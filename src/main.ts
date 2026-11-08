@@ -29,9 +29,9 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <div class="menu-group"><button data-action="appearance"><span class="menu-label">${paletteIcon}Appearance and text…</span><span class="menu-value" id="appearance-summary"></span></button><button data-action="assistant" data-desktop hidden>AI assistant…</button><button data-action="compact" data-desktop hidden>Compact window <span class="menu-value">420 × 620</span></button><button data-action="reading" data-desktop hidden>Reading window <span class="menu-value">760 × 900</span></button></div>
     <div class="menu-group"><button data-action="shortcuts">Keyboard shortcuts</button><button data-action="clear-recents">Clear recent files</button><button data-action="clear-data">Delete saved reading data…</button></div>
   </div></dialog>
-  <dialog id="jump"><form><div class="dialog-head"><h2>Go to location</h2><button type="button" data-close aria-label="Close">×</button></div><label id="jump-label" for="target">Location</label><input id="target" required autocomplete="off"><p id="jump-error" role="alert"></p><button class="primary" type="submit">Go to location</button></form></dialog>
+  <dialog id="jump" class="drop" aria-labelledby="jump-label"><form><label id="jump-label" for="target">Location</label><div class="jump-row"><input id="target" required autocomplete="off"><button class="primary" type="submit" aria-label="Go to location">Go</button></div><p id="jump-error" role="alert"></p></form></dialog>
   <dialog id="password"><form><h2>Password required</h2><label for="secret">Document password</label><input id="secret" type="password" autocomplete="off"><div class="dialog-actions"><button type="button" data-close>Cancel</button><button type="submit" class="primary">Open document</button></div></form></dialog>
-  <dialog id="contents"><div class="dialog-head"><h2>Contents</h2><button data-close aria-label="Close contents">×</button></div><div id="outline-list"></div></dialog>
+  <dialog id="contents" class="drop" aria-label="Contents"><div id="outline-list"></div></dialog>
   <dialog id="appearance"></dialog>
   <dialog id="shortcuts"><div class="dialog-head"><h2>Keyboard shortcuts</h2><button data-close aria-label="Close shortcuts">×</button></div><dl><dt>Next / previous page</dt><dd>PgDn / PgUp</dd><dt>Page mode navigation</dt><dd>Right / Left</dd><dt>Next / previous screen</dt><dd>Space / Shift Space</dd><dt>Scroll</dt><dd>Up / Down</dd><dt>First / last location</dt><dd>Home / End</dd><dt>Go to location</dt><dd>Ctrl G</dd><dt>Back after a jump</dt><dd>Alt Left</dd><dt>Open file</dt><dd>Ctrl O</dd><dt>Document library</dt><dd>Ctrl B</dd><dt>Resize library (divider focused)</dt><dd>Left / Right, Home / End, Enter</dd><dt>Pin / size lock</dt><dd>Ctrl Shift T / L</dd><dt>Fit page / width</dt><dd>Ctrl 0 / 2</dd><dt>Two-page spread</dt><dd>Ctrl 3</dd><dt>Zoom / text size</dt><dd>Ctrl + / −</dd><dt>Hand tool (pan a zoomed page)</dt><dd>H · or middle-drag</dd><dt>Find in document</dt><dd>Ctrl F</dd><dt>Command palette</dt><dd>Ctrl K</dd><dt>Dismiss a dialog</dt><dd>Escape</dd></dl></dialog>
   <dialog id="delete-data"><h2>Delete saved reading data?</h2><p>This removes saved positions and reading settings. Your documents and recent-file list remain. The current position will be saved again when you navigate.</p><div class="dialog-actions"><button data-close>Cancel</button><button id="confirm-delete" class="danger">Delete reading data</button></div></dialog>
@@ -175,10 +175,25 @@ function flush(): Promise<void> {
   return saveQueue;
 }
 setInterval(() => { if (dirty) void flush(); }, 1500);
-function showDialog(id: string) { $(id) instanceof HTMLDialogElement && ($<HTMLDialogElement>(id).showModal()); }
+// Go to and Contents drop from the toolbar under the title, like the palette, instead of centring on a
+// dimmed page; a click outside closes them.
+function showDialog(id: string) {
+  const dialog = $(id);
+  if (!(dialog instanceof HTMLDialogElement)) return;
+  if (dialog.classList.contains('drop')) {
+    const title = $('ask').getBoundingClientRect(), width = Math.min(320, innerWidth - 12);
+    dialog.style.top = `${Math.round($('ask').closest('header')!.getBoundingClientRect().bottom + 4)}px`;
+    dialog.style.left = `${Math.round(Math.max(6, Math.min(title.left, innerWidth - width - 6)))}px`;
+  }
+  dialog.showModal();
+}
 function closeDialog(dialog: HTMLDialogElement) { dialog.close(); activeHost?.focus(); $('menu-toggle').setAttribute('aria-expanded', 'false'); }
 document.querySelectorAll<HTMLDialogElement>('dialog').forEach(dialog => { dialog.addEventListener('close', () => { activeHost?.focus(); if (dialog.id === 'menu') $('menu-toggle').setAttribute('aria-expanded', 'false'); }); });
 document.querySelectorAll<HTMLElement>('[data-close]').forEach(button => button.onclick = () => closeDialog(button.closest('dialog')!));
+document.querySelectorAll<HTMLDialogElement>('dialog.drop').forEach(dialog => dialog.addEventListener('click', event => {
+  const box = dialog.getBoundingClientRect();
+  if (event.target === dialog && (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom)) closeDialog(dialog);
+}));
 const library = createLibrary($('library-root'), {
   open: path => load(() => openLibraryDocument(path), path.split(/[\\/]/).pop()),
   error: fail,

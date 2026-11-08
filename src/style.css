@@ -345,12 +345,20 @@ dialog select { padding-right: 28px; }
 .menu-label svg { flex-shrink: 0; color: var(--accent-ink); }
 .menu-value { color: var(--muted); font: 10px/1.4 var(--font-mono); white-space: nowrap; }
 kbd { color: var(--muted); background: var(--stage); border: 1px solid var(--border); border-radius: 3px; padding: 1px 4px; font: 10px/1.4 var(--font-mono); white-space: nowrap; }
-#outline-list { display: flex; flex-direction: column; gap: 3px; }
-#outline-list button { text-align: left; white-space: normal; font-size: 13px; }
+/* Dropped from the title (Go to, Contents): a popover under the toolbar, no dimmed page. */
+dialog.drop { position: fixed; inset: auto; margin: 0; width: min(320px, calc(100vw - 12px)); max-height: calc(100dvh - 56px); padding: 10px; border-radius: 9px; background: var(--card); }
+dialog.drop::backdrop { background: transparent; }
+#outline-list { display: flex; flex-direction: column; }
+#outline-list:not(:has(button)) { color: var(--muted); font-size: 12px; padding: 4px 6px; }
+#outline-list button { text-align: left; white-space: normal; padding: 6px 8px; font-size: 12px; }
 dl { display: grid; grid-template-columns: 1fr auto; gap: 12px 8px; font-size: 11px; }
 dd { margin: 0; color: var(--muted); }
-#jump-error { color: var(--error); }
-#jump .primary { width: 100%; }
+#jump label { display: block; margin: 0 0 6px; color: var(--muted); font-size: 11px; }
+.jump-row { display: flex; gap: 6px; }
+.jump-row input { flex: 1; min-width: 0; margin: 0 !important; padding: 7px 9px !important; }
+.jump-row .primary { padding: 7px 14px; }
+#jump-error { margin: 6px 0 0; color: var(--error); font-size: 12px; }
+#jump-error:empty { display: none; }
 /* Appearance: a bottom sheet over the document, so theme previews stay visible above it. */
 #appearance { margin: auto 0 0; width: 100%; max-width: none; max-height: calc(100dvh - 40px); padding: 14px 18px 16px; border: 0; border-top: 1px solid var(--border); border-radius: 14px 14px 0 0; background: var(--card); box-shadow: var(--shadow-sheet); }
 #appearance[open] { display: flex; flex-direction: column; gap: 13px; }
