@@ -204,7 +204,11 @@ select:hover { border-color: var(--accent-border); }
 /* Without a native caption the toolbar's empty space is the only grab handle, so a strip before the
    pin always stays free; in a narrow window with nothing open the tagline gives way to the name. */
 .windows-titlebar #pin { margin-left: 24px; }
-@media (max-width: 480px) { .windows-titlebar:has(#empty:not([hidden])) .title span { display: none; } }
+@media (max-width: 480px) {
+  .windows-titlebar:has(#empty:not([hidden])) .title span { display: none; }
+  /* Narrow Windows windows give the title about 150 px; the mark gives way before the name does. */
+  .windows-titlebar .ask-mark { display: none; }
+}
 .caption button { display: grid; place-items: center; width: 44px; height: 100%; padding: 0; border: 0; border-radius: 0; color: var(--fg); }
 .caption button:hover { background: var(--hover); }
 .caption button:disabled { opacity: .35; background: transparent; }
@@ -219,9 +223,10 @@ select:hover { border-color: var(--accent-border); }
 .title { flex: 0 1 auto; margin-right: auto; min-width: 0; display: flex; align-items: center; gap: 7px; height: 28px; padding: 0 8px; border-radius: 6px; text-align: left; }
 .title:hover { background: var(--hover); }
 .ask-mark { flex-shrink: 0; color: var(--accent-ink); }
-.title strong { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 12px; }
-/* Where you are matters more than the full file name, so the name truncates first. */
-.title span { flex: 0 0 auto; max-width: 60%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 10px/1.4 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+/* The compact position ("12 / 24") keeps its width (up to 55% of the title); the name gives way,
+   down to about five characters, so neither ever collapses to a lone ellipsis. */
+.title strong { flex: 0 1 auto; min-width: min(5em, 45%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 12px; }
+.title span { flex: 0 0 auto; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 10px/1.4 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
 .ask-key { display: none; flex-shrink: 0; }
 .title:hover .ask-key, .title:focus-visible .ask-key { display: block; }
 /* --find-bar-height is the find bar's real height, so the reading surface and the opening strip can

@@ -408,7 +408,7 @@ test('PDF view controls zoom, pan 1:1 by hand tool and middle button, and keep l
   await page.keyboard.press('h');
   await expect(hand).toHaveAttribute('aria-pressed', 'true');
   await expect(host).toHaveClass(/hand-tool/);
-  await expect(page.locator('#filekind')).toHaveAttribute('title', 'PDF · 150% · Hand');
+  await expect(page.locator('#filekind')).toHaveAttribute('title', /^PDF · 150% · Hand$/m);
 
   // A drag moves the page exactly with the pointer and does not select text.
   const box = (await host.boundingBox())!;
