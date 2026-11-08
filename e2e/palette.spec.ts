@@ -19,6 +19,26 @@ test('Ctrl+K opens the palette and Escape restores focus to the reading surface'
   await expect(page.locator('#palette')).toBeHidden();
 });
 
+test('Ctrl+K opens the palette from a text field too (library search, find)', async ({ page }) => {
+  await page.setViewportSize({ width: 1080, height: 700 });
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles(textDocument);
+  await expect(page.locator('#filename')).toHaveText('palette.txt');
+  if (!(await page.locator('#library-root').isVisible())) await page.locator('#library-toggle').click();
+  await page.locator('.library-search').fill('beside');
+  await page.keyboard.press('Control+k');
+  await expect(page.locator('#palette-input')).toBeFocused();
+  // The field keeps what was typed in it; the shortcut is not swallowed as text editing.
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.library-search')).toHaveValue('beside');
+  // Back on the page (Ctrl+F is typing inside a field), then from the find field.
+  await page.locator('.reader-host:not(.staging)').focus();
+  await page.keyboard.press('Control+f');
+  await expect(page.locator('#find-query')).toBeFocused();
+  await page.keyboard.press('Control+k');
+  await expect(page.locator('#palette-input')).toBeFocused();
+});
+
 test('the palette filters as you type and runs the chosen command', async ({ page }) => {
   await page.goto('/');
   await page.locator('#file-input').setInputFiles(textDocument);
