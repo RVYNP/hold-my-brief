@@ -266,6 +266,16 @@ in the app's cache folder (at most 192 MB) and remade automatically when a file 
 library is slow only the first time it is shown. Thumbnails are a disposable cache: deleting them
 loses nothing.
 
+### Library board
+
+The board shows a whole collection at once. Choose the expand button in the library header, or run
+**Library board** from the command palette. The drawer opens across the reading panel, with your
+collections on the left and every reference as a true-proportion thumbnail; the page underneath keeps
+its size and place. Click a reference to select it. From 1200 px wide, a detail strip on the right
+shows its collections, tags, notes and source. Press Enter or double-click to open it and return to
+reading. Press Escape, or choose **Back to reading**, to return to the drawer exactly as you left it.
+The board needs a window at least 720 px wide.
+
 The desktop library stores references to original paths, not copies. Organizing, favoriting, and
 removing entries never move, rename, or delete source files or saved positions. Opening a document
 adds it to the library automatically. The existing recent-file list is migrated on first load; the

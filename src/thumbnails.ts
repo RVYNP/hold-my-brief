@@ -11,7 +11,11 @@ const maxEdge = 480;
 // requests mean fewer round trips to a slow volume; both stay far below the file sizes involved.
 const firstChunk = 64 * 1024, rangeChunk = 256 * 1024, rangeLimit = 8 * 1024 * 1024;
 const avifLimit = 20 * 1024 * 1024;
-const jobTimeout = 60_000;
+const jobTimeout = 120_000;
+// pdf.js drops any image above `maxImageSize` pixels, which leaves a blank page: a 148 MB scan holds a
+// 10729 x 13808 JPEG (148 Mpx). The cap therefore admits scans that large, and files over `heavyBytes`
+// are rendered one at a time because each such decode needs several hundred MB.
+const maxImagePixels = 200_000_000, heavyBytes = 32 * 1024 * 1024;
 /** Pictures kept as object URLs; the least recently shown beyond this go, unless a tile still shows them. */
 const keepReady = 600;
 const concurrency = { pdf: 4, image: 3 } as const;
@@ -46,6 +50,12 @@ async function readSpan(path: string, begin: number, end: number): Promise<Uint8
   return joined;
 }
 
+/** Runs `work` after every earlier exclusive job has finished. */
+let exclusiveTail: Promise<unknown> = Promise.resolve();
+function exclusive<T>(work: () => Promise<T>): Promise<T> {
+  const run = exclusiveTail.then(work, work); exclusiveTail = run.catch(() => undefined); return run;
+}
+
 /**
  * Page 1 of a PDF scaled to `maxEdge`, rendered by the bundled pdf.js. pdf.js asks for the ranges it
  * needs (the cross-reference table, page 1 and its images) through a range transport backed by
@@ -54,11 +64,15 @@ async function readSpan(path: string, begin: number, end: number): Promise<Uint8
  */
 async function renderPdfThumbnail(path: string): Promise<LibraryThumbnail> {
   const lib = await loadPdfjs();
-  const first = await readLibraryRange(path, 0, firstChunk); const worker = takeWorker(lib);
+  const first = await readLibraryRange(path, 0, firstChunk);
+  return first.total > heavyBytes ? exclusive(() => renderFirstPage(lib, path, first)) : renderFirstPage(lib, path, first);
+}
+async function renderFirstPage(lib: Pdfjs, path: string, first: { total: number; bytes: Uint8Array }): Promise<LibraryThumbnail> {
+  const worker = takeWorker(lib);
   const root = new URL(`${import.meta.env.BASE_URL}pdfjs/`, location.href).href;
   const options = {
     cMapUrl: `${root}cmaps/`, cMapPacked: true, standardFontDataUrl: `${root}standard_fonts/`, wasmUrl: `${root}wasm/`,
-    enableXfa: false, maxImageSize: 40_000_000, worker, disableAutoFetch: true, disableStream: true, rangeChunkSize: rangeChunk,
+    enableXfa: false, maxImageSize: maxImagePixels, worker, disableAutoFetch: true, disableStream: true, rangeChunkSize: rangeChunk,
   };
   // A read that fails would leave pdf.js waiting for it forever; this settles the whole render instead.
   let fail: (error: unknown) => void = () => undefined;

@@ -41,6 +41,7 @@ const GROUP_ORDER: readonly CommandGroup[] = ['File', 'Navigate', 'View', 'Windo
 export const COMMANDS: readonly Command[] = [
   { id: 'open', label: 'Open file…', group: 'File', keywords: ['load', 'recent'], shortcut: 'Ctrl O' },
   { id: 'library', label: 'Toggle document library', group: 'File', keywords: ['sidebar', 'books', 'collection'], shortcut: 'Ctrl B' },
+  { id: 'library-board', label: 'Library board', group: 'File', keywords: ['board', 'grid', 'browse', 'collection'] },
   { id: 'find', label: 'Find in document…', group: 'Navigate', keywords: ['search', 'text', 'grep', 'locate'], shortcut: 'Ctrl F', requiresDocument: true },
   { id: 'goto', label: 'Go to location…', group: 'Navigate', keywords: ['jump', 'page', 'line', 'percentage'], shortcut: 'Ctrl G', requiresDocument: true },
   { id: 'outline', label: 'Contents', group: 'Navigate', keywords: ['toc', 'chapters', 'outline'], requiresDocument: true },

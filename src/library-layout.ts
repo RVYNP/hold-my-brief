@@ -27,18 +27,18 @@ export function parseLibraryWidth(saved: string | null): number {
 
 // Thumbnail grid. Tiles keep their true proportions (masonry), so the only layout decisions are
 // how many columns fit and which column each tile joins. Both are pure so the edges stay testable.
-export const libraryGrid = { minTile: 120, gap: 4, defaultRatio: 4 / 5, minColumnWidth: 56 } as const;
+export const libraryGrid = { minTile: 120, boardMinTile: 150, gap: 4, defaultRatio: 4 / 5, minColumnWidth: 56 } as const;
 export type LibraryView = 'grid' | 'list';
 
 /**
  * Columns for a grid whose content box is `width` px wide: as many `minTile`-wide columns as fit,
  * but at least two whenever two tiles of `minColumnWidth` fit, so the narrowest drawer (240 px, a
  * ~224 px content box that holds two 120 px tiles only with a few px squeezed) still reads as a grid
- * rather than one huge column; and never fewer than one.
+ * rather than one huge column; and never fewer than one. The board passes a larger `minTile`.
  */
-export function libraryGridColumns(width: number): number {
+export function libraryGridColumns(width: number, minTile: number = libraryGrid.minTile): number {
   if (!Number.isFinite(width) || width <= 0) return 1;
-  const fit = Math.floor((width + libraryGrid.gap) / (libraryGrid.minTile + libraryGrid.gap));
+  const fit = Math.floor((width + libraryGrid.gap) / (minTile + libraryGrid.gap));
   const twoFit = width >= 2 * libraryGrid.minColumnWidth + libraryGrid.gap;
   return Math.max(twoFit ? 2 : 1, fit);
 }

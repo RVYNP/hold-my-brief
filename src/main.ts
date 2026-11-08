@@ -288,6 +288,7 @@ async function command(id: string) {
   if (reason) { notify(reason); return; }
   if (id === 'open') openFile();
   else if (id === 'library') library.toggle();
+  else if (id === 'library-board') library.board();
   else if (id === 'find') findBar.open();
   else if (id === 'assistant') assistant.openSettings();
   else await action(id);

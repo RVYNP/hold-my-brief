@@ -52,6 +52,17 @@ describe('library grid columns', () => {
   });
 });
 
+describe('library board columns', () => {
+  it('uses the larger board tile: five columns beside the rail at 1080 px, six with the detail strip at 1440 px', () => {
+    const { boardMinTile } = libraryGrid;
+    // Board content box = window - 12 px margins - 200 px rail - 20 px padding (- 220 px detail strip from 1200 px).
+    expect(libraryGridColumns(1080 - 12 - 200 - 20, boardMinTile)).toBe(5);
+    expect(libraryGridColumns(1440 - 12 - 200 - 220 - 20, boardMinTile)).toBe(6);
+    expect(libraryGridColumns(5 * boardMinTile + 4 * libraryGrid.gap, boardMinTile)).toBe(5);
+    expect(libraryGridColumns(5 * boardMinTile + 4 * libraryGrid.gap - 1, boardMinTile)).toBe(4);
+  });
+});
+
 describe('library masonry', () => {
   it('puts every tile in exactly one column, in ascending order within it', () => {
     const heights = [1.2, 0.6, 1.5, 0.8, 1, 1, 0.5, 2, 0.7];

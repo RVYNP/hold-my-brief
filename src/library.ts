@@ -45,6 +45,7 @@ const panelIcon = { left: icon('<rect width="18" height="18" x="3" y="3" rx="2"/
 const closeIcon = icon('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>');
 const chevronIcon = '<svg class="library-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 const viewIcon = { grid: icon('<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>'), list: icon('<path d="M3 6h.01M3 12h.01M3 18h.01M8 6h13M8 12h13M8 18h13"/>') };
+const boardIcon = { open: icon('<path d="m15 15 6 6"/><path d="m9 9-6-6"/><path d="M21 16v5h-5"/><path d="M3 8V3h5"/>'), close: icon('<path d="m14 10 7-7"/><path d="M20 10h-6V4"/><path d="m3 21 7-7"/><path d="M4 14h6v6"/>') };
 function savedPreference(key: string) { try { return localStorage.getItem(key); } catch { return null; } }
 function savePreference(key: string, value: string) { try { localStorage.setItem(key, value); } catch { /* Optional preference. */ } }
 function orderedTree<T extends { id: string; name: string; parentId: string | null }>(items: T[]): { item: T; depth: number }[] {
@@ -64,7 +65,7 @@ function orderedTree<T extends { id: string; name: string; parentId: string | nu
   return result;
 }
 
-export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refresh: (activePath?: string) => Promise<void>; toggle: () => void } {
+export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refresh: (activePath?: string) => Promise<void>; toggle: () => void; board: () => void } {
   // Drawer mode: at >=720 px the library is a resizable drawer floating over the page; below it
   // becomes a compact sheet with a scrim, a focus trap and workspace `inert`.
   const wide = window.matchMedia('(min-width: 720px)');
@@ -82,6 +83,8 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
   let searchable = new Map<string, string>();
   const busyDisabled = new Map<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLButtonElement, boolean>();
   let view: LibraryView = 'list'; let scopeOpen = false; let menuAnchor: HTMLElement | undefined;
+  // The board is the same drawer opened across the whole reading panel; it is never saved, so the drawer width is untouched.
+  let board = false; let selectedPath: string | undefined;
 
   root.classList.add('library-root');
   const backdrop = button('', 'Close library'); backdrop.className = 'library-backdrop'; backdrop.tabIndex = -1;
@@ -118,7 +121,25 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
   const documents = element('div', 'library-documents'); documents.setAttribute('aria-label', 'Library items'); documents.setAttribute('role', 'list');
   const pager = element('div', 'library-pager');
   const fileInput = element('input'); fileInput.type = 'file'; fileInput.accept = '.pdf,.epub,.md,.markdown,.txt,.png,.jpeg,.jpg,.webp,.gif,.avif,.bmp'; fileInput.multiple = true; fileInput.hidden = true;
-  panel.append(header, tools, searchLabel, search, scope, scopeMenu, itemMenu, documents, pager, fileInput);
+  // Board layout: header, tools and the collection tree become a left rail, search, scope row and grid the
+  // main column, and a detail strip joins from 1200 px. `arrange` moves the same nodes between the two layouts.
+  const boardButton = button('', 'Open library board', 'board'); boardButton.className = 'library-board-toggle'; boardButton.innerHTML = boardIcon.open; boardButton.title = 'Browse the library at full width'; headerActions.prepend(boardButton);
+  const boardBack = button('', undefined, 'board-back'); boardBack.className = 'library-board-back'; boardBack.setAttribute('aria-keyshortcuts', 'Escape'); boardBack.insertAdjacentHTML('beforeend', `${boardIcon.close}<span>Back to reading</span><kbd>Esc</kbd>`);
+  const rail = element('div', 'library-board-rail'); const boardMain = element('div', 'library-board-main');
+  const detail = element('aside', 'library-detail'); detail.setAttribute('aria-label', 'Selected reference');
+  const boardLayout = element('div', 'library-board'); boardLayout.append(rail, boardMain, detail);
+  function arrange() {
+    const focused = document.activeElement instanceof HTMLElement && root.contains(document.activeElement) ? document.activeElement : undefined;
+    if (board) {
+      scope.insertBefore(searchLabel, viewToggle); scope.insertBefore(search, viewToggle); scope.append(boardBack);
+      rail.append(header, tools, scopeMenu); boardMain.append(scope, documents, pager);
+      panel.replaceChildren(boardLayout, itemMenu, fileInput);
+    } else {
+      boardBack.remove(); panel.replaceChildren(header, tools, searchLabel, search, scope, scopeMenu, itemMenu, documents, pager, fileInput);
+    }
+    if (focused?.isConnected) focused.focus();
+  }
+  arrange();
   const resizeHandle = element('div', 'library-resize'); resizeHandle.tabIndex = 0;
   for (const [name, value] of [['role', 'separator'], ['aria-orientation', 'vertical'], ['aria-label', 'Resize library'], ['aria-controls', root.id]]) resizeHandle.setAttribute(name, value);
   const grip = element('span', 'library-resize-grip'); grip.append(element('span'), element('span'), element('span'));
@@ -191,8 +212,8 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
 
   function applyVisibility() {
     root.hidden = !visible; layout?.classList.toggle('library-open', visible); toggleButton?.setAttribute('aria-expanded', String(visible));
-    if (workspace) workspace.inert = visible && !wide.matches;
-    if (visible) { thumbs.retryFailed(); for (const media of documents.querySelectorAll('.is-unavailable')) media.classList.remove('is-unavailable'); observeThumbnails(); } else { setScope(false); closeItemMenu(false); clearThumbnails(); }
+    if (workspace) workspace.inert = visible && (!wide.matches || board);
+    if (visible) { thumbs.retryFailed(); for (const media of documents.querySelectorAll('.is-unavailable')) media.classList.remove('is-unavailable'); observeThumbnails(); } else { setBoard(false, 'none'); setScope(false); closeItemMenu(false); clearThumbnails(); }
   }
   function setVisible(next: boolean, focus = true, persist = true) {
     visible = next; if (persist) try { localStorage.setItem(preferenceKey(), next ? 'open' : 'closed'); } catch { /* Optional preference. */ }
@@ -200,9 +221,10 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
   }
   function toggle() { if (!modal?.open) setVisible(!visible); }
   backdrop.onclick = close.onclick = () => { if (!busy) setVisible(false); };
-  wide.addEventListener('change', () => { const hadFocus = root.contains(document.activeElement); visible = modal?.open ? true : preference(); applyVisibility(); if (!visible && hadFocus) toggleButton?.focus(); });
+  wide.addEventListener('change', () => { const hadFocus = root.contains(document.activeElement); if (!wide.matches) setBoard(false, 'none'); visible = modal?.open ? true : preference(); applyVisibility(); if (!visible && hadFocus) toggleButton?.focus(); });
   root.addEventListener('keydown', event => {
     if (event.key === 'Escape' && (!itemMenu.hidden || scopeOpen)) { event.preventDefault(); event.stopPropagation(); if (!itemMenu.hidden) closeItemMenu(); else { setScope(false); scopeButton.focus(); } return; }
+    if (event.key === 'Escape' && board && !modal?.open) { event.preventDefault(); event.stopPropagation(); if (!busy) setBoard(false, 'control'); return; }
     if (event.key === 'Escape' && !modal?.open) { event.preventDefault(); event.stopPropagation(); if (!busy) setVisible(false); }
     if (event.key === 'Tab' && visible && !wide.matches && !modal?.open) {
       const controls = Array.from(panel.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled):not([hidden]), select:not(:disabled), summary')).filter(node => node.getClientRects().length);
@@ -401,7 +423,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
     function filterButton(label: string, count: number, next: Filter, key: string) {
       const control = button('', label, key); control.className = 'library-filter'; control.append(element('span', 'library-filter-name', label), element('span', 'library-count', String(count)));
       control.setAttribute('aria-pressed', String(filter.kind === next.kind && (!('id' in next) || 'id' in filter && filter.id === next.id)));
-      control.onclick = () => { filter = next; page = 0; setScope(false); scopeButton.focus(); render(); }; return control;
+      control.onclick = () => { filter = next; page = 0; if (!board) { setScope(false); scopeButton.focus(); } render(); }; return control;
     }
     navigation.append(filterButton('All references', library.documents.length, { kind: 'all' }, 'all'), filterButton('Favorites', library.documents.filter(doc => doc.favorite).length, { kind: 'favorites' }, 'favorites'), filterButton('Unfiled', library.documents.filter(doc => !doc.collectionIds.length).length, { kind: 'unfiled' }, 'unfiled'));
     const heading = element('div', 'library-collections-heading'); const create = button('+ New', 'New personal collection', 'new-collection'); create.onclick = () => { setScope(false); collectionForm(scopeButton); }; heading.append(element('h3', '', 'Collections'), create); navigation.append(heading);
@@ -448,6 +470,56 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
   function markUnavailable(media: HTMLElement) { media.classList.add('is-unavailable'); media.title = 'Thumbnail unavailable. Use More actions to locate the original.'; }
   window.addEventListener('pagehide', () => { clearThumbnails(); thumbs.dispose(); });
 
+  // Board: a click selects a reference for the detail strip; Enter or a double click opens it and returns
+  // to reading. Outside the board a click opens it, as before.
+  function bindOpen(doc: LibraryDocument, open: HTMLElement, node: HTMLElement) {
+    node.dataset.docPath = doc.path; node.classList.toggle('is-selected', board && doc.path === selectedPath);
+    open.onclick = () => { if (board) selectDocument(doc.path); else void openDocument(doc, open, matches.filter(isImage).map(item => item.path)); };
+    open.ondblclick = () => { if (board) void openFromBoard(doc, open); };
+    open.onkeydown = event => { if (board && event.key === 'Enter') { event.preventDefault(); void openFromBoard(doc, open); } };
+  }
+  function selectDocument(path: string | undefined) {
+    selectedPath = path;
+    for (const node of documents.querySelectorAll<HTMLElement>('[data-doc-path]')) node.classList.toggle('is-selected', board && node.dataset.docPath === path);
+    renderDetail();
+  }
+  async function openFromBoard(doc: LibraryDocument, trigger: HTMLElement) {
+    await openDocument(doc, trigger, matches.filter(isImage).map(item => item.path));
+    if (activePath === doc.path) setBoard(false, 'reader');
+  }
+  function setBoard(next: boolean, focus: 'none' | 'control' | 'reader') {
+    if (next === board || next && (!wide.matches || !visible || modal?.open)) return;
+    closeItemMenu(false); setScope(false); board = next;
+    root.classList.toggle('is-board', board); boardButton.setAttribute('aria-pressed', String(board));
+    scopeMenu.hidden = !board; scopeButton.tabIndex = board ? -1 : 0;
+    if (workspace) workspace.inert = visible && (!wide.matches || board);
+    arrange(); renderDocuments();
+    if (focus === 'reader') workspace?.querySelector<HTMLElement>('.reader-host:not(.staging)')?.focus();
+    else if (focus === 'control') (board ? documents.querySelector<HTMLElement>('.is-selected .library-document-open') ?? search : boardButton).focus();
+  }
+  boardButton.onclick = () => setBoard(true, 'control'); boardBack.onclick = () => setBoard(false, 'control');
+  // The detail strip (from 1200 px): the selected reference at a glance, with the actions the tile menu has.
+  function renderDetail() {
+    if (!board) return;
+    detail.replaceChildren(); const doc = library.documents.find(item => item.path === selectedPath);
+    if (!doc) { detail.append(element('p', 'library-detail-empty', 'Select a reference to see its details.')); return; }
+    const missing = (doc.availability ?? 'ready') === 'missing'; const cached = thumbs.peek(doc.path);
+    const preview = element('div', 'library-detail-preview'); preview.classList.toggle('is-empty', !cached);
+    if (cached) { const image = element('img'); image.alt = ''; image.src = cached.url; preview.append(image); }
+    else { preview.append(element('span', '', missing ? 'Missing' : doc.format.toUpperCase())); if (thumbnailable(doc) && !missing) void thumbs.request(doc.path, doc.format, () => board && selectedPath === doc.path).then(made => { if (made && board && selectedPath === doc.path) renderDetail(); }); }
+    const name = element('h3', 'library-detail-name', doc.name); name.title = doc.path;
+    const open = button('Open in reader'); open.className = 'library-detail-open'; open.append(element('kbd', '', 'Enter')); open.onclick = () => void openFromBoard(doc, open);
+    const organizeButton = button('Organize…'); organizeButton.onclick = () => organize(doc, organizeButton);
+    const actions = element('div', 'library-detail-actions'); actions.append(open, organizeButton);
+    detail.append(preview, name, element('p', 'library-detail-meta', `${doc.format.toUpperCase()} · ${doc.source?.removed ? 'no longer in folder' : doc.availability ?? 'ready'}`), actions);
+    const byId = new Map(library.collections.map(item => [item.id, item]));
+    const chain = (id: string) => { const names: string[] = []; const seen = new Set<string>(); let current = byId.get(id); while (current && !seen.has(current.id)) { seen.add(current.id); names.unshift(current.name); current = current.parentId ? byId.get(current.parentId) : undefined; } return names.join(' › '); };
+    const provenance = doc.source;
+    for (const [label, value] of [['Collection', doc.collectionIds.map(chain).filter(Boolean).join('\n')], ['Tags', doc.tags.join(', ')], ['Notes', doc.notes], ['Source', [provenance?.repository, provenance?.relativePath ?? provenance?.sourcePath].filter(Boolean).join(' / ')]]) {
+      if (!value) continue; const section = element('section', 'library-detail-section'); section.append(element('h4', '', label), element('p', '', value)); detail.append(section);
+    }
+  }
+
   // Scope popover: the collection tree and the two filters, opened from the scope row.
   function scopeName() {
     const selected = filter;
@@ -456,7 +528,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
     return library.collections.find(item => item.id === selected.id)?.name ?? 'Collection';
   }
   function setScope(open: boolean) {
-    if (open && (busy || modal?.open)) return;
+    if (board || open && (busy || modal?.open)) return;
     scopeOpen = open; scopeMenu.hidden = !open; scopeButton.setAttribute('aria-expanded', String(open));
     if (open) { closeItemMenu(false); scopeMenu.style.setProperty('--scope-top', `${scope.offsetTop + scope.offsetHeight + 2}px`); }
   }
@@ -514,7 +586,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
   function layoutGrid(force = false) {
     if (view !== 'grid' || !tiles.length) return;
     const width = contentWidth(); if (width <= 0) return;
-    const columns = libraryGridColumns(width); if (!force && columns === columnCount && documents.querySelector('.library-column')) return;
+    const columns = libraryGridColumns(width, board ? libraryGrid.boardMinTile : undefined); if (!force && columns === columnCount && documents.querySelector('.library-column')) return;
     columnCount = columns; const tileWidth = (width - libraryGrid.gap * (columns - 1)) / columns;
     const placed = assignMasonry(tiles.map(tile => 1 / tile.ratio), columns, libraryGrid.gap / tileWidth);
     const focused = document.activeElement instanceof HTMLElement && documents.contains(document.activeElement) ? document.activeElement : undefined;
@@ -536,7 +608,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
     const row = element('div', 'library-document'); row.setAttribute('role', 'listitem'); row.classList.toggle('is-active', doc.path === activePath);
     const open = button('', `Open ${doc.name}`, `open:${doc.path}`); open.className = 'library-document-open'; open.title = doc.path; if (doc.path === activePath) open.setAttribute('aria-current', 'true');
     open.append(element('span', 'library-document-name', doc.name), element('span', 'library-document-meta', `${doc.format.toUpperCase()} · ${doc.source?.removed ? 'no longer in folder' : doc.availability ?? 'ready'}${doc.path === activePath ? ' · Reading' : ''}`));
-    open.onclick = () => void openDocument(doc, open, matches.filter(isImage).map(item => item.path));
+    bindOpen(doc, open, row);
     row.append(open, actionsFor(doc)); return row;
   }
   function documentTile(doc: LibraryDocument): Tile {
@@ -555,7 +627,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
     } else media.append(element('span', 'library-tile-title', doc.name), element('span', 'library-tile-meta', format));
     if (doc.path === activePath) media.append(element('span', 'library-tile-tag', 'Reading'));
     open.append(media);
-    open.onclick = () => void openDocument(doc, open, matches.filter(isImage).map(item => item.path));
+    bindOpen(doc, open, node);
     node.append(open, actionsFor(doc)); return { node, path: doc.path, ratio };
   }
   for (const mode of ['grid', 'list'] as const) viewButtons[mode].onclick = () => { if (view !== mode) { savePreference(viewKey(), mode); renderDocuments(); } };
@@ -571,6 +643,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
     });
     matches.sort(sort.value === 'name' ? (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }) || a.path.localeCompare(b.path) : (a, b) => timestamp(b.lastOpened) - timestamp(a.lastOpened) || a.name.localeCompare(b.name));
     page = Math.min(page, Math.max(0, Math.ceil(matches.length / pageSize) - 1));
+    if (board && !matches.some(doc => doc.path === selectedPath)) selectedPath = matches.find(doc => doc.path === activePath)?.path ?? matches[0]?.path;
     resultCount.textContent = `${matches.length} ${matches.length === 1 ? 'reference' : 'references'}`;
     view = currentView(); documents.classList.toggle('library-grid', view === 'grid'); documents.classList.toggle('library-list', view === 'list');
     for (const mode of ['grid', 'list'] as const) viewButtons[mode].setAttribute('aria-pressed', String(view === mode));
@@ -598,7 +671,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
       const change = (offset: number) => { page += offset; renderDocuments(); documents.scrollTop = 0; documents.querySelector<HTMLElement>('.library-document-open')?.focus(); };
       previous.onclick = () => change(-1); next.onclick = () => change(1); pager.append(previous, element('span', '', `${page * pageSize + 1}–${Math.min(matches.length, (page + 1) * pageSize)} / ${matches.length}`), next);
     }
-    observeThumbnails(); renderImageNavigation(); if (busy) setBusy(true);
+    observeThumbnails(); renderImageNavigation(); renderDetail(); if (busy) setBusy(true);
   }
   function render() {
     const key = focusKey(); if (filter.kind === 'collection' && !library.collections.some(collection => filter.kind === 'collection' && collection.id === filter.id)) filter = { kind: 'unfiled' };
@@ -617,5 +690,10 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
     catch (error) { if (token !== revision) return; loadError = true; render(); callbacks.error(error); }
   }
   toggleButton?.setAttribute('aria-controls', root.id); applySide(); applyWidth(preferredWidth); rebuildIndex(); applyVisibility(); render();
-  return { refresh, toggle: () => { toggle(); if (visible && loadError) void refresh(); } };
+  return {
+    refresh,
+    toggle: () => { toggle(); if (visible && loadError) void refresh(); },
+    // Library board (palette command): open the drawer if needed, then enter or leave the board. Below 720 px there is only the sheet.
+    board: () => { if (!visible) setVisible(true, false); if (wide.matches) setBoard(!board, 'control'); else search.focus(); if (visible && loadError) void refresh(); },
+  };
 }

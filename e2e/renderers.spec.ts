@@ -341,6 +341,35 @@ test('library drawer floats over the page and never resizes it, while drag, keyb
   await page.getByRole('button', { name: 'Grid view' }).click();
   await expect(documents).toHaveClass(/library-grid/);
   expect(await pageGeometry()).toEqual(untouched);
+
+  // Board: the drawer opened across the whole reading panel. It is still out of flow, so the page is covered
+  // and inert but never resized or refitted, the drawer width is not rewritten, and Escape or the back button
+  // returns to the drawer exactly as it was.
+  await page.getByRole('button', { name: 'Open library board' }).click();
+  const root = page.locator('#library-root');
+  await expect(root).toHaveClass(/is-board/);
+  await expect(handle).toBeHidden();
+  await expect(workspace).toHaveJSProperty('inert', true);
+  expect(Math.round((await panel.boundingBox())!.width)).toBe(1080 - 12);
+  await expect.poll(columns).toBe(5);
+  expect(await contained()).toBe(true);
+  expect(await pageGeometry()).toEqual(untouched);
+  await expect(page.locator('.library-detail')).toBeHidden();
+  await page.locator('.library-tile').first().click();
+  await expect(page.locator('.library-tile.is-selected')).toHaveCount(1);
+  await expect(root).toHaveClass(/is-board/);
+  expect(await pageGeometry()).toEqual(untouched);
+  await page.keyboard.press('Escape');
+  await expect(root).not.toHaveClass(/is-board/);
+  await expect(handle).toHaveAttribute('aria-valuenow', '334');
+  expect(Math.round((await panel.boundingBox())!.width)).toBe(334);
+  await expect(workspace).toHaveJSProperty('inert', false);
+  expect(await docked()).toBe(true);
+  expect(await pageGeometry()).toEqual(untouched);
+  await page.getByRole('button', { name: 'Open library board' }).click();
+  await page.getByRole('button', { name: /Back to reading/ }).click();
+  await expect(root).not.toHaveClass(/is-board/);
+  expect(await pageGeometry()).toEqual(untouched);
   await page.reload();
   await expect(handle).toHaveAttribute('aria-valuenow', '334');
   expect(await docked()).toBe(true);
@@ -401,6 +430,36 @@ test('library thumbnails are made once and survive searching, sorting and switch
   expect(new Set(await sources())).toEqual(new Set(before.sources));
 });
 
+test('a PDF whose page is one huge image gets a real thumbnail, not a blank page', async ({ page }) => {
+  // pdf.js removes images above its pixel cap, which used to leave 148 MB scans as white tiles. This page is
+  // one 8000 x 8000 (64 Mpx) black image: it compresses to a few KB, but must still be drawn.
+  const objects = [
+    Buffer.from('<< /Type /Catalog /Pages 2 0 R >>'),
+    Buffer.from('<< /Type /Pages /Kids [3 0 R] /Count 1 >>'),
+    Buffer.from('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>'),
+    Buffer.from('<< /Length 31 >>\nstream\nq 100 0 0 100 0 0 cm /Im0 Do Q\nendstream'),
+  ];
+  const pixels = deflateSync(Buffer.alloc(8000 * 8000));
+  objects.push(Buffer.concat([Buffer.from(`<< /Type /XObject /Subtype /Image /Width 8000 /Height 8000 /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /Length ${pixels.length} >>\nstream\n`), pixels, Buffer.from('\nendstream')]));
+  const parts = [Buffer.from('%PDF-1.7\n')]; const offsets: number[] = []; let size = parts[0].length;
+  objects.forEach((body, index) => { offsets.push(size); const part = Buffer.concat([Buffer.from(`${index + 1} 0 obj\n`), body, Buffer.from('\nendobj\n')]); parts.push(part); size += part.length; });
+  parts.push(Buffer.from(`xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map(offset => `${String(offset).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${size}\n%%EOF`));
+  await page.setViewportSize({ width: 1080, height: 680 });
+  await page.goto('/');
+  await page.locator('.library-panel input[type=file]').setInputFiles({ name: 'huge-scan.pdf', mimeType: 'application/pdf', buffer: Buffer.concat(parts) });
+  const media = page.locator('.library-tile-media.is-loaded');
+  await expect(media).toHaveCount(1, { timeout: 60000 });
+  const mean = await media.locator('img').evaluate(async (image: HTMLImageElement) => {
+    await image.decode();
+    const canvas = document.createElement('canvas'); canvas.width = 16; canvas.height = 16;
+    const context = canvas.getContext('2d')!; context.drawImage(image, 0, 0, 16, 16);
+    const data = context.getImageData(0, 0, 16, 16).data; let sum = 0;
+    for (let i = 0; i < data.length; i += 4) sum += data[i];
+    return sum / (data.length / 4);
+  });
+  expect(mean, 'a blank page is white (255); the black image must show').toBeLessThan(40);
+});
+
 test('tiles built while the library is hidden still load their pictures once it opens', async ({ page }) => {
   // Compact window: the library is closed, so the grid is built with no width and its tiles are attached
   // only when the window grows and the drawer opens.
@@ -435,6 +494,38 @@ test('compact library sheet shows the grid in two columns without sideways overf
   await page.keyboard.press('Escape');
   await expect(page.locator('#library-scope-menu')).toBeHidden();
   await expect(page.locator('#library-root')).toBeVisible();
+});
+
+test('the library board browses at full width and a detail strip joins from 1200 px', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.locator('.library-panel input[type=file]').setInputFiles(pngFiles);
+  await expect(page.locator('.library-tile')).toHaveCount(6);
+  // The palette command opens the board (and the drawer if it was closed).
+  await page.mouse.click(1100, 450); // Shortcuts belong to the reading panel, not the library's own fields.
+  await page.keyboard.press('Control+k');
+  await page.locator('#palette-input').fill('library board');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#library-root')).toHaveClass(/is-board/);
+  await expect(page.locator('.library-detail')).toBeVisible();
+  await expect.poll(() => page.locator('.library-column').count()).toBe(6);
+  // The first reference is selected and described; a click moves the selection without opening anything.
+  await expect(page.locator('.library-detail-name')).toHaveCount(1);
+  const tiles = page.locator('.library-tile');
+  await tiles.nth(1).click();
+  const name = (await tiles.nth(1).locator('.library-tile-open').getAttribute('aria-label'))!.replace('Open ', '');
+  await expect(page.locator('.library-detail-name')).toHaveText(name);
+  await expect(page.locator('#library-root')).toHaveClass(/is-board/);
+  await expect(page.locator('#filename')).not.toHaveText(name);
+  // Enter opens the selected reference and leaves the board.
+  await tiles.nth(1).locator('.library-tile-open').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#filename')).toHaveText(name);
+  await expect(page.locator('#library-root')).not.toHaveClass(/is-board/);
+  // Below 720 px there is no board: the sheet is all there is.
+  await page.setViewportSize({ width: 420, height: 620 });
+  await page.locator('#library-toggle').click();
+  await expect(page.locator('.library-board-toggle')).toBeHidden();
 });
 
 test('PDF page-bitmap cache never reuses pixels across rotation', async ({ page }) => {
