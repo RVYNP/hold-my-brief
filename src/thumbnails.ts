@@ -1,9 +1,23 @@
 import workerURL from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type * as PdfjsModule from 'pdfjs-dist';
-import { canvasThumbnail, encodeCanvas, imageFormats, libraryThumbnailRatios, putLibraryThumbnail, readLibraryRange, readLibraryThumbnail, type LibraryThumbnail } from './bridge';
+import { canvasThumbnail, encodeCanvas, imageFormats, libraryThumbnailIndex, putLibraryColours, putLibraryThumbnail, readLibraryRange, readLibraryThumbnail, type LibraryThumbnail } from './bridge';
+import { dominantColours } from './colour';
 
 export type Thumbnail = { url: string; ratio: number };
 type Pdfjs = typeof PdfjsModule;
+
+/** Up to five dominant colours of a thumbnail, measured on a 32 x 32 copy. Empty if the picture cannot be read back. */
+async function sampleColours(blob: Blob): Promise<number[]> {
+  try {
+    const bitmap = await createImageBitmap(blob);
+    try {
+      const size = 32; const canvas = document.createElement('canvas'); canvas.width = size; canvas.height = size;
+      const context = canvas.getContext('2d', { willReadFrequently: true }); if (!context) return [];
+      context.drawImage(bitmap, 0, 0, size, size);
+      return dominantColours(context.getImageData(0, 0, size, size).data);
+    } finally { bitmap.close(); }
+  } catch { return []; }
+}
 
 /** Longest edge of a thumbnail the webview renders itself (PDF first pages, AVIF). */
 const maxEdge = 480;
@@ -127,6 +141,7 @@ export function createThumbnailStore() {
   const jobs = new Map<string, Promise<Thumbnail | undefined>>();
   const failed = new Set<string>();
   const hints = new Map<string, number>(); // Proportions known from the disk cache before any picture loaded.
+  const palette = new Map<string, number[]>(); // Dominant colours per entry, largest first; kept after the picture itself is dropped.
   const asked = new Set<string>();
   let queue: Job[] = []; const active = { pdf: 0, image: 0 };
 
@@ -145,6 +160,11 @@ export function createThumbnailStore() {
       else throw Error('This format has no thumbnail.');
       // The disk cache only saves the next launch the work; a failed save must not hide a good picture.
       void putLibraryThumbnail(path, made).catch(() => undefined);
+    }
+    // Thumbnails cached before the colour filter existed get their colours the first time they load.
+    if (!palette.has(path)) {
+      const colours = await sampleColours(made.blob); palette.set(path, colours);
+      if (colours.length) void putLibraryColours(path, colours).catch(() => undefined);
     }
     return remember(path, made);
   }
@@ -167,6 +187,8 @@ export function createThumbnailStore() {
     },
     /** Best known width / height: the picture's, else the disk cache's, else nothing. */
     ratio(path: string): number | undefined { return ready.get(path)?.ratio ?? hints.get(path); },
+    /** Dominant colours (packed 0xRRGGBB, largest first) once measured or read from the disk cache; undefined until then. */
+    colours(path: string): number[] | undefined { return palette.get(path); },
     failed(path: string): boolean { return failed.has(path); },
     /**
      * Makes (or fetches) a thumbnail. `wants` says whether anyone still needs it when its turn comes, so
@@ -187,14 +209,19 @@ export function createThumbnailStore() {
       for (const path of wanted) asked.add(path);
       if (!wanted.length) return 0;
       let learned = 0;
-      try { for (const [path, [width, height]] of Object.entries(await libraryThumbnailRatios(wanted))) if (width > 0 && height > 0) { hints.set(path, width / height); learned++; } }
+      try {
+        for (const [path, { size: [width, height], colours }] of Object.entries(await libraryThumbnailIndex(wanted))) {
+          if (width > 0 && height > 0) { hints.set(path, width / height); learned++; }
+          if (colours.length && !palette.has(path)) palette.set(path, colours);
+        }
+      }
       catch { for (const path of wanted) asked.delete(path); }
       return learned;
     },
     /** Forgets thumbnails of entries that left the library. */
     reconcile(paths: Set<string>) {
       for (const [path, thumbnail] of ready) if (!paths.has(path)) { URL.revokeObjectURL(thumbnail.url); ready.delete(path); }
-      for (const path of hints.keys()) if (!paths.has(path)) hints.delete(path);
+      for (const known of [hints, palette]) for (const path of known.keys()) if (!paths.has(path)) known.delete(path);
       for (const known of [asked, failed]) for (const path of known) if (!paths.has(path)) known.delete(path);
     },
     /** Lets thumbnails that failed (an unmounted volume, say) try again. */
@@ -202,7 +229,7 @@ export function createThumbnailStore() {
     /** Drops everything known about one entry whose original was replaced. */
     forget(path: string) {
       const old = ready.get(path); if (old) URL.revokeObjectURL(old.url);
-      ready.delete(path); hints.delete(path); asked.delete(path); failed.delete(path);
+      ready.delete(path); hints.delete(path); palette.delete(path); asked.delete(path); failed.delete(path);
     },
     /** Caps memory: drops the least recently shown pictures that no tile is showing. */
     trim(showing: Set<string>) {
@@ -215,7 +242,7 @@ export function createThumbnailStore() {
     dispose() {
       queue = [];
       for (const thumbnail of ready.values()) URL.revokeObjectURL(thumbnail.url);
-      ready.clear(); hints.clear(); asked.clear(); failed.clear();
+      ready.clear(); hints.clear(); palette.clear(); asked.clear(); failed.clear();
     },
   };
 }

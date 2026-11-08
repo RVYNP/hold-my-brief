@@ -183,9 +183,15 @@ export async function putLibraryThumbnail(path: string, thumbnail: LibraryThumbn
   const body = new Uint8Array(await new Blob([header, thumbnail.blob]).arrayBuffer());
   await invoke('put_library_thumbnail', body, { headers: { 'x-library-path': encodeURIComponent(path) } });
 }
-/** Pixel size of every thumbnail that is already cached, so tiles can reserve their real shape. */
-export async function libraryThumbnailRatios(paths: string[]): Promise<Record<string, [number, number]>> {
-  return desktop && paths.length ? native('library_thumbnail_ratios', { paths }) : {};
+/** What the disk cache already knows about a thumbnail: pixel size and dominant colours (packed 0xRRGGBB, largest first; empty when not yet measured). */
+export type LibraryThumbnailInfo = { size: [number, number]; colours: number[] };
+/** Size and colours of every thumbnail that is already cached, so tiles can reserve their real shape and the colour filter can answer early. */
+export async function libraryThumbnailIndex(paths: string[]): Promise<Record<string, LibraryThumbnailInfo>> {
+  return desktop && paths.length ? native('library_thumbnail_index', { paths }) : {};
+}
+/** Stores the dominant colours measured for a thumbnail (desktop only; the browser build keeps them in memory). */
+export async function putLibraryColours(path: string, colours: number[]): Promise<void> {
+  if (desktop) await native('put_library_colours', { path, colours });
 }
 /** Part of a library original: the total file length and the bytes from `offset` (at most 8 MiB). */
 export async function readLibraryRange(path: string, offset: number, length: number): Promise<{ total: number; bytes: Uint8Array }> {

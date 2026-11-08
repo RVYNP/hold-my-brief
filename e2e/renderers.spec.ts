@@ -496,6 +496,41 @@ test('compact library sheet shows the grid in two columns without sideways overf
   await expect(page.locator('#library-root')).toBeVisible();
 });
 
+test('the colour filter narrows the library to a named hue with a removable chip, on top of search, and swatches set it', async ({ page }) => {
+  const solid = (name: string, colour: [number, number, number]) => ({ name: `${name}.png`, mimeType: 'image/png', buffer: pngFixture(90, 120, colour) });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.locator('.library-panel input[type=file]').setInputFiles([solid('green-one', [46, 139, 58]), solid('green-two', [60, 160, 70]), solid('red-one', [192, 48, 32]), solid('blue-one', [48, 80, 192]), solid('grey-one', [128, 128, 128])]);
+  // A picture's colours are measured when its thumbnail is made.
+  await expect(page.locator('.library-tile-media.is-loaded')).toHaveCount(5);
+  const chip = page.locator('.library-colour-chip'), tiles = page.locator('.library-tile');
+  await expect(chip).toBeHidden();
+  await page.getByRole('button', { name: /Choose collection and filters/ }).click();
+  await page.getByLabel('Filter by colour').selectOption('green');
+  await expect(chip).toHaveText(/Green/);
+  await expect(tiles).toHaveCount(2);
+  await expect(page.locator('.library-result-count')).toHaveText('2 references');
+  // It sits on top of the search: the same hue with a title that matches only one of them.
+  await page.getByRole('searchbox').fill('green-two');
+  await expect(tiles).toHaveCount(1);
+  await page.getByRole('searchbox').fill('red-one');
+  await expect(tiles).toHaveCount(0);
+  await page.getByRole('searchbox').fill('');
+  await expect(tiles).toHaveCount(2);
+  // The chip removes it again, and the select follows.
+  await page.getByRole('button', { name: 'Remove colour filter: green' }).click();
+  await expect(chip).toBeHidden();
+  await expect(tiles).toHaveCount(5);
+  await expect(page.getByLabel('Filter by colour')).toHaveValue('');
+  // In the board, a swatch of the selected reference sets the filter to its hue.
+  await page.getByRole('button', { name: 'Open library board' }).click();
+  await page.locator('.library-tile', { has: page.getByLabel('Open red-one.png') }).click();
+  await expect(page.locator('.library-detail-name')).toHaveText('red-one.png');
+  await page.getByRole('button', { name: 'Filter the library by red' }).first().click();
+  await expect(chip).toHaveText(/Red/);
+  await expect(tiles).toHaveCount(1);
+});
+
 test('the library board browses at full width and a detail strip joins from 1200 px', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');

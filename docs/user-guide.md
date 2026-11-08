@@ -169,7 +169,8 @@ follow-up. Escape or × closes it and ends the conversation.
 **What it can do:** read the text where you are (the page or spread on screen, the current EPUB
 chapter, or the Markdown/text lines from the top of the view), search the whole document and show a
 match, go to a page, chapter, percentage or line, read the contents, search your library and open a
-document from it, change mode, theme or page tone, and run reader commands: library, back,
+document from it, show the library filtered by colour and words ("the green packaging scans"),
+change mode, theme or page tone, and run reader commands: library, back,
 first/last location, fit, rotate, spread, zoom, pin, size lock and the window presets. It cannot open
 files outside your library, delete anything, change your library or reach the file system.
 
@@ -275,6 +276,15 @@ its size and place. Click a reference to select it. From 1200 px wide, a detail 
 shows its collections, tags, notes and source. Press Enter or double-click to open it and return to
 reading. Press Escape, or choose **Back to reading**, to return to the drawer exactly as you left it.
 The board needs a window at least 720 px wide.
+
+### Filter by colour
+
+The library can be narrowed to references whose pictures are mostly one colour: red, orange,
+yellow, green, teal, blue, purple, pink, brown, black, white or grey. Choose a colour in the filter
+menu (beside the collection name), or click a swatch in the board's detail strip. A chip such as
+**Blue ×** appears in the scope row; its × removes the filter. The filter applies on top of the
+current collection and search. Colours are measured on this computer as thumbnails are made, and
+remembered with them; while some are still being measured the chip says how many.
 
 The desktop library stores references to original paths, not copies. Organizing, favoriting, and
 removing entries never move, rename, or delete source files or saved positions. Opening a document

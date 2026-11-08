@@ -94,6 +94,10 @@ export type ReaderEnvironment = {
   outline: () => OutlineItem[];
   library: () => Promise<LibraryDocument[]>;
   open: (document: LibraryDocument) => Promise<boolean>;
+  /** Shows the library filtered by colour and/or text; colour null clears it. Returns what is shown. */
+  filterLibrary: (change: { colour?: string | null; query?: string }) => Promise<{ colour: string | null; query: string; matches: number; names: string[] }>;
+  /** Colour names the library can filter by. */
+  colourNames: readonly string[];
   setAppearance: (change: { mode?: string; theme?: string; page?: string }) => string;
   runCommand: (id: string) => Promise<string>;
 };
@@ -208,6 +212,17 @@ export function readerTools(env: ReaderEnvironment): Tool[] {
         if (!await env.open(doc)) throw new Error(`${doc.name} could not be opened.`);
         matches = undefined;
         return { result: { opened: doc.name }, step: `Opened ${doc.name}` };
+      },
+    },
+    {
+      name: 'filter_library', description: 'Shows the library to the user filtered by the dominant colour of each reference\'s thumbnail and/or by words in its title, tags or folder, e.g. "the green packaging scans". colour must be one of the listed names, or null to clear the colour. Returns how many match and the first titles.',
+      input_schema: { type: 'object', properties: { colour: { type: ['string', 'null'], enum: [...env.colourNames, null] }, query: { type: 'string' } } },
+      run: async input => {
+        const colour = input.colour === null ? null : typeof input.colour === 'string' ? input.colour.toLowerCase() : undefined;
+        if (colour && !env.colourNames.includes(colour)) throw new Error(`Use one of: ${env.colourNames.join(', ')}.`);
+        const shown = await env.filterLibrary({ colour, query: typeof input.query === 'string' ? input.query : undefined });
+        const what = [shown.colour, shown.query && `“${shown.query}”`].filter(Boolean).join(' ') || 'everything';
+        return { result: shown, step: `Library: ${what} · ${shown.matches} ${shown.matches === 1 ? 'match' : 'matches'}` };
       },
     },
     {

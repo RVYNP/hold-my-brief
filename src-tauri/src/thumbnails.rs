@@ -34,6 +34,8 @@ const MAX_UPLOAD_EDGE: u32 = 1024;
 const MAX_RANGE: u64 = 8 * 1024 * 1024;
 /// Formats the `image` crate decodes here. AVIF is left to the webview.
 const NATIVE_FORMATS: [&str; 6] = ["png", "jpg", "jpeg", "webp", "gif", "bmp"];
+/// Dominant colours kept per thumbnail (the webview measures five).
+const MAX_COLOURS: usize = 8;
 /// Behind a transparent image, so a cut-out does not turn black when flattened to JPEG.
 const FLATTEN_BACKGROUND: u8 = 238;
 
@@ -123,6 +125,19 @@ impl ThumbnailCache {
         decode_header(&header)
     }
 
+    fn colour_file(&self, key: &str) -> PathBuf {
+        self.dir.join(format!("{key}.col"))
+    }
+
+    fn colours(&self, key: &str) -> Vec<u32> {
+        fs::read(self.colour_file(key)).map(|bytes| decode_colours(&bytes)).unwrap_or_default()
+    }
+
+    fn put_colours(&self, key: &str, colours: &[u32]) -> Result<(), String> {
+        fs::create_dir_all(&self.dir).map_err(|e| format!("Thumbnail cache is unavailable: {e}"))?;
+        fs::write(self.colour_file(key), encode_colours(colours)).map_err(|e| format!("Colours could not be saved: {e}"))
+    }
+
     fn put(&self, key: &str, bytes: &[u8]) -> Result<(), String> {
         fs::create_dir_all(&self.dir).map_err(|e| format!("Thumbnail cache is unavailable: {e}"))?;
         // Rename into place so a reader never sees half a file.
@@ -149,9 +164,30 @@ impl ThumbnailCache {
             })
             .collect();
         for path in prune_plan(entries, CACHE_CAP) {
+            let _ = fs::remove_file(path.with_extension("col"));
             let _ = fs::remove_file(path);
         }
     }
+}
+
+/// Colours are packed 0xRRGGBB and stored three bytes each, so a sidecar is at most `3 * MAX_COLOURS` bytes.
+fn encode_colours(colours: &[u32]) -> Vec<u8> {
+    colours.iter().take(MAX_COLOURS).flat_map(|colour| [(colour >> 16) as u8, (colour >> 8) as u8, *colour as u8]).collect()
+}
+
+/// Empty for anything that is not a whole sidecar.
+fn decode_colours(bytes: &[u8]) -> Vec<u32> {
+    if bytes.len() % 3 != 0 || bytes.len() > 3 * MAX_COLOURS {
+        return Vec::new();
+    }
+    bytes.chunks_exact(3).map(|rgb| u32::from(rgb[0]) << 16 | u32::from(rgb[1]) << 8 | u32::from(rgb[2])).collect()
+}
+
+fn validate_colours(colours: &[u32]) -> Result<(), String> {
+    if colours.len() > MAX_COLOURS || colours.iter().any(|colour| *colour > 0xff_ffff) {
+        return Err("Colours must be at most eight 24-bit values.".into());
+    }
+    Ok(())
 }
 
 /// Length and modification time (ns since the epoch) of the original: the freshness part of the key.
@@ -294,10 +330,20 @@ fn percent_decode(value: &str) -> Option<String> {
     String::from_utf8(out).ok()
 }
 
-/// `[width, height]` of the thumbnails that are already cached, so the grid can reserve every tile's
-/// real shape before a single picture has loaded. Entries without a cached thumbnail are absent.
+/// What the disk cache knows about one thumbnail: its pixel size and up to five dominant colours (packed
+/// 0xRRGGBB). Colours are absent for thumbnails made before the colour filter existed; the webview computes
+/// them the next time it loads such a thumbnail and stores them with `put_library_colours`.
+#[derive(serde::Serialize)]
+pub struct ThumbnailInfo {
+    size: [u32; 2],
+    colours: Vec<u32>,
+}
+
+/// Size and colours of the thumbnails that are already cached, so the grid can reserve every tile's real
+/// shape and the colour filter can answer before a single picture has loaded. Entries without a cached
+/// thumbnail are absent.
 #[tauri::command]
-pub async fn library_thumbnail_ratios(paths: Vec<String>, app: AppHandle) -> Result<HashMap<String, [u32; 2]>, String> {
+pub async fn library_thumbnail_index(paths: Vec<String>, app: AppHandle) -> Result<HashMap<String, ThumbnailInfo>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let resolved = lookup(&app, &paths);
         let cache = app.state::<ThumbnailCache>();
@@ -305,11 +351,25 @@ pub async fn library_thumbnail_ratios(paths: Vec<String>, app: AppHandle) -> Res
         for (path, found) in paths.into_iter().zip(resolved) {
             let Ok((original, _)) = found else { continue };
             let Ok((len, modified)) = fingerprint(&original) else { continue };
-            if let Some((width, height)) = cache.dimensions(&cache_key(&path, len, modified)) {
-                known.insert(path, [width, height]);
+            let key = cache_key(&path, len, modified);
+            if let Some((width, height)) = cache.dimensions(&key) {
+                known.insert(path, ThumbnailInfo { size: [width, height], colours: cache.colours(&key) });
             }
         }
         Ok(known)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Stores the dominant colours the webview measured for a thumbnail.
+#[tauri::command]
+pub async fn put_library_colours(path: String, colours: Vec<u32>, app: AppHandle) -> Result<(), String> {
+    validate_colours(&colours)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let (resolved, _) = lookup_one(&app, &path)?;
+        let (len, modified) = fingerprint(&resolved)?;
+        app.state::<ThumbnailCache>().put_colours(&cache_key(&path, len, modified), &colours)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -401,6 +461,36 @@ mod tests {
         fs::write(cache.file(&key), [0u8; 20]).unwrap();
         assert!(cache.get(&key).is_none());
         assert!(!cache.file(&key).exists(), "a corrupt entry is removed rather than retried forever");
+    }
+
+    #[test]
+    fn colours_round_trip_as_three_bytes_each_and_refuse_anything_else() {
+        let colours = [0x2e8b3a, 0xffffff, 0x000000, 0x0102ff];
+        let bytes = encode_colours(&colours);
+        assert_eq!(bytes.len(), 12);
+        assert_eq!(&bytes[..3], &[0x2e, 0x8b, 0x3a]);
+        assert_eq!(decode_colours(&bytes), colours);
+        assert_eq!(decode_colours(&[]), Vec::<u32>::new());
+        assert_eq!(decode_colours(&[1, 2]), Vec::<u32>::new(), "a torn file yields no colours rather than wrong ones");
+        assert_eq!(decode_colours(&vec![7; 3 * (MAX_COLOURS + 1)]), Vec::<u32>::new());
+        assert_eq!(encode_colours(&[1; 20]).len(), 3 * MAX_COLOURS, "extra colours are dropped");
+    }
+
+    #[test]
+    fn colours_live_beside_the_thumbnail_and_go_with_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = ThumbnailCache::new(dir.path().join("thumbs"));
+        let key = cache_key("p", 1, 1);
+        assert!(cache.colours(&key).is_empty());
+        cache.put(&key, &encode_thumbnail(10, 20, &JPEG)).unwrap();
+        cache.put_colours(&key, &[0x336699, 0xeeeeee]).unwrap();
+        assert_eq!(cache.colours(&key), vec![0x336699, 0xeeeeee]);
+        // Colours from a thumbnail that was pruned must not outlive it in the index.
+        fs::remove_file(cache.file(&key)).unwrap();
+        assert_eq!(cache.dimensions(&key), None);
+        assert!(validate_colours(&[0x1000000]).is_err(), "more than 24 bits is not a colour");
+        assert!(validate_colours(&[0xffffff; MAX_COLOURS + 1]).is_err());
+        assert!(validate_colours(&[0xffffff; MAX_COLOURS]).is_ok());
     }
 
     #[test]

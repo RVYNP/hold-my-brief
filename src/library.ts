@@ -4,6 +4,10 @@ import { emptyLibrary, type Collection, type Library, type LibraryDocument } fro
 import { isImage, searchText } from './library-query';
 import { assignMasonry, clampLibraryWidth, defaultLibraryView, libraryGrid, libraryGridColumns, libraryWidth, libraryWidthBounds, parseLibraryView, parseLibraryWidth, type LibrarySide, type LibraryView } from './library-layout';
 import { canThumbnail, createThumbnailStore, type Thumbnail } from './thumbnails';
+import { colourHex, colourMatches, colourNames, colourSwatches, nameColour, parseColourName, type ColourName } from './colour';
+
+export type LibraryFilterResult = { colour: string | null; query: string; matches: number; names: string[] };
+const titleCase = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
 type Callbacks = { open: (path: string) => Promise<boolean>; error: (error: unknown) => void };
 type Filter = { kind: 'all' | 'favorites' | 'unfiled' } | { kind: 'collection' | 'source'; id: string };
@@ -65,7 +69,12 @@ function orderedTree<T extends { id: string; name: string; parentId: string | nu
   return result;
 }
 
-export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refresh: (activePath?: string) => Promise<void>; toggle: () => void; board: () => void } {
+export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
+  refresh: (activePath?: string) => Promise<void>; toggle: () => void; board: () => void;
+  /** Sets the colour and/or search text of the library list (opening the drawer if needed) and reports what matches. `colour: null` clears it; omitted fields are left alone. */
+  filter: (change: { colour?: string | null; query?: string }) => Promise<LibraryFilterResult>;
+  colourNames: readonly string[];
+} {
   // Drawer mode: at >=720 px the library is a resizable drawer floating over the page; below it
   // becomes a compact sheet with a scrim, a focus trap and workspace `inert`.
   const wide = window.matchMedia('(min-width: 720px)');
@@ -85,6 +94,8 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
   let view: LibraryView = 'list'; let scopeOpen = false; let menuAnchor: HTMLElement | undefined;
   // The board is the same drawer opened across the whole reading panel; it is never saved, so the drawer width is untouched.
   let board = false; let selectedPath: string | undefined;
+  // Colour filter: a named hue applied on top of the collection and search. A picture counts once its colours are known.
+  let colourFilter: ColourName | null = null; let colourIndex: Promise<number> | undefined; let colourUnknown = 0; let colourTimer = 0;
 
   root.classList.add('library-root');
   const backdrop = button('', 'Close library'); backdrop.className = 'library-backdrop'; backdrop.tabIndex = -1;
@@ -104,6 +115,9 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
   const availability = element('select'); availability.setAttribute('aria-label', 'Filter by availability');
   for (const [value, text] of [['', 'Any availability'], ['ready', 'Ready'], ['missing', 'Missing']]) option(availability, value, text);
   facets.append(format, availability);
+  const colourSelect = element('select'); colourSelect.setAttribute('aria-label', 'Filter by colour'); option(colourSelect, '', 'Any colour');
+  for (const name of colourNames) option(colourSelect, name, titleCase(name));
+  facets.append(colourSelect);
   const navigation = element('nav', 'library-navigation'); navigation.setAttribute('aria-label', 'Library filters and collections');
   // The scope row names the open collection; its popover holds the collection tree and the two filters,
   // so the grid keeps the drawer's height.
@@ -115,7 +129,8 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
   const viewButtons = { grid: button('', 'Grid view', 'view-grid'), list: button('', 'List view', 'view-list') };
   for (const mode of ['grid', 'list'] as const) { viewButtons[mode].innerHTML = viewIcon[mode]; viewButtons[mode].title = `${mode === 'grid' ? 'Grid' : 'List'} view`; viewToggle.append(viewButtons[mode]); }
   const sort = element('select', 'library-sort'); sort.setAttribute('aria-label', 'Sort library'); option(sort, 'recent', 'Recent'); option(sort, 'name', 'Name A–Z');
-  scope.append(scopeButton, resultCount, viewToggle, sort);
+  const colourChip = button('', undefined, 'colour-chip'); colourChip.className = 'library-colour-chip'; colourChip.hidden = true;
+  scope.append(scopeButton, colourChip, resultCount, viewToggle, sort);
   const scopeMenu = element('div', 'library-scope-menu'); scopeMenu.id = 'library-scope-menu'; scopeMenu.hidden = true; scopeMenu.append(navigation, facets);
   const itemMenu = element('div', 'library-item-menu'); itemMenu.setAttribute('role', 'menu'); itemMenu.hidden = true;
   const documents = element('div', 'library-documents'); documents.setAttribute('aria-label', 'Library items'); documents.setAttribute('role', 'list');
@@ -416,7 +431,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
       if (!item.parentId) continue;
       const parent = collectionMatches.get(item.parentId); if (parent) for (const path of collectionMatches.get(item.id) ?? []) parent.add(path);
     }
-    thumbs.reconcile(new Set(library.documents.map(doc => doc.path)));
+    thumbs.reconcile(new Set(library.documents.map(doc => doc.path))); colourIndex = undefined;
   }
   function renderNavigation() {
     navigation.replaceChildren();
@@ -517,6 +532,15 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
     const provenance = doc.source;
     for (const [label, value] of [['Collection', doc.collectionIds.map(chain).filter(Boolean).join('\n')], ['Tags', doc.tags.join(', ')], ['Notes', doc.notes], ['Source', [provenance?.repository, provenance?.relativePath ?? provenance?.sourcePath].filter(Boolean).join(' / ')]]) {
       if (!value) continue; const section = element('section', 'library-detail-section'); section.append(element('h4', '', label), element('p', '', value)); detail.append(section);
+    }
+    const colours = thumbs.colours(doc.path);
+    if (colours?.length) {
+      const section = element('section', 'library-detail-section'); const swatches = element('div', 'library-swatches');
+      for (const colour of colours) {
+        const name = nameColour(colour); const swatch = button('', `Filter the library by ${name}`); swatch.className = 'library-swatch'; swatch.style.background = colourHex(colour); swatch.title = `${titleCase(name)} — filter by this`;
+        swatch.onclick = () => setColour(name); swatches.append(swatch);
+      }
+      section.append(element('h4', '', 'Colours'), swatches); detail.append(section);
     }
   }
 
@@ -633,18 +657,29 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
   for (const mode of ['grid', 'list'] as const) viewButtons[mode].onclick = () => { if (view !== mode) { savePreference(viewKey(), mode); renderDocuments(); } };
   function renderDocuments() {
     clearThumbnails(); documents.replaceChildren(); pager.replaceChildren(); tiles = []; tileByPath.clear(); columnCount = 0; closeItemMenu(false); const generation = ++renderGeneration;
+    const unknown: LibraryDocument[] = [];
     const query = search.value.trim().toLocaleLowerCase();
     matches = library.documents.filter(doc => {
       if (!inScope(doc)) return false;
       if (format.value === 'image' && !isImage(doc) || format.value === 'document' && !['pdf', 'epub', 'md', 'markdown', 'txt'].includes(doc.format)) return false;
       if (availability.value && (doc.availability ?? 'ready') !== availability.value) return false;
       const categories = doc.collectionIds.map(id => library.collections.find(item => item.id === id)?.name ?? '').join(' ').toLocaleLowerCase();
-      return !query || query.split(/\s+/).every(word => `${searchable.get(doc.path) ?? ''} ${categories}`.includes(word));
+      if (!(!query || query.split(/\s+/).every(word => `${searchable.get(doc.path) ?? ''} ${categories}`.includes(word)))) return false;
+      if (!colourFilter) return true;
+      const colours = thumbs.colours(doc.path);
+      if (!colours) { if (thumbnailable(doc) && (doc.availability ?? 'ready') !== 'missing' && !thumbs.failed(doc.path)) unknown.push(doc); return false; }
+      return colourMatches(colours, colourFilter);
     });
     matches.sort(sort.value === 'name' ? (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }) || a.path.localeCompare(b.path) : (a, b) => timestamp(b.lastOpened) - timestamp(a.lastOpened) || a.name.localeCompare(b.name));
     page = Math.min(page, Math.max(0, Math.ceil(matches.length / pageSize) - 1));
     if (board && !matches.some(doc => doc.path === selectedPath)) selectedPath = matches.find(doc => doc.path === activePath)?.path ?? matches[0]?.path;
-    resultCount.textContent = `${matches.length} ${matches.length === 1 ? 'reference' : 'references'}`;
+    colourUnknown = unknown.length; colourChip.hidden = !colourFilter;
+    if (colourFilter) {
+      colourChip.replaceChildren(); const dot = element('span', 'library-colour-dot'); dot.style.background = colourSwatches[colourFilter];
+      colourChip.append(dot, element('span', '', titleCase(colourFilter)), element('span', 'library-colour-clear', '×')); colourChip.setAttribute('aria-label', `Remove colour filter: ${colourFilter}`); colourChip.title = 'Remove colour filter';
+      analyseColours(unknown, generation);
+    }
+    resultCount.textContent = `${matches.length} ${matches.length === 1 ? 'reference' : 'references'}${colourFilter && unknown.length ? ` · analysing ${unknown.length}` : ''}`;
     view = currentView(); documents.classList.toggle('library-grid', view === 'grid'); documents.classList.toggle('library-list', view === 'list');
     for (const mode of ['grid', 'list'] as const) viewButtons[mode].setAttribute('aria-pressed', String(view === mode));
     scopeLabel.textContent = scopeName(); scopeButton.setAttribute('aria-label', `${scopeName()}. Choose collection and filters`);
@@ -679,6 +714,32 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
     add.title = collection && !collection.sourceId ? `Add files to ${collection.name}` : 'Add files to Unfiled';
     if (busy) setBusy(true); if (key && !busy && !modal?.open) restoreFocus(key);
   }
+  function setColour(next: ColourName | null) { colourFilter = next; colourSelect.value = next ?? ''; page = 0; renderDocuments(); }
+  colourChip.onclick = () => { setColour(null); search.focus(); };
+  colourSelect.onchange = () => setColour(parseColourName(colourSelect.value) ?? null);
+  // A picture's colours are known once its thumbnail has been made, or the disk cache already has them. While a
+  // colour filter is on, the ones still unknown are made in the background and the list refreshes as they arrive.
+  function scheduleColourRender() { if (!colourTimer) colourTimer = window.setTimeout(() => { colourTimer = 0; if (colourFilter && visible) renderDocuments(); }, 250); }
+  function analyseColours(unknown: LibraryDocument[], generation: number) {
+    colourIndex ??= thumbs.primeRatios(library.documents.filter(thumbnailable).map(doc => doc.path)).then(learned => { if (learned) scheduleColourRender(); return learned; });
+    void colourIndex.then(() => {
+      if (generation !== renderGeneration) return;
+      for (const doc of unknown) if (!thumbs.colours(doc.path)) void thumbs.request(doc.path, doc.format, () => colourFilter !== null && visible).then(scheduleColourRender);
+    });
+  }
+  async function filterBy(change: { colour?: string | null; query?: string }): Promise<LibraryFilterResult> {
+    const colour = change.colour === undefined || change.colour === null ? change.colour : parseColourName(change.colour);
+    if (typeof change.colour === 'string' && !colour) throw Error(`Unknown colour "${change.colour}". Choose one of: ${colourNames.join(', ')}.`);
+    if (!visible) setVisible(true, false);
+    if (change.query !== undefined) search.value = change.query;
+    if (colour !== undefined) { colourFilter = colour; colourSelect.value = colour ?? ''; }
+    page = 0; renderDocuments();
+    // Pictures whose colours are not known yet are analysed first, for at most 25 s, so the answer is complete.
+    for (const deadline = Date.now() + 25_000; colourFilter && colourUnknown > 0 && Date.now() < deadline;) await new Promise(resolve => setTimeout(resolve, 200));
+    if (colourTimer) { clearTimeout(colourTimer); colourTimer = 0; }
+    if (colourFilter) renderDocuments();
+    return { colour: colourFilter, query: search.value.trim(), matches: matches.length, names: matches.slice(0, 10).map(doc => doc.name) };
+  }
   search.oninput = () => { page = 0; renderDocuments(); }; sort.onchange = format.onchange = availability.onchange = () => { page = 0; renderDocuments(); };
   let chosenCollection: string | null = null;
   add.onclick = () => { if (busy) return; const collection = filter.kind === 'collection' ? library.collections.find(item => filter.kind === 'collection' && item.id === filter.id) : undefined; chosenCollection = collection && !collection.sourceId ? collection.id : null; if (desktop) void mutate(() => addDocuments(chosenCollection)); else fileInput.click(); };
@@ -695,5 +756,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
     toggle: () => { toggle(); if (visible && loadError) void refresh(); },
     // Library board (palette command): open the drawer if needed, then enter or leave the board. Below 720 px there is only the sheet.
     board: () => { if (!visible) setVisible(true, false); if (wide.matches) setBoard(!board, 'control'); else search.focus(); if (visible && loadError) void refresh(); },
+    filter: filterBy,
+    colourNames,
   };
 }

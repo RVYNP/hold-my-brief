@@ -255,6 +255,8 @@ const assistant = createAssistantPanel($('reader-layout'), {
     showMatch: async hit => { const current = reader!; await current.revealSearchMatch?.(hit); return current.getPosition().label; },
     outline: () => reader?.outline() ?? [],
     library: async () => (await getLibrary()).documents,
+    filterLibrary: change => library.filter(change),
+    colourNames: library.colourNames,
     open: doc => load(() => openLibraryDocument(doc.path), doc.name),
     setAppearance: change => {
       const kept = appearance();
