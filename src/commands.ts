@@ -125,6 +125,39 @@ export function unavailableReason(command: Command, context: { hasDocument: bool
   return undefined;
 }
 
+/** One line of the keyboard shortcut reference: what it does and its keys, one key cap each. */
+export type ShortcutRow = { label: string; keys: readonly string[]; note?: string };
+export type ShortcutSection = { title: string; rows: readonly ShortcutRow[] };
+
+/** Keys the readers handle themselves (they are not commands), shown before the catalog. */
+const MOVING_KEYS: readonly ShortcutRow[] = [
+  { label: 'Next / previous page', keys: ['PgDn', 'PgUp'] },
+  { label: 'Turn the page in page mode', keys: ['→', '←'] },
+  { label: 'Scroll', keys: ['↑', '↓'] },
+  { label: 'First / last location', keys: ['Home', 'End'] },
+  { label: 'Pan a zoomed page', keys: ['H'], note: 'or middle-drag' },
+];
+/** Keys of the interface itself, shown after the catalog. */
+const INTERFACE_KEYS: readonly ShortcutRow[] = [
+  { label: 'Command palette', keys: ['Ctrl', 'K'] },
+  { label: 'Resize the library', keys: ['←', '→'], note: 'on its divider' },
+  { label: 'Close a dialog or popover', keys: ['Esc'] },
+];
+
+/**
+ * The keyboard shortcut reference, generated from the catalog so it cannot drift from the
+ * palette: every command with a shortcut, in palette order, between the keys that move through
+ * a document and the interface's own keys. Desktop-only commands are left out of the browser.
+ */
+export function shortcutReference(context: { desktop: boolean }): ShortcutSection[] {
+  const catalog = GROUP_ORDER.map(group => ({
+    title: group,
+    rows: COMMANDS.filter(command => command.group === group && command.shortcut && !(command.requiresDesktop && !context.desktop))
+      .map(command => ({ label: command.label.replace(/…$/, ''), keys: command.shortcut!.split(' ') })),
+  })).filter(section => section.rows.length);
+  return [{ title: 'Moving around', rows: MOVING_KEYS }, ...catalog, { title: 'Anywhere', rows: INTERFACE_KEYS }];
+}
+
 /**
  * Scores a command against a query, or returns undefined when it does not match.
  *

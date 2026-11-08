@@ -367,6 +367,16 @@ dialog.drop::backdrop { background: transparent; }
 #outline-list button { text-align: left; white-space: normal; padding: 6px 8px; font-size: 12px; }
 dl { display: grid; grid-template-columns: 1fr auto; gap: 12px 8px; font-size: 11px; }
 dd { margin: 0; color: var(--muted); }
+/* Keyboard shortcuts: grouped like the palette, key caps in its style, two columns when there is
+   room. The dialog itself takes focus on open (autofocus), so the close button is not ringed. */
+#shortcuts { width: min(620px, calc(100vw - 28px)); padding: 16px 18px 6px; }
+#shortcuts:focus { outline: none; }
+#shortcut-list { columns: 2 250px; column-gap: 32px; }
+#shortcut-list section { break-inside: avoid; margin-bottom: 14px; }
+#shortcut-list h3 { margin: 0 0 5px; font-size: 10px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+#shortcut-list dl { gap: 6px 12px; margin: 0; font-size: 12px; }
+#shortcut-list dd { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 3px; }
+#shortcut-list dd span { margin-left: 2px; font-size: 11px; color: var(--faint); }
 #jump label { display: block; margin: 0 0 6px; color: var(--muted); font-size: 11px; }
 .jump-row { display: flex; gap: 6px; }
 .jump-row input { flex: 1; min-width: 0; margin: 0 !important; padding: 7px 9px !important; }
@@ -460,18 +470,26 @@ dd { margin: 0; color: var(--muted); }
 .palette-hint { font-size: 10px; color: var(--faint); white-space: nowrap; }
 .palette-empty { margin: 0; padding: 16px 13px 18px; font-size: 12px; color: var(--muted); text-align: center; }
 
-/* Find in document (Ctrl+F): a compact bar above the reading panel, not a floating
-   overlay, so it never covers the text it is searching. */
+/* Find in document (Ctrl+F): a strip above the reading surface, which moves down by the strip's
+   height so the first line is never covered. It is quiet like the rest of the chrome (one tone and
+   a hairline, no card or shadow), the field is sized for a query rather than for the window, and
+   beside the library it starts at the drawer's edge, so the drawer never covers what you typed. */
 /* The reading surface is absolutely positioned over the whole panel, so the find bar floats
    above it on the stacking axis rather than sharing its layout flow. */
-#find-bar { position: absolute; top: 0; left: 0; right: 0; z-index: 5; height: var(--find-bar-height); display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--border); background: var(--card); color: var(--muted); box-shadow: var(--shadow-popover); }
+#find-bar { position: absolute; top: 0; left: 0; right: 0; z-index: 5; height: var(--find-bar-height); display: flex; align-items: center; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--hairline); background: var(--raise); color: var(--muted); }
 #find-bar[hidden] { display: none; }
+@media (min-width: 720px) {
+  #reader-layout.library-open:not(.library-right) #find-bar { left: calc(var(--library-width, 270px) + 16px); }
+  #reader-layout.library-open.library-right #find-bar { right: calc(var(--library-width, 270px) + 16px); }
+}
 /* While the bar is open, shift the reading surface down so the first line is never hidden. */
 #workspace:has(#find-bar:not([hidden])) .reader-host { top: var(--find-bar-height); }
-#find-bar svg { flex-shrink: 0; }
-#find-query { flex: 1; min-width: 0; padding: 4px 7px; border: 1px solid var(--border); border-radius: 5px; background: var(--card); color: var(--fg); font: inherit; font-size: 12px; }
+#find-bar svg { flex-shrink: 0; margin-right: 2px; }
+#find-query { flex: 0 1 320px; min-width: 0; padding: 4px 8px; border: 0; border-radius: 6px; background: var(--hover-subtle); color: var(--fg); font: inherit; font-size: 12px; }
+#find-query::placeholder { color: var(--faint); }
 #find-query:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-#find-status { font-size: 10px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; min-width: 0; }
+#find-close { margin-left: auto; }
+#find-status { margin: 0 6px 0 4px; font-size: 10px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; min-width: 0; }
 #find-bar button { flex-shrink: 0; padding: 1px 6px; font-size: 11px; border-radius: 4px; color: var(--muted); }
 #find-bar button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent-border); }
 #find-bar button:disabled { opacity: .4; }
@@ -496,7 +514,11 @@ dd { margin: 0; color: var(--muted); }
 /* Below the find bar when both are open, the same way the opening strip waits for it. */
 #reader-layout:has(#find-bar:not([hidden])) #answer { top: calc(var(--find-bar-height) + var(--workspace-border)); }
 #assistant-settings p { margin: 0 0 12px; color: var(--muted); font-size: 12px; line-height: 1.55; }
-#assistant-settings .assistant-privacy { font-size: 11px; }
+/* What the assistant sends, as three labelled lines rather than a paragraph: read at the moment of
+   consent, so it stays visible, but scannable. */
+.assistant-terms { grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0 0 4px; font-size: 11px; line-height: 1.5; }
+.assistant-terms dt { color: var(--fg); font-weight: 500; }
+.assistant-terms dd { color: var(--muted); }
 .assistant-error { min-height: 1em; color: var(--error) !important; }
 .link-button { margin-right: auto; padding-left: 0; padding-right: 0; color: var(--accent-ink); }
 .link-button:hover { background: transparent; text-decoration: underline; }

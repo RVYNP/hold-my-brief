@@ -50,6 +50,25 @@ test('Ctrl+F counts matches, Enter steps through them and marks the current one'
   await expect(page.locator('mark.search-hit').first()).toContainText(/harbour/i);
 });
 
+test('beside the library the find field is never under the drawer, on either side', async ({ page }) => {
+  await page.setViewportSize({ width: 1080, height: 680 });
+  await openMarkdown(page);
+  if (!(await page.locator('#library-root').isVisible())) await page.locator('#library-toggle').click();
+  await expect(page.locator('#library-root')).toBeVisible();
+  await page.keyboard.press('Control+f');
+  await page.locator('#find-query').fill('harbour');
+  // Both ends of the field and the close button must be what a click there reaches, not the drawer.
+  const reachable = () => page.evaluate(() => {
+    const hit = (element: Element | null, x: number) => { const box = element!.getBoundingClientRect(); return element!.contains(document.elementFromPoint(x(box), box.top + box.height / 2)); };
+    return [hit(document.querySelector('#find-query'), box => box.left + 3), hit(document.querySelector('#find-query'), box => box.right - 3), hit(document.querySelector('#find-close'), box => box.left + box.width / 2)];
+  });
+  expect(await reachable()).toEqual([true, true, true]);
+  await page.getByRole('button', { name: 'Move library to the right' }).click();
+  await expect(page.getByRole('button', { name: 'Move library to the left' })).toBeVisible();
+  await page.locator('#find-query').focus();
+  expect(await reachable()).toEqual([true, true, true]);
+});
+
 test('match case narrows results and whole word excludes longer words', async ({ page }) => {
   await openMarkdown(page);
   await page.keyboard.press('Control+f');
