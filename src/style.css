@@ -367,6 +367,16 @@ dialog.drop::backdrop { background: transparent; }
 #outline-list button { text-align: left; white-space: normal; padding: 6px 8px; font-size: 12px; }
 dl { display: grid; grid-template-columns: 1fr auto; gap: 12px 8px; font-size: 11px; }
 dd { margin: 0; color: var(--muted); }
+/* Keyboard shortcuts: grouped like the palette, key caps in its style, two columns when there is
+   room. The dialog itself takes focus on open (autofocus), so the close button is not ringed. */
+#shortcuts { width: min(620px, calc(100vw - 28px)); padding: 16px 18px 6px; }
+#shortcuts:focus { outline: none; }
+#shortcut-list { columns: 2 250px; column-gap: 32px; }
+#shortcut-list section { break-inside: avoid; margin-bottom: 14px; }
+#shortcut-list h3 { margin: 0 0 5px; font-size: 10px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+#shortcut-list dl { gap: 6px 12px; margin: 0; font-size: 12px; }
+#shortcut-list dd { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 3px; }
+#shortcut-list dd span { margin-left: 2px; font-size: 11px; color: var(--faint); }
 #jump label { display: block; margin: 0 0 6px; color: var(--muted); font-size: 11px; }
 .jump-row { display: flex; gap: 6px; }
 .jump-row input { flex: 1; min-width: 0; margin: 0 !important; padding: 7px 9px !important; }

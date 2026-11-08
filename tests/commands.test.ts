@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COMMANDS, INTERFACE_SHORTCUTS, SHORTCUTS, groupCommands, parseIntent, scoreCommand, searchCommands, shortcutFor, unavailableReason, type Command } from '../src/commands';
+import { COMMANDS, INTERFACE_SHORTCUTS, SHORTCUTS, groupCommands, parseIntent, scoreCommand, searchCommands, shortcutFor, shortcutReference, unavailableReason, type Command } from '../src/commands';
 
 const byId = (id: string): Command => {
   const found = COMMANDS.find(command => command.id === id);
@@ -195,5 +195,20 @@ describe('typed requests', () => {
   it('leaves command names and incomplete requests to the command search', () => {
     for (const query of ['go to', 'page', 'find', 'fit', 'dark mode', 'page forty', '40 pages'])
       expect(parseIntent(query)).toBeUndefined();
+  });
+});
+
+describe('shortcut reference', () => {
+  const rows = (desktop: boolean) => shortcutReference({ desktop }).flatMap(section => section.rows.map(row => `${row.label}: ${row.keys.join(' ')}`));
+
+  it('lists every catalog shortcut with the keys the palette shows, so the two cannot drift', () => {
+    for (const command of COMMANDS.filter(entry => entry.shortcut))
+      expect(rows(true)).toContain(`${command.label.replace(/…$/, '')}: ${command.shortcut}`);
+  });
+
+  it('leaves desktop-only shortcuts out of the browser preview', () => {
+    const desktopOnly = COMMANDS.filter(entry => entry.shortcut && entry.requiresDesktop);
+    expect(desktopOnly.length).toBeGreaterThan(0);
+    for (const command of desktopOnly) expect(rows(false).some(row => row.startsWith(`${command.label}:`))).toBe(false);
   });
 });

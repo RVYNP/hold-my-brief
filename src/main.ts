@@ -5,7 +5,7 @@ import { createLibrary } from './library';
 import { ImageAdapter } from './adapters/image';
 import { createPalette } from './palette';
 import { createFindBar } from './find-bar';
-import { COMMANDS, shortcutFor, unavailableReason } from './commands';
+import { COMMANDS, shortcutFor, shortcutReference, unavailableReason } from './commands';
 import { appearance, initAppearance, pageTones, palettes, saveAppearance, type AppearanceMode } from './theme';
 import { appearanceSummary, createAppearanceSheet, paletteIcon } from './appearance';
 import { createAssistantPanel } from './assistant-panel';
@@ -33,7 +33,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <dialog id="password"><form><h2>Password required</h2><label for="secret">Document password</label><input id="secret" type="password" autocomplete="off"><div class="dialog-actions"><button type="button" data-close>Cancel</button><button type="submit" class="primary">Open document</button></div></form></dialog>
   <dialog id="contents" class="drop" aria-label="Contents"><div id="outline-list"></div></dialog>
   <dialog id="appearance"></dialog>
-  <dialog id="shortcuts"><div class="dialog-head"><h2>Keyboard shortcuts</h2><button data-close aria-label="Close shortcuts">×</button></div><dl><dt>Next / previous page</dt><dd>PgDn / PgUp</dd><dt>Page mode navigation</dt><dd>Right / Left</dd><dt>Next / previous screen</dt><dd>Space / Shift Space</dd><dt>Scroll</dt><dd>Up / Down</dd><dt>First / last location</dt><dd>Home / End</dd><dt>Go to location</dt><dd>Ctrl G</dd><dt>Back after a jump</dt><dd>Alt Left</dd><dt>Open file</dt><dd>Ctrl O</dd><dt>Document library</dt><dd>Ctrl B</dd><dt>Resize library (divider focused)</dt><dd>Left / Right, Home / End, Enter</dd><dt>Pin / size lock</dt><dd>Ctrl Shift T / L</dd><dt>Fit page / width</dt><dd>Ctrl 0 / 2</dd><dt>Two-page spread</dt><dd>Ctrl 3</dd><dt>Zoom / text size</dt><dd>Ctrl + / −</dd><dt>Hand tool (pan a zoomed page)</dt><dd>H · or middle-drag</dd><dt>Find in document</dt><dd>Ctrl F</dd><dt>Command palette</dt><dd>Ctrl K</dd><dt>Dismiss a dialog</dt><dd>Escape</dd></dl></dialog>
+  <dialog id="shortcuts" aria-labelledby="shortcuts-title" tabindex="-1" autofocus><div class="dialog-head"><h2 id="shortcuts-title">Keyboard shortcuts</h2><button data-close aria-label="Close shortcuts">×</button></div><div id="shortcut-list"></div></dialog>
   <dialog id="delete-data"><h2>Delete saved reading data?</h2><p>This removes saved positions and reading settings. Your documents and recent-file list remain. The current position will be saved again when you navigate.</p><div class="dialog-actions"><button data-close>Cancel</button><button id="confirm-delete" class="danger">Delete reading data</button></div></dialog>
   <input id="file-input" type="file" accept=".pdf,.epub,.md,.markdown,.txt,.png,.jpg,.jpeg,.webp,.gif,.avif,.bmp" hidden>`;
 // The window frame is drawn by the reader on both desktop systems. macOS keeps its own traffic lights
@@ -43,6 +43,20 @@ const platform = !desktop ? undefined : navigator.userAgent.includes('Mac') ? 'm
 if (platform) document.documentElement.classList.add(`${platform}-titlebar`);
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+// The shortcut reference is generated from the command catalog, so it says what the palette says.
+$('shortcut-list').replaceChildren(...shortcutReference({ desktop }).map(section => {
+  const group = document.createElement('section'), heading = document.createElement('h3'), list = document.createElement('dl');
+  heading.textContent = section.title;
+  for (const row of section.rows) {
+    const term = document.createElement('dt'), keys = document.createElement('dd');
+    term.textContent = row.label;
+    keys.append(...row.keys.map(key => Object.assign(document.createElement('kbd'), { textContent: key })));
+    if (row.note) keys.append(Object.assign(document.createElement('span'), { textContent: row.note }));
+    list.append(term, keys);
+  }
+  group.append(heading, list);
+  return group;
+}));
 // Text settings apply to reflowable documents only; PDF pages, fixed-layout books and images zoom instead.
 const appearanceSheet = createAppearanceSheet($<HTMLDialogElement>('appearance'), {
   current: () => reader && active && reader.mode !== 'fixed' ? { fontSize: options.fontSize, lineHeight: options.lineHeight, margin: options.margin, wrap: options.wrap, wraps: active.format === 'txt' } : undefined,
@@ -188,6 +202,9 @@ function showDialog(id: string) {
     dialog.style.left = `${Math.round(Math.max(6, Math.min(title.left, innerWidth - width - 6)))}px`;
   }
   dialog.showModal();
+  // A dialog marked autofocus (a reference with nothing to fill in) takes focus itself rather than
+  // ringing its close button; not every engine honours the attribute on <dialog>.
+  if (dialog.hasAttribute('autofocus')) dialog.focus();
 }
 function closeDialog(dialog: HTMLDialogElement) { dialog.close(); activeHost?.focus(); $('menu-toggle').setAttribute('aria-expanded', 'false'); }
 document.querySelectorAll<HTMLDialogElement>('dialog').forEach(dialog => { dialog.addEventListener('close', () => { activeHost?.focus(); if (dialog.id === 'menu') $('menu-toggle').setAttribute('aria-expanded', 'false'); }); });
