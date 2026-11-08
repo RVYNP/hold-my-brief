@@ -255,17 +255,19 @@ while focus is inside the drawer.
 
 - **Add files** selects several documents or images at once without opening them. Select a
   collection first to add new entries directly to it.
-- **Index a folder of PDFs** (desktop only) picks a folder and adds every PDF beneath it. The folder
-  becomes a collection, and each first-level subfolder that contains PDFs becomes a child
-  collection. Entries point at the original files; nothing is copied. Indexing the same folder
-  again refreshes it without duplicating entries or losing favorites and reading positions.
+- **Index a folder** (desktop only) picks a folder and adds every PDF, EPUB, Markdown and text file
+  beneath it. The folder becomes a collection, and each first-level subfolder that contains such
+  files becomes a child collection. Entries point at the original files; nothing is copied. Indexing
+  the same folder again refreshes it without duplicating entries or losing favorites and reading
+  positions.
 - **New collection** creates a named group. Use **Edit** beside a collection to rename it, or its
   **×** control to delete it after confirmation. Deleting a collection puts its documents in
   **Unfiled**; it does not delete them.
 - Each document's **···** control opens **Info**, **Organize document** (move it to a collection or
   remove its library entry after confirmation) and, for a missing original, **Locate**.
-- Star a document for **Favorites**. Search filters the selected view by filename or path; sorting
-  offers recent-first or name order.
+- Star a document for **Favorites**. Search filters the selected view by filename, path, tags, notes,
+  collection name and, for an EPUB, the title and authors inside the book; sorting offers
+  recent-first or name order.
 - Click a document to reopen it at its saved reading position. A missing or unreadable source
   reports an error without replacing the document you are reading.
 
@@ -274,8 +276,9 @@ while focus is inside the drawer.
 The row under the search field names the collection you are looking at; click it for the collection
 list and the format and availability filters. Beside it, the two glyphs switch between a **grid** of
 thumbnails and a **list** of names. The grid keeps each reference's real proportions, so tall
-posters and wide spreads read as themselves; books and text show a plain card with their title. The
-choice is remembered per collection, and a collection that is mostly images or PDFs opens as a grid.
+posters and wide spreads read as themselves; a reference with no picture shows a generated cover
+(below). The choice is remembered per collection, and a collection that is mostly images, PDFs or
+EPUBs opens as a grid.
 Hovering or focusing a tile shows its name, format, star and ··· menu; the document you are reading
 is marked **Reading**, and a missing original is dimmed.
 
@@ -284,6 +287,38 @@ with the reader's own PDF engine, reading only as much of the file as that page 
 in the app's cache folder (at most 192 MB) and remade automatically when a file changes, so a large
 library is slow only the first time it is shown. Thumbnails are a disposable cache: deleting them
 loses nothing.
+
+### Titles, covers and shelves
+
+**EPUB titles and covers.** An EPUB shows the title (and author) written inside the book instead of
+its file name, and its own cover image as the thumbnail when it has one. Only the book's package
+file (which holds the title) and its cover are read, never the whole book, and the result is remembered so it is not
+read again until the file changes. The file name stays visible in the board's detail strip, in small
+monospaced type, and on the list's second line.
+
+**Generated covers.** A reference with no picture (an EPUB without a cover, Markdown, plain text)
+gets a borderless 3:4 cover in the colours of its shelf. A band of simple dithered pixel art fills the
+top half and carries no text; below it sit the title in the reading face, then the format and, at
+the right, the version or date a file name ends with (`Rust-Book-1.99.epub` gives 1.99,
+`Photoshop-UXP-Docs-2026-10-29.epub` gives 2026-10-29). The art and tint come from the collection:
+the same collection always gets the same colour and pattern, so a shelf reads as a set and another
+collection looks different; a reference in no collection gets a neutral grey. Light and dark mode
+each have their own quiet version, and all of the text keeps at least 4.5:1 contrast. The open or
+selected reference carries the same accent ring as a picture.
+
+**Shelves.** When you open a collection that has child collections, the grid and board group its
+references into shelves: a quiet monospaced header (the collection's name in capitals, then a count)
+above that collection's tiles, with the references that sit directly in the parent first under the
+parent's own name. Shelves are ordered by collection name, so a numeric prefix sets the order. Search,
+format, availability and colour filters apply inside every shelf, and a shelf with nothing left
+disappears. Tab follows the same order, shelf by shelf. The list view is unchanged, and a collection
+without children is a plain grid.
+
+**Collection names.** The library shows a collection's name without an ordering prefix: a leading
+number and its separator are dropped, hyphens and underscores become spaces, and the first letter is
+capitalised, so `1-languages` shows as **Languages** and `2-creative-apps` as **Creative apps**. This
+is display only: the stored name, and the folder it came from, are unchanged, and the edit dialog
+shows the real name.
 
 ### Library board
 

@@ -125,7 +125,7 @@
 .library-tile-open { display: block; width: 100%; padding: 0; border-radius: 4px; }
 .library-tile-open:focus-visible { outline: none; }
 .library-tile-media { position: relative; display: block; aspect-ratio: var(--ratio, 4 / 5); overflow: hidden; border-radius: 4px; background: var(--hover); }
-.library-tile-media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.library-tile-media > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 /* The ring is an overlay above the picture: inset shadows on the media itself would sit under the img. */
 .library-tile-media::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; }
 .library-tile-open:focus-visible .library-tile-media::after, .library-tile.is-active .library-tile-media::after { box-shadow: inset 0 0 0 2px var(--accent); }
@@ -141,16 +141,31 @@
 .library-tile .library-card-actions button { color: #fff; text-shadow: 0 0 4px #0009; }
 .library-tile .library-card-actions button:hover { background: #0000008c; color: #fff; }
 .library-tile .library-card-actions .library-favorite[aria-pressed=true] { color: #fff; text-shadow: 0 1px 5px #000b; }
-.library-tile.is-text .library-card-actions button, .library-tile.is-missing .library-card-actions button { color: var(--muted); text-shadow: none; }
-.library-tile.is-text .library-card-actions button:hover, .library-tile.is-missing .library-card-actions button:hover { background: var(--hover); color: var(--fg); }
-.library-tile.is-text .library-card-actions .library-favorite[aria-pressed=true], .library-tile.is-missing .library-card-actions .library-favorite[aria-pressed=true] { color: var(--accent); text-shadow: none; }
-/* Tiles without a picture: a title set in the reading face for text, a dashed glyph for a missing original. */
-.library-tile.is-text .library-tile-media { background: var(--card); box-shadow: inset 0 0 0 1px var(--hairline); }
-.library-tile-title { position: absolute; top: 10px; right: 10px; left: 10px; display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 5; font: 500 12px/1.4 Georgia, 'Iowan Old Style', 'Times New Roman', serif; text-align: left; white-space: normal; overflow-wrap: anywhere; }
-.library-tile.is-text .library-tile-meta { position: absolute; bottom: 8px; left: 10px; color: var(--muted); font: 11px/1 var(--font-mono); letter-spacing: .2px; }
+.library-tile.is-cover:not(:has(.is-loaded)) .library-card-actions button, .library-tile.is-missing .library-card-actions button { color: var(--muted); text-shadow: none; }
+.library-tile.is-cover:not(:has(.is-loaded)) .library-card-actions button:hover, .library-tile.is-missing .library-card-actions button:hover { background: var(--hover); color: var(--fg); }
+.library-tile.is-cover:not(:has(.is-loaded)) .library-card-actions .library-favorite[aria-pressed=true], .library-tile.is-missing .library-card-actions .library-favorite[aria-pressed=true] { color: var(--accent); text-shadow: none; }
+/* Generated cover, for a reference with no picture (Markdown, text, an EPUB without a cover): a borderless 3:4 tile in
+   its shelf's tint, dithered art of the shelf in the top 56% (it carries no text), then the title in the reading face
+   and the format with the file name's version. The art is a PNG of ink pixels only, shown unsmoothed. */
+.library-cover { position: absolute; inset: 0; display: flex; flex-direction: column; background: var(--cover-fill, var(--hover)); color: var(--ink); container-type: inline-size; }
+.library-tile-media.is-loaded .library-cover { display: none; }
+.library-cover-art { display: block; flex: none; width: 100%; height: 56.25%; image-rendering: pixelated; object-fit: fill; }
+.library-cover-text { display: flex; flex: 1 1 0; flex-direction: column; justify-content: space-between; gap: 4px; min-height: 0; padding: 7px 9px 8px; text-align: left; }
+.library-cover-title { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font: 13px/1.25 var(--font-read); overflow-wrap: anywhere; white-space: normal; }
+@container (min-width: 140px) { .library-cover-title { -webkit-line-clamp: 3; } }
+.library-cover-meta { display: flex; flex: none; justify-content: space-between; gap: 6px; color: color-mix(in srgb, var(--ink) 30%, var(--muted)); font: 11px/1.1 var(--font-mono); letter-spacing: 0; white-space: nowrap; }
+.library-cover-meta span:last-child:not(:first-child) { overflow: hidden; text-overflow: ellipsis; }
+.library-tile.is-cover .library-tile-media:not(.is-loaded) .library-tile-scrim { display: none; }
+.library-tile.is-cover .library-tile-tag { top: 6px; bottom: auto; }
+/* A dashed glyph for a missing original. */
 .library-tile-glyph { position: absolute; top: calc(50% - 14px); left: calc(50% - 7px); width: 14px; height: 14px; border: 1.5px dashed var(--muted); border-radius: 50%; }
 .library-tile-note { position: absolute; top: calc(50% + 6px); right: 0; left: 0; color: var(--muted); font: 11px/1 var(--font-mono); letter-spacing: .1px; text-align: center; }
 .library-tile.is-missing .library-tile-media { background: color-mix(in srgb, var(--hover) 70%, var(--raise)); }
+
+/* Shelf: a quiet mono header above the tiles of one sub-collection (placed absolutely like the tiles). */
+.library-shelf-head { position: absolute; display: flex; align-items: baseline; gap: 6px; height: 18px; color: var(--muted); font: 11px/18px var(--font-mono); letter-spacing: .3px; pointer-events: none; }
+.library-shelf-name { overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
+.library-shelf-count { flex: none; font-variant-numeric: tabular-nums; }
 
 /* Board: the drawer opened across the whole reading panel. It stays out of flow like the drawer (the page
    underneath never resizes or refits and #workspace never gets a width); only this box's own width changes,
@@ -189,10 +204,13 @@
 .library-tile.is-selected .library-tile-media::after { box-shadow: inset 0 0 0 2px var(--accent); }
 .library-list .library-document.is-selected { background: var(--accent-soft); }
 .library-detail { flex-direction: column; min-width: 0; min-height: 0; gap: 6px; padding: 12px; overflow-y: auto; border-left: 1px solid var(--hairline); scrollbar-width: thin; }
-.library-detail-preview { display: grid; place-items: center; flex: none; max-height: 240px; overflow: hidden; border-radius: 4px; background: var(--hover); color: var(--muted); font: 11px/1 var(--font-mono); letter-spacing: .2px; }
+.library-detail-preview { position: relative; display: grid; place-items: center; flex: none; max-height: 240px; overflow: hidden; border-radius: 4px; background: var(--hover); color: var(--muted); font: 11px/1 var(--font-mono); letter-spacing: .2px; }
 .library-detail-preview.is-empty { aspect-ratio: 4 / 3; }
-.library-detail-preview img { display: block; width: 100%; max-height: 240px; object-fit: contain; }
+.library-detail-preview.is-cover { aspect-ratio: 3 / 4; width: min(100%, 180px); }
+.library-detail-preview > img { display: block; width: 100%; max-height: 240px; object-fit: contain; }
 .library-detail-name { margin: 6px 0 0; font-size: 14px; font-weight: 650; line-height: 1.3; overflow-wrap: anywhere; }
+.library-detail-creator { margin: -2px 0 0; color: var(--muted); font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+.library-detail-file { margin: 0; color: var(--muted); font: 11px/1.3 var(--font-mono); letter-spacing: 0; overflow-wrap: anywhere; }
 .library-detail-meta { margin: 0; color: var(--muted); font: 11px/1.3 var(--font-mono); letter-spacing: 0; }
 .library-detail-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; margin: 2px 0 4px -6px; }
 .library-detail-actions button { padding: 3px 6px; color: var(--muted); }

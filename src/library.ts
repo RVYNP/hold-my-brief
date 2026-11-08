@@ -6,6 +6,9 @@ import { assignMasonry, clampLibraryWidth, defaultLibraryView, libraryGrid, libr
 import { canThumbnail, createThumbnailStore, type Thumbnail } from './thumbnails';
 import { colourHex, colourMatches, colourNames, colourSwatches, nameColour, parseColourName, type ColourName } from './colour';
 import { shortcutFor } from './commands';
+import { coverArt } from './covers';
+import { collectionDisplayName, compareCollections, coverFill, coverRatio, fileTitle, fileVersion, groupIntoShelves, shelfLayout, type Shelf } from './shelf';
+import { onAppearanceChange, scheme } from './theme';
 
 /** `pending` is how many pictures still had no measured colours when the answer was given (0 = `matches` is complete). */
 export type LibraryFilterResult = { colour: string | null; query: string; matches: number; names: string[]; pending: number };
@@ -346,7 +349,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   }
   function organize(doc: LibraryDocument, trigger: HTMLElement) {
     const view = openDialog('Organize reference', trigger); if (!view) return;
-    view.content.append(element('p', 'library-dialog-document', doc.name));
+    view.content.append(element('p', 'library-dialog-document', docLabel(doc)));
     const memberships = element('fieldset', 'library-memberships'); memberships.append(element('legend', '', 'Collections (choose more than one)'));
     const selected = new Set(doc.collectionIds); const collectionInputs: { collection: Collection; input: HTMLInputElement }[] = [];
     for (const { item, depth } of orderedTree(library.collections)) {
@@ -374,8 +377,10 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     view.dialog.showModal(); tags.focus();
   }
   function referenceDetails(doc: LibraryDocument, trigger: HTMLElement) {
-    const view = openDialog(doc.name, trigger); if (!view) return;
-    view.content.append(element('p', 'library-document-meta', `${doc.format.toUpperCase()} · ${doc.availability ?? 'ready'}`));
+    const view = openDialog(docLabel(doc), trigger); if (!view) return;
+    const creator = doc.format === 'epub' ? thumbs.epub(doc.path)?.creator : undefined;
+    if (creator) view.content.append(element('p', 'library-dialog-help', creator));
+    view.content.append(element('p', 'library-document-meta', `${doc.format.toUpperCase()} · ${doc.availability ?? 'ready'}${docLabel(doc) !== doc.name ? ` · ${doc.name}` : ''}`));
     if (doc.tags.length) view.content.append(element('p', 'library-dialog-help', `Personal tags: ${doc.tags.join(', ')}`));
     if (doc.notes) view.content.append(element('p', 'library-description', doc.notes));
     locationActions(doc, view.content, () => view.dialog.close());
@@ -411,10 +416,10 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   function sourceManager(trigger: HTMLElement) {
     const view = openDialog('Sources and originals', trigger); if (!view) return;
     if (desktop) {
-      const indexButton = button('Index a folder of PDFs', undefined, 'index-folder'); indexButton.className = 'primary';
+      const indexButton = button('Index a folder', undefined, 'index-folder'); indexButton.className = 'primary';
       indexButton.onclick = () => void mutate(() => indexFolder(), () => view.dialog.close());
       const row = element('section', 'library-source-card');
-      row.append(element('h3', '', 'Folders'), element('p', 'library-dialog-help', 'Choose a folder to list its PDFs, grouped by subfolder. Each entry points at its real file; nothing is copied. Index the same folder again to pick up changes.'), indexButton);
+      row.append(element('h3', '', 'Folders'), element('p', 'library-dialog-help', 'PDF, EPUB, Markdown and text; files stay where they are.'), element('p', 'library-dialog-help', 'Choose a folder to list its documents, grouped by subfolder. Each entry points at its real file; nothing is copied. Index the same folder again to pick up changes.'), indexButton);
       view.content.append(row);
     } else view.content.append(element('p', 'library-dialog-help', 'Folder indexing and source locations require the desktop app. Browser mode supports locally chosen documents and images.'));
     for (const sourceRoot of library.roots) {
@@ -452,11 +457,11 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
       while (parent && !seen.has(parent)) { seen.add(parent); if (byId.has(parent) && !expanded.has(parent)) hidden = true; parent = byId.get(parent)?.parentId ?? null; }
       if (hidden) continue;
       const row = element('div', 'library-collection'); row.style.paddingInlineStart = `${Math.min(depth, 8) * 11}px`;
-      if (parents.has(item.id)) { const expand = button(expanded.has(item.id) ? '▾' : '▸', `${expanded.has(item.id) ? 'Collapse' : 'Expand'} ${item.name}`, `expand:${item.id}`); expand.className = 'library-expand'; expand.setAttribute('aria-expanded', String(expanded.has(item.id))); expand.onclick = () => { if (expanded.has(item.id)) expanded.delete(item.id); else expanded.add(item.id); renderNavigation(); restoreFocus(`expand:${item.id}`); }; row.append(expand); }
+      if (parents.has(item.id)) { const expand = button(expanded.has(item.id) ? '▾' : '▸', `${expanded.has(item.id) ? 'Collapse' : 'Expand'} ${collectionDisplayName(item.name)}`, `expand:${item.id}`); expand.className = 'library-expand'; expand.setAttribute('aria-expanded', String(expanded.has(item.id))); expand.onclick = () => { if (expanded.has(item.id)) expanded.delete(item.id); else expanded.add(item.id); renderNavigation(); restoreFocus(`expand:${item.id}`); }; row.append(expand); }
       else row.append(element('span', 'library-expand-spacer'));
-      const select = filterButton(`${item.name}${item.removed ? ' · removed' : ''}`, collectionMatches.get(item.id)?.size ?? 0, { kind: 'collection', id: item.id }, `collection:${item.id}`);
-      select.title = [item.name, item.sourceId ? 'Indexed folder collection' : 'Personal collection'].join('\n'); row.append(select);
-      if (!item.sourceId) { const edit = button('···', `Edit ${item.name}`, `edit:${item.id}`); edit.className = 'library-collection-action'; edit.onclick = () => { setScope(false); collectionForm(scopeButton, item); }; row.append(edit); }
+      const select = filterButton(`${collectionDisplayName(item.name)}${item.removed ? ' · removed' : ''}`, collectionMatches.get(item.id)?.size ?? 0, { kind: 'collection', id: item.id }, `collection:${item.id}`);
+      select.title = [collectionDisplayName(item.name), item.sourceId ? 'Indexed folder collection' : 'Personal collection'].join('\n'); row.append(select);
+      if (!item.sourceId) { const edit = button('···', `Edit ${collectionDisplayName(item.name)}`, `edit:${item.id}`); edit.className = 'library-collection-action'; edit.onclick = () => { setScope(false); collectionForm(scopeButton, item); }; row.append(edit); }
       navigation.append(row);
     }
     if (!library.collections.length) navigation.append(element('p', 'library-no-collections', 'Create a collection or index a folder.'));
@@ -476,6 +481,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
       void thumbs.request(path, media.dataset.format!, () => media.isConnected && visible).then(thumbnail => {
         if (!media.isConnected) return;
         if (thumbnail) showThumbnail(media, thumbnail); else if (thumbs.failed(path)) markUnavailable(media);
+        if (media.dataset.format === 'epub') reflectEpub(path);
       });
     }
   }, { root: documents, rootMargin: '120px' });
@@ -484,7 +490,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   function showThumbnail(media: HTMLElement, thumbnail: Thumbnail) {
     const tile = tileByPath.get(media.dataset.path!); if (tile && Math.abs(tile.ratio - thumbnail.ratio) > .001) { tile.ratio = thumbnail.ratio; schedulePlacement(); }
     media.style.setProperty('--ratio', String(thumbnail.ratio));
-    const image = media.querySelector('img')!; image.src = thumbnail.url; image.hidden = false; media.classList.add('is-loaded');
+    const image = media.querySelector<HTMLImageElement>(':scope > img')!; image.src = thumbnail.url; image.hidden = false; media.classList.add('is-loaded');
   }
   let placementFrame = 0;
   function schedulePlacement() { if (!placementFrame) placementFrame = requestAnimationFrame(() => { placementFrame = 0; layoutGrid(); }); }
@@ -499,7 +505,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     open.setAttribute('aria-pressed', String(selected)); open.setAttribute('aria-label', `${selected ? 'Open' : 'Select'} ${doc.name}`);
   }
   function bindOpen(doc: LibraryDocument, open: HTMLElement, node: HTMLElement) {
-    node.dataset.docPath = doc.path; node.dataset.docName = doc.name; node.classList.toggle('is-selected', board && doc.path === selectedPath); labelOpen(open, doc);
+    node.dataset.docPath = doc.path; node.dataset.docName = docLabel(doc); node.classList.toggle('is-selected', board && doc.path === selectedPath); labelOpen(open, { name: docLabel(doc), path: doc.path });
     open.onclick = () => {
       if (!board) void openDocument(doc, open, matches.filter(isImage).map(item => item.path));
       else if (selectedPath === doc.path) void openFromBoard(doc, open);
@@ -536,16 +542,20 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     detail.replaceChildren(); const doc = library.documents.find(item => item.path === selectedPath);
     if (!doc) { detail.append(element('p', 'library-detail-empty', 'Select a reference to see its details.')); return; }
     const missing = (doc.availability ?? 'ready') === 'missing'; const cached = thumbs.peek(doc.path);
-    const preview = element('div', 'library-detail-preview'); preview.classList.toggle('is-empty', !cached);
+    const preview = element('div', 'library-detail-preview'); preview.classList.toggle('is-empty', !cached); preview.classList.toggle('is-cover', !cached && hasCover(doc));
     if (cached) { const image = element('img'); image.alt = ''; image.src = cached.url; preview.append(image); }
-    else { preview.append(element('span', '', missing ? 'Missing' : doc.format.toUpperCase())); if (thumbnailable(doc) && !missing) void thumbs.request(doc.path, doc.format, () => board && selectedPath === doc.path).then(made => { if (made && board && selectedPath === doc.path) renderDetail(); }); }
-    const name = element('h3', 'library-detail-name', doc.name); name.title = doc.path;
+    else { if (!missing && hasCover(doc)) preview.append(coverNode(doc, doc.collectionIds[0])); else preview.append(element('span', '', missing ? 'Missing' : doc.format.toUpperCase())); if (thumbnailable(doc) && !missing) void thumbs.request(doc.path, doc.format, () => board && selectedPath === doc.path).then(made => { if (made && board && selectedPath === doc.path) renderDetail(); }); }
+    const name = element('h3', 'library-detail-name', docLabel(doc)); name.title = doc.path;
     const open = button('Open in reader'); open.className = 'library-detail-open'; open.append(element('kbd', '', 'Enter')); open.onclick = () => void openFromBoard(doc, open);
     const organizeButton = button('Organize…'); organizeButton.onclick = () => organize(doc, organizeButton);
     const actions = element('div', 'library-detail-actions'); actions.append(open, organizeButton);
-    detail.append(preview, name, element('p', 'library-detail-meta', `${doc.format.toUpperCase()} · ${doc.source?.removed ? 'no longer in folder' : doc.availability ?? 'ready'}`), actions);
+    detail.append(preview, name);
+    const creator = doc.format === 'epub' ? thumbs.epub(doc.path)?.creator : undefined; if (creator) detail.append(element('p', 'library-detail-creator', creator));
+    detail.append(element('p', 'library-detail-meta', `${doc.format.toUpperCase()} · ${doc.source?.removed ? 'no longer in folder' : doc.availability ?? 'ready'}`));
+    if (docLabel(doc) !== doc.name) detail.append(element('p', 'library-detail-file', doc.name));
+    detail.append(actions);
     const byId = new Map(library.collections.map(item => [item.id, item]));
-    const chain = (id: string) => { const names: string[] = []; const seen = new Set<string>(); let current = byId.get(id); while (current && !seen.has(current.id)) { seen.add(current.id); names.unshift(current.name); current = current.parentId ? byId.get(current.parentId) : undefined; } return names.join(' › '); };
+    const chain = (id: string) => { const names: string[] = []; const seen = new Set<string>(); let current = byId.get(id); while (current && !seen.has(current.id)) { seen.add(current.id); names.unshift(collectionDisplayName(current.name)); current = current.parentId ? byId.get(current.parentId) : undefined; } return names.join(' › '); };
     const provenance = doc.source;
     for (const [label, value] of [['Collection', doc.collectionIds.map(chain).filter(Boolean).join('\n')], ['Tags', doc.tags.join(', ')], ['Notes', doc.notes], ['Source', [provenance?.repository, provenance?.relativePath ?? provenance?.sourcePath].filter(Boolean).join(' / ')]]) {
       if (!value) continue; const section = element('section', 'library-detail-section'); section.append(element('h4', '', label), element('p', '', value)); detail.append(section);
@@ -566,7 +576,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     const selected = filter;
     if (!('id' in selected)) return selected.kind === 'all' ? 'All references' : selected.kind === 'favorites' ? 'Favorites' : 'Unfiled';
     if (selected.kind === 'source') return selected.id;
-    return library.collections.find(item => item.id === selected.id)?.name ?? 'Collection';
+    const named = library.collections.find(item => item.id === selected.id); return named ? collectionDisplayName(named.name) : 'Collection';
   }
   function setScope(open: boolean) {
     if (board || open && (busy || modal?.open)) return;
@@ -621,33 +631,68 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     const saved = parseLibraryView(savedPreference(viewKey())); if (saved) return saved;
     const scoped = library.documents.filter(inScope); return defaultLibraryView(scoped.filter(thumbnailable).length, scoped.length);
   }
-  // Tiles sit in the DOM in sorted order (so Tab and screen readers follow the sort) and are positioned
-  // absolutely into masonry columns: each joins the shortest column, and a tile's height follows its ratio.
+  // Tiles sit in the DOM in sorted order (so Tab and screen readers follow the sort, shelf by shelf) and are
+  // positioned absolutely into masonry columns: each joins the shortest column of its shelf, and a tile's height
+  // follows its ratio. A shelf header is placed the same way, above its tiles.
   type Tile = { node: HTMLElement; path: string; ratio: number; column: number };
-  let tiles: Tile[] = []; let columnCount = 0; const tileByPath = new Map<string, Tile>();
+  type Section = { head?: HTMLElement; tiles: Tile[] };
+  let tiles: Tile[] = []; let sections: Section[] = []; let columnCount = 0; const tileByPath = new Map<string, Tile>();
   const gridSizer = element('div', 'library-grid-sizer'); gridSizer.setAttribute('aria-hidden', 'true');
   function contentWidth() { const style = getComputedStyle(documents); return documents.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight); }
-  /** Places every tile. The column of each tile is only reassigned when asked or when the column count changes, so a picture arriving moves what is below it, never reshuffles. */
+  /** Places every header and tile. The column of each tile is only reassigned when asked or when the column count changes, so a picture arriving moves what is below it, never reshuffles. */
   function layoutGrid(assign = false) {
     if (view !== 'grid' || !tiles.length) return;
     const width = contentWidth(); if (width <= 0) return;
     const columns = libraryGridColumns(width, board ? libraryGrid.boardMinTile : undefined); const gap = libraryGrid.gap;
-    const tileWidth = (width - gap * (columns - 1)) / columns;
-    if (assign || columns !== columnCount) {
-      columnCount = columns;
-      assignMasonry(tiles.map(tile => 1 / tile.ratio), columns, gap / tileWidth).forEach((indices, column) => { for (const index of indices) tiles[index].column = column; });
-    }
-    const style = getComputedStyle(documents); const left = parseFloat(style.paddingLeft), top = parseFloat(style.paddingTop); const bottoms = new Array<number>(columns).fill(0);
-    for (const tile of tiles) {
-      const y = bottoms[tile.column]; bottoms[tile.column] = y + tileWidth / tile.ratio + gap;
-      tile.node.dataset.column = String(tile.column); tile.node.style.width = `${tileWidth}px`; tile.node.style.left = `${left + tile.column * (tileWidth + gap)}px`; tile.node.style.top = `${top + y}px`;
-    }
-    gridSizer.style.height = `${Math.max(0, Math.max(...bottoms) - gap)}px`;
+    const tileWidth = (width - gap * (columns - 1)) / columns; const reassign = assign || columns !== columnCount; columnCount = columns;
+    const style = getComputedStyle(documents); const left = parseFloat(style.paddingLeft), top = parseFloat(style.paddingTop);
+    let y = 0;
+    sections.forEach((section, index) => {
+      if (section.head) {
+        if (index) y += shelfLayout.gap;
+        section.head.style.left = `${left}px`; section.head.style.top = `${top + y}px`; section.head.style.width = `${width}px`; y += shelfLayout.head + shelfLayout.below;
+      }
+      if (reassign) assignMasonry(section.tiles.map(tile => 1 / tile.ratio), columns, gap / tileWidth).forEach((indices, column) => { for (const at of indices) section.tiles[at].column = column; });
+      const bottoms = new Array<number>(columns).fill(0);
+      for (const tile of section.tiles) {
+        const offset = bottoms[tile.column]; bottoms[tile.column] = offset + tileWidth / tile.ratio + gap;
+        tile.node.dataset.column = String(tile.column); tile.node.style.width = `${tileWidth}px`; tile.node.style.left = `${left + tile.column * (tileWidth + gap)}px`; tile.node.style.top = `${top + y + offset}px`;
+      }
+      y += Math.max(...bottoms) - gap;
+    });
+    gridSizer.style.height = `${Math.max(0, y)}px`;
     // Tiles built while the drawer was hidden or had no width are only placed now; observing is idempotent.
     observeThumbnails();
   }
   // The drawer's own width is the only input; a new width re-places the tiles (and re-assigns columns if their count changed).
   new ResizeObserver(() => { if (visible) layoutGrid(); }).observe(documents);
+
+  // An EPUB's title is what its tile and detail show, once read (the file name until then). The library entry's own name is kept as the file name.
+  const epubTitle = (doc: LibraryDocument) => doc.format === 'epub' ? thumbs.epub(doc.path)?.title : undefined;
+  const docLabel = (doc: LibraryDocument) => epubTitle(doc) ?? doc.name;
+  function reflectEpub(path: string) {
+    const doc = library.documents.find(item => item.path === path); if (!doc) return;
+    const label = docLabel(doc);
+    for (const node of documents.querySelectorAll<HTMLElement>('[data-doc-path]')) {
+      if (node.dataset.docPath !== path) continue;
+      node.dataset.docName = label; const open = node.querySelector<HTMLElement>('.library-document-open'); if (open) labelOpen(open, { name: label, path });
+      for (const text of node.querySelectorAll<HTMLElement>('.library-document-name, .library-tile-name')) text.textContent = label;
+      for (const text of node.querySelectorAll<HTMLElement>('.library-cover-title')) text.textContent = epubTitle(doc) ?? fileTitle(doc.name);
+      const meta = node.querySelector<HTMLElement>('.library-row-meta'); if (meta) meta.textContent = rowMeta(doc);
+    }
+    if (board && selectedPath === path) renderDetail();
+  }
+  const rowMeta = (doc: LibraryDocument) => `${doc.format.toUpperCase()} · ${doc.source?.removed ? 'no longer in folder' : doc.availability ?? 'ready'}${doc.path === activePath ? ' · Reading' : ''}${epubTitle(doc) ? ` · ${doc.name}` : ''}`;
+  /** A generated cover for a document with no picture: dithered art of its shelf in the top half, the title and the format (with the version in the file name) below. */
+  function coverNode(doc: LibraryDocument, shelfId: string | undefined) {
+    const cover = element('span', 'library-cover'); cover.style.setProperty('--cover-fill', coverFill(shelfId));
+    const art = element('img', 'library-cover-art'); art.alt = ''; art.dataset.cover = shelfId ?? ''; art.src = coverArt(shelfId, scheme());
+    const meta = element('span', 'library-cover-meta'); meta.append(element('span', '', doc.format.toUpperCase())); const version = fileVersion(doc.name); if (version) meta.append(element('span', '', version));
+    const text = element('span', 'library-cover-text'); text.append(element('span', 'library-cover-title', epubTitle(doc) ?? fileTitle(doc.name)), meta);
+    cover.append(art, text); return cover;
+  }
+  const hasCover = (doc: LibraryDocument) => (doc.availability ?? 'ready') !== 'missing' && (!thumbnailable(doc) || doc.format === 'epub');
+  onAppearanceChange(() => { for (const art of root.querySelectorAll<HTMLImageElement>('.library-cover-art')) art.src = coverArt(art.dataset.cover || undefined, scheme()); });
   function actionsFor(doc: LibraryDocument) {
     const actions = element('div', 'library-card-actions');
     const favorite = button(doc.favorite ? '★' : '☆', `${doc.favorite ? 'Unfavorite' : 'Favorite'} ${doc.name}`, `favorite:${doc.path}`); favorite.className = 'library-favorite'; favorite.setAttribute('aria-pressed', String(doc.favorite));
@@ -657,49 +702,62 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   }
   function documentRow(doc: LibraryDocument) {
     const row = element('div', 'library-document'); row.setAttribute('role', 'listitem'); row.classList.toggle('is-active', doc.path === activePath);
-    const open = button('', `Open ${doc.name}`, `open:${doc.path}`); open.className = 'library-document-open'; open.title = doc.path; if (doc.path === activePath) open.setAttribute('aria-current', 'true');
-    open.append(element('span', 'library-document-name', doc.name), element('span', 'library-document-meta', `${doc.format.toUpperCase()} · ${doc.source?.removed ? 'no longer in folder' : doc.availability ?? 'ready'}${doc.path === activePath ? ' · Reading' : ''}`));
+    const open = button('', `Open ${docLabel(doc)}`, `open:${doc.path}`); open.className = 'library-document-open'; open.title = doc.path; if (doc.path === activePath) open.setAttribute('aria-current', 'true');
+    open.append(element('span', 'library-document-name', docLabel(doc)), element('span', 'library-document-meta library-row-meta', rowMeta(doc)));
     bindOpen(doc, open, row);
     row.append(open, actionsFor(doc)); return row;
   }
-  function documentTile(doc: LibraryDocument): Tile {
-    const ratio = thumbs.ratio(doc.path) ?? libraryGrid.defaultRatio; const missing = (doc.availability ?? 'ready') === 'missing';
+  /** `shelfId` is the shelf the tile sits on, which tints its generated cover; outside shelves it is the document's first collection. */
+  function documentTile(doc: LibraryDocument, shelfId: string | undefined): Tile {
+    const generated = hasCover(doc); const ratio = thumbs.ratio(doc.path) ?? (generated ? coverRatio : libraryGrid.defaultRatio); const missing = (doc.availability ?? 'ready') === 'missing';
     const node = element('div', 'library-document library-tile'); node.setAttribute('role', 'listitem');
-    node.classList.toggle('is-active', doc.path === activePath); node.classList.toggle('is-missing', missing); node.classList.toggle('is-text', !missing && !thumbnailable(doc));
-    const open = button('', `Open ${doc.name}`, `open:${doc.path}`); open.className = 'library-document-open library-tile-open'; open.title = doc.path; if (doc.path === activePath) open.setAttribute('aria-current', 'true');
+    node.classList.toggle('is-active', doc.path === activePath); node.classList.toggle('is-missing', missing); node.classList.toggle('is-cover', generated);
+    const open = button('', `Open ${docLabel(doc)}`, `open:${doc.path}`); open.className = 'library-document-open library-tile-open'; open.title = doc.path; if (doc.path === activePath) open.setAttribute('aria-current', 'true');
     const media = element('span', 'library-tile-media'); media.style.setProperty('--ratio', String(ratio));
     const format = doc.format.toUpperCase();
     if (missing) media.append(element('span', 'library-tile-glyph'), element('span', 'library-tile-note', 'Missing'));
-    else if (thumbnailable(doc)) {
-      media.append(element('span', 'library-tile-format', format));
-      const image = element('img'); image.alt = ''; image.hidden = true; image.decoding = 'async'; media.dataset.path = doc.path; media.dataset.format = doc.format; media.append(image);
-      const cached = thumbs.peek(doc.path); if (cached) showThumbnail(media, cached); else if (thumbs.failed(doc.path)) markUnavailable(media);
-      const scrim = element('span', 'library-tile-scrim'); scrim.append(element('span', 'library-tile-name', doc.name), element('span', 'library-tile-meta', format)); media.append(scrim);
-    } else media.append(element('span', 'library-tile-title', doc.name), element('span', 'library-tile-meta', format));
+    else {
+      if (generated) media.append(coverNode(doc, shelfId));
+      if (thumbnailable(doc)) {
+        if (!generated) media.append(element('span', 'library-tile-format', format));
+        const image = element('img'); image.alt = ''; image.hidden = true; image.decoding = 'async'; media.dataset.path = doc.path; media.dataset.format = doc.format; media.append(image);
+        const cached = thumbs.peek(doc.path); if (cached) showThumbnail(media, cached); else if (thumbs.failed(doc.path)) markUnavailable(media);
+        const scrim = element('span', 'library-tile-scrim'); scrim.append(element('span', 'library-tile-name', docLabel(doc)), element('span', 'library-tile-meta', format)); media.append(scrim);
+      }
+    }
     if (doc.path === activePath) media.append(element('span', 'library-tile-tag', 'Reading'));
     open.append(media);
     bindOpen(doc, open, node);
     node.append(open, actionsFor(doc)); return { node, path: doc.path, ratio, column: 0 };
   }
   for (const mode of ['grid', 'list'] as const) viewButtons[mode].onclick = () => { if (view !== mode) { savePreference(viewKey(), mode); renderDocuments(); } };
+  function shelfHead(shelf: Shelf<LibraryDocument>) {
+    const head = element('div', 'library-shelf-head'); head.setAttribute('role', 'listitem'); head.dataset.shelf = shelf.id;
+    head.append(element('span', 'library-shelf-name', shelf.name), element('span', 'library-shelf-count', String(shelf.items.length))); return head;
+  }
   function renderDocuments() {
-    clearThumbnails(); documents.replaceChildren(); pager.replaceChildren(); tiles = []; tileByPath.clear(); columnCount = 0; closeItemMenu(false); const generation = ++renderGeneration;
+    clearThumbnails(); documents.replaceChildren(); pager.replaceChildren(); tiles = []; sections = []; tileByPath.clear(); columnCount = 0; closeItemMenu(false); const generation = ++renderGeneration;
     const unknown: LibraryDocument[] = [];
     const query = search.value.trim().toLocaleLowerCase();
     matches = library.documents.filter(doc => {
       if (!inScope(doc)) return false;
       if (format.value === 'image' && !isImage(doc) || format.value === 'document' && !['pdf', 'epub', 'md', 'markdown', 'txt'].includes(doc.format)) return false;
       if (availability.value && (doc.availability ?? 'ready') !== availability.value) return false;
-      const categories = doc.collectionIds.map(id => library.collections.find(item => item.id === id)?.name ?? '').join(' ').toLocaleLowerCase();
-      if (!(!query || query.split(/\s+/).every(word => `${searchable.get(doc.path) ?? ''} ${categories}`.includes(word)))) return false;
+      const categories = doc.collectionIds.map(id => { const item = library.collections.find(collection => collection.id === id); return item ? `${item.name} ${collectionDisplayName(item.name)}` : ''; }).join(' ').toLocaleLowerCase();
+      const info = thumbs.epub(doc.path); const known = `${info?.title ?? ''} ${info?.creator ?? ''}`.toLocaleLowerCase();
+      if (!(!query || query.split(/\s+/).every(word => `${searchable.get(doc.path) ?? ''} ${known} ${categories}`.includes(word)))) return false;
       if (!colourFilter) return true;
       const colours = thumbs.colours(doc.path);
-      if (!colours) { if (thumbnailable(doc) && (doc.availability ?? 'ready') !== 'missing' && !thumbs.failed(doc.path)) unknown.push(doc); return false; }
+      if (!colours) { if (thumbnailable(doc) && (doc.availability ?? 'ready') !== 'missing' && !thumbs.failed(doc.path) && !thumbs.none(doc.path)) unknown.push(doc); return false; }
       return colourMatches(colours, colourFilter);
     });
     matches.sort(sort.value === 'name' ? (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }) || a.path.localeCompare(b.path) : (a, b) => timestamp(b.lastOpened) - timestamp(a.lastOpened) || a.name.localeCompare(b.name));
+    view = currentView();
+    // A collection with sub-collections shows as shelves in the grid: its own documents first, then one shelf per child.
+    const shelves = view === 'grid' && filter.kind === 'collection' ? groupIntoShelves(filter.id, library.collections, matches) : undefined;
+    const ordered = shelves ? shelves.flatMap(shelf => shelf.items) : matches;
     page = Math.min(page, Math.max(0, Math.ceil(matches.length / pageSize) - 1));
-    if (board && !matches.some(doc => doc.path === selectedPath)) selectedPath = matches.find(doc => doc.path === activePath)?.path ?? matches[0]?.path;
+    if (board && !matches.some(doc => doc.path === selectedPath)) selectedPath = matches.find(doc => doc.path === activePath)?.path ?? ordered[0]?.path;
     colourUnknown = unknown.length; colourChip.hidden = !colourFilter;
     if (colourFilter) {
       colourChip.replaceChildren(); const dot = element('span', 'library-colour-dot'); dot.style.background = colourSwatches[colourFilter];
@@ -707,18 +765,23 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
       analyseColours(unknown, generation);
     }
     resultCount.textContent = `${matches.length} ${matches.length === 1 ? 'reference' : 'references'}${colourFilter && unknown.length ? ` · analysing ${unknown.length}` : ''}`;
-    view = currentView(); documents.classList.toggle('library-grid', view === 'grid'); documents.classList.toggle('library-list', view === 'list');
+    documents.classList.toggle('library-grid', view === 'grid'); documents.classList.toggle('library-list', view === 'list');
     for (const mode of ['grid', 'list'] as const) viewButtons[mode].setAttribute('aria-pressed', String(view === mode));
     scopeLabel.textContent = scopeName(); scopeButton.setAttribute('aria-label', `${scopeName()}. Choose collection and filters`);
     if (!matches.length) {
       const empty = element('div', 'library-empty'); empty.setAttribute('role', 'listitem');
-      empty.append(element('strong', '', loadError ? 'Library unavailable' : !loaded ? 'Loading library…' : !library.documents.length ? 'Your references, collected.' : 'No matching references'), element('p', '', loadError ? 'Could not load the library. Close and reopen it to retry.' : !loaded ? 'Getting your saved library.' : !library.documents.length ? 'Add local documents and images, or index a folder of PDFs. Originals stay untouched.' : 'Try another search, format, availability, or collection.'));
+      empty.append(element('strong', '', loadError ? 'Library unavailable' : !loaded ? 'Loading library…' : !library.documents.length ? 'Your references, collected.' : 'No matching references'), element('p', '', loadError ? 'Could not load the library. Close and reopen it to retry.' : !loaded ? 'Getting your saved library.' : !library.documents.length ? 'Add local documents and images, or index a folder. Originals stay untouched.' : 'Try another search, format, availability, or collection.'));
       documents.append(empty);
     }
-    const shown = matches.slice(page * pageSize, (page + 1) * pageSize);
+    const shown = ordered.slice(page * pageSize, (page + 1) * pageSize);
     if (view === 'grid') {
-      tiles = shown.map(documentTile); for (const tile of tiles) tileByPath.set(tile.path, tile);
-      documents.append(gridSizer, ...tiles.map(tile => tile.node)); layoutGrid(true);
+      const nodes: HTMLElement[] = [];
+      for (const doc of shown) {
+        const shelf = shelves?.find(candidate => candidate.items.includes(doc)); const last = sections[sections.length - 1];
+        if (!last || shelf && last.head?.dataset.shelf !== shelf.id) { const head = shelf ? shelfHead(shelf) : undefined; sections.push({ head, tiles: [] }); if (head) nodes.push(head); }
+        const tile = documentTile(doc, shelf?.id ?? doc.collectionIds[0]); sections[sections.length - 1].tiles.push(tile); tiles.push(tile); tileByPath.set(tile.path, tile); nodes.push(tile.node);
+      }
+      documents.append(gridSizer, ...nodes); layoutGrid(true);
       // The disk cache knows the shape of every thumbnail it holds: reserve those tiles' real height now
       // rather than letting the grid jump as pictures arrive.
       void thumbs.primeRatios(shown.map(doc => doc.path)).then(learned => {
@@ -728,6 +791,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
       });
     }
     else documents.append(...shown.map(documentRow));
+    for (const doc of shown) if (doc.format === 'epub' && (doc.availability ?? 'ready') !== 'missing' && !thumbs.epub(doc.path)) void thumbs.loadEpub(doc.path, () => visible && generation === renderGeneration).then(info => { if (info) reflectEpub(doc.path); });
     thumbs.trim(new Set(shown.map(doc => doc.path)));
     if (matches.length > pageSize) {
       const previous = button('←', 'Previous library page', 'page-previous'); previous.disabled = page === 0; const next = button('→', 'Next library page', 'page-next'); next.disabled = (page + 1) * pageSize >= matches.length;
@@ -739,7 +803,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   function render() {
     const key = focusKey(); if (filter.kind === 'collection' && !library.collections.some(collection => filter.kind === 'collection' && collection.id === filter.id)) filter = { kind: 'unfiled' };
     renderNavigation(); renderDocuments(); const collection = filter.kind === 'collection' ? library.collections.find(item => filter.kind === 'collection' && item.id === filter.id) : undefined;
-    add.title = collection && !collection.sourceId ? `Add files to ${collection.name}` : 'Add files to Unfiled';
+    add.title = collection && !collection.sourceId ? `Add files to ${collectionDisplayName(collection.name)}` : 'Add files to Unfiled';
     if (busy) setBusy(true); if (key && !busy && !modal?.open) restoreFocus(key);
   }
   function setColour(next: ColourName | null) { colourFilter = next; colourRequested.clear(); colourSelect.value = next ?? ''; page = 0; renderDocuments(); }
