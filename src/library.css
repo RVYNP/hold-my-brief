@@ -31,7 +31,7 @@
 /* Light: the design's dark ink pill. Dark: a raised card, so it doesn't flare against dark surfaces. */
 .library-resize-tip { position: absolute; top: 50%; left: calc(100% + 6px); display: flex; align-items: center; gap: 6px; padding: 5px 8px; border: 1px solid light-dark(var(--fg), var(--border)); border-radius: 6px; background: light-dark(var(--fg), var(--card)); color: light-dark(var(--chrome), var(--fg)); font: 10px/1.4 var(--font-mono); white-space: nowrap; pointer-events: none; transform: translateY(-50%); }
 .library-right .library-resize-tip { left: auto; right: calc(100% + 6px); }
-.library-resize-value { color: light-dark(var(--faint), var(--muted)); font-variant-numeric: tabular-nums; }
+.library-resize-value { color: var(--muted); font-variant-numeric: tabular-nums; }
 .library-resize::before, .library-resize-grip, .library-resize-tip { opacity: 0; transition: opacity .12s; }
 .library-resize:hover::before, .library-resize:hover .library-resize-grip, .library-resize:focus-visible::before, .library-resize:focus-visible .library-resize-grip, .library-resize:focus-visible .library-resize-tip, .library-resizing .library-resize::before, .library-resizing .library-resize-grip, .library-resizing .library-resize-tip { opacity: 1; }
 .library-resize:hover .library-resize-tip { opacity: 1; transition-delay: .35s; }
@@ -49,7 +49,7 @@
 .library-tools button:not(.library-add):hover { color: var(--fg); }
 .library-search-label { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .library-search { flex-shrink: 0; width: 100%; min-width: 0; padding: 6px 8px; border: 0; border-radius: 6px; background: color-mix(in srgb, var(--hover) 55%, var(--raise)); color: var(--fg); margin-bottom: 4px; }
-.library-search::placeholder { color: var(--faint); }
+.library-search::placeholder { color: var(--muted); }
 .library-facets { display: flex; flex-shrink: 0; flex-wrap: wrap; gap: 0 6px; margin: 0; }
 .library-facets select, .library-sort { flex: 0 1 auto; min-width: 0; max-width: 100%; padding: 4px 16px 4px 2px; border: 0; border-radius: 4px; background-color: transparent; background-position: right 6px center, right 2px center; color: var(--muted); font-size: 11px !important; }
 .library-facets select:hover, .library-sort:hover { color: var(--fg); }
@@ -129,7 +129,7 @@
 /* The ring is an overlay above the picture: inset shadows on the media itself would sit under the img. */
 .library-tile-media::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; }
 .library-tile-open:focus-visible .library-tile-media::after, .library-tile.is-active .library-tile-media::after { box-shadow: inset 0 0 0 2px var(--accent); }
-.library-tile-format { position: absolute; inset: 0; display: grid; place-items: center; color: var(--faint); font: 9px/1 var(--font-mono); letter-spacing: .6px; }
+.library-tile-format { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font: 9px/1 var(--font-mono); letter-spacing: .6px; }
 .library-tile-media.is-loaded .library-tile-format { display: none; }
 .library-tile-scrim { position: absolute; right: 0; bottom: 0; left: 0; display: flex; flex-direction: column; gap: 1px; padding: 22px 7px 6px; background: linear-gradient(to top, #000000b8, #00000000); color: #fff; text-align: left; opacity: 0; transition: opacity .12s; pointer-events: none; }
 .library-tile.is-active .library-tile-scrim { padding-bottom: 26px; }
@@ -189,7 +189,7 @@
 .library-tile.is-selected .library-tile-media::after { box-shadow: inset 0 0 0 2px var(--accent); }
 .library-list .library-document.is-selected { background: var(--accent-soft); }
 .library-detail { flex-direction: column; min-width: 0; min-height: 0; gap: 6px; padding: 12px; overflow-y: auto; border-left: 1px solid var(--hairline); scrollbar-width: thin; }
-.library-detail-preview { display: grid; place-items: center; flex: none; max-height: 240px; overflow: hidden; border-radius: 4px; background: var(--hover); color: var(--faint); font: 9px/1 var(--font-mono); letter-spacing: .6px; }
+.library-detail-preview { display: grid; place-items: center; flex: none; max-height: 240px; overflow: hidden; border-radius: 4px; background: var(--hover); color: var(--muted); font: 9px/1 var(--font-mono); letter-spacing: .6px; }
 .library-detail-preview.is-empty { aspect-ratio: 4 / 3; }
 .library-detail-preview img { display: block; width: 100%; max-height: 240px; object-fit: contain; }
 .library-detail-name { margin: 6px 0 0; font-size: 14px; font-weight: 650; line-height: 1.3; overflow-wrap: anywhere; }

@@ -26,7 +26,7 @@
   --accent-ink: light-dark(#c62f2f, #ff8a80);
   --accent-soft: light-dark(#fde9e4, #3a1e1a);
   --accent-border: light-dark(#f3b3a8, #6e2b24);
-  --accent-fill: light-dark(#e13a3a, #d93a3a);
+  --accent-fill: light-dark(#db3435, #d93a3a);
   --scrim: light-dark(#1a18153d, #0000008c);
   --search-hit: light-dark(#f2dfa0, #6b5620);
 }
@@ -37,7 +37,7 @@
   --paper: light-dark(#fbfafc, #1e1d24);
   --ink: light-dark(#1d1b22, #dedbe6);
   --fg: light-dark(#303039, #e8e6ee);
-  --muted: light-dark(#6b6975, #9a97a6);
+  --muted: light-dark(#64626e, #9a97a6);
   --faint: light-dark(#a9a6b3, #5e5b69);
   --border: light-dark(#d4d1db, #302e39);
   --hairline: light-dark(#dedbe4, #28262f);
@@ -59,7 +59,7 @@
   --paper: light-dark(#fbf8f1, #201e1a);
   --ink: light-dark(#2a251d, #e6dfd2);
   --fg: light-dark(#33302a, #ece6da);
-  --muted: light-dark(#76705f, #a39b8c);
+  --muted: light-dark(#6b6554, #a39b8c);
   --faint: light-dark(#aba593, #625c51);
   --border: light-dark(#d8d3c8, #35312a);
   --hairline: light-dark(#e2ded4, #2b2823);
@@ -103,7 +103,7 @@
   --paper: light-dark(#fafcfd, #141b21);
   --ink: light-dark(#1e2731, #dce4ea);
   --fg: light-dark(#25303b, #e2e9ef);
-  --muted: light-dark(#617080, #8a99a7);
+  --muted: light-dark(#596777, #8a99a7);
   --faint: light-dark(#a3afbb, #4e5b67);
   --border: light-dark(#ced7e1, #25303a);
   --hairline: light-dark(#dae1e8, #1d262e);
@@ -351,7 +351,7 @@ dialog select { padding-right: 28px; }
 .menu-group:not(:has(button:not([hidden]))) { display: none; }
 .menu-grid button { display: flex; justify-content: space-between; align-items: center; text-align: left; gap: 8px; padding: 6px 10px; font-size: 12px; white-space: nowrap; }
 .menu-grid button[aria-pressed=true] { background: transparent; border-color: transparent; color: var(--accent-ink); }
-.menu-grid kbd { padding: 0; border: 0; background: none; color: var(--faint); }
+.menu-grid kbd { padding: 0; border: 0; background: none; color: var(--muted); }
 /* A dialog focuses its first item when it opens, which WebKit rings even after a click; the ring is
    kept for Tab navigation, as for the page. */
 :root:not(.keyboard-focus) #menu button:focus-visible { outline: none; }
@@ -373,10 +373,10 @@ dd { margin: 0; color: var(--muted); }
 #shortcuts:focus { outline: none; }
 #shortcut-list { columns: 2 250px; column-gap: 32px; }
 #shortcut-list section { break-inside: avoid; margin-bottom: 14px; }
-#shortcut-list h3 { margin: 0 0 5px; font-size: 10px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+#shortcut-list h3 { margin: 0 0 5px; font-size: 10px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 #shortcut-list dl { gap: 6px 12px; margin: 0; font-size: 12px; }
 #shortcut-list dd { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 3px; }
-#shortcut-list dd span { margin-left: 2px; font-size: 11px; color: var(--faint); }
+#shortcut-list dd span { margin-left: 2px; font-size: 11px; color: var(--muted); }
 #jump label { display: block; margin: 0 0 6px; color: var(--muted); font-size: 11px; }
 .jump-row { display: flex; gap: 6px; }
 .jump-row input { flex: 1; min-width: 0; margin: 0 !important; padding: 7px 9px !important; }
@@ -457,17 +457,17 @@ dd { margin: 0; color: var(--muted); }
 .palette-search { display: flex; align-items: center; gap: 8px; padding: 11px 13px; border-bottom: 1px solid var(--border); color: var(--muted); flex-shrink: 0; }
 .palette-search svg { flex-shrink: 0; }
 #palette-input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--fg); font: inherit; font-size: 13px; outline: none; }
-#palette-input::placeholder { color: var(--faint); }
+#palette-input::placeholder { color: var(--muted); }
 .palette-esc { flex-shrink: 0; }
 .palette-list { overflow-y: auto; overscroll-behavior: contain; padding: 6px; min-height: 0; }
-.palette-group { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); padding: 8px 8px 3px; }
+.palette-group { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 8px 8px 3px; }
 .palette-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 9px; border-radius: 5px; font-size: 12px; cursor: default; }
 .palette-row[aria-selected="true"] { background: var(--accent-soft); color: var(--accent-ink); }
 .palette-row[aria-selected="true"] kbd { color: var(--accent-ink); border-color: var(--accent-border); background: transparent; }
 .palette-row[aria-disabled="true"] { color: var(--faint); }
 .palette-row[aria-disabled="true"][aria-selected="true"] { background: var(--hover); color: var(--muted); }
 .palette-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.palette-hint { font-size: 10px; color: var(--faint); white-space: nowrap; }
+.palette-hint { font-size: 10px; color: var(--muted); white-space: nowrap; }
 .palette-empty { margin: 0; padding: 16px 13px 18px; font-size: 12px; color: var(--muted); text-align: center; }
 
 /* Find in document (Ctrl+F): a strip above the reading surface, which moves down by the strip's
@@ -486,7 +486,7 @@ dd { margin: 0; color: var(--muted); }
 #workspace:has(#find-bar:not([hidden])) .reader-host { top: var(--find-bar-height); }
 #find-bar svg { flex-shrink: 0; margin-right: 2px; }
 #find-query { flex: 0 1 320px; min-width: 0; padding: 4px 8px; border: 0; border-radius: 6px; background: var(--hover-subtle); color: var(--fg); font: inherit; font-size: 12px; }
-#find-query::placeholder { color: var(--faint); }
+#find-query::placeholder { color: var(--muted); }
 #find-query:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 #find-close { margin-left: auto; }
 #find-status { margin: 0 6px 0 4px; font-size: 10px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; min-width: 0; }
@@ -509,7 +509,7 @@ dd { margin: 0; color: var(--muted); }
 .answer-pending { color: var(--muted); }
 .answer-error { color: var(--error); }
 .answer-follow input { width: 100%; margin-top: 8px; padding: 7px 9px; border: 0; border-radius: 6px; background: var(--hover-subtle); color: var(--fg); font: inherit; font-size: 12px; }
-.answer-follow input::placeholder { color: var(--faint); }
+.answer-follow input::placeholder { color: var(--muted); }
 .answer-follow input:disabled { opacity: .5; }
 /* Below the find bar when both are open, the same way the opening strip waits for it. */
 #reader-layout:has(#find-bar:not([hidden])) #answer { top: calc(var(--find-bar-height) + var(--workspace-border)); }
