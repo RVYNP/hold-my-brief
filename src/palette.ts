@@ -88,7 +88,7 @@ export function createPalette(context: PaletteContext): Palette {
       const fallback: Row[] = !intent && text.length >= 2 && state.hasDocument ? [{ label: `Find “${text}” in document`, shortcut: 'Ctrl F', run: () => context.find(text) }] : [];
       const named = commands.some(command => (scoreCommand(command, query) ?? 0) >= 700);
       const assistant = context.assistant;
-      const ask: Row[] = assistant?.ready() && text.length >= 2 ? [{ label: `Ask Claude “${text}”`, run: () => assistant.ask(text) }] : [];
+      const ask: Row[] = assistant?.ready() && text.length >= 2 ? [{ label: `Ask the assistant “${text}”`, run: () => assistant.ask(text) }] : [];
       // A command named by the query keeps the lead even when it reads like a question ("show shortcuts").
       const question = !intent && !named && looksLikeQuestion(text);
       sections = [{ rows: [...(question ? ask : []), ...request, ...(named ? [] : fallback), ...commands.map(toRow), ...(named ? fallback : []), ...(question ? [] : ask)] }];
@@ -100,6 +100,13 @@ export function createPalette(context: PaletteContext): Palette {
     const firstEnabled = enabled.findIndex(Boolean);
     actived = firstEnabled === -1 ? 0 : firstEnabled;
     list.replaceChildren();
+    if (!text && !state.hasDocument) {
+      const caption = document.createElement('p');
+      caption.className = 'palette-note';
+      caption.setAttribute('aria-hidden', 'true');
+      caption.textContent = 'Dimmed commands need an open document.';
+      list.append(caption);
+    }
     empty.hidden = rows.length > 0;
 
     let index = 0;
@@ -135,11 +142,12 @@ export function createPalette(context: PaletteContext): Palette {
           keys.textContent = entry.shortcut;
           row.append(keys);
         }
-        // A disabled row explains itself rather than just going grey, so the shortcut is
-        // still shown but the reason follows it.
+        // A disabled row explains itself rather than just going grey. "Open a document first" would repeat
+        // down every unavailable row, so with no document open it is said once above the list and kept on
+        // the rows only for screen readers and hover; any other reason stays on its row.
         if (entry.reason) {
           const note = document.createElement('span');
-          note.className = 'palette-hint';
+          note.className = entry.reason === needsDocument ? 'palette-hint palette-hint-quiet' : 'palette-hint';
           note.textContent = entry.reason;
           row.append(note);
         }

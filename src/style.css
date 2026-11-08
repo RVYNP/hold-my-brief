@@ -294,11 +294,17 @@ select:hover { border-color: var(--accent-border); }
 #workspace { position: relative; flex: 1; min-height: 0; min-width: 0; border-top: var(--workspace-border) solid var(--hairline); background: var(--surface); overflow: hidden; }
 /* First run is a page of type, not a stack of boxes: the mark is a plain glyph, the one filled
    control is the call to action sized to its words, and recents are a quiet list. */
-#empty { height: 100%; overflow: auto; padding: 32px 28px 24px; max-width: 640px; margin: auto; }
+#empty { height: 100%; overflow: auto; padding: 32px 28px 24px; max-width: 640px; margin: auto; display: flex; flex-direction: column; align-items: flex-start; }
+/* The page of type rests at the optical centre of the panel instead of hugging the top: two spacers share
+   the free height 1 : 1.3 (a little above true centre), and give way to nothing when the window is short. */
+#empty::before, #empty::after { content: ''; flex: 1 1 0; min-height: 0; }
+#empty::after { flex-grow: 1.3; }
+#empty > * { flex-shrink: 0; }
+#recents { align-self: stretch; }
 .book-mark { display: block; color: var(--accent); }
 .eyebrow { font: 11px/1.35 var(--font-mono) !important; letter-spacing: .8px; color: var(--muted) !important; margin-top: 22px !important; }
 /* Headings are titles: Geist Serif at its one weight, which a display serif carries without bold. */
-h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 12px 0 18px; color: var(--fg); }
+h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 1px 0 5px; color: var(--fg); }
 #empty > p { color: var(--muted); font-size: 13px; line-height: 1.65; }
 .primary { background: var(--accent-fill); color: var(--on-accent); padding: 11px 15px; font-weight: 600; }
 .primary:hover { background: var(--accent-fill-hover); }
@@ -324,6 +330,9 @@ footer:hover, footer:focus-within, footer:has(#progress:active) { translate: 0 0
 footer:hover::before, footer:focus-within::before { height: 0; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 #position { flex: 1; min-width: 0; padding: 3px 6px; overflow: hidden; text-overflow: ellipsis; font: 11px/1.5 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+/* The position is the whole row between the arrows, so a filled hover would box the entire footer in as
+   soon as it opens; it brightens its text instead. */
+#position:hover:not(:disabled) { background: transparent; color: var(--fg); }
 #previous, #next { padding: 3px 9px; color: var(--muted); }
 /* The scrubber is the hairline along the window's bottom edge; its thumb appears while the footer is
    open or the slider has focus. The 12 px input straddles the edge so it stays easy to grab. */
@@ -341,7 +350,7 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
    workspace goes inert behind the compact library sheet, which would make its Cancel button dead.
    A notice keeps its own row: it is persistent, and floating it would cover the document, the find
    bar and the library header until it is dismissed. */
-#loading { position: absolute; z-index: 25; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--accent-soft); color: var(--accent-ink); font-size: 12px; border-bottom: 1px solid var(--accent-border); box-shadow: var(--shadow-popover); }
+#loading { position: absolute; z-index: 25; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--raise); color: var(--muted); font-size: 12px; border-bottom: 1px solid var(--hairline); }
 /* The find bar owns the top edge of the panel, so the strip waits below it. The bar sits inside the
    panel's 1 px border, while the strip is positioned against the layout, so that border is added back;
    the reader host, which is positioned inside the panel, only needs the bar's own height. */
@@ -355,6 +364,7 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
 #notice span, #loading span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 #notice button, #loading button { padding: 3px 8px; border: 0; color: inherit; font-size: 11px; font-weight: 600; }
 #notice button:hover, #loading button:hover { background: color-mix(in srgb, currentColor 12%, transparent); }
+#loading button { color: var(--accent-ink); }
 #dismiss-notice { font-size: 15px !important; font-weight: 400 !important; line-height: 1; }
 [hidden] { display: none !important; }
 .reader-host { position: absolute; inset: 0; overflow: auto; background: var(--surface); scrollbar-color: var(--faint) transparent; scrollbar-width: thin; }
@@ -381,8 +391,8 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
 #view-controls .view-group { display: flex; align-items: center; gap: 2px; }
 #view-controls .view-sep { width: 1px; height: 16px; background: var(--hairline); }
 /* Move grip: six muted dots, no box. The default placement is CSS; dragging it (or the arrow keys) pins the pill with inline left/top. */
-#view-controls #view-grip { width: 12px; height: 26px; margin-left: -1px; border-radius: 4px; color: var(--muted); cursor: grab; touch-action: none; }
-#view-controls #view-grip:hover, #view-controls #view-grip:active { color: var(--fg); }
+#view-controls #view-grip { width: 14px; height: 26px; margin: 0 2px 0 -1px; border-radius: 5px; color: var(--muted); cursor: grab; touch-action: none; }
+#view-controls #view-grip:hover, #view-controls #view-grip:active { color: var(--fg); background: var(--hover-subtle); }
 #view-controls #view-grip:active { cursor: grabbing; }
 :root:not(.keyboard-focus) #view-controls #view-grip:focus-visible { outline: none; }
 /* Hand tool: drags pan the page instead of selecting text; links stay clickable. */
@@ -400,6 +410,9 @@ dialog label { display: block; font-size: 12px; margin: 14px 0 6px; color: var(-
 /* Fields are a tone, not a box, like the library search and the find field. */
 dialog input:not([type=checkbox]):not([type=color]), dialog select { display: block; width: 100%; padding: 8px 10px; background-color: var(--hover-subtle); border: 0; border-radius: 6px; margin: 6px 0 12px; color: var(--fg); }
 dialog input::placeholder { color: var(--muted); }
+/* A focused text field in a dialog takes the find field's treatment: a deeper tone and an accent underline,
+   not a ring that boxes the field in. */
+dialog input:not([type=checkbox]):not([type=color]):focus-visible { outline: none; border-radius: 6px 6px 0 0; background-color: var(--hover); box-shadow: inset 0 -2px 0 var(--accent); }
 dialog select { padding-right: 28px; }
 /* A dialog focuses its first control when it opens, which rings a button (Cancel, ×) even after a click;
    button rings are kept for keyboard use (Tab), fields keep theirs because they are typed into. */
@@ -517,22 +530,22 @@ dd { margin: 0; color: var(--muted); }
   #empty { padding-top: 18px; }
   .book-mark { display: none; }
   .eyebrow { margin-top: 8px !important; }
-  h1 { font-size: 28px; margin: 10px 0; }
+  h1 { font-size: 28px; margin: 0; }
   #recents { margin-top: 18px; }
 }
 @media (min-width: 650px) {
-  #empty { padding-top: 64px; }
+  #empty { padding-top: 40px; }
   h1 { font-size: 42px; }
 }
 
 /* Command palette (Ctrl+K or the title): a search field over the same actions the menu lists. It
    drops from the toolbar, just under the title that opens it, rather than centring on the page.
    The dialog overrides the shared dialog chrome so the input sits flush at the top. */
-#palette { margin: 40px auto auto; width: min(520px, calc(100vw - 16px)); padding: 0; overflow: hidden; max-height: calc(100dvh - 56px); display: flex; flex-direction: column; }
+#palette { margin: 40px auto auto; width: min(520px, calc(100vw - 16px)); padding: 0; overflow: hidden; max-height: min(540px, calc(100dvh - 56px)); display: flex; flex-direction: column; }
 #palette:not([open]) { display: none; }
-.palette-search { display: flex; align-items: center; gap: 8px; padding: 11px 13px; border-bottom: 1px solid var(--border); color: var(--muted); flex-shrink: 0; }
+.palette-search { display: flex; align-items: center; gap: 8px; padding: 0 13px; height: 44px; border-bottom: 1px solid var(--hairline); color: var(--muted); flex-shrink: 0; }
 .palette-search svg { flex-shrink: 0; }
-#palette-input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--fg); font: inherit; font-size: 13px; outline: none; }
+#palette-input { flex: 1; min-width: 0; width: auto; margin: 0; padding: 0; border: 0; background: transparent; color: var(--fg); font: inherit; font-size: 13px; outline: none; box-shadow: none; }
 #palette-input::placeholder { color: var(--muted); }
 .palette-esc { flex-shrink: 0; }
 .palette-list { overflow-y: auto; overscroll-behavior: contain; padding: 6px; min-height: 0; }
@@ -542,8 +555,12 @@ dd { margin: 0; color: var(--muted); }
 .palette-row[aria-selected="true"] kbd { color: var(--accent-ink); border-color: var(--accent-border); background: transparent; }
 .palette-row[aria-disabled="true"] { color: var(--faint); }
 .palette-row[aria-disabled="true"][aria-selected="true"] { background: var(--hover); color: var(--muted); }
-.palette-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.palette-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .palette-hint { font-size: 11px; color: var(--muted); white-space: nowrap; }
+/* Said once above the list; kept in the row for screen readers, and shown when the row is hovered. */
+.palette-hint-quiet { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.palette-row:hover .palette-hint-quiet { position: static; width: auto; height: auto; overflow: visible; clip-path: none; }
+.palette-note { margin: 0; padding: 6px 8px 2px; font-size: 11px; color: var(--muted); }
 .palette-empty { margin: 0; padding: 16px 13px 18px; font-size: 12px; color: var(--muted); text-align: center; }
 
 /* Find in document (Ctrl+F): a strip above the reading surface, which moves down by the strip's
@@ -563,7 +580,7 @@ dd { margin: 0; color: var(--muted); }
 #find-bar svg { flex-shrink: 0; margin-right: 2px; }
 #find-query { flex: 0 1 320px; min-width: 0; padding: 4px 8px; border: 0; border-radius: 6px; background: var(--hover-subtle); color: var(--fg); font: inherit; font-size: 12px; }
 #find-query::placeholder { color: var(--muted); }
-#find-query:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+#find-query:focus { outline: none; border-radius: 6px 6px 0 0; background: var(--hover); box-shadow: inset 0 -2px 0 var(--accent); }
 #find-close { margin-left: auto; }
 #find-status { margin: 0 6px 0 4px; font-size: 11px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; min-width: 0; }
 #find-bar button { flex-shrink: 0; padding: 1px 6px; font-size: 11px; border-radius: 4px; color: var(--muted); }

@@ -174,7 +174,7 @@ provider remembering its own choice; for Anthropic the newest Sonnet is chosen b
 and forget key** deletes the key from the keychain.
 
 **Ask:** type into the palette as usual. With the assistant on, every query also offers
-**Ask Claude**. When the text reads as a question ("what…", "why…", "summarize…", or anything ending
+**Ask the assistant**. When the text reads as a question ("what…", "why…", "summarize…", or anything ending
 in "?"), that row comes first; otherwise it comes last, after go to, find and the commands. The
 answer drops from the toolbar over the top of the page. It lists each thing the assistant did
 ("Searched for "Darcy": 12 matches", "Went to Page 7") above a short answer, with a field for a
