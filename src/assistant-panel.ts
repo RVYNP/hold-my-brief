@@ -101,19 +101,22 @@ export function createAssistantPanel(layout: HTMLElement, options: { env: Reader
   settings.setAttribute('aria-labelledby', 'assistant-title');
   settings.innerHTML = `
     <div class="dialog-head"><h2 id="assistant-title">AI assistant</h2><button type="button" data-assistant-close aria-label="Close">×</button></div>
-    <p>Ask about what you're reading, or have it find, open and change things for you. It uses your own API key from Anthropic, OpenRouter or OpenAI, one at a time, and is off until you add one.</p>
+    <p class="assistant-intro">Ask about what you're reading, or have it find, open and change things for you. It uses your own API key from Anthropic, OpenRouter or OpenAI, one at a time, and is off until you add one.</p>
+    <div class="choices" role="radiogroup" aria-label="Provider">${(Object.keys(providers) as Provider[]).map(id => `<button type="button" role="radio" data-provider="${id}" aria-checked="false">${providers[id].name}</button>`).join('')}</div>
+    <div class="assistant-on" hidden><p class="assistant-connected"></p><label for="assistant-model">Model</label><select id="assistant-model"></select><p class="assistant-error" role="alert"></p></div>
     <dl class="assistant-terms">
-      <dt>Sent when you ask</dt><dd>Your question and what it reads to answer it: the page you're on, search results, the contents, and the titles, tags and folders of library documents. It goes <span data-sent-to></span>.</dd>
-      <dt>Never sent</dt><dd>Full file paths and your notes. Nothing at all until you ask.</dd>
+      <dt>Sent</dt><dd>Only when you ask: your question and what it reads to answer it, such as the page you're on, search results, the contents, and the titles, tags and folders of library documents. It goes <span data-sent-to></span>.</dd>
+      <dt>Never sent</dt><dd>Full file paths and your notes.</dd>
       <dt>Your key</dt><dd>Kept in ${store}, never in the app's files.</dd>
     </dl>
     <form class="assistant-off">
-      <div class="choices" role="radiogroup" aria-label="Provider">${(Object.keys(providers) as Provider[]).map(id => `<button type="button" role="radio" data-provider="${id}" aria-checked="false">${providers[id].name}</button>`).join('')}</div>
       <label for="assistant-key">Anthropic API key</label><input id="assistant-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…"><p class="assistant-error" role="alert"></p><div class="dialog-actions"><button type="button" class="link-button" data-get-key>Get a key</button><button type="submit" class="primary">Turn on</button></div></form>
-    <div class="assistant-on" hidden><p class="assistant-connected"></p><label for="assistant-model">Model</label><select id="assistant-model"></select><p class="assistant-error" role="alert"></p><div class="dialog-actions"><button type="button" class="link-button danger-text" data-forget>Turn off and forget key</button><button type="button" class="primary" data-assistant-close>Done</button></div></div>`;
+    <div class="dialog-actions assistant-on" hidden><button type="button" class="link-button danger-text" data-forget>Turn off and forget key</button><button type="button" class="primary" data-assistant-close>Done</button></div>`;
   document.body.append(settings);
   const off = settings.querySelector<HTMLFormElement>('.assistant-off')!;
-  const on = settings.querySelector<HTMLElement>('.assistant-on')!;
+  // Everything that only makes sense with no key, and everything that only does with one.
+  const whenOff = settings.querySelectorAll<HTMLElement>('.assistant-off, .assistant-intro, .choices');
+  const whenOn = settings.querySelectorAll<HTMLElement>('.assistant-on');
   const keyInput = settings.querySelector<HTMLInputElement>('#assistant-key')!;
   const keyLabel = settings.querySelector<HTMLElement>('label[for=assistant-key]')!;
   const modelSelect = settings.querySelector<HTMLSelectElement>('#assistant-model')!;
@@ -133,7 +136,7 @@ export function createAssistantPanel(layout: HTMLElement, options: { env: Reader
     return chosenModel;
   }
   function showState() {
-    off.hidden = configured; on.hidden = !configured; showError('');
+    whenOff.forEach(element => { element.hidden = configured; }); whenOn.forEach(element => { element.hidden = !configured; }); showError('');
     const info = providers[configured && connected ? connected : chosen];
     connectedLine.textContent = `Connected to ${info.name}.`;
     keyInput.placeholder = info.placeholder;
@@ -160,6 +163,8 @@ export function createAssistantPanel(layout: HTMLElement, options: { env: Reader
   settings.querySelector<HTMLButtonElement>('[data-get-key]')!.onclick = () => void options.openExternal(providers[chosen].keyUrl).catch(error => showError(String(error)));
   settings.querySelectorAll<HTMLButtonElement>('[data-assistant-close]').forEach(button => { button.onclick = () => settings.close(); });
 
+  showState();
+
   const send: Send = body => {
     if (connected === null || connected === 'anthropic') return native<ModelResponse>('assistant_send', { body });
     const { model, system, messages, tools: toolList, max_tokens } = body;
@@ -173,7 +178,7 @@ export function createAssistantPanel(layout: HTMLElement, options: { env: Reader
     if (sheet.hidden) return;
     // Bumping the conversation makes the running loop stop at its next request or tool call.
     ++conversation; history = []; tools = readerTools(env); busy = false;
-    sheet.hidden = true;
+    sheet.hidden = true; sheet.removeAttribute('aria-busy');
     returnFocus();
   }
 
@@ -187,7 +192,7 @@ export function createAssistantPanel(layout: HTMLElement, options: { env: Reader
     questionLine.textContent = text; questionLine.title = text;
     stepsList.replaceChildren();
     answer.classList.remove('answer-error'); answer.replaceChildren(); answer.textContent = 'Thinking…'; answer.classList.add('answer-pending');
-    followInput.value = ''; followInput.disabled = true;
+    followInput.value = ''; followInput.disabled = true; sheet.setAttribute('aria-busy', 'true');
     sheet.focus();
     void (async () => {
       const model = (connected && localStorage.getItem(modelKey(connected))) || await loadModels();
@@ -207,7 +212,7 @@ export function createAssistantPanel(layout: HTMLElement, options: { env: Reader
     }).finally(() => {
       if (token !== conversation) return;
       busy = false; answer.classList.remove('answer-pending');
-      followInput.disabled = false;
+      followInput.disabled = false; sheet.removeAttribute('aria-busy');
       // Only take focus if the reader is still in the sheet; someone back on the page keeps their keys.
       if (sheet.contains(document.activeElement)) followInput.focus();
     });
