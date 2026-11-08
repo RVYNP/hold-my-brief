@@ -243,12 +243,28 @@ while focus is inside the drawer.
 - **New collection** creates a named group. Use **Edit** beside a collection to rename it, or its
   **×** control to delete it after confirmation. Deleting a collection puts its documents in
   **Unfiled**; it does not delete them.
-- Each document's **···** control opens **Organize document**, where you can move it to a
-  collection or remove its library entry after confirmation.
+- Each document's **···** control opens **Info**, **Organize document** (move it to a collection or
+  remove its library entry after confirmation) and, for a missing original, **Locate**.
 - Star a document for **Favorites**. Search filters the selected view by filename or path; sorting
   offers recent-first or name order.
 - Click a document to reopen it at its saved reading position. A missing or unreadable source
   reports an error without replacing the document you are reading.
+
+### Grid and list
+
+The row under the search field names the collection you are looking at; click it for the collection
+list and the format and availability filters. Beside it, the two glyphs switch between a **grid** of
+thumbnails and a **list** of names. The grid keeps each reference's real proportions, so tall
+posters and wide spreads read as themselves; books and text show a plain card with their title. The
+choice is remembered per collection, and a collection that is mostly images or PDFs opens as a grid.
+Hovering or focusing a tile shows its name, format, star and ··· menu; the document you are reading
+is marked **Reading**, and a missing original is dimmed.
+
+Thumbnails are made on this computer: images are scaled down, and a PDF's first page is rendered
+with the reader's own PDF engine, reading only as much of the file as that page needs. They are kept
+in the app's cache folder (at most 192 MB) and remade automatically when a file changes, so a large
+library is slow only the first time it is shown. Thumbnails are a disposable cache: deleting them
+loses nothing.
 
 The desktop library stores references to original paths, not copies. Organizing, favoriting, and
 removing entries never move, rename, or delete source files or saved positions. Opening a document
