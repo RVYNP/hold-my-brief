@@ -118,6 +118,10 @@ test('searching navigates a long text document to the matched line', async ({ pa
   // The scrubber follows the reader, so its value proves the view actually moved.
   await expect.poll(() => page.locator('#progress').evaluate((input: HTMLInputElement) => Number(input.value))).toBeGreaterThan(50);
   await expect(page.locator('mark.search-hit').first()).toContainText('needle');
+  // Revealing the match scrolls the reading surface only: the window chrome must not move (the
+  // footer rests below the window edge, so a scrollable #app once slid the toolbar off the top).
+  expect(await page.evaluate(() => document.getElementById('app')!.scrollTop)).toBe(0);
+  expect((await page.locator('.toolbar').boundingBox())!.y).toBe(0);
 });
 
 test('the palette reaches find, so Ctrl+F is not the only route', async ({ page }) => {

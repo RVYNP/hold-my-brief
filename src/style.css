@@ -185,7 +185,9 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 /* The chevron is two hairline diagonals so it takes the token color in every theme. */
 select { appearance: none; color: var(--fg); background-color: var(--card); background-image: linear-gradient(45deg, transparent 40%, var(--muted) 40%, var(--muted) 62%, transparent 62%), linear-gradient(135deg, transparent 38%, var(--muted) 38%, var(--muted) 60%, transparent 60%); background-position: right 13px center, right 9px center; background-size: 4px 4px; background-repeat: no-repeat; border: 1px solid var(--border); border-radius: 5px; padding: 7px 26px 7px 8px; cursor: pointer; }
 select:hover { border-color: var(--accent-border); }
-#app { position: relative; height: 100dvh; min-width: 300px; display: flex; flex-direction: column; overflow: hidden; }
+/* clip, not hidden: the footer rests 27 px below the window edge, and a hidden-overflow box can still
+   be scrolled by code (a find match's scrollIntoView did, pushing the toolbar off the top). */
+#app { position: relative; height: 100dvh; min-width: 300px; display: flex; flex-direction: column; overflow: clip; }
 /* One 38 px row. Empty toolbar space drags the window (data-tauri-drag-region), so it never selects text. */
 .toolbar { display: flex; align-items: center; gap: 2px; height: 38px; padding: 0 6px; background: var(--chrome); flex-shrink: 0; -webkit-user-select: none; user-select: none; }
 /* macOS draws the traffic lights over the toolbar's left end (titleBarStyle Overlay). */
