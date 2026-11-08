@@ -104,6 +104,12 @@ mode. The Hand button reads "Zoom in to pan" while the page fits, and the hand t
 document opens or the page fits again. Markdown, TXT and reflowable EPUB reflow instead of zooming,
 so they have no pill and no panning.
 
+If the pill covers something you are reading, drag the dotted grip at its left end to put it anywhere
+in the reading panel. It stays inside the panel and above the footer, keeps its proportional place
+when you resize the window, and steps aside while the library drawer is open. With the grip focused,
+the arrow keys move it 16 px (Shift: 64 px). Double-click the grip, or press Home or Enter on it, to
+return it to the default spot. Moving it never resizes or refits the page.
+
 ### Two-page spread
 
 **Two-page spread** (the ··· menu, the pill's book button, or Ctrl+3) shows PDF and
@@ -155,15 +161,17 @@ library.
 
 ### AI assistant (optional)
 
-The desktop app can hand questions to Claude, using your own Anthropic API key. It is off until you
-turn it on, and without a key the app never makes a network request.
+The desktop app can hand questions to an AI model, using your own API key from Anthropic (Claude),
+OpenRouter or OpenAI. It is off until you turn it on, and without a key the app never makes a network
+request.
 
-**Turn it on:** choose **AI assistant…** in the ··· menu (or type `ai` in the palette), paste an API
-key from the [Anthropic Console](https://console.anthropic.com/settings/keys) and choose **Turn on**.
-The key is checked with Anthropic first, then kept in macOS Keychain or Windows Credential Manager.
-The app's own files never hold it, and the window never sees it again. Pick a model there too;
-the newest Sonnet is chosen by default. **Turn off and forget key** deletes the key from the
-keychain.
+**Turn it on:** choose **AI assistant…** in the ··· menu (or type `ai` in the palette), pick a
+provider, paste an API key (**Get a key** opens the provider's key page) and choose **Turn on**.
+Only one provider's key is kept at a time: turning on another provider replaces the first key. The
+key is checked with the provider first, then kept in macOS Keychain or Windows Credential Manager.
+The app's own files never hold it, and the window never sees it again. Pick a model there too, each
+provider remembering its own choice; for Anthropic the newest Sonnet is chosen by default. **Turn off
+and forget key** deletes the key from the keychain.
 
 **Ask:** type into the palette as usual. With the assistant on, every query also offers
 **Ask Claude**. When the text reads as a question ("what…", "why…", "summarize…", or anything ending
@@ -182,9 +190,9 @@ files outside your library, delete anything, change your library or reach the fi
 
 **What is sent:** only when you ask, your question and the results of what it looked at (text from
 the page you're on, search excerpts, the contents, and the titles, tags and folder names of library
-documents; never full file paths or your notes) go to
-Anthropic over HTTPS from the app's native side. Anthropic's terms for your API account apply to
-that data. Use is billed to your API key.
+documents; never full file paths or your notes) go to your chosen provider over HTTPS from the app's
+native side. With OpenRouter, the request is forwarded to the provider of the model you pick. That
+provider's terms for your account apply to the data. Use is billed to your API key.
 
 ### Keyboard shortcuts
 
