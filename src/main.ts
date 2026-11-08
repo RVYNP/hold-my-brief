@@ -105,10 +105,10 @@ function updateViewControls() {
   const layout = position?.spread, waiting = layout === 'waiting' ? `Two pages appear when the reading area is at least ${MIN_SPREAD_WIDTH} px wide` : '';
   const kind = reader.mode === 'fixed' && fitted && !width && layout === 'active' ? 'Two-page view'
     : `${reader.mode !== 'fixed' ? (reader.mode === 'paginated' ? 'Reading view' : 'Scroll view') : fitted ? (width ? 'Fit width' : 'Page view') : level}${layout === 'active' ? ' · Two pages' : ''}`;
-  // The subtitle says where you are, compactly ("48 / 146"); the full position and the kind of view
-  // are in its tooltip.
+  // The subtitle says where you are, compactly ("48 / 146", without a PDF's printed page number);
+  // the full position and the kind of view are in its tooltip.
   const where = position?.label ?? '';
-  $('filekind').textContent = where.replace(/^(?:Pages?|Line) ([\d–-]+) of (\d+)$/, '$1 / $2');
+  $('filekind').textContent = where.replace(/^(?:Pages?|Line) ([\d–-]+) of (\d+)(?: · .*)?$/, '$1 / $2');
   $('filekind').title = [where, `${active.format.toUpperCase()} · ${kind}${pan.hand ? ' · Hand' : ''}`, waiting].filter(Boolean).join('\n');
   const spreads = !!reader.spreads, spread = spreads && options.spread;
   const toggles = [$<HTMLButtonElement>('spread-toggle'), $<HTMLButtonElement>('view-spread')];
