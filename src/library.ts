@@ -7,7 +7,7 @@ import { canThumbnail, createThumbnailStore, type Thumbnail } from './thumbnails
 import { colourHex, colourMatches, colourNames, colourSwatches, nameColour, parseColourName, type ColourName } from './colour';
 import { shortcutFor } from './commands';
 import { coverArt } from './covers';
-import { collectionDisplayName, compareCollections, coverFill, coverRatio, fileTitle, fileVersion, groupIntoShelves, shelfLayout, type Shelf } from './shelf';
+import { assignCoverSlots, collectionDisplayName, compareCollections, coverFill, coverRatio, fileTitle, fileVersion, groupIntoShelves, shelfLayout, type Shelf } from './shelf';
 import { onAppearanceChange, scheme } from './theme';
 
 /** `pending` is how many pictures still had no measured colours when the answer was given (0 = `matches` is complete). */
@@ -432,6 +432,10 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
 
   function rebuildIndex() {
     searchable = new Map(library.documents.map(doc => [doc.path, searchText(doc)])); collectionMatches = new Map();
+    // Siblings get distinct cover styles by display order, so shelves side by side never share art or hue.
+    const siblings = new Map<string | null, Collection[]>();
+    for (const collection of library.collections) siblings.set(collection.parentId, [...(siblings.get(collection.parentId) ?? []), collection]);
+    assignCoverSlots([...siblings.values()].map(group => [...group].sort(compareCollections).map(collection => collection.id)));
     for (const collection of library.collections) {
       if (!knownCollections.has(collection.id)) { knownCollections.add(collection.id); if (!collection.parentId) expanded.add(collection.id); }
       collectionMatches.set(collection.id, new Set(library.documents.filter(doc => doc.collectionIds.includes(collection.id)).map(doc => doc.path)));

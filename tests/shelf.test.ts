@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { collectionDisplayName, coverHash, coverHue, coverInkRgb, coverMotif, coverSecondaryInk, coverTintRgb, fileTitle, fileVersion, groupIntoShelves } from '../src/shelf';
+import { assignCoverSlots, collectionDisplayName, coverHash, coverHue, coverInkRgb, coverMotif, coverSecondaryInk, coverTintRgb, fileTitle, fileVersion, groupIntoShelves } from '../src/shelf';
 import { motifs } from '../src/dither';
 import { contrast, palettes, type Rgb } from '../src/theme';
 
@@ -82,6 +82,16 @@ describe('generated cover colours', () => {
     expect(coverMotif(undefined)).toBe('neutral');
     expect(coverHash('a')).not.toBe(coverHash('b'));
     for (const id of ids) expect(motifs).toContain(coverMotif(id));
+  });
+  it('never gives two siblings the same motif or a close hue, whatever their ids hash to', () => {
+    const siblings = ['languages', 'creative-apps', 'libraries-tools', 'x', 'y', 'z'];
+    assignCoverSlots([siblings]);
+    try {
+      expect(new Set(siblings.map(id => coverMotif(id))).size).toBe(siblings.length);
+      const hues = siblings.map(coverHue).sort((a, b) => a - b);
+      const gaps = hues.map((hue, index) => (index ? hue - hues[index - 1] : hue + 360 - hues[hues.length - 1]));
+      expect(Math.min(...gaps)).toBeGreaterThanOrEqual(40);
+    } finally { assignCoverSlots([]); }
   });
 
   // Read from disk, like the palette contrast test: the tokens are the stylesheet's own.

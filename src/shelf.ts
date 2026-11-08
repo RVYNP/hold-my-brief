@@ -1,7 +1,7 @@
 // Pure helpers for the reference shelf: display names, the version in a file name, generated covers and
 // the grouping of a collection's documents into shelves. No DOM, so every edge stays testable.
 import { oklchToRgb } from './colour';
-import { artTone, motifFor, type Motif } from './dither';
+import { artTone, motifFor, motifs, type Motif } from './dither';
 
 const knownExtension = /\.(pdf|epub|md|markdown|txt|png|jpe?g|webp|gif|avif|bmp)$/i;
 // A date may be the whole name (`2026-10-29.md`); a number or `master` needs a name before it.
@@ -79,11 +79,29 @@ export function coverHash(collectionId: string): number {
   return hash >>> 0;
 }
 
-/** Hue (degrees) of a collection's covers. */
-export const coverHue = (collectionId: string) => coverHash(collectionId) % 360;
+/**
+ * Siblings (collections under the same parent) get distinct styles by position rather than by hash, so two shelves
+ * side by side can never share a motif or a hue. `assignCoverSlots` takes each sibling group in display order; a
+ * collection with no slot (not yet known) falls back to its hash.
+ */
+const slots = new Map<string, { index: number; count: number }>();
+export function assignCoverSlots(groups: readonly (readonly string[])[]): void {
+  slots.clear();
+  for (const ids of groups) ids.forEach((id, index) => slots.set(id, { index, count: ids.length }));
+}
 
-/** The motif of a collection's cover art: the same collection always gets the same one. */
-export const coverMotif = (collectionId: string | undefined): Motif => motifFor(collectionId === undefined ? undefined : coverHash(collectionId));
+/** Hue (degrees) of a collection's covers: siblings are spaced evenly round the wheel (120° apart for three). */
+export function coverHue(collectionId: string): number {
+  const slot = slots.get(collectionId);
+  return slot === undefined ? coverHash(collectionId) % 360 : Math.round(20 + slot.index * 360 / slot.count) % 360;
+}
+
+/** The motif of a collection's cover art: the same collection always gets the same one, and siblings different ones. */
+export function coverMotif(collectionId: string | undefined): Motif {
+  if (collectionId === undefined) return motifFor(undefined);
+  const slot = slots.get(collectionId);
+  return slot === undefined ? motifFor(coverHash(collectionId)) : motifs[slot.index % motifs.length];
+}
 
 /** Plain tint of a cover as a packed colour, for the given scheme (no collection: undefined, the cover uses `--hover`). */
 export function coverTintRgb(collectionId: string, scheme: 'light' | 'dark'): number {
