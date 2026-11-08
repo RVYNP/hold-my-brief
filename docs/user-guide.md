@@ -25,8 +25,11 @@ palette (Ctrl+K), where you can open a file, jump, find or change any setting.
 
 The pin button keeps the reader above ordinary windows. The lock button captures its outer
 dimensions while allowing movement. Each is highlighted while on. Ctrl+Shift+T toggles pin;
-Ctrl+Shift+L toggles lock. The menu includes both controls, window presets (Compact 420 × 620,
-Reading 760 × 900), appearance and text, fit/zoom, rotation, contents, Go to, Back and a shortcut reference.
+Ctrl+Shift+L toggles lock. The ··· menu opens just under its button and holds what has no other
+home: **All commands…** (the palette), Go to, Contents, Back, page rotation and spreads when the
+document has pages, **Appearance and text…**, the AI assistant, the window presets (Compact
+420 × 620, Reading 760 × 900), the shortcut reference and the data commands. Everything else, such as
+fit and zoom, is on the page's floating controls, on its keys, and in the palette.
 
 While another app has focus, the reader's buttons and progress line fade so a pinned window stays
 quiet beside your work; the document's name, its position and the page keep full strength. Click the
@@ -99,7 +102,7 @@ so they have no pill and no panning.
 
 ### Two-page spread
 
-**Two-page spread** (Reader controls menu, the pill's book button, or Ctrl+3) shows PDF and
+**Two-page spread** (the ··· menu, the pill's book button, or Ctrl+3) shows PDF and
 fixed-layout EPUB pages side by side, edge to edge, like an open book. By default page 1 is a cover
 shown alone on the right and pairs follow as 2–3, 4–5…; turn off **Cover page alone** in the menu for
 documents that should pair 1–2. Fixed-layout EPUBs keep their publisher's page sides and

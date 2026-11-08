@@ -330,9 +330,17 @@ dialog select { padding-right: 28px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 .danger { background: var(--danger); color: var(--on-accent); }
 .danger:hover { background: var(--danger-hover); }
-.menu-grid { display: flex; flex-direction: column; gap: 2px; }
-.menu-grid button { display: flex; justify-content: space-between; align-items: center; text-align: left; gap: 8px; font-size: 12px; white-space: normal; }
-.menu-grid button:nth-child(3), .menu-grid button:nth-child(7), .menu-grid button:nth-child(16) { border-bottom: 1px solid var(--border); border-radius: 0; padding-bottom: 12px; margin-bottom: 7px; }
+/* The ··· menu: a popover under its button (top and right are set when it opens), groups separated
+   by a hairline, shortcuts as quiet text rather than key caps. */
+#menu { position: fixed; inset: auto; margin: 0; width: min(280px, calc(100vw - 12px)); max-height: calc(100dvh - 56px); padding: 4px; border-radius: 9px; background: var(--card); }
+#menu::backdrop { background: transparent; }
+.menu-grid { display: flex; flex-direction: column; }
+.menu-group { display: flex; flex-direction: column; padding: 3px 0; }
+.menu-group + .menu-group { border-top: 1px solid var(--hairline); }
+.menu-group:not(:has(button:not([hidden]))) { display: none; }
+.menu-grid button { display: flex; justify-content: space-between; align-items: center; text-align: left; gap: 8px; padding: 6px 10px; font-size: 12px; white-space: nowrap; }
+.menu-grid button[aria-pressed=true] { background: transparent; border-color: transparent; color: var(--accent-ink); }
+.menu-grid kbd { padding: 0; border: 0; background: none; color: var(--faint); }
 .menu-label { display: inline-flex; align-items: center; gap: 8px; }
 .menu-label svg { flex-shrink: 0; color: var(--accent-ink); }
 .menu-value { color: var(--muted); font: 10px/1.4 var(--font-mono); white-space: nowrap; }
