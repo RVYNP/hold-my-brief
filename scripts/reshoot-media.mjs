@@ -180,7 +180,7 @@ const browser = await chromium.launch(existsSync(CHROME) ? { executablePath: CHR
     'However little known the feelings or views of such a man may be on his first entering a neighbourhood, this truth is so well fixed in the minds of the surrounding families, that he is considered as the rightful property of some one or other of their daughters.',
     '“My dear Mr. Bennet,” said his lady to him one day, “have you heard that Netherfield Park is let at last?”',
   ].join('\n\n');
-  const families = ['brief', 'lilac', 'birch', 'graphite', 'arctic'];
+  const families = ['brief', 'lilac', 'birch', 'graphite', 'arctic', 'blossom', 'peony'];
   const cells = [];
   for (const palette of families) {
     const { ctx, page } = await open(browser, { palette });
@@ -193,7 +193,7 @@ const browser = await chromium.launch(existsSync(CHROME) ? { executablePath: CHR
   // repeated as padding around the set.
   const sheet = await browser.newPage({ viewport: { width: README_WIDTH, height: 400 }, deviceScaleFactor: 3 });
   await sheet.setContent(`<style>${SHEET_CSS}
-    .grid { box-sizing: border-box; display: grid; grid-template-columns: repeat(5, 1fr); column-gap: ${GUTTER}px; row-gap: 8px;
+    .grid { box-sizing: border-box; display: grid; grid-template-columns: repeat(${families.length}, 1fr); column-gap: ${GUTTER}px; row-gap: 8px;
             width: ${README_WIDTH}px; padding: ${GUTTER}px; }
     img { width: 100%; border-radius: 7px; outline: none; box-shadow: 0 0 0 1px rgba(110,105,94,.2); }
   </style><div class="grid">${families.map(f => `<div class="label">${f}</div>`).join('')}${cells.map(c => `<img src="${dataUrl(c)}">`).join('')}</div>`);

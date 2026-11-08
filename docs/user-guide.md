@@ -41,7 +41,9 @@ Open the menu and choose **Appearance and text…** to open the Appearance panel
 window. Its **Colour** tab holds:
 
 - **Mode:** System (default; follows the operating system as it changes), Light or Dark.
-- **Theme:** Brief (default), Lilac, Birch, Graphite or Arctic. Each has a light and a dark version.
+- **Theme:** Brief (default), Lilac, Birch, Graphite, Arctic, and two pinks: Blossom (soft blush with a
+  rose accent) and Peony (bold, magenta-tinted, deep aubergine in dark mode). Each has a light and a
+  dark version, and every one keeps its text at WCAG AA contrast or better.
   Hover over or focus a theme to preview it on the whole window, click or press Enter to keep it, and
   move away or press Escape to go back to the theme you kept.
 - **Accent:** the theme's own accent, one of seven presets, or a custom color. Contrast is adjusted

@@ -118,6 +118,53 @@
   --scrim: light-dark(#1a26333d, #0000008c);
   --search-hit: light-dark(#c9e0a8, #3d5230);
 }
+/* The two pinks share Lilac's structure (each token at Lilac's OKLCH lightness) on a pink hue.
+   Blossom is soft: blush neutrals and a rose accent. Peony is bold: magenta-tinted neutrals and a
+   hot-pink accent, deep aubergine in dark mode. */
+[data-palette='blossom'] {
+  --chrome: light-dark(#ede0e1, #1e1415);
+  --surface: light-dark(#fdf9fa, #271a1c);
+  --card: light-dark(#ffffff, #2e2022);
+  --paper: light-dark(#fdf9fa, #271a1c);
+  --ink: light-dark(#25181a, #ecd7d9);
+  --fg: light-dark(#3c2c2e, #f2e3e5);
+  --muted: light-dark(#735d60, #ad9195);
+  --faint: light-dark(#b9a1a4, #6f5659);
+  --border: light-dark(#e0ced0, #3d2a2c);
+  --hairline: light-dark(#e9d8da, #332325);
+  --hover: light-dark(#ecd4d6, #372426);
+  --stage: light-dark(#f5ebec, #231618);
+  --track: light-dark(#dbc1c4, #4a3135);
+  --accent: light-dark(#c03153, #e16479);
+  --accent-ink: light-dark(#ab1c44, #f899a5);
+  --accent-soft: light-dark(#ffe7e9, #3e1d22);
+  --accent-border: light-dark(#eeb2b8, #7b333f);
+  --accent-fill: light-dark(#c03153, #c33d59);
+  --scrim: light-dark(#2a181c3d, #0000008c);
+  --search-hit: light-dark(#ffe08a, #6f5a1e);
+}
+[data-palette='peony'] {
+  --chrome: light-dark(#f0dee7, #20121a);
+  --surface: light-dark(#fef9fc, #291822);
+  --card: light-dark(#ffffff, #311d28);
+  --paper: light-dark(#fef9fc, #291822);
+  --ink: light-dark(#271620, #f0d4e3);
+  --fg: light-dark(#3f2935, #f5e1eb);
+  --muted: light-dark(#775a6a, #b28da1);
+  --faint: light-dark(#be9daf, #745164);
+  --border: light-dark(#e4cbd8, #412635);
+  --hairline: light-dark(#edd5e1, #361f2c);
+  --hover: light-dark(#f1d0e1, #3b202f);
+  --stage: light-dark(#f7eaf1, #25141e);
+  --track: light-dark(#e0bdd0, #4f2c40);
+  --accent: light-dark(#c50381, #ee45a6);
+  --accent-ink: light-dark(#a9036f, #fe8dc6);
+  --accent-soft: light-dark(#ffe6f1, #42172e);
+  --accent-border: light-dark(#f6a9cd, #832159);
+  --accent-fill: light-dark(#c50381, #cd0087);
+  --scrim: light-dark(#2a16203d, #0000008c);
+  --search-hit: light-dark(#ffe08a, #6f5a1e);
+}
 /* Page tones recolor only text documents (Markdown, TXT, reflowable EPUB). */
 [data-page='white'] { --paper: #ffffff; --ink: #1b1b1f; }
 [data-page='sepia'] { --paper: light-dark(#f5eddb, #2a2419); --ink: light-dark(#43361f, #e2d4b6); }
@@ -403,7 +450,8 @@ dd { margin: 0; color: var(--muted); }
 .segmented button[aria-checked=true] { background: var(--card); border-color: var(--border); color: var(--fg); }
 .segmented button:focus-visible { outline-offset: -1px; }
 .theme-group { display: flex; flex-direction: column; gap: 8px; }
-.theme-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+/* Seven families in rows of four (4 + 3): seven across would not fit the sheet, and 5 + 2 orphans two. */
+.theme-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .theme-card { display: flex; flex-direction: column; gap: 7px; min-width: 0; padding: 3px; border-radius: 11px; text-align: left; white-space: normal; }
 .theme-card:hover { background: transparent; }
 .theme-tile { display: flex; flex-direction: column; gap: 8px; padding: 9px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
