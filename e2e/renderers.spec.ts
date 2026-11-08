@@ -609,6 +609,32 @@ test('the library board browses at full width and a detail strip joins from 1200
   await expect(page.locator('.library-board-toggle')).toBeHidden();
 });
 
+test('browser library lists one document per file however it is added or opened', async ({ page }) => {
+  const plate = pngFiles[0];
+  const openButtons = page.locator('.library-document-open');
+  await page.goto('/');
+  // Added to the library, then the same file opened directly.
+  await page.locator('.library-panel input[type=file]').setInputFiles(plate);
+  await expect(page.locator('.library-document')).toHaveCount(1);
+  await page.locator('#file-input').setInputFiles(plate);
+  await expect(page.locator('#filename')).toHaveText(plate.name);
+  await expect(page.locator('.library-document')).toHaveCount(1);
+  // One pick holding the same file again plus a different one commits in a single step: only the different one is new.
+  await page.locator('.library-panel input[type=file]').setInputFiles([plate, pngFiles[1]]);
+  await expect(page.locator('.library-document')).toHaveCount(2);
+  expect(await openButtons.evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label')))).toEqual(expect.arrayContaining([`Open ${plate.name}`, `Open ${pngFiles[1].name}`]));
+  expect(new Set(await openButtons.evaluateAll(nodes => nodes.map(node => (node as HTMLElement).title))).size).toBe(2);
+  // Opened first (a fresh browser context has an empty library), then added.
+  const fresh = await page.context().browser()!.newContext();
+  const other = await fresh.newPage();
+  await other.goto(page.url());
+  await other.locator('#file-input').setInputFiles(plate);
+  await expect(other.locator('.library-document')).toHaveCount(1);
+  await other.locator('.library-panel input[type=file]').setInputFiles([plate, pngFiles[1]]);
+  await expect(other.locator('.library-document')).toHaveCount(2);
+  await fresh.close();
+});
+
 test('PDF page-bitmap cache never reuses pixels across rotation', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto('/');
