@@ -102,13 +102,13 @@ computer.
 <table>
   <tr>
     <td align="center" width="50%"><img src="docs/media/hand-tool.png" alt="A PDF page zoomed to 120% with the hand tool switched on in the floating zoom controls"><br><sub><b>Zoom in</b>, then drag the page with the hand tool</sub></td>
-    <td align="center" width="50%"><img src="docs/media/appearance.png" alt="The Appearance panel with theme cards over a book"><br><sub><b>Appearance</b>: hover to preview, click to keep</sub></td>
+    <td align="center" width="50%"><img src="docs/media/appearance.png" alt="The Appearance panel's Colour tab, with five theme cards in a row, over a book"><br><sub><b>Appearance</b>: hover to preview, click to keep. Text size and spacing are on its Text tab</sub></td>
   </tr>
 </table>
 
 <p align="center">
-  <img src="docs/media/library.png" alt="The document library floating over a PDF, with the page unreduced behind it" width="880">
-  <br><sub><b>The library</b> floats over the page. Put it on either side and the page keeps its place</sub>
+  <img src="docs/media/library.png" alt="The library drawer as a grid of thumbnails at their real proportions (a print manual marked Reading, Hokusai's Great Wave, Haeckel plates and a book) floating over a PDF page" width="880">
+  <br><sub><b>The library</b> floats over the page as a grid of thumbnails or a list. Put it on either side and the page keeps its place</sub>
 </p>
 
 <p align="center">
