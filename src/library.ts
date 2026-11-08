@@ -1,8 +1,9 @@
 import './library.css';
-import { addDocuments, desktop, editLibrary, getLibrary, chooseSourceRoot, locateLibraryDocument, readLibraryThumbnail, indexFolder } from './bridge';
+import { addDocuments, desktop, editLibrary, getLibrary, chooseSourceRoot, locateLibraryDocument, indexFolder } from './bridge';
 import { emptyLibrary, type Collection, type Library, type LibraryDocument } from './catalog-types';
 import { isImage, searchText } from './library-query';
-import { clampLibraryWidth, libraryWidth, libraryWidthBounds, parseLibraryWidth, type LibrarySide } from './library-layout';
+import { assignMasonry, clampLibraryWidth, defaultLibraryView, libraryGrid, libraryGridColumns, libraryWidth, libraryWidthBounds, parseLibraryView, parseLibraryWidth, type LibrarySide, type LibraryView } from './library-layout';
+import { canThumbnail, createThumbnailStore, type Thumbnail } from './thumbnails';
 
 type Callbacks = { open: (path: string) => Promise<boolean>; error: (error: unknown) => void };
 type Filter = { kind: 'all' | 'favorites' | 'unfiled' } | { kind: 'collection' | 'source'; id: string };
@@ -42,6 +43,8 @@ function icon(paths: string) {
 }
 const panelIcon = { left: icon('<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/>'), right: icon('<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/>') };
 const closeIcon = icon('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>');
+const chevronIcon = '<svg class="library-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+const viewIcon = { grid: icon('<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>'), list: icon('<path d="M3 6h.01M3 12h.01M3 18h.01M8 6h13M8 12h13M8 18h13"/>') };
 function savedPreference(key: string) { try { return localStorage.getItem(key); } catch { return null; } }
 function savePreference(key: string, value: string) { try { localStorage.setItem(key, value); } catch { /* Optional preference. */ } }
 function orderedTree<T extends { id: string; name: string; parentId: string | null }>(items: T[]): { item: T; depth: number }[] {
@@ -78,6 +81,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
   let collectionMatches = new Map<string, Set<string>>();
   let searchable = new Map<string, string>();
   const busyDisabled = new Map<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLButtonElement, boolean>();
+  let view: LibraryView = 'list'; let scopeOpen = false; let menuAnchor: HTMLElement | undefined;
 
   root.classList.add('library-root');
   const backdrop = button('', 'Close library'); backdrop.className = 'library-backdrop'; backdrop.tabIndex = -1;
@@ -98,13 +102,23 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
   for (const [value, text] of [['', 'Any availability'], ['ready', 'Ready'], ['missing', 'Missing']]) option(availability, value, text);
   facets.append(format, availability);
   const navigation = element('nav', 'library-navigation'); navigation.setAttribute('aria-label', 'Library filters and collections');
-  const documentsHead = element('div', 'library-documents-head'); const resultCount = element('span', 'library-result-count'); resultCount.setAttribute('role', 'status');
-  const sort = element('select', 'library-sort'); sort.setAttribute('aria-label', 'Sort library'); option(sort, 'recent', 'Recent first'); option(sort, 'name', 'Name A–Z');
-  documentsHead.append(resultCount, sort);
+  // The scope row names the open collection; its popover holds the collection tree and the two filters,
+  // so the grid keeps the drawer's height.
+  const scope = element('div', 'library-scope');
+  const scopeButton = button('', 'Choose collection and filters', 'scope'); scopeButton.className = 'library-scope-name'; scopeButton.setAttribute('aria-haspopup', 'true'); scopeButton.setAttribute('aria-expanded', 'false'); scopeButton.setAttribute('aria-controls', 'library-scope-menu');
+  const scopeLabel = element('span', 'library-scope-label'); scopeButton.append(scopeLabel); scopeButton.insertAdjacentHTML('beforeend', chevronIcon);
+  const resultCount = element('span', 'library-result-count'); resultCount.setAttribute('role', 'status');
+  const viewToggle = element('div', 'library-view-toggle'); viewToggle.setAttribute('role', 'group'); viewToggle.setAttribute('aria-label', 'Library view');
+  const viewButtons = { grid: button('', 'Grid view', 'view-grid'), list: button('', 'List view', 'view-list') };
+  for (const mode of ['grid', 'list'] as const) { viewButtons[mode].innerHTML = viewIcon[mode]; viewButtons[mode].title = `${mode === 'grid' ? 'Grid' : 'List'} view`; viewToggle.append(viewButtons[mode]); }
+  const sort = element('select', 'library-sort'); sort.setAttribute('aria-label', 'Sort library'); option(sort, 'recent', 'Recent'); option(sort, 'name', 'Name A–Z');
+  scope.append(scopeButton, resultCount, viewToggle, sort);
+  const scopeMenu = element('div', 'library-scope-menu'); scopeMenu.id = 'library-scope-menu'; scopeMenu.hidden = true; scopeMenu.append(navigation, facets);
+  const itemMenu = element('div', 'library-item-menu'); itemMenu.setAttribute('role', 'menu'); itemMenu.hidden = true;
   const documents = element('div', 'library-documents'); documents.setAttribute('aria-label', 'Library items'); documents.setAttribute('role', 'list');
   const pager = element('div', 'library-pager');
   const fileInput = element('input'); fileInput.type = 'file'; fileInput.accept = '.pdf,.epub,.md,.markdown,.txt,.png,.jpeg,.jpg,.webp,.gif,.avif,.bmp'; fileInput.multiple = true; fileInput.hidden = true;
-  panel.append(header, tools, searchLabel, search, facets, navigation, documentsHead, documents, pager, fileInput);
+  panel.append(header, tools, searchLabel, search, scope, scopeMenu, itemMenu, documents, pager, fileInput);
   const resizeHandle = element('div', 'library-resize'); resizeHandle.tabIndex = 0;
   for (const [name, value] of [['role', 'separator'], ['aria-orientation', 'vertical'], ['aria-label', 'Resize library'], ['aria-controls', root.id]]) resizeHandle.setAttribute(name, value);
   const grip = element('span', 'library-resize-grip'); grip.append(element('span'), element('span'), element('span'));
@@ -178,7 +192,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
   function applyVisibility() {
     root.hidden = !visible; layout?.classList.toggle('library-open', visible); toggleButton?.setAttribute('aria-expanded', String(visible));
     if (workspace) workspace.inert = visible && !wide.matches;
-    if (visible) observeThumbnails(); else clearThumbnails();
+    if (visible) { thumbs.retryFailed(); for (const media of documents.querySelectorAll('.is-unavailable')) media.classList.remove('is-unavailable'); observeThumbnails(); } else { setScope(false); closeItemMenu(false); clearThumbnails(); }
   }
   function setVisible(next: boolean, focus = true, persist = true) {
     visible = next; if (persist) try { localStorage.setItem(preferenceKey(), next ? 'open' : 'closed'); } catch { /* Optional preference. */ }
@@ -188,6 +202,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
   backdrop.onclick = close.onclick = () => { if (!busy) setVisible(false); };
   wide.addEventListener('change', () => { const hadFocus = root.contains(document.activeElement); visible = modal?.open ? true : preference(); applyVisibility(); if (!visible && hadFocus) toggleButton?.focus(); });
   root.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && (!itemMenu.hidden || scopeOpen)) { event.preventDefault(); event.stopPropagation(); if (!itemMenu.hidden) closeItemMenu(); else { setScope(false); scopeButton.focus(); } return; }
     if (event.key === 'Escape' && !modal?.open) { event.preventDefault(); event.stopPropagation(); if (!busy) setVisible(false); }
     if (event.key === 'Tab' && visible && !wide.matches && !modal?.open) {
       const controls = Array.from(panel.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled):not([hidden]), select:not(:disabled), summary')).filter(node => node.getClientRects().length);
@@ -270,6 +285,8 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
     };
     view.dialog.showModal(); input.focus(); input.select();
   }
+  // A relocated original may be a different file under the same entry, so its old thumbnail goes.
+  const locateOriginal = (doc: LibraryDocument, after?: () => void) => void mutate(() => { thumbs.forget(doc.path); return locateLibraryDocument(doc.path); }, after);
   function locationActions(doc: LibraryDocument, target: HTMLElement, closeDialog?: () => void) {
     const provenance = doc.source;
     if (provenance) {
@@ -284,7 +301,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
       target.append(element('p', 'library-dialog-help', `${rootInfo.name}: ${rootInfo.path ?? 'Not located'}`));
       if (!rootInfo.managed) { const locateRoot = button(`Locate ${rootInfo.name} root…`); locateRoot.onclick = () => void mutate(() => chooseSourceRoot(rootInfo.id), closeDialog); target.append(locateRoot); }
     }
-    const locate = button('Locate this original…'); locate.onclick = () => void mutate(() => locateLibraryDocument(doc.path), closeDialog); target.append(locate);
+    const locate = button('Locate this original…'); locate.onclick = () => locateOriginal(doc, closeDialog); target.append(locate);
   }
   function organize(doc: LibraryDocument, trigger: HTMLElement) {
     const view = openDialog('Organize reference', trigger); if (!view) return;
@@ -377,16 +394,17 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
       if (!item.parentId) continue;
       const parent = collectionMatches.get(item.parentId); if (parent) for (const path of collectionMatches.get(item.id) ?? []) parent.add(path);
     }
+    thumbs.reconcile(new Set(library.documents.map(doc => doc.path)));
   }
   function renderNavigation() {
     navigation.replaceChildren();
     function filterButton(label: string, count: number, next: Filter, key: string) {
       const control = button('', label, key); control.className = 'library-filter'; control.append(element('span', 'library-filter-name', label), element('span', 'library-count', String(count)));
       control.setAttribute('aria-pressed', String(filter.kind === next.kind && (!('id' in next) || 'id' in filter && filter.id === next.id)));
-      control.onclick = () => { filter = next; page = 0; render(); restoreFocus(key); }; return control;
+      control.onclick = () => { filter = next; page = 0; setScope(false); scopeButton.focus(); render(); }; return control;
     }
     navigation.append(filterButton('All references', library.documents.length, { kind: 'all' }, 'all'), filterButton('Favorites', library.documents.filter(doc => doc.favorite).length, { kind: 'favorites' }, 'favorites'), filterButton('Unfiled', library.documents.filter(doc => !doc.collectionIds.length).length, { kind: 'unfiled' }, 'unfiled'));
-    const heading = element('div', 'library-collections-heading'); const create = button('+ New', 'New personal collection', 'new-collection'); create.onclick = () => collectionForm(create); heading.append(element('h3', '', 'Collections'), create); navigation.append(heading);
+    const heading = element('div', 'library-collections-heading'); const create = button('+ New', 'New personal collection', 'new-collection'); create.onclick = () => { setScope(false); collectionForm(scopeButton); }; heading.append(element('h3', '', 'Collections'), create); navigation.append(heading);
     const parents = new Set(library.collections.map(item => item.parentId)); const byId = new Map(library.collections.map(item => [item.id, item]));
     for (const { item, depth } of orderedTree(library.collections)) {
       let parent = item.parentId, hidden = false; const seen = new Set<string>();
@@ -397,7 +415,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
       else row.append(element('span', 'library-expand-spacer'));
       const select = filterButton(`${item.name}${item.removed ? ' · removed' : ''}`, collectionMatches.get(item.id)?.size ?? 0, { kind: 'collection', id: item.id }, `collection:${item.id}`);
       select.title = [item.name, item.sourceId ? 'Indexed folder collection' : 'Personal collection'].join('\n'); row.append(select);
-      if (!item.sourceId) { const edit = button('···', `Edit ${item.name}`, `edit:${item.id}`); edit.className = 'library-collection-action'; edit.onclick = () => collectionForm(edit, item); row.append(edit); }
+      if (!item.sourceId) { const edit = button('···', `Edit ${item.name}`, `edit:${item.id}`); edit.className = 'library-collection-action'; edit.onclick = () => { setScope(false); collectionForm(scopeButton, item); }; row.append(edit); }
       navigation.append(row);
     }
     if (!library.collections.length) navigation.append(element('p', 'library-no-collections', 'Create a collection or index a folder.'));
@@ -405,41 +423,147 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
     if (sources.length) { const heading = element('div', 'library-collections-heading'); heading.append(element('h3', '', 'Sources')); navigation.append(heading); for (const source of sources) navigation.append(filterButton(source, library.documents.filter(doc => doc.source?.repository === source).length, { kind: 'source', id: source }, `source:${source}`)); }
   }
 
-  let thumbnailGeneration = 0, thumbnailActive = 0;
-  let thumbnailQueue: { image: HTMLImageElement; path: string; generation: number }[] = [];
-  const thumbnailUrls = new Set<string>();
+  // Thumbnails come from the shared store (src/thumbnails.ts). Tiles ask for theirs as they scroll into
+  // view, and every re-render reuses what has already loaded, so typing in the search box fetches nothing.
+  const thumbs = createThumbnailStore();
+  let renderGeneration = 0;
+  // The tile's media box is observed, not the <img>: it stays hidden until its picture arrives and a
+  // hidden element never intersects.
   const thumbnailObserver = new IntersectionObserver(entries => {
     for (const entry of entries) if (entry.isIntersecting) {
-      const image = entry.target as HTMLImageElement; thumbnailObserver.unobserve(image);
-      thumbnailQueue.push({ image, path: image.dataset.path!, generation: thumbnailGeneration });
+      const media = entry.target as HTMLElement; thumbnailObserver.unobserve(media); const path = media.dataset.path!;
+      void thumbs.request(path, media.dataset.format!, () => media.isConnected && visible).then(thumbnail => {
+        if (!media.isConnected) return;
+        if (thumbnail) showThumbnail(media, thumbnail); else if (thumbs.failed(path)) markUnavailable(media);
+      });
     }
-    pumpThumbnails();
   }, { root: documents, rootMargin: '120px' });
-  function clearThumbnails() {
-    ++thumbnailGeneration; thumbnailObserver.disconnect(); thumbnailQueue = [];
-    for (const url of thumbnailUrls) URL.revokeObjectURL(url); thumbnailUrls.clear();
-    for (const image of documents.querySelectorAll<HTMLImageElement>('img[data-path]')) { image.removeAttribute('src'); image.hidden = true; }
+  const clearThumbnails = () => thumbnailObserver.disconnect();
+  function observeThumbnails() { if (visible) for (const media of documents.querySelectorAll<HTMLElement>('[data-path]:not(.is-loaded):not(.is-unavailable)')) thumbnailObserver.observe(media); }
+  function showThumbnail(media: HTMLElement, thumbnail: Thumbnail) {
+    const tile = tileByPath.get(media.dataset.path!); if (tile) tile.ratio = thumbnail.ratio;
+    media.style.setProperty('--ratio', String(thumbnail.ratio));
+    const image = media.querySelector('img')!; image.src = thumbnail.url; image.hidden = false; media.classList.add('is-loaded');
   }
-  function observeThumbnails() { if (visible) for (const image of documents.querySelectorAll<HTMLImageElement>('img[data-path]')) if (!image.hasAttribute('src')) thumbnailObserver.observe(image); }
-  function pumpThumbnails() {
-    while (thumbnailActive < 3 && thumbnailQueue.length) {
-      const item = thumbnailQueue.shift()!; if (item.generation !== thumbnailGeneration || !item.image.isConnected || !visible) continue;
-      ++thumbnailActive;
-      void readLibraryThumbnail(item.path).then(thumbnail => {
-        if (!thumbnail || item.generation !== thumbnailGeneration || !item.image.isConnected || !visible) return;
-        if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif', 'image/bmp'].includes(thumbnail.mime)) return;
-        const url = URL.createObjectURL(new Blob([new Uint8Array(thumbnail.bytes)], { type: thumbnail.mime })); thumbnailUrls.add(url); item.image.src = url; item.image.hidden = false;
-      }).catch(() => { if (item.generation === thumbnailGeneration && item.image.isConnected) item.image.parentElement!.title = 'Thumbnail unavailable. Use source details to locate the original.'; }).finally(() => { --thumbnailActive; pumpThumbnails(); });
-    }
+  function markUnavailable(media: HTMLElement) { media.classList.add('is-unavailable'); media.title = 'Thumbnail unavailable. Use More actions to locate the original.'; }
+  window.addEventListener('pagehide', () => { clearThumbnails(); thumbs.dispose(); });
+
+  // Scope popover: the collection tree and the two filters, opened from the scope row.
+  function scopeName() {
+    const selected = filter;
+    if (!('id' in selected)) return selected.kind === 'all' ? 'All references' : selected.kind === 'favorites' ? 'Favorites' : 'Unfiled';
+    if (selected.kind === 'source') return selected.id;
+    return library.collections.find(item => item.id === selected.id)?.name ?? 'Collection';
   }
-  window.addEventListener('pagehide', clearThumbnails);
+  function setScope(open: boolean) {
+    if (open && (busy || modal?.open)) return;
+    scopeOpen = open; scopeMenu.hidden = !open; scopeButton.setAttribute('aria-expanded', String(open));
+    if (open) { closeItemMenu(false); scopeMenu.style.setProperty('--scope-top', `${scope.offsetTop + scope.offsetHeight + 2}px`); }
+  }
+  scopeButton.onclick = () => setScope(!scopeOpen);
+  // Per-item menu (Details, Organize, Locate original) shared by every tile and row.
+  function closeItemMenu(refocus = true) {
+    if (itemMenu.hidden) return; itemMenu.hidden = true; const anchor = menuAnchor; menuAnchor = undefined;
+    anchor?.closest('.library-document')?.classList.remove('is-menu-open'); anchor?.setAttribute('aria-expanded', 'false');
+    if (refocus && anchor?.isConnected) anchor.focus();
+  }
+  function openItemMenu(doc: LibraryDocument, anchor: HTMLElement) {
+    if (busy || modal?.open) return; if (!itemMenu.hidden && menuAnchor === anchor) { closeItemMenu(); return; }
+    closeItemMenu(false); setScope(false); itemMenu.replaceChildren();
+    const entries: [string, () => void][] = [['Details', () => referenceDetails(doc, anchor)], ['Organize…', () => organize(doc, anchor)]];
+    if (desktop) entries.push(['Locate original…', () => locateOriginal(doc)]);
+    for (const [label, run] of entries) { const item = button(label); item.setAttribute('role', 'menuitem'); item.onclick = () => { closeItemMenu(false); run(); }; itemMenu.append(item); }
+    menuAnchor = anchor; anchor.setAttribute('aria-expanded', 'true'); anchor.closest('.library-document')?.classList.add('is-menu-open'); itemMenu.hidden = false;
+    const bounds = panel.getBoundingClientRect(), at = anchor.getBoundingClientRect(), border = panel.clientLeft;
+    const below = at.bottom - bounds.top - panel.clientTop + panel.scrollTop + 2;
+    itemMenu.style.left = `${Math.min(Math.max(4, at.right - bounds.left - border - itemMenu.offsetWidth), panel.clientWidth - itemMenu.offsetWidth - 4)}px`;
+    itemMenu.style.top = `${below + itemMenu.offsetHeight > panel.scrollTop + panel.clientHeight ? at.top - bounds.top - panel.clientTop + panel.scrollTop - itemMenu.offsetHeight - 2 : below}px`;
+    itemMenu.querySelector<HTMLElement>('button')?.focus();
+  }
+  itemMenu.addEventListener('keydown', event => {
+    const items = Array.from(itemMenu.querySelectorAll<HTMLElement>('button')); const index = items.indexOf(document.activeElement as HTMLElement);
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); items[(index + (event.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]?.focus(); }
+    else if (event.key === 'Home' || event.key === 'End') { event.preventDefault(); items[event.key === 'Home' ? 0 : items.length - 1]?.focus(); }
+    else if (event.key === 'Tab') closeItemMenu(false);
+  });
+  document.addEventListener('pointerdown', event => {
+    const target = event.target as Node;
+    if (!itemMenu.hidden && !itemMenu.contains(target) && !menuAnchor?.contains(target)) closeItemMenu(false);
+    if (scopeOpen && !scopeMenu.contains(target) && !scopeButton.contains(target)) setScope(false);
+  });
+
+  // Grid view: each tile keeps its picture's proportions and joins the shortest column.
+  const thumbnailable = (doc: LibraryDocument) => canThumbnail(doc.format);
+  function inScope(doc: LibraryDocument) {
+    const selected = filter;
+    if (selected.kind === 'favorites') return doc.favorite; if (selected.kind === 'unfiled') return !doc.collectionIds.length;
+    if (selected.kind === 'collection') return Boolean(collectionMatches.get(selected.id)?.has(doc.path));
+    if (selected.kind === 'source') return doc.source?.repository === selected.id;
+    return true;
+  }
+  const viewKey = () => `hold-my-brief:library-view:${filter.kind === 'collection' || filter.kind === 'source' ? `${filter.kind}:${filter.id}` : filter.kind}`;
+  // Saved per collection; with no choice yet, grid when at least half of the collection can show a thumbnail.
+  // The default looks at the whole collection, not the search, so typing never flips the view.
+  function currentView(): LibraryView {
+    const saved = parseLibraryView(savedPreference(viewKey())); if (saved) return saved;
+    const scoped = library.documents.filter(inScope); return defaultLibraryView(scoped.filter(thumbnailable).length, scoped.length);
+  }
+  type Tile = { node: HTMLElement; path: string; ratio: number };
+  let tiles: Tile[] = []; let columnCount = 0; const tileByPath = new Map<string, Tile>();
+  function contentWidth() { const style = getComputedStyle(documents); return documents.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight); }
+  function layoutGrid(force = false) {
+    if (view !== 'grid' || !tiles.length) return;
+    const width = contentWidth(); if (width <= 0) return;
+    const columns = libraryGridColumns(width); if (!force && columns === columnCount && documents.querySelector('.library-column')) return;
+    columnCount = columns; const tileWidth = (width - libraryGrid.gap * (columns - 1)) / columns;
+    const placed = assignMasonry(tiles.map(tile => 1 / tile.ratio), columns, libraryGrid.gap / tileWidth);
+    const focused = document.activeElement instanceof HTMLElement && documents.contains(document.activeElement) ? document.activeElement : undefined;
+    documents.replaceChildren(...placed.map(indices => { const column = element('div', 'library-column'); column.setAttribute('role', 'presentation'); column.append(...indices.map(index => tiles[index].node)); return column; }));
+    if (focused?.isConnected) focused.focus();
+    // Tiles built while the drawer was hidden or had no width are only attached now; observing is idempotent.
+    observeThumbnails();
+  }
+  // Only the column count is recomputed on resize; the drawer's own width is the only input.
+  new ResizeObserver(() => { if (visible) layoutGrid(); }).observe(documents);
+  function actionsFor(doc: LibraryDocument) {
+    const actions = element('div', 'library-card-actions');
+    const favorite = button(doc.favorite ? '★' : '☆', `${doc.favorite ? 'Unfavorite' : 'Favorite'} ${doc.name}`, `favorite:${doc.path}`); favorite.className = 'library-favorite'; favorite.setAttribute('aria-pressed', String(doc.favorite));
+    favorite.onclick = () => void mutate(() => editLibrary({ action: 'updateDocument', path: doc.path, collectionIds: doc.collectionIds, favorite: !doc.favorite, tags: doc.tags, notes: doc.notes }));
+    const more = button('···', `More actions for ${doc.name}`, `more:${doc.path}`); more.className = 'library-organize'; more.setAttribute('aria-haspopup', 'menu'); more.setAttribute('aria-expanded', 'false'); more.onclick = () => openItemMenu(doc, more);
+    actions.append(favorite, more); return actions;
+  }
+  function documentRow(doc: LibraryDocument) {
+    const row = element('div', 'library-document'); row.setAttribute('role', 'listitem'); row.classList.toggle('is-active', doc.path === activePath);
+    const open = button('', `Open ${doc.name}`, `open:${doc.path}`); open.className = 'library-document-open'; open.title = doc.path; if (doc.path === activePath) open.setAttribute('aria-current', 'true');
+    open.append(element('span', 'library-document-name', doc.name), element('span', 'library-document-meta', `${doc.format.toUpperCase()} · ${doc.source?.removed ? 'no longer in folder' : doc.availability ?? 'ready'}${doc.path === activePath ? ' · Reading' : ''}`));
+    open.onclick = () => void openDocument(doc, open, matches.filter(isImage).map(item => item.path));
+    row.append(open, actionsFor(doc)); return row;
+  }
+  function documentTile(doc: LibraryDocument): Tile {
+    const ratio = thumbs.ratio(doc.path) ?? libraryGrid.defaultRatio; const missing = (doc.availability ?? 'ready') === 'missing';
+    const node = element('div', 'library-document library-tile'); node.setAttribute('role', 'listitem');
+    node.classList.toggle('is-active', doc.path === activePath); node.classList.toggle('is-missing', missing); node.classList.toggle('is-text', !missing && !thumbnailable(doc));
+    const open = button('', `Open ${doc.name}`, `open:${doc.path}`); open.className = 'library-document-open library-tile-open'; open.title = doc.path; if (doc.path === activePath) open.setAttribute('aria-current', 'true');
+    const media = element('span', 'library-tile-media'); media.style.setProperty('--ratio', String(ratio));
+    const format = doc.format.toUpperCase();
+    if (missing) media.append(element('span', 'library-tile-glyph'), element('span', 'library-tile-note', 'Missing'));
+    else if (thumbnailable(doc)) {
+      media.append(element('span', 'library-tile-format', format));
+      const image = element('img'); image.alt = ''; image.hidden = true; image.decoding = 'async'; media.dataset.path = doc.path; media.dataset.format = doc.format; media.append(image);
+      const cached = thumbs.peek(doc.path); if (cached) showThumbnail(media, cached); else if (thumbs.failed(doc.path)) markUnavailable(media);
+      const scrim = element('span', 'library-tile-scrim'); scrim.append(element('span', 'library-tile-name', doc.name), element('span', 'library-tile-meta', format)); media.append(scrim);
+    } else media.append(element('span', 'library-tile-title', doc.name), element('span', 'library-tile-meta', format));
+    if (doc.path === activePath) media.append(element('span', 'library-tile-tag', 'Reading'));
+    open.append(media);
+    open.onclick = () => void openDocument(doc, open, matches.filter(isImage).map(item => item.path));
+    node.append(open, actionsFor(doc)); return { node, path: doc.path, ratio };
+  }
+  for (const mode of ['grid', 'list'] as const) viewButtons[mode].onclick = () => { if (view !== mode) { savePreference(viewKey(), mode); renderDocuments(); } };
   function renderDocuments() {
-    clearThumbnails(); documents.replaceChildren(); pager.replaceChildren();
-    const query = search.value.trim().toLocaleLowerCase(); const selected = filter;
+    clearThumbnails(); documents.replaceChildren(); pager.replaceChildren(); tiles = []; tileByPath.clear(); columnCount = 0; closeItemMenu(false); const generation = ++renderGeneration;
+    const query = search.value.trim().toLocaleLowerCase();
     matches = library.documents.filter(doc => {
-      if (selected.kind === 'favorites' && !doc.favorite || selected.kind === 'unfiled' && doc.collectionIds.length) return false;
-      if (selected.kind === 'collection' && !collectionMatches.get(selected.id)?.has(doc.path)) return false;
-      if (selected.kind === 'source' && doc.source?.repository !== selected.id) return false;
+      if (!inScope(doc)) return false;
       if (format.value === 'image' && !isImage(doc) || format.value === 'document' && !['pdf', 'epub', 'md', 'markdown', 'txt'].includes(doc.format)) return false;
       if (availability.value && (doc.availability ?? 'ready') !== availability.value) return false;
       const categories = doc.collectionIds.map(id => library.collections.find(item => item.id === id)?.name ?? '').join(' ').toLocaleLowerCase();
@@ -448,25 +572,27 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): { refres
     matches.sort(sort.value === 'name' ? (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }) || a.path.localeCompare(b.path) : (a, b) => timestamp(b.lastOpened) - timestamp(a.lastOpened) || a.name.localeCompare(b.name));
     page = Math.min(page, Math.max(0, Math.ceil(matches.length / pageSize) - 1));
     resultCount.textContent = `${matches.length} ${matches.length === 1 ? 'reference' : 'references'}`;
-    documents.classList.toggle('library-grid', matches.some(isImage));
+    view = currentView(); documents.classList.toggle('library-grid', view === 'grid'); documents.classList.toggle('library-list', view === 'list');
+    for (const mode of ['grid', 'list'] as const) viewButtons[mode].setAttribute('aria-pressed', String(view === mode));
+    scopeLabel.textContent = scopeName(); scopeButton.setAttribute('aria-label', `${scopeName()}. Choose collection and filters`);
     if (!matches.length) {
       const empty = element('div', 'library-empty'); empty.setAttribute('role', 'listitem');
       empty.append(element('strong', '', loadError ? 'Library unavailable' : !loaded ? 'Loading library…' : !library.documents.length ? 'Your references, collected.' : 'No matching references'), element('p', '', loadError ? 'Could not load the library. Close and reopen it to retry.' : !loaded ? 'Getting your saved library.' : !library.documents.length ? 'Add local documents and images, or index a folder of PDFs. Originals stay untouched.' : 'Try another search, format, availability, or collection.'));
       documents.append(empty);
     }
-    for (const doc of matches.slice(page * pageSize, (page + 1) * pageSize)) {
-      const row = element('div', 'library-document'); row.setAttribute('role', 'listitem'); row.classList.toggle('is-active', doc.path === activePath);
-      const open = button('', `Open ${doc.name}`, `open:${doc.path}`); open.className = 'library-document-open'; open.title = doc.path; if (doc.path === activePath) open.setAttribute('aria-current', 'true');
-      if (isImage(doc)) { const preview = element('span', 'library-thumbnail'); preview.append(element('span', 'library-thumbnail-placeholder', doc.format.toUpperCase())); const image = element('img'); image.alt = ''; image.hidden = true; image.decoding = 'async'; image.dataset.path = doc.path; preview.append(image); open.append(preview); }
-      open.append(element('span', 'library-document-name', doc.name), element('span', 'library-document-meta', `${doc.format.toUpperCase()} · ${doc.source?.removed ? 'no longer in folder' : doc.availability ?? 'ready'}${doc.path === activePath ? ' · Reading' : ''}`));
-      open.onclick = () => void openDocument(doc, open, matches.filter(isImage).map(item => item.path));
-      const actions = element('div', 'library-card-actions');
-      const favorite = button(doc.favorite ? '★' : '☆', `${doc.favorite ? 'Unfavorite' : 'Favorite'} ${doc.name}`, `favorite:${doc.path}`); favorite.className = 'library-favorite'; favorite.setAttribute('aria-pressed', String(doc.favorite));
-      favorite.onclick = () => void mutate(() => editLibrary({ action: 'updateDocument', path: doc.path, collectionIds: doc.collectionIds, favorite: !doc.favorite, tags: doc.tags, notes: doc.notes }));
-      const details = button('Info', `Reference details for ${doc.name}`, `details:${doc.path}`); details.className = 'library-info'; details.onclick = () => referenceDetails(doc, details);
-      const organizeButton = button('···', `Organize ${doc.name}`, `organize:${doc.path}`); organizeButton.className = 'library-organize'; organizeButton.onclick = () => organize(doc, organizeButton);
-      actions.append(favorite, details, organizeButton); row.append(open, actions); documents.append(row);
+    const shown = matches.slice(page * pageSize, (page + 1) * pageSize);
+    if (view === 'grid') {
+      tiles = shown.map(documentTile); for (const tile of tiles) tileByPath.set(tile.path, tile); layoutGrid(true);
+      // The disk cache knows the shape of every thumbnail it holds: reserve those tiles' real height now
+      // rather than letting the grid jump as pictures arrive.
+      void thumbs.primeRatios(shown.map(doc => doc.path)).then(learned => {
+        if (!learned || generation !== renderGeneration) return;
+        for (const tile of tiles) { const ratio = thumbs.ratio(tile.path); if (ratio && Math.abs(ratio - tile.ratio) > .001) { tile.ratio = ratio; tile.node.querySelector<HTMLElement>('.library-tile-media')?.style.setProperty('--ratio', String(ratio)); } }
+        layoutGrid(true);
+      });
+      thumbs.trim(new Set(shown.map(doc => doc.path)));
     }
+    else documents.append(...shown.map(documentRow));
     if (matches.length > pageSize) {
       const previous = button('←', 'Previous library page', 'page-previous'); previous.disabled = page === 0; const next = button('→', 'Next library page', 'page-next'); next.disabled = (page + 1) * pageSize >= matches.length;
       const change = (offset: number) => { page += offset; renderDocuments(); documents.scrollTop = 0; documents.querySelector<HTMLElement>('.library-document-open')?.focus(); };

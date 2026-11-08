@@ -50,5 +50,4 @@ export type LibraryChange =
   | { action: 'deleteCollection'; id: string }
   | { action: 'updateDocument'; path: string; collectionIds: string[]; favorite: boolean; tags: string[]; notes: string }
   | { action: 'removeDocument'; path: string };
-export type Thumbnail = { bytes: number[]; mime: string };
 export const emptyLibrary = (): Library => ({ documents: [], collections: [], roots: [], imports: [] });

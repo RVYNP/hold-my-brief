@@ -1,6 +1,20 @@
 import { test, expect } from '@playwright/test';
 import { ZipWriter, Uint8ArrayWriter, TextReader } from '@zip.js/zip.js';
 import { createHash } from 'node:crypto';
+import { crc32, deflateSync } from 'node:zlib';
+
+// A solid-colour PNG of exactly the requested size, so tile proportions are known to the test.
+function pngFixture(width: number, height: number, [r, g, b]: [number, number, number]) {
+  const chunk = (type: string, data: Buffer) => {
+    const body = Buffer.concat([Buffer.from(type), data]); const out = Buffer.alloc(body.length + 8);
+    out.writeUInt32BE(data.length, 0); body.copy(out, 4); out.writeUInt32BE(crc32(body), body.length + 4); return out;
+  };
+  const header = Buffer.alloc(13); header.writeUInt32BE(width, 0); header.writeUInt32BE(height, 4); header[8] = 8; header[9] = 2;
+  const row = Buffer.alloc(1 + width * 3); for (let x = 0; x < width; x++) row.set([r, g, b], 1 + x * 3);
+  const raw = Buffer.concat(Array.from({ length: height }, () => row));
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', header), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
+const pngFiles = [[80, 120], [120, 80], [100, 100], [60, 140], [120, 90], [90, 120]].map(([width, height], i) => ({ name: `plate-${i + 1}.png`, mimeType: 'image/png', buffer: pngFixture(width, height, [40 * i + 20, 120, 200 - 30 * i]) }));
 
 async function recordFixture(name: string, buffer: Buffer, properties: Record<string, unknown>) {
   await test.info().attach('fixture-manifest.json', { body: JSON.stringify({ schema: 1, name, bytes: buffer.length, sha256: createHash('sha256').update(buffer).digest('hex'), origin: 'Synthetic, generated from this test source', ...properties }, null, 2), contentType: 'application/json' });
@@ -292,6 +306,41 @@ test('library drawer floats over the page and never resizes it, while drag, keyb
   expect(await docked()).toBe(true);
   // Mirroring the drawer is a pure overlay too: the page keeps its box and its bitmap.
   expect(await pageGeometry()).toEqual(untouched);
+
+  // Grid view is a pure overlay as well. Adding six images makes the collection mostly pictures, so it
+  // opens as a grid; widening to 480 px changes the column count, never the page, and the masonry never
+  // scrolls sideways or lets a tile out of the drawer.
+  const documents = page.locator('.library-documents');
+  await page.locator('.library-panel input[type=file]').setInputFiles(pngFiles);
+  await expect(page.locator('.library-tile')).toHaveCount(7);
+  await expect(documents).toHaveClass(/library-grid/);
+  const columns = () => page.locator('.library-column').count();
+  const contained = () => documents.evaluate(el => {
+    const area = el.getBoundingClientRect();
+    return el.scrollWidth <= el.clientWidth && Array.from(el.querySelectorAll('.library-tile')).every(tile => { const box = tile.getBoundingClientRect(); return box.left >= area.left - 1 && box.right <= area.right + 1; });
+  });
+  expect(await columns()).toBe(2);
+  expect(await contained()).toBe(true);
+  expect(await pageGeometry()).toEqual(untouched);
+  // Right-docked, so dragging the handle left widens the drawer (334 -> 480) and right narrows it again.
+  const drag = async (delta: number) => {
+    const grip = (await handle.boundingBox())!, y = grip.y + grip.height / 2;
+    await page.mouse.move(grip.x + 5, y); await page.mouse.down(); await page.mouse.move(grip.x + 5 + delta, y, { steps: 6 }); await page.mouse.up();
+  };
+  await drag(-146); await expect(handle).toHaveAttribute('aria-valuenow', '480');
+  await expect.poll(columns).toBe(3);
+  expect(await contained()).toBe(true);
+  expect(await pageGeometry()).toEqual(untouched);
+  await drag(146); await expect(handle).toHaveAttribute('aria-valuenow', '334');
+  await expect.poll(columns).toBe(2);
+  expect(await pageGeometry()).toEqual(untouched);
+  await page.getByRole('button', { name: 'List view' }).click();
+  await expect(documents).toHaveClass(/library-list/);
+  await expect(page.locator('.library-document')).toHaveCount(7);
+  expect(await pageGeometry()).toEqual(untouched);
+  await page.getByRole('button', { name: 'Grid view' }).click();
+  await expect(documents).toHaveClass(/library-grid/);
+  expect(await pageGeometry()).toEqual(untouched);
   await page.reload();
   await expect(handle).toHaveAttribute('aria-valuenow', '334');
   expect(await docked()).toBe(true);
@@ -302,6 +351,90 @@ test('library drawer floats over the page and never resizes it, while drag, keyb
   await page.setViewportSize({ width: 800, height: 680 });
   await expect(handle).toHaveAttribute('aria-valuenow', '440'); await expect(handle).toHaveAttribute('aria-valuemax', '440');
   await page.setViewportSize({ width: 1080, height: 680 }); await expect(handle).toHaveAttribute('aria-valuenow', '520');
+
+  // Every width keeps the masonry inside the drawer, and the view is remembered for the collection.
+  await handle.focus(); await page.keyboard.press('End');
+  await expect.poll(columns).toBe(4);
+  expect(await contained()).toBe(true);
+  await handle.focus(); await page.keyboard.press('Home'); await expect(handle).toHaveAttribute('aria-valuenow', '240');
+  await expect.poll(columns).toBe(2);
+  expect(await contained()).toBe(true);
+  await page.getByRole('button', { name: 'List view' }).click();
+  await expect(documents).toHaveClass(/library-list/);
+  await page.reload();
+  await expect(documents).toHaveClass(/library-list/);
+  await page.getByRole('button', { name: 'Grid view' }).click();
+  await expect(documents).toHaveClass(/library-grid/);
+});
+
+test('library thumbnails are made once and survive searching, sorting and switching view', async ({ page }) => {
+  // Every thumbnail is an object URL, so counting createObjectURL calls counts pictures made.
+  await page.addInitScript(() => {
+    const create = URL.createObjectURL.bind(URL); let count = 0;
+    URL.createObjectURL = blob => { count++; return create(blob); };
+    Object.defineProperty(window, 'objectUrlCount', { get: () => count });
+  });
+  await page.setViewportSize({ width: 1080, height: 680 });
+  await page.goto('/');
+  await expect(page.locator('#library-root')).toBeVisible();
+  await page.locator('.library-panel input[type=file]').setInputFiles(pngFiles);
+  const loaded = page.locator('.library-tile-media.is-loaded');
+  await expect(loaded).toHaveCount(6);
+  const made = () => page.evaluate(() => Reflect.get(window, 'objectUrlCount') as number);
+  const sources = () => page.locator('.library-tile-media img').evaluateAll(images => images.map(image => image.getAttribute('src')));
+  const before = { made: await made(), sources: await sources() };
+  expect(before.made).toBe(6);
+  // Typing re-renders the list on every keystroke; a match keeps its picture and nothing is fetched again.
+  const search = page.getByRole('searchbox');
+  await search.pressSequentially('plate-');
+  await expect(loaded).toHaveCount(6);
+  await search.fill('plate-3');
+  await expect(page.locator('.library-tile')).toHaveCount(1);
+  await expect(loaded).toHaveCount(1);
+  expect(before.sources).toContain(await page.locator('.library-tile-media img').getAttribute('src'));
+  await search.fill('');
+  await page.locator('.library-sort').selectOption('name');
+  await page.getByRole('button', { name: 'List view' }).click();
+  await page.getByRole('button', { name: 'Grid view' }).click();
+  await expect(loaded).toHaveCount(6);
+  expect(await made()).toBe(before.made);
+  expect(new Set(await sources())).toEqual(new Set(before.sources));
+});
+
+test('tiles built while the library is hidden still load their pictures once it opens', async ({ page }) => {
+  // Compact window: the library is closed, so the grid is built with no width and its tiles are attached
+  // only when the window grows and the drawer opens.
+  await page.goto('/');
+  await expect(page.locator('#library-root')).toBeHidden();
+  await page.locator('.library-panel input[type=file]').setInputFiles(pngFiles);
+  await expect(page.locator('.library-tile')).toHaveCount(0);
+  await page.setViewportSize({ width: 1080, height: 680 });
+  await expect(page.locator('#library-root')).toBeVisible();
+  await expect(page.locator('.library-tile')).toHaveCount(6);
+  await expect(page.locator('.library-tile-media.is-loaded')).toHaveCount(6);
+});
+
+test('compact library sheet shows the grid in two columns without sideways overflow', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#library-toggle').click();
+  await expect(page.locator('#library-root')).toBeVisible();
+  await page.locator('.library-panel input[type=file]').setInputFiles(pngFiles);
+  const documents = page.locator('.library-documents');
+  await expect(documents).toHaveClass(/library-grid/);
+  await expect(page.locator('.library-tile')).toHaveCount(6);
+  await expect(page.locator('.library-column')).toHaveCount(2);
+  const fit = await page.evaluate(() => {
+    const area = document.querySelector('.library-documents')!, panel = document.querySelector('.library-panel')!;
+    const inside = Array.from(area.querySelectorAll('.library-tile')).every(tile => { const box = tile.getBoundingClientRect(), edge = panel.getBoundingClientRect(); return box.left >= edge.left && box.right <= edge.right; });
+    return { scrolls: area.scrollWidth > area.clientWidth, panelScrolls: panel.scrollWidth > panel.clientWidth, inside, sheet: Math.round(panel.getBoundingClientRect().width) };
+  });
+  expect(fit).toEqual({ scrolls: false, panelScrolls: false, inside: true, sheet: 306 });
+  // The scope popover opens inside the sheet and the Escape key closes it before the sheet itself.
+  await page.getByRole('button', { name: /Choose collection and filters/ }).click();
+  await expect(page.locator('#library-scope-menu')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#library-scope-menu')).toBeHidden();
+  await expect(page.locator('#library-root')).toBeVisible();
 });
 
 test('PDF page-bitmap cache never reuses pixels across rotation', async ({ page }) => {

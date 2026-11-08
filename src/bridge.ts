@@ -1,7 +1,7 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { Format, Locator, ReaderOptions } from './types';
 import { getBrowserFile, getBrowserLibrary, mutateBrowserLibrary } from './library-store';
-import type { Library, LibraryChange, Thumbnail } from './catalog-types';
+import type { Library, LibraryChange } from './catalog-types';
 import { applyLibraryChange, localDocument, requireCollection } from './library-model';
 export type { Library, LibraryChange, LibraryDocument, Collection } from './catalog-types';
 export const desktop = isTauri();
@@ -142,18 +142,57 @@ export async function indexFolder(): Promise<Library> {
   requireDesktop();
   return native('index_folder');
 }
-export async function readLibraryThumbnail(path: string): Promise<Thumbnail | null> {
-  if (desktop) return native('read_library_thumbnail', { path });
+/** A thumbnail ready to show: a JPEG (or, in the browser build, WebP) and its pixel size. */
+export type LibraryThumbnail = { width: number; height: number; blob: Blob };
+// A cached thumbnail travels as `[width u32 BE][height u32 BE][jpeg]`, the same bytes the disk cache holds.
+const thumbnailHeader = 8;
+/**
+ * The thumbnail the native side already has or can scale itself (every image format but AVIF). `null`
+ * means "not available natively": PDFs and AVIF are rendered by the webview (src/thumbnails.ts) and
+ * handed back through `putLibraryThumbnail`.
+ */
+export async function readLibraryThumbnail(path: string): Promise<LibraryThumbnail | null> {
+  if (desktop) {
+    const buffer = await native<ArrayBuffer>('read_library_thumbnail', { path });
+    if (buffer.byteLength <= thumbnailHeader) return null;
+    const view = new DataView(buffer);
+    return { width: view.getUint32(0), height: view.getUint32(4), blob: new Blob([buffer.slice(thumbnailHeader)], { type: 'image/jpeg' }) };
+  }
   const file = await getBrowserFile(path);
-  if (!Object.hasOwn(imageFormats, file.name.split('.').pop()?.toLowerCase() ?? '')) return null;
+  if (!Object.hasOwn(imageFormats, file.name.split('.').pop()?.toLowerCase() ?? '') || file.name.toLowerCase().endsWith('.avif')) return null;
   const image = await createImageBitmap(file, { resizeWidth: 320, resizeQuality: 'medium' });
-  try {
-    const canvas = document.createElement('canvas');
-    canvas.width = image.width; canvas.height = image.height;
-    const context = canvas.getContext('2d');
-    if (!context) throw Error('Image previews are unavailable.');
-    context.drawImage(image, 0, 0);
-    const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(result => result ? resolve(result) : reject(Error('Could not create image preview.')), 'image/webp', 0.8));
-    return { bytes: Array.from(new Uint8Array(await blob.arrayBuffer())), mime: blob.type };
-  } finally { image.close(); }
+  try { return await canvasThumbnail(image, image.width, image.height, 'image/webp'); } finally { image.close(); }
+}
+/** Draws `source` at `width` x `height` and encodes it; shared by the AVIF and PDF paths. */
+export async function canvasThumbnail(source: CanvasImageSource, width: number, height: number, type: 'image/jpeg' | 'image/webp' = 'image/jpeg'): Promise<LibraryThumbnail> {
+  const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (!context) throw Error('Image previews are unavailable.');
+  context.fillStyle = '#ffffff'; context.fillRect(0, 0, width, height); context.drawImage(source, 0, 0, width, height);
+  return encodeCanvas(canvas, type);
+}
+export async function encodeCanvas(canvas: HTMLCanvasElement, type: 'image/jpeg' | 'image/webp' = 'image/jpeg'): Promise<LibraryThumbnail> {
+  const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(result => result ? resolve(result) : reject(Error('Could not create image preview.')), type, 0.82));
+  return { width: canvas.width, height: canvas.height, blob };
+}
+/** Stores a webview-rendered JPEG thumbnail in the native cache. The browser build keeps it in memory only. */
+export async function putLibraryThumbnail(path: string, thumbnail: LibraryThumbnail): Promise<void> {
+  if (!desktop) return;
+  const header = new Uint8Array(thumbnailHeader); const view = new DataView(header.buffer);
+  view.setUint32(0, thumbnail.width); view.setUint32(4, thumbnail.height);
+  const body = new Uint8Array(await new Blob([header, thumbnail.blob]).arrayBuffer());
+  await invoke('put_library_thumbnail', body, { headers: { 'x-library-path': encodeURIComponent(path) } });
+}
+/** Pixel size of every thumbnail that is already cached, so tiles can reserve their real shape. */
+export async function libraryThumbnailRatios(paths: string[]): Promise<Record<string, [number, number]>> {
+  return desktop && paths.length ? native('library_thumbnail_ratios', { paths }) : {};
+}
+/** Part of a library original: the total file length and the bytes from `offset` (at most 8 MiB). */
+export async function readLibraryRange(path: string, offset: number, length: number): Promise<{ total: number; bytes: Uint8Array }> {
+  if (desktop) {
+    const buffer = await native<ArrayBuffer>('read_library_range', { path, offset, length });
+    return { total: Number(new DataView(buffer).getBigUint64(0)), bytes: new Uint8Array(buffer.slice(8)) };
+  }
+  const file = await getBrowserFile(path);
+  return { total: file.size, bytes: new Uint8Array(await file.slice(offset, offset + length).arrayBuffer()) };
 }
