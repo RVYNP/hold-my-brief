@@ -10,6 +10,7 @@ Versions below are the installed direct frontend dependencies for this candidate
 | @zip.js/zip.js | 2.24.0 | BSD-3-Clause | Bounded archive resource reads |
 | markdown-it | 15.0.3 | MIT | Markdown parsing with raw HTML disabled |
 | Geist, Geist Serif (vercel/geist-font) | 1.9.0 | OFL-1.1 | Bundled interface and reading typefaces (`src/fonts/`, licence in `src/fonts/OFL-Geist.txt`) |
+| JetBrains Mono (JetBrains/JetBrainsMono) | 2.304 | OFL-1.1 | Bundled monospace typeface, regular and bold (`src/fonts/`, licence in `src/fonts/OFL-JetBrainsMono.txt`) |
 
 The foliate source is patched reproducibly by scripts/secure-foliate.mjs to remove allow-scripts from publication frames. That script fails if the expected sandbox code changes. Renderer upgrades require repeating the security and fidelity tests. Readest application source is not reused.
 
