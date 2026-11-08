@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COMMANDS, INTERFACE_SHORTCUTS, SHORTCUTS, groupCommands, scoreCommand, searchCommands, shortcutFor, unavailableReason, type Command } from '../src/commands';
+import { COMMANDS, INTERFACE_SHORTCUTS, SHORTCUTS, groupCommands, parseIntent, scoreCommand, searchCommands, shortcutFor, unavailableReason, type Command } from '../src/commands';
 
 const byId = (id: string): Command => {
   const found = COMMANDS.find(command => command.id === id);
@@ -175,5 +175,25 @@ describe('command scoring and search', () => {
     const labelMatch = scoreCommand({ id: 'a', label: 'Bravo', group: 'View' }, 'bravo')!;
     const keywordMatch = scoreCommand({ id: 'b', label: 'Alpha', group: 'View', keywords: ['bravo'] }, 'bravo')!;
     expect(labelMatch).toBeGreaterThan(keywordMatch);
+  });
+});
+
+describe('typed requests', () => {
+  it('reads a bare or prefixed number as a location', () => {
+    for (const query of ['40', ' page 40 ', 'p40', 'p. 40', 'go to 40', 'goto 40', 'line 40'])
+      expect(parseIntent(query)).toEqual({ kind: 'goto', target: '40' });
+    expect(parseIntent('35%')).toEqual({ kind: 'goto', target: '35%' });
+    expect(parseIntent('jump to 12.5%')).toEqual({ kind: 'goto', target: '12.5%' });
+  });
+
+  it('reads a find verb as the words after it', () => {
+    expect(parseIntent('find borrow checker')).toEqual({ kind: 'find', text: 'borrow checker' });
+    expect(parseIntent('search for Darcy')).toEqual({ kind: 'find', text: 'Darcy' });
+    expect(parseIntent("where's Netherfield")).toEqual({ kind: 'find', text: 'Netherfield' });
+  });
+
+  it('leaves command names and incomplete requests to the command search', () => {
+    for (const query of ['go to', 'page', 'find', 'fit', 'dark mode', 'page forty', '40 pages'])
+      expect(parseIntent(query)).toBeUndefined();
   });
 });

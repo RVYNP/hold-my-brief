@@ -61,8 +61,8 @@ computer.
     <td valign="top">
       <h3>Reads what you read</h3>
       PDFs, EPUB books, Markdown notes, plain text and images: faithful pages for PDFs, comfortable
-      reflowing text for books. Turn pages, jump to a chapter or scrub through the whole document
-      with one slider.
+      reflowing text for books. Click the title or press Ctrl+K and type a page number, a phrase or a
+      command to go straight there; the hairline under the page scrubs the whole document.
     </td>
     <td valign="top">
       <h3>Opens like a book</h3>
@@ -74,13 +74,25 @@ computer.
     <td valign="top">
       <h3>A library for your references</h3>
       Collect documents into collections, star favorites, search, or point it at a folder of PDFs.
-      It opens as a drawer over the page: widen it, narrow it or move it to either side without the
-      page ever moving. It never copies or moves your files.
+      Browse a collection as a grid of thumbnails at their real proportions, PDFs included, or as a
+      list. It opens as a drawer over the page: widen it, narrow it or move it to either side without
+      the page ever moving. It never copies or moves your files.
     </td>
     <td valign="top">
       <h3>Fits your space</h3>
-      Light and dark modes that follow your system, five theme families (Brief by default), your own accent
-      color, and a page tone for text. Hover a theme to preview it on the whole window.
+      One slim toolbar, and a footer that is only a progress line until you reach for it, leave the
+      page 94% of the window; a pinned reader's controls fade while you work in another app. Light and dark modes that
+      follow your system, five theme families (Brief by default), your own accent color, and a page
+      tone for text. Hover a theme to preview it on the whole window.
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" valign="top">
+      <h3>Ask it, if you want to</h3>
+      Turn on the optional AI assistant with your own Anthropic API key, then type a question into
+      the title bar: "where does Darcy first appear?", "summarize this chapter", "open the Tauri docs
+      and switch to dark". Claude finds things, answers from the page you're on, and moves, opens or
+      restyles the reader for you, listing each thing it did. It stays off until you add a key.
     </td>
   </tr>
 </table>
@@ -90,13 +102,13 @@ computer.
 <table>
   <tr>
     <td align="center" width="50%"><img src="docs/media/hand-tool.png" alt="A PDF page zoomed to 120% with the hand tool switched on in the floating zoom controls"><br><sub><b>Zoom in</b>, then drag the page with the hand tool</sub></td>
-    <td align="center" width="50%"><img src="docs/media/appearance.png" alt="The Appearance panel with theme cards over a book"><br><sub><b>Appearance</b>: hover to preview, click to keep</sub></td>
+    <td align="center" width="50%"><img src="docs/media/appearance.png" alt="The Appearance panel's Colour tab, with five theme cards in a row, over a book"><br><sub><b>Appearance</b>: hover to preview, click to keep. Text size and spacing are on its Text tab</sub></td>
   </tr>
 </table>
 
 <p align="center">
-  <img src="docs/media/library.png" alt="The document library floating over a PDF, with the page unreduced behind it" width="880">
-  <br><sub><b>The library</b> floats over the page. Put it on either side and the page keeps its place</sub>
+  <img src="docs/media/library.png" alt="The library drawer as a grid of thumbnails at their real proportions (a print manual marked Reading, Hokusai's Great Wave, Haeckel plates and a book) floating over a PDF page" width="880">
+  <br><sub><b>The library</b> floats over the page as a grid of thumbnails or a list. Put it on either side and the page keeps its place</sub>
 </p>
 
 <p align="center">
@@ -112,6 +124,9 @@ computer.
 ## Private by design
 
 - **Your files stay yours.** No account, no cloud, no analytics. It works offline.
+- **AI is off unless you turn it on.** The optional assistant uses your own Anthropic API key, kept in
+  the system keychain. Only when you ask something does it send your question and the text it reads
+  to answer it to Anthropic. Without a key, the app makes no network requests.
 - **Documents are never changed.** Reading positions and the library live in a small local data
   folder. Removing something from the library never deletes the file.
 - **Nothing runs behind your back.** Scripts inside documents are blocked, books open in a sandbox,
@@ -207,8 +222,11 @@ Thank you to the Stencil team.
 
 The screenshots read public-domain documents: *The Half-Tone Process* (1895), a print manual
 scanned by the [Internet Archive](https://archive.org/details/halftoneprocessp00verf_0), and
-Jane Austen's *Pride and Prejudice*. No in-copyright scans are committed to this repository.
-`scripts/reshoot-media.mjs` regenerates every still, the hero included, from documents you supply.
+Jane Austen's *Pride and Prejudice*. The library shots also show Hokusai's *The Great Wave off
+Kanagawa* and two plates from Ernst Haeckel's *Kunstformen der Natur* (1904), from
+[Wikimedia Commons](https://commons.wikimedia.org/). No in-copyright scans are committed to this
+repository. `scripts/reshoot-media.mjs` regenerates every still, the hero included, from documents
+you supply.
 
 ## License
 

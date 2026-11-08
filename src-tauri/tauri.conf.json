@@ -18,7 +18,10 @@
       "height": 620,
       "visible": false,
       "dragDropEnabled": true,
-      "resizable": true
+      "resizable": true,
+      "titleBarStyle": "Overlay",
+      "hiddenTitle": true,
+      "trafficLightPosition": { "x": 14, "y": 22 }
     }],
     "security": {
       "capabilities": ["main"],

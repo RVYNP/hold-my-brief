@@ -38,6 +38,29 @@ test('the palette filters as you type and runs the chosen command', async ({ pag
   await expect(page.locator('#position')).toContainText('120');
 });
 
+test('the title opens the palette, a typed number goes there and free text finds it', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles(textDocument);
+  await expect(page.locator('#filename')).toHaveText('palette.txt');
+
+  await page.locator('#ask').click();
+  await expect(page.locator('#palette-input')).toBeFocused();
+  await page.locator('#palette-input').fill('page 150');
+  await expect(page.locator('.palette-row').first()).toHaveText('Go to 150');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#palette')).toBeHidden();
+  await expect(page.locator('#position')).toContainText('150');
+
+  // Words that name no command are offered as a find in the document, first.
+  await page.keyboard.press('Control+k');
+  await page.locator('#palette-input').fill('beside the work');
+  await expect(page.locator('.palette-row').first()).toContainText('Find “beside the work” in document');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#find-bar')).toBeVisible();
+  await expect(page.locator('#find-query')).toHaveValue('beside the work');
+  await expect(page.locator('#find-status')).toContainText('200');
+});
+
 test('arrow keys move the highlight and skip commands that need a document', async ({ page }) => {
   await page.goto('/');
   // With nothing open, document commands are listed but disabled, and the first usable row

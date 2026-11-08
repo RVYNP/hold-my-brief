@@ -50,6 +50,12 @@ export interface ReaderAdapter {
   revealSearchMatch?(hit: SearchHit): Promise<void>;
   /** Clears the current match marking without changing position. */
   clearSearchHighlights?(): void;
+  /**
+   * Plain text at the reader's current place, for the assistant: the page or spread on screen
+   * (PDF), the current section (EPUB) or source lines from the top of the view (Markdown, TXT).
+   * At most `limit` characters. Absent when the format has no text at all (images).
+   */
+  readText?(limit: number): Promise<{ label: string; text: string }>;
   /** The element that scrolls page-based content, for the view controls and hand tool; absent when content reflows instead of zooming. */
   scroller?(): HTMLElement | undefined;
   destroy(): void;

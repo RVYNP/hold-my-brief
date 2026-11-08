@@ -31,7 +31,7 @@ stop to ask the user whenever a step says so.
 - Do not change the user's default apps. The Windows installer already adds Hold My Brief to
   **Open with** without taking over any file type.
 - Do not open, upload or copy the user's documents. Hold My Brief needs no account and no network
-  connection.
+  connection. Do not turn on its optional AI assistant or enter an API key for the user.
 - Ask before installing system-wide prerequisites (Node.js, Rust, Visual Studio Build Tools, Xcode
   tools) or anything that needs administrator rights.
 

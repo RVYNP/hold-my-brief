@@ -1,6 +1,7 @@
 // Record the README's library demo: the drawer opens over the page, is dragged wider, reset with a
 // double-click and closed, while the page never moves. Writes docs/media/library-resize.gif (light mode).
-// Usage: node scripts/record-library-demo.mjs <page-document.pdf>
+// Usage: node scripts/record-library-demo.mjs <page-document.pdf> [book.epub public-domain-image ...]
+//        (the extra files fill the drawer's grid with real thumbnails)
 //        (dev server must be running on :1420; needs ffmpeg with palettegen: Homebrew's, or set FFMPEG)
 // Frames are captured deterministically: every CSS animation is paused and stepped by one frame
 // before each screenshot, so hover fades and tooltips land on the same frames every run.
@@ -24,7 +25,7 @@ const FPS = 15;
 const VIEWPORT = { width: 1080, height: 680 };
 const GIF_WIDTH = 1080;
 
-const [PDF = ''] = process.argv.slice(2);
+const [PDF = '', ...EXTRA] = process.argv.slice(2);
 if (!PDF) {
   console.error('usage: node scripts/record-library-demo.mjs <page-document.pdf>');
   process.exit(1);
@@ -48,6 +49,16 @@ async function record(browser) {
   await page.keyboard.press('Enter');
   await page.locator('#position').filter({ hasText: 'Page 48' }).waitFor();
   const libraryOpen = () => page.evaluate(() => document.querySelector('#library-toggle')?.getAttribute('aria-expanded') === 'true');
+  // Fill the drawer through its own file picker and wait for every thumbnail before recording.
+  if (EXTRA.length) {
+    if (!(await libraryOpen())) await page.click('#library-toggle');
+    await page.locator('input[type=file][multiple]').setInputFiles(EXTRA);
+    await page.waitForFunction(() => {
+      const media = [...document.querySelectorAll('.library-tile-media[data-path]')];
+      return media.length > 0 && media.every(m => m.classList.contains('is-loaded') || m.classList.contains('is-unavailable'));
+    }, null, { timeout: 30000 });
+    await page.waitForTimeout(600);
+  }
   if (await libraryOpen()) await page.click('#library-toggle');
   await page.evaluate(() => document.activeElement instanceof HTMLElement && document.activeElement.blur());
   await page.evaluate(svg => {
@@ -72,7 +83,9 @@ async function record(browser) {
     ring.style.left = `${x}px`; ring.style.top = `${y}px`; ring.style.opacity = pressed ? '1' : '0';
   }, { ...p, pressed });
   const frame = async () => {
+    // No focus ring in the recording: opening the drawer focuses its search field, which is not what the demo shows.
     await page.evaluate(step => {
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
       for (const animation of document.getAnimations()) {
         if (animation.effect?.target?.closest?.('#demo-cursor, #demo-press')) continue;
         animation.pause();

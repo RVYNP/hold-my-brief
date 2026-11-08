@@ -1,6 +1,7 @@
 // Reshoot the README media in docs/media against the current UI: Brief theme, light mode.
 // Documents are public-domain scans and books; nothing personal is committed.
-// Usage: node scripts/reshoot-media.mjs <page-document.pdf> <book.epub>
+// Usage: node scripts/reshoot-media.mjs <page-document.pdf> <book.epub> [public-domain-image ...]
+//        (the optional images fill the library drawer's grid with real thumbnails)
 //        (dev server must be running on :1420)
 import { createRequire } from 'node:module';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
@@ -24,7 +25,7 @@ const URL = 'http://127.0.0.1:1420/';
 //  - a public-domain book (e.g. Pride and Prejudice) for EPUB shots.
 // In-copyright magazine scans are intentionally NOT committed.
 // Pass the two documents as arguments; the README documents the sources used.
-const [PDF = '', BOOK = ''] = process.argv.slice(2);
+const [PDF = '', BOOK = '', ...IMAGES] = process.argv.slice(2);
 if (!PDF || !BOOK) {
   console.error('usage: node scripts/reshoot-media.mjs <page-document.pdf> <book.epub>');
   process.exit(1);
@@ -145,6 +146,12 @@ const browser = await chromium.launch(existsSync(CHROME) ? { executablePath: CHR
   await loadFile(page, PDF, 9000);
   await jumpTo(page, 48);
   await setLibrary(page, true);
+  // Add the book and any images through the drawer's own file picker, then wait for every thumbnail.
+  await page.locator('input[type=file][multiple]').setInputFiles([BOOK, ...IMAGES]);
+  await page.waitForFunction(() => {
+    const media = [...document.querySelectorAll('.library-tile-media[data-path]')];
+    return media.length > 0 && media.every(m => m.classList.contains('is-loaded') || m.classList.contains('is-unavailable'));
+  }, null, { timeout: 30000 });
   await page.waitForTimeout(900);
   await shot(page, 'library.png');
   await ctx.close();
@@ -205,8 +212,9 @@ const browser = await chromium.launch(existsSync(CHROME) ? { executablePath: CHR
     const { ctx, page } = await open(browser);
     await loadFile(page, PDF, 9000);
     await jumpTo(page, 48);
-    // The browser preview cannot pin; draw the pinned state exactly as updateWindow() in src/main.ts does.
-    await page.evaluate(() => { const pin = document.getElementById('pin'); pin.setAttribute('aria-pressed', 'true'); pin.textContent = 'Pinned'; });
+    // The browser preview has no native frame and cannot pin: draw what the desktop app does on Windows
+    // (its own caption buttons in the toolbar, the pinned state as updateWindow() in src/main.ts sets it).
+    await page.evaluate(() => { document.documentElement.classList.add('windows-titlebar'); document.getElementById('pin').setAttribute('aria-pressed', 'true'); });
     reader = await shot(page);
     await ctx.close();
   }
@@ -263,7 +271,6 @@ const browser = await chromium.launch(existsSync(CHROME) ? { executablePath: CHR
     .doc p, .doc li { margin: 0 0 8px; } .doc ul { margin: 0 0 8px; padding-left: 20px; } .doc a { color: #0969da; text-decoration: none; }
     .doc code { padding: 1px 4px; background: #eff1f3; border-radius: 4px; font: 11.5px 'JetBrains Mono', Consolas, monospace; }
     .reader { right: 26px; top: 22px; width: 420px; }
-    .reader .bar { background: #f4f1ea; }
     .reader > img { display: block; width: 420px; }
     .taskbar { position: absolute; left: 0; right: 0; bottom: 0; height: 48px; display: flex; align-items: center; justify-content: center; gap: 6px;
                background: rgba(243,243,243,.92); border-top: 1px solid rgba(0,0,0,.08); }
@@ -284,7 +291,6 @@ const browser = await chromium.launch(existsSync(CHROME) ? { executablePath: CHR
       <div class="doc">${guide}</div>
     </div>
     <div class="win reader">
-      <div class="bar"><img src="${icon}"><span class="t">Hold My Brief</span>${controls}</div>
       <img src="${dataUrl(reader)}">
     </div>
     <div class="taskbar">

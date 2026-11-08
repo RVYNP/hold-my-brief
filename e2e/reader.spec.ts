@@ -37,6 +37,40 @@ test('Markdown uses safe content, an outline and compact accessible controls', a
   await expect(page.locator('#position')).toContainText('Next steps');
   await expect(page.getByRole('button', { name: 'Pin', exact: true })).toBeVisible();
 });
+test('text settings live in the appearance sheet, apply to the open text and keep a readable measure', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  const prose = Array.from({ length: 40 }, (_, i) => `Paragraph ${i + 1} reads beside the work in progress, long enough to wrap across a wide window several times over.`).join('\n\n');
+  await page.locator('#file-input').setInputFiles({ name: 'notes.md', mimeType: 'text/markdown', buffer: Buffer.from(prose) });
+  await expect(page.locator('#filename')).toHaveText('notes.md');
+  const content = page.locator('.reader-text-content');
+  // In a wide window prose stops at a readable measure and centres instead of spanning the window.
+  const box = (await content.boundingBox())!;
+  expect(box.width).toBeLessThan(760);
+  expect(Math.abs(box.x + box.width / 2 - 720)).toBeLessThan(40);
+
+  await page.keyboard.press('Control+k');
+  await page.locator('#palette-input').fill('text size');
+  await page.keyboard.press('Enter');
+  const sheet = page.locator('#appearance');
+  await expect(sheet.getByRole('tab', { name: 'Text' })).toHaveAttribute('aria-selected', 'true');
+  await sheet.getByRole('button', { name: 'Larger text' }).click();
+  await expect(content).toHaveCSS('font-size', '20px');
+  await sheet.getByRole('radio', { name: 'Loose' }).click();
+  await expect(content).toHaveCSS('line-height', '44px');
+  // Markdown always wraps, so the plain-text wrap choice is not offered.
+  await expect(sheet.getByRole('radio', { name: 'Keep as written' })).toBeHidden();
+  await page.keyboard.press('Escape');
+
+  // Page-based documents zoom instead: the Text tab explains rather than offering controls that do nothing.
+  await page.locator('#file-input').setInputFiles({ name: 'flat.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64') });
+  await expect(page.locator('#filename')).toHaveText('flat.png');
+  await page.getByRole('button', { name: 'Reader menu' }).click();
+  await page.getByRole('button', { name: /Appearance and text/ }).click();
+  await sheet.getByRole('tab', { name: 'Text' }).click();
+  await expect(sheet.getByRole('button', { name: 'Larger text' })).toBeHidden();
+  await expect(sheet.locator('.appearance-text-note')).toBeVisible();
+});
 test('appearance previews on hover, keeps on click, restores on Escape and persists', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' });
   await page.goto('/');

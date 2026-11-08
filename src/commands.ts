@@ -41,6 +41,7 @@ const GROUP_ORDER: readonly CommandGroup[] = ['File', 'Navigate', 'View', 'Windo
 export const COMMANDS: readonly Command[] = [
   { id: 'open', label: 'Open file…', group: 'File', keywords: ['load', 'recent'], shortcut: 'Ctrl O' },
   { id: 'library', label: 'Toggle document library', group: 'File', keywords: ['sidebar', 'books', 'collection'], shortcut: 'Ctrl B' },
+  { id: 'library-board', label: 'Library board', group: 'File', keywords: ['board', 'grid', 'browse', 'collection'] },
   { id: 'find', label: 'Find in document…', group: 'Navigate', keywords: ['search', 'text', 'grep', 'locate'], shortcut: 'Ctrl F', requiresDocument: true },
   { id: 'goto', label: 'Go to location…', group: 'Navigate', keywords: ['jump', 'page', 'line', 'percentage'], shortcut: 'Ctrl G', requiresDocument: true },
   { id: 'outline', label: 'Contents', group: 'Navigate', keywords: ['toc', 'chapters', 'outline'], requiresDocument: true },
@@ -56,8 +57,9 @@ export const COMMANDS: readonly Command[] = [
   { id: 'cover', label: 'Cover page alone', group: 'View', keywords: ['spread', 'first page'], requiresDocument: true },
   { id: 'smaller', label: 'Smaller text / zoom out', group: 'View', keywords: ['decrease', 'reduce', 'small'], shortcut: 'Ctrl −', requiresDocument: true },
   { id: 'larger', label: 'Larger text / zoom in', group: 'View', keywords: ['increase', 'grow', 'big'], shortcut: 'Ctrl +', requiresDocument: true },
-  { id: 'appearance', label: 'Appearance and theme…', group: 'View', keywords: ['dark', 'light', 'theme', 'colour', 'color', 'palette'] },
-  { id: 'type', label: 'Typography & wrapping…', group: 'Reading', keywords: ['font', 'size', 'line', 'margin', 'spacing'], requiresDocument: true },
+  { id: 'appearance', label: 'Appearance and text…', group: 'View', keywords: ['dark', 'light', 'theme', 'colour', 'color', 'palette'] },
+  { id: 'type', label: 'Text size & spacing…', group: 'Reading', keywords: ['typography', 'font', 'size', 'line', 'margin', 'spacing', 'wrap'], requiresDocument: true },
+  { id: 'assistant', label: 'AI assistant…', group: 'Reading', keywords: ['ai', 'ask', 'claude', 'chat', 'question', 'api key', 'anthropic'], requiresDesktop: true },
   { id: 'pin', label: 'Toggle pin (always on top)', group: 'Window', keywords: ['float', 'above', 'sticky'], shortcut: 'Ctrl Shift T', requiresDesktop: true },
   { id: 'lock', label: 'Toggle size lock', group: 'Window', keywords: ['resize', 'resizable', 'fixed size'], shortcut: 'Ctrl Shift L', requiresDesktop: true },
   { id: 'compact', label: 'Compact window', group: 'Window', keywords: ['small', 'shrink'], requiresDesktop: true },
@@ -176,6 +178,26 @@ export function searchCommands(query: string, commands: readonly Command[] = COM
     .filter((entry): entry is { command: Command; index: number; score: number } => entry.score !== undefined)
     .sort((a, b) => b.score - a.score || a.index - b.index)
     .map(entry => entry.command);
+}
+
+/** A typed request the catalog cannot express on its own: a place to go or words to find. */
+export type Intent = { kind: 'goto'; target: string } | { kind: 'find'; text: string };
+
+const GOTO_REQUEST = /^(?:go\s*to|goto|jump\s*to|page|pg|p\.?|line)?\s*(\d+(?:\.\d+)?%?)$/i;
+const FIND_REQUEST = /^(?:find|search(?:\s+for)?|where\s+is|where's)\s+(.+)$/i;
+
+/**
+ * Reads a palette query as a request, without a model: "40", "page 40" and "35%" go to that
+ * location (the adapter decides whether it is a page, a line or a percentage), and "find
+ * lifetimes" finds the words after the verb. Anything else is left to the command search.
+ */
+export function parseIntent(query: string): Intent | undefined {
+  const text = query.trim();
+  const go = GOTO_REQUEST.exec(text);
+  if (go) return { kind: 'goto', target: go[1] };
+  const find = FIND_REQUEST.exec(text);
+  if (find && find[1].trim()) return { kind: 'find', text: find[1].trim() };
+  return undefined;
 }
 
 export type GroupedCommands = { group: CommandGroup; commands: Command[] };

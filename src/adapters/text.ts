@@ -105,7 +105,8 @@ export function renderMarkdown(source: string): { html: string; outline: Outline
 }
 
 const styles = `
-.reader-text-content{box-sizing:border-box;min-height:100%;color:inherit;overflow-wrap:anywhere}
+.reader-text-content{box-sizing:border-box;min-height:100%;color:inherit;overflow-wrap:anywhere;max-width:calc(var(--measure) + 2 * var(--reader-margin));margin-inline:auto}
+.reader-text-content[data-wrap="false"]{max-width:none}
 .reader-text-content :is(p,h1,h2,h3,h4,h5,h6,pre,blockquote,ul,ol,table){margin-top:0;margin-bottom:1em}
 .reader-text-content :is(h1,h2,h3,h4,h5,h6){line-height:1.25}
 .reader-text-content h1{font-size:2em;letter-spacing:normal;color:inherit}
@@ -366,11 +367,23 @@ export class TextAdapter implements ReaderAdapter {
     this.content.style.fontSize = `${options.fontSize}px`;
     this.content.style.lineHeight = String(options.lineHeight);
     this.content.style.padding = `${options.margin}px`;
+    // A readable measure: in a wide window prose stops at about 70 characters (56ch of the interface
+    // face, whose average letter is narrower than its '0') and centres instead of running the full
+    // width. Unwrapped text (logs, code) keeps every column.
+    this.content.style.setProperty('--reader-margin', `${options.margin}px`);
+    this.content.style.setProperty('--measure', '56ch');
     this.content.dataset.wrap = String(options.wrap);
   }
 
   async setOptions(options: ReaderOptions): Promise<void> { const anchor = this.getPosition().locator; this.applyOptions(options); await this.restore(anchor); }
   outline(): OutlineItem[] { return [...this.headings]; }
+
+  async readText(limit: number): Promise<{ label: string; text: string }> {
+    const { label, locator } = this.getPosition();
+    const line = Math.max(1, Number((locator as TextAnchor).line) || 1);
+    const start = this.offsets[line - 1] ?? 0;
+    return { label, text: this.source.slice(start, start + limit) };
+  }
 
   /**
    * Searches the decoded source, one unit per source line, so every hit knows its line and

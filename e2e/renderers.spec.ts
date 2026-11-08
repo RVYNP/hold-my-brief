@@ -1,6 +1,24 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { ZipWriter, Uint8ArrayWriter, TextReader } from '@zip.js/zip.js';
 import { createHash } from 'node:crypto';
+import { crc32, deflateSync } from 'node:zlib';
+import { libraryGridColumns } from '../src/library-layout';
+
+// A solid-colour PNG of exactly the requested size, so tile proportions are known to the test.
+function pngFixture(width: number, height: number, [r, g, b]: [number, number, number]) {
+  const chunk = (type: string, data: Buffer) => {
+    const body = Buffer.concat([Buffer.from(type), data]); const out = Buffer.alloc(body.length + 8);
+    out.writeUInt32BE(data.length, 0); body.copy(out, 4); out.writeUInt32BE(crc32(body), body.length + 4); return out;
+  };
+  const header = Buffer.alloc(13); header.writeUInt32BE(width, 0); header.writeUInt32BE(height, 4); header[8] = 8; header[9] = 2;
+  const row = Buffer.alloc(1 + width * 3); for (let x = 0; x < width; x++) row.set([r, g, b], 1 + x * 3);
+  const raw = Buffer.concat(Array.from({ length: height }, () => row));
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', header), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
+const pngFiles = [[80, 120], [120, 80], [100, 100], [60, 140], [120, 90], [90, 120]].map(([width, height], i) => ({ name: `plate-${i + 1}.png`, mimeType: 'image/png', buffer: pngFixture(width, height, [40 * i + 20, 120, 200 - 30 * i]) }));
+
+/** Distinct masonry columns the tiles occupy (each tile carries its column). */
+const tileColumns = (page: Page) => page.locator('.library-tile').evaluateAll(nodes => new Set(nodes.map(node => node.getAttribute('data-column'))).size);
 
 async function recordFixture(name: string, buffer: Buffer, properties: Record<string, unknown>) {
   await test.info().attach('fixture-manifest.json', { body: JSON.stringify({ schema: 1, name, bytes: buffer.length, sha256: createHash('sha256').update(buffer).digest('hex'), origin: 'Synthetic, generated from this test source', ...properties }, null, 2), contentType: 'application/json' });
@@ -255,8 +273,8 @@ test('library drawer floats over the page and never resizes it, while drag, keyb
   // Absolute, layout-stable expectations only: the workspace and host widths. The bitmap stays in
   // the relative pageGeometry() comparison below, which is the actual regression guard -- pinning
   // its exact pixel size here would depend on the loading-bar race described above.
-  expect(untouched.workspace!.width).toBe(1068);
-  expect(untouched.hostClientWidth).toBe(1066);
+  expect(untouched.workspace!.width).toBe(1080);
+  expect(untouched.hostClientWidth).toBe(1080);
 
   // Opening the drawer rolls over the page instead of narrowing it.
   await page.locator('#library-toggle').click();
@@ -292,6 +310,71 @@ test('library drawer floats over the page and never resizes it, while drag, keyb
   expect(await docked()).toBe(true);
   // Mirroring the drawer is a pure overlay too: the page keeps its box and its bitmap.
   expect(await pageGeometry()).toEqual(untouched);
+
+  // Grid view is a pure overlay as well. Adding six images makes the collection mostly pictures, so it
+  // opens as a grid; widening to 480 px changes the column count, never the page, and the masonry never
+  // scrolls sideways or lets a tile out of the drawer.
+  const documents = page.locator('.library-documents');
+  await page.locator('.library-panel input[type=file]').setInputFiles(pngFiles);
+  await expect(page.locator('.library-tile')).toHaveCount(7);
+  await expect(documents).toHaveClass(/library-grid/);
+  const columns = () => tileColumns(page);
+  const contained = () => documents.evaluate(el => {
+    const area = el.getBoundingClientRect();
+    return el.scrollWidth <= el.clientWidth && Array.from(el.querySelectorAll('.library-tile')).every(tile => { const box = tile.getBoundingClientRect(); return box.left >= area.left - 1 && box.right <= area.right + 1; });
+  });
+  expect(await columns()).toBe(2);
+  expect(await contained()).toBe(true);
+  expect(await pageGeometry()).toEqual(untouched);
+  // Right-docked, so dragging the handle left widens the drawer (334 -> 480) and right narrows it again.
+  const drag = async (delta: number) => {
+    const grip = (await handle.boundingBox())!, y = grip.y + grip.height / 2;
+    await page.mouse.move(grip.x + 5, y); await page.mouse.down(); await page.mouse.move(grip.x + 5 + delta, y, { steps: 6 }); await page.mouse.up();
+  };
+  await drag(-146); await expect(handle).toHaveAttribute('aria-valuenow', '480');
+  await expect.poll(columns).toBe(3);
+  expect(await contained()).toBe(true);
+  expect(await pageGeometry()).toEqual(untouched);
+  await drag(146); await expect(handle).toHaveAttribute('aria-valuenow', '334');
+  await expect.poll(columns).toBe(2);
+  expect(await pageGeometry()).toEqual(untouched);
+  await page.getByRole('button', { name: 'List view' }).click();
+  await expect(documents).toHaveClass(/library-list/);
+  await expect(page.locator('.library-document')).toHaveCount(7);
+  expect(await pageGeometry()).toEqual(untouched);
+  await page.getByRole('button', { name: 'Grid view' }).click();
+  await expect(documents).toHaveClass(/library-grid/);
+  expect(await pageGeometry()).toEqual(untouched);
+
+  // Board: the drawer opened across the whole reading panel. It is still out of flow, so the page is covered
+  // and inert but never resized or refitted, the drawer width is not rewritten, and Escape or the back button
+  // returns to the drawer exactly as it was.
+  await page.getByRole('button', { name: 'Open library board' }).click();
+  const root = page.locator('#library-root');
+  await expect(root).toHaveClass(/is-board/);
+  await expect(handle).toBeHidden();
+  await expect(workspace).toHaveJSProperty('inert', true);
+  expect(Math.round((await panel.boundingBox())!.width)).toBe(1080 - 12);
+  await expect.poll(columns).toBe(5);
+  expect(await contained()).toBe(true);
+  expect(await pageGeometry()).toEqual(untouched);
+  await expect(page.locator('.library-detail')).toBeHidden();
+  // The board pre-selects the document being read, and pressing a selected tile opens it, so select another one.
+  await page.locator('.library-tile:not(.is-selected)').first().click();
+  await expect(page.locator('.library-tile.is-selected')).toHaveCount(1);
+  await expect(root).toHaveClass(/is-board/);
+  expect(await pageGeometry()).toEqual(untouched);
+  await page.keyboard.press('Escape');
+  await expect(root).not.toHaveClass(/is-board/);
+  await expect(handle).toHaveAttribute('aria-valuenow', '334');
+  expect(Math.round((await panel.boundingBox())!.width)).toBe(334);
+  await expect(workspace).toHaveJSProperty('inert', false);
+  expect(await docked()).toBe(true);
+  expect(await pageGeometry()).toEqual(untouched);
+  await page.getByRole('button', { name: 'Open library board' }).click();
+  await page.getByRole('button', { name: /Back to reading/ }).click();
+  await expect(root).not.toHaveClass(/is-board/);
+  expect(await pageGeometry()).toEqual(untouched);
   await page.reload();
   await expect(handle).toHaveAttribute('aria-valuenow', '334');
   expect(await docked()).toBe(true);
@@ -302,6 +385,228 @@ test('library drawer floats over the page and never resizes it, while drag, keyb
   await page.setViewportSize({ width: 800, height: 680 });
   await expect(handle).toHaveAttribute('aria-valuenow', '440'); await expect(handle).toHaveAttribute('aria-valuemax', '440');
   await page.setViewportSize({ width: 1080, height: 680 }); await expect(handle).toHaveAttribute('aria-valuenow', '520');
+
+  // Every width keeps the masonry inside the drawer, and the view is remembered for the collection. At the
+  // widest drawer the column count depends on the platform's scrollbar width (classic scrollbars take ~15 px),
+  // so it is checked against the layout rule for the measured content width rather than a fixed number.
+  await handle.focus(); await page.keyboard.press('End');
+  await expect.poll(async () => (await columns()) === libraryGridColumns(await documents.evaluate(el => el.clientWidth - parseFloat(getComputedStyle(el).paddingLeft) - parseFloat(getComputedStyle(el).paddingRight)))).toBe(true);
+  expect(await columns()).toBeGreaterThanOrEqual(3);
+  expect(await contained()).toBe(true);
+  await handle.focus(); await page.keyboard.press('Home'); await expect(handle).toHaveAttribute('aria-valuenow', '240');
+  await expect.poll(columns).toBe(2);
+  expect(await contained()).toBe(true);
+  await page.getByRole('button', { name: 'List view' }).click();
+  await expect(documents).toHaveClass(/library-list/);
+  await page.reload();
+  await expect(documents).toHaveClass(/library-list/);
+  await page.getByRole('button', { name: 'Grid view' }).click();
+  await expect(documents).toHaveClass(/library-grid/);
+});
+
+test('library thumbnails are made once and survive searching, sorting and switching view', async ({ page }) => {
+  // Every thumbnail is an object URL, so counting createObjectURL calls counts pictures made.
+  await page.addInitScript(() => {
+    const create = URL.createObjectURL.bind(URL); let count = 0;
+    URL.createObjectURL = blob => { count++; return create(blob); };
+    Object.defineProperty(window, 'objectUrlCount', { get: () => count });
+  });
+  await page.setViewportSize({ width: 1080, height: 680 });
+  await page.goto('/');
+  await expect(page.locator('#library-root')).toBeVisible();
+  await page.locator('.library-panel input[type=file]').setInputFiles(pngFiles);
+  const loaded = page.locator('.library-tile-media.is-loaded');
+  await expect(loaded).toHaveCount(6);
+  const made = () => page.evaluate(() => Reflect.get(window, 'objectUrlCount') as number);
+  const sources = () => page.locator('.library-tile-media img').evaluateAll(images => images.map(image => image.getAttribute('src')));
+  const before = { made: await made(), sources: await sources() };
+  expect(before.made).toBe(6);
+  // Typing re-renders the list on every keystroke; a match keeps its picture and nothing is fetched again.
+  const search = page.getByRole('searchbox');
+  await search.pressSequentially('plate-');
+  await expect(loaded).toHaveCount(6);
+  await search.fill('plate-3');
+  await expect(page.locator('.library-tile')).toHaveCount(1);
+  await expect(loaded).toHaveCount(1);
+  expect(before.sources).toContain(await page.locator('.library-tile-media img').getAttribute('src'));
+  await search.fill('');
+  await page.locator('.library-sort').selectOption('name');
+  await page.getByRole('button', { name: 'List view' }).click();
+  await page.getByRole('button', { name: 'Grid view' }).click();
+  await expect(loaded).toHaveCount(6);
+  expect(await made()).toBe(before.made);
+  expect(new Set(await sources())).toEqual(new Set(before.sources));
+});
+
+test('a PDF whose page is one huge image gets a real thumbnail, not a blank page', async ({ page }) => {
+  // pdf.js removes images above its pixel cap, which used to leave 148 MB scans as white tiles. This page is
+  // one 8000 x 8000 (64 Mpx) black image: it compresses to a few KB, but must still be drawn.
+  const objects = [
+    Buffer.from('<< /Type /Catalog /Pages 2 0 R >>'),
+    Buffer.from('<< /Type /Pages /Kids [3 0 R] /Count 1 >>'),
+    Buffer.from('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Resources << /XObject << /Im0 5 0 R >> >> /Contents 4 0 R >>'),
+    Buffer.from('<< /Length 31 >>\nstream\nq 100 0 0 100 0 0 cm /Im0 Do Q\nendstream'),
+  ];
+  const pixels = deflateSync(Buffer.alloc(8000 * 8000));
+  objects.push(Buffer.concat([Buffer.from(`<< /Type /XObject /Subtype /Image /Width 8000 /Height 8000 /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode /Length ${pixels.length} >>\nstream\n`), pixels, Buffer.from('\nendstream')]));
+  const parts = [Buffer.from('%PDF-1.7\n')]; const offsets: number[] = []; let size = parts[0].length;
+  objects.forEach((body, index) => { offsets.push(size); const part = Buffer.concat([Buffer.from(`${index + 1} 0 obj\n`), body, Buffer.from('\nendobj\n')]); parts.push(part); size += part.length; });
+  parts.push(Buffer.from(`xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map(offset => `${String(offset).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${size}\n%%EOF`));
+  await page.setViewportSize({ width: 1080, height: 680 });
+  await page.goto('/');
+  await page.locator('.library-panel input[type=file]').setInputFiles({ name: 'huge-scan.pdf', mimeType: 'application/pdf', buffer: Buffer.concat(parts) });
+  const media = page.locator('.library-tile-media.is-loaded');
+  await expect(media).toHaveCount(1, { timeout: 60000 });
+  const mean = await media.locator('img').evaluate(async (image: HTMLImageElement) => {
+    await image.decode();
+    const canvas = document.createElement('canvas'); canvas.width = 16; canvas.height = 16;
+    const context = canvas.getContext('2d')!; context.drawImage(image, 0, 0, 16, 16);
+    const data = context.getImageData(0, 0, 16, 16).data; let sum = 0;
+    for (let i = 0; i < data.length; i += 4) sum += data[i];
+    return sum / (data.length / 4);
+  });
+  expect(mean, 'a blank page is white (255); the black image must show').toBeLessThan(40);
+});
+
+test('the grid keeps the sort order for Tab and screen readers even though tiles sit in masonry columns', async ({ page }) => {
+  await page.setViewportSize({ width: 1080, height: 680 });
+  await page.goto('/');
+  await page.locator('.library-panel input[type=file]').setInputFiles([...pngFiles].reverse());
+  await expect(page.locator('.library-tile')).toHaveCount(6);
+  await page.locator('.library-sort').selectOption('name');
+  const order = () => page.locator('.library-tile-open').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label')));
+  // DOM (and so Tab) order is the sorted list, not column by column.
+  await expect.poll(order).toEqual([1, 2, 3, 4, 5, 6].map(n => `Open plate-${n}.png`));
+  // ...while the tiles really are spread over several columns, each starting a column in reading order.
+  expect(await tileColumns(page)).toBeGreaterThan(1);
+  await page.locator('.library-tile-open').first().focus();
+  await page.keyboard.press('Tab'); await page.keyboard.press('Tab'); await page.keyboard.press('Tab');
+  await expect(page.locator('.library-tile-open:focus')).toHaveAttribute('aria-label', 'Open plate-2.png');
+});
+
+test('in the board a tile is a toggle: pressing selects it, pressing the selected one opens it', async ({ page }) => {
+  await page.setViewportSize({ width: 1080, height: 680 });
+  await page.goto('/');
+  await page.locator('.library-panel input[type=file]').setInputFiles(pngFiles);
+  await expect(page.locator('.library-tile')).toHaveCount(6);
+  await page.getByRole('button', { name: 'Open library board' }).click();
+  const selected = page.locator('.library-tile-open[aria-pressed=true]');
+  await expect(selected).toHaveCount(1);
+  const other = page.locator('.library-tile-open[aria-pressed=false]').first();
+  const name = (await other.getAttribute('aria-label'))!.replace(/^Select /, '');
+  await other.click();
+  // Exposed to assistive technology: pressed, and now named for what activating it does.
+  await expect(page.getByRole('button', { name: `Open ${name}` })).toHaveAttribute('aria-pressed', 'true');
+  await expect(selected).toHaveCount(1);
+  await expect(page.locator('#library-root')).toHaveClass(/is-board/);
+  await page.getByRole('button', { name: `Open ${name}` }).click();
+  await expect(page.locator('#filename')).toHaveText(name);
+  await expect(page.locator('#library-root')).not.toHaveClass(/is-board/);
+});
+
+test('tiles built while the library is hidden still load their pictures once it opens', async ({ page }) => {
+  // Compact window: the library is closed, so the grid is built with no width and its tiles are attached
+  // only when the window grows and the drawer opens.
+  await page.goto('/');
+  await expect(page.locator('#library-root')).toBeHidden();
+  await page.locator('.library-panel input[type=file]').setInputFiles(pngFiles);
+  // The tiles exist in the sorted list but have no width to be seen in, so nothing is loaded yet.
+  await expect(page.locator('.library-tile')).toHaveCount(6);
+  await expect(page.locator('.library-tile-media.is-loaded')).toHaveCount(0);
+  await page.setViewportSize({ width: 1080, height: 680 });
+  await expect(page.locator('#library-root')).toBeVisible();
+  await expect(page.locator('.library-tile')).toHaveCount(6);
+  await expect(page.locator('.library-tile-media.is-loaded')).toHaveCount(6);
+});
+
+test('compact library sheet shows the grid in two columns without sideways overflow', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#library-toggle').click();
+  await expect(page.locator('#library-root')).toBeVisible();
+  await page.locator('.library-panel input[type=file]').setInputFiles(pngFiles);
+  const documents = page.locator('.library-documents');
+  await expect(documents).toHaveClass(/library-grid/);
+  await expect(page.locator('.library-tile')).toHaveCount(6);
+  await expect.poll(() => tileColumns(page)).toBe(2);
+  const fit = await page.evaluate(() => {
+    const area = document.querySelector('.library-documents')!, panel = document.querySelector('.library-panel')!;
+    const inside = Array.from(area.querySelectorAll('.library-tile')).every(tile => { const box = tile.getBoundingClientRect(), edge = panel.getBoundingClientRect(); return box.left >= edge.left && box.right <= edge.right; });
+    return { scrolls: area.scrollWidth > area.clientWidth, panelScrolls: panel.scrollWidth > panel.clientWidth, inside, sheet: Math.round(panel.getBoundingClientRect().width) };
+  });
+  expect(fit).toEqual({ scrolls: false, panelScrolls: false, inside: true, sheet: 306 });
+  // The scope popover opens inside the sheet and the Escape key closes it before the sheet itself.
+  await page.getByRole('button', { name: /Choose collection and filters/ }).click();
+  await expect(page.locator('#library-scope-menu')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#library-scope-menu')).toBeHidden();
+  await expect(page.locator('#library-root')).toBeVisible();
+});
+
+test('the colour filter narrows the library to a named hue with a removable chip, on top of search, and swatches set it', async ({ page }) => {
+  const solid = (name: string, colour: [number, number, number]) => ({ name: `${name}.png`, mimeType: 'image/png', buffer: pngFixture(90, 120, colour) });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.locator('.library-panel input[type=file]').setInputFiles([solid('green-one', [46, 139, 58]), solid('green-two', [60, 160, 70]), solid('red-one', [192, 48, 32]), solid('blue-one', [48, 80, 192]), solid('grey-one', [128, 128, 128])]);
+  // A picture's colours are measured when its thumbnail is made.
+  await expect(page.locator('.library-tile-media.is-loaded')).toHaveCount(5);
+  const chip = page.locator('.library-colour-chip'), tiles = page.locator('.library-tile');
+  await expect(chip).toBeHidden();
+  await page.getByRole('button', { name: /Choose collection and filters/ }).click();
+  await page.getByLabel('Filter by colour').selectOption('green');
+  await expect(chip).toHaveText(/Green/);
+  await expect(tiles).toHaveCount(2);
+  await expect(page.locator('.library-result-count')).toHaveText('2 references');
+  // It sits on top of the search: the same hue with a title that matches only one of them.
+  await page.getByRole('searchbox').fill('green-two');
+  await expect(tiles).toHaveCount(1);
+  await page.getByRole('searchbox').fill('red-one');
+  await expect(tiles).toHaveCount(0);
+  await page.getByRole('searchbox').fill('');
+  await expect(tiles).toHaveCount(2);
+  // The chip removes it again, and the select follows.
+  await page.getByRole('button', { name: 'Remove colour filter: green' }).click();
+  await expect(chip).toBeHidden();
+  await expect(tiles).toHaveCount(5);
+  await expect(page.getByLabel('Filter by colour')).toHaveValue('');
+  // In the board, a swatch of the selected reference sets the filter to its hue.
+  await page.getByRole('button', { name: 'Open library board' }).click();
+  await page.locator('.library-tile', { has: page.getByLabel('Select red-one.png') }).click();
+  await expect(page.locator('.library-detail-name')).toHaveText('red-one.png');
+  await page.getByRole('button', { name: 'Filter the library by red' }).first().click();
+  await expect(chip).toHaveText(/Red/);
+  await expect(tiles).toHaveCount(1);
+});
+
+test('the library board browses at full width and a detail strip joins from 1200 px', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.locator('.library-panel input[type=file]').setInputFiles(pngFiles);
+  await expect(page.locator('.library-tile')).toHaveCount(6);
+  // The palette command opens the board (and the drawer if it was closed).
+  await page.mouse.click(1100, 450); // Shortcuts belong to the reading panel, not the library's own fields.
+  await page.keyboard.press('Control+k');
+  await page.locator('#palette-input').fill('library board');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#library-root')).toHaveClass(/is-board/);
+  await expect(page.locator('.library-detail')).toBeVisible();
+  await expect.poll(() => tileColumns(page)).toBe(6);
+  // The first reference is selected and described; a click moves the selection without opening anything.
+  await expect(page.locator('.library-detail-name')).toHaveCount(1);
+  const tiles = page.locator('.library-tile');
+  await tiles.nth(1).click();
+  const name = (await tiles.nth(1).locator('.library-tile-open').getAttribute('aria-label'))!.replace(/^(Open|Select) /, '');
+  await expect(page.locator('.library-detail-name')).toHaveText(name);
+  await expect(page.locator('#library-root')).toHaveClass(/is-board/);
+  await expect(page.locator('#filename')).not.toHaveText(name);
+  // Enter opens the selected reference and leaves the board.
+  await tiles.nth(1).locator('.library-tile-open').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#filename')).toHaveText(name);
+  await expect(page.locator('#library-root')).not.toHaveClass(/is-board/);
+  // Below 720 px there is no board: the sheet is all there is.
+  await page.setViewportSize({ width: 420, height: 620 });
+  await page.locator('#library-toggle').click();
+  await expect(page.locator('.library-board-toggle')).toBeHidden();
 });
 
 test('PDF page-bitmap cache never reuses pixels across rotation', async ({ page }) => {
@@ -375,7 +680,7 @@ test('fixed-layout EPUB keeps physical single pages and supports next/fit', asyn
   const buffer = await epubFixture(true); await recordFixture('fixed.epub', buffer, { pages: 2, layout: 'pre-paginated', viewport: '800 x 1000' });
   await page.locator('#file-input').setInputFiles({ name: 'fixed.epub', mimeType: 'application/epub+zip', buffer });
   await expect(page.locator('#filename')).toHaveText('fixed.epub');
-  await expect(page.locator('#filekind')).toContainText('Page view');
+  await expect(page.locator('#filekind')).toHaveAttribute('title', /Page view/);
   await expect(page.locator('#position')).toContainText('Page 1 of 2');
   const first = page.frames().find(frame => frame.url().startsWith('blob:'))!;
   await expect(first.locator('h1')).toHaveText('Opening chapter');
@@ -408,7 +713,7 @@ test('PDF view controls zoom, pan 1:1 by hand tool and middle button, and keep l
   await page.keyboard.press('h');
   await expect(hand).toHaveAttribute('aria-pressed', 'true');
   await expect(host).toHaveClass(/hand-tool/);
-  await expect(page.locator('#filekind')).toHaveText('PDF · 150% · Hand');
+  await expect(page.locator('#filekind')).toHaveAttribute('title', /^PDF · 150% · Hand$/m);
 
   // A drag moves the page exactly with the pointer and does not select text.
   const box = (await host.boundingBox())!;

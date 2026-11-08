@@ -1,15 +1,16 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod assistant;
 mod state;
 mod windows;
 mod catalog;
 mod folder_index;
+mod thumbnails;
 
 use serde::Serialize;
 use serde_json::Value;
 use crate::state::{Library, LibraryChange, LibraryDocument, ReadingState, Recent, Store, WindowState};
 use std::{
-    collections::HashMap,
     fs,
     io::Read,
     path::{Path, PathBuf},
@@ -109,38 +110,6 @@ async fn open_file(app: AppHandle, path: Option<String>) -> Result<Option<Opened
         let path = candidate.to_string_lossy().into_owned();
         opened_document(&shared, &candidate, &path).map(Some)
     }).await.map_err(|e| e.to_string())?
-}
-
-#[derive(Serialize)]
-struct Thumbnail {
-    bytes: Vec<u8>,
-    mime: &'static str,
-}
-
-/// Bounded in-memory thumbnail cache, keyed by library document path.
-#[derive(Default)]
-pub struct ThumbnailCache {
-    thumbnails: Mutex<HashMap<String, (Vec<u8>, &'static str)>>,
-}
-
-impl ThumbnailCache {
-    fn get(&self, path: &str) -> Option<Vec<u8>> {
-        self.thumbnails
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .get(path)
-            .map(|(bytes, _)| bytes.clone())
-    }
-    fn put(&self, path: &str, bytes: Vec<u8>, mime: &'static str) {
-        let mut thumbnails = self.thumbnails.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        if thumbnails.len() >= 1024 {
-            let first = thumbnails.keys().next().cloned();
-            if let Some(first) = first {
-                thumbnails.remove(&first);
-            }
-        }
-        thumbnails.insert(path.to_string(), (bytes, mime));
-    }
 }
 
 fn opened_document(shared: &Shared, resolved: &Path, path: &str) -> Result<OpenedFile, String> {
@@ -293,63 +262,6 @@ async fn open_library_document(path: String, app: AppHandle) -> Result<OpenedFil
     })
     .await
     .map_err(|e| e.to_string())?
-}
-
-fn resolve_original_checked(store: &Store, path: &str) -> Result<PathBuf, String> {
-    if let Some(catalog) = store.catalog.as_ref() {
-        match catalog.resolve(&store.saved.library, path) {
-            Ok(resolved) => return Ok(resolved),
-            Err(_) => {}
-        }
-    }
-    let document = store
-        .saved
-        .library
-        .documents
-        .iter()
-        .find(|d| d.path == path)
-        .ok_or("Item is no longer in the library.")?;
-    fs::canonicalize(&document.path).map_err(|e| format!("Original is unavailable: {e}"))
-}
-
-#[tauri::command]
-fn read_library_thumbnail(path: String, app: AppHandle) -> Result<Option<Thumbnail>, String> {
-    let cache = app.state::<ThumbnailCache>();
-    if let Some(bytes) = cache.get(&path) {
-        return Ok(Some(Thumbnail { bytes, mime: "image/jpeg" }));
-    }
-    let shared = app.state::<Shared>();
-    let store = shared.lock().map_err(|_| "Reading state is unavailable")?;
-    let document = store
-        .saved
-        .library
-        .documents
-        .iter()
-        .find(|d| d.path == path)
-        .ok_or("Item is no longer in the library.")?;
-    let format = document.format.as_str();
-    if !matches!(format, "png" | "jpg" | "jpeg" | "webp" | "gif" | "avif" | "bmp") {
-        return Ok(None);
-    }
-    let resolved = resolve_original_checked(&store, &path)?;
-    drop(store);
-    let bytes = read_bounded(&resolved, MAX_IMAGE)?;
-    let image = image::load_from_memory(&bytes).map_err(|_| "Image could not be decoded.".to_string())?;
-    let thumbnail = if image.width() > 480 || image.height() > 480 {
-        image.thumbnail(480, 480)
-    } else {
-        image
-    };
-    let mut output = std::io::Cursor::new(Vec::new());
-    thumbnail
-        .write_to(&mut output, image::ImageFormat::Jpeg)
-        .map_err(|e| format!("Thumbnail could not be encoded: {e}"))?;
-    let encoded = output.into_inner();
-    cache.put(&path, encoded.clone(), "image/jpeg");
-    Ok(Some(Thumbnail {
-        bytes: encoded,
-        mime: "image/jpeg",
-    }))
 }
 
 /// Indexes the PDFs below a user-chosen folder. Cancelling leaves the library unchanged.
@@ -666,7 +578,11 @@ fn main() {
             locate_library_document,
             open_library_document,
             read_document_bytes,
-            read_library_thumbnail,
+            thumbnails::read_library_thumbnail,
+            thumbnails::put_library_thumbnail,
+            thumbnails::library_thumbnail_index,
+            thumbnails::put_library_colours,
+            thumbnails::read_library_range,
             index_folder,
             pending_open,
             confirm_open,
@@ -677,6 +593,11 @@ fn main() {
             clear_reading_data,
             read_relative_image,
             open_external,
+            assistant::assistant_status,
+            assistant::assistant_set_key,
+            assistant::assistant_forget_key,
+            assistant::assistant_models,
+            assistant::assistant_send,
             windows::set_pin,
             windows::set_lock,
             windows::set_preset
@@ -685,7 +606,7 @@ fn main() {
             let directory = app.path().app_local_data_dir()?;
             let shared = Arc::new(Mutex::new(Store::load(directory.join("state.json"))));
             app.manage(shared.clone());
-            app.manage(ThumbnailCache::default());
+            app.manage(thumbnails::ThumbnailCache::new(app.path().app_cache_dir()?.join("thumbs")));
             let window = app
                 .get_webview_window("main")
                 .ok_or("Main window is missing")?;
