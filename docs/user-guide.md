@@ -28,6 +28,10 @@ dimensions while allowing movement. Each is highlighted while on. Ctrl+Shift+T t
 Ctrl+Shift+L toggles lock. The menu includes both controls, window presets (Compact 420 × 620,
 Reading 760 × 900), typography, fit/zoom, rotation, contents, Go to, Back and a shortcut reference.
 
+While another app has focus, the reader's buttons and progress line fade so a pinned window stays
+quiet beside your work; the document's name, its position and the page keep full strength. Click the
+reader and everything returns.
+
 ## Appearance
 
 Open the menu and choose **Appearance…** to open the Appearance panel at the bottom of the window.
@@ -55,11 +59,14 @@ uses Tern's default palette. See [Credits](../README.md#credits).
 ## Moving through a document
 
 PgDn/PgUp change pages. Space/Shift+Space traverse one screen, scrolling a tall PDF page before
-advancing. Ctrl+G jumps to a physical page, EPUB chapter/percentage or source line. The footer
-reports **position**, never completion or material actually read.
+advancing. Ctrl+G jumps to a physical page, EPUB chapter/percentage or source line. The position
+(page, chapter or line) is shown next to the document's name in the toolbar; hover the name to see
+the kind of view. It reports **position**, never completion or material actually read.
 
-The hairline along the bottom edge of the page scrubs the entire document; hover the footer to show
-its thumb. Click the line to jump, or drag the thumb to preview
+While you read, the footer is just the progress line along the window's bottom edge. Move the
+pointer to the bottom of the page, or Tab to it, and the previous/next arrows and the full position
+slide up over the page; clicking the position opens Go to. The line scrubs the entire document: click
+it to jump, or drag its thumb to preview
 a destination and release to navigate. PDF and fixed-layout EPUB snap to physical pages (to whole
 spreads in two-page view);
 Markdown/TXT use source lines; reflowable EPUB uses whole-book percentage. With the slider focused,
@@ -88,7 +95,7 @@ shown alone on the right and pairs follow as 2–3, 4–5…; turn off **Cover p
 documents that should pair 1–2. Fixed-layout EPUBs keep their publisher's page sides and
 right-to-left page progression. Pages of different sizes are scaled to a common height; fit page fits
 the whole spread and fit width its width. Page turns, Go to, Back and the scrubber move by spread, and
-the footer reads "Pages 2–3 of 27". Reflowable EPUB shows two text columns instead.
+the position reads "Pages 2–3 of 27". Reflowable EPUB shows two text columns instead.
 
 The choice is remembered per document (new documents open in single-page view), and the saved place
 is the first visible page, so switching views keeps it. When the reading panel is narrower than 600

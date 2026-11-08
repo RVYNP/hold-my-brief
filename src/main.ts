@@ -93,7 +93,7 @@ function updateScrubValue(preview = false) {
   scrubber.setAttribute('aria-valuetext', label);
   if (preview) $('position').textContent = `${label} · release to jump`;
 }
-/** Syncs the view-controls pill, page-layout toggles and the title subtitle with the current zoom, layout and hand-tool state. */
+/** Syncs the view-controls pill, page-layout toggles and the title subtitle with the current position, zoom, layout and hand-tool state. */
 function updateViewControls() {
   if (!reader || !active) return;
   // Fixed-layout EPUB rebuilds its renderer when the page layout changes; follow it.
@@ -105,8 +105,9 @@ function updateViewControls() {
   const layout = position?.spread, waiting = layout === 'waiting' ? `Two pages appear when the reading area is at least ${MIN_SPREAD_WIDTH} px wide` : '';
   const kind = reader.mode === 'fixed' && fitted && !width && layout === 'active' ? 'Two-page view'
     : `${reader.mode !== 'fixed' ? (reader.mode === 'paginated' ? 'Reading view' : 'Scroll view') : fitted ? (width ? 'Fit width' : 'Page view') : level}${layout === 'active' ? ' · Two pages' : ''}`;
-  $('filekind').textContent = `${active.format.toUpperCase()} · ${kind}${pan.hand ? ' · Hand' : ''}`;
-  $('filekind').title = waiting;
+  // The subtitle says where you are; what kind of view it is moves to the tooltip.
+  $('filekind').textContent = position?.label ?? '';
+  $('filekind').title = [`${active.format.toUpperCase()} · ${kind}${pan.hand ? ' · Hand' : ''}`, waiting].filter(Boolean).join('\n');
   const spreads = !!reader.spreads, spread = spreads && options.spread;
   const toggles = [$<HTMLButtonElement>('spread-toggle'), $<HTMLButtonElement>('view-spread')];
   for (const button of toggles) {
@@ -221,7 +222,7 @@ const assistant = createAssistantPanel($('reader-layout'), {
   env: {
     hasDocument: () => Boolean(reader),
     snapshot: () => ({
-      document: active && reader ? { name: active.name, format: active.format, position: reader.getPosition().label, view: $('filekind').textContent } : null,
+      document: active && reader ? { name: active.name, format: active.format, position: reader.getPosition().label, view: $('filekind').title } : null,
       window: desktop ? { pinned: windowState.pinned, sizeLocked: windowState.locked } : 'browser preview',
       appearance: appearanceSummary(),
       libraryOpen: $('library-toggle').getAttribute('aria-expanded') === 'true',
@@ -356,6 +357,9 @@ document.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(button => 
 for (const id of ['font-size', 'line-height', 'margin', 'wrap']) $(id).onchange = () => { const fontSize = Number($<HTMLInputElement>('font-size').value); if (fontSize < 12 || fontSize > 40) return; void changeOptions({ fontSize, lineHeight: Number($<HTMLSelectElement>('line-height').value), margin: Number($<HTMLSelectElement>('margin').value), wrap: $<HTMLInputElement>('wrap').checked }); };
 $('confirm-delete').onclick = () => { void (async () => { await flush(); if (desktop) await native('clear_reading_data'); else for (const key of Object.keys(localStorage)) if (key.startsWith('hold-my-brief:')) localStorage.removeItem(key); dirty = false; closeDialog($<HTMLDialogElement>('delete-data')); notify('Saved reading data deleted. Your documents are unchanged.'); })().catch(fail); };
 
+// Tab marks keyboard navigation (the page's focus ring returns); a pointer press clears it.
+document.addEventListener('keydown', event => { if (event.key === 'Tab') document.documentElement.classList.add('keyboard-focus'); }, true);
+document.addEventListener('pointerdown', () => document.documentElement.classList.remove('keyboard-focus'), true);
 document.addEventListener('keydown', event => {
   if (document.querySelector('dialog[open]')) return;
   const target = event.composedPath()[0];
@@ -403,6 +407,13 @@ async function initialize() {
       $('caption-close').onclick = () => void appWindow.close().catch(fail);
       await appWindow.onResized(() => void syncMaximized());
       await syncMaximized();
+    }
+    // The native focus event, not the page's blur: clicking into an EPUB frame blurs the page too.
+    await appWindow.onFocusChanged(({ payload: focused }) => document.documentElement.classList.toggle('window-inactive', !focused));
+    if (platform === 'mac') {
+      const syncFullscreen = async () => document.documentElement.classList.toggle('window-fullscreen', await appWindow.isFullscreen());
+      await appWindow.onResized(() => void syncFullscreen());
+      await syncFullscreen();
     }
     const pending = await native<string | null>('pending_open'); if (pending) openFile(pending);
   }

@@ -177,24 +177,34 @@ button { cursor: pointer; border: 1px solid transparent; background: transparent
 button:hover { background: var(--hover); }
 button:disabled { opacity: .45; cursor: default; }
 button[aria-pressed=true] { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent-ink); }
-button:focus-visible, input:focus-visible, select:focus-visible, .reader-host:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The page takes focus in code after every open and jump, and WebKit then reports :focus-visible, which
+   drew a red frame around the whole page. The ring is kept for people moving focus with Tab. */
+.reader-host:focus { outline: none; }
+.keyboard-focus .reader-host:focus-visible { outline: 2px solid var(--accent); }
 /* The chevron is two hairline diagonals so it takes the token color in every theme. */
 select { appearance: none; color: var(--fg); background-color: var(--card); background-image: linear-gradient(45deg, transparent 40%, var(--muted) 40%, var(--muted) 62%, transparent 62%), linear-gradient(135deg, transparent 38%, var(--muted) 38%, var(--muted) 60%, transparent 60%); background-position: right 13px center, right 9px center; background-size: 4px 4px; background-repeat: no-repeat; border: 1px solid var(--border); border-radius: 5px; padding: 7px 26px 7px 8px; cursor: pointer; }
 select:hover { border-color: var(--accent-border); }
-#app { height: 100dvh; min-width: 300px; display: flex; flex-direction: column; overflow: hidden; }
+#app { position: relative; height: 100dvh; min-width: 300px; display: flex; flex-direction: column; overflow: hidden; }
 /* One 38 px row. Empty toolbar space drags the window (data-tauri-drag-region), so it never selects text. */
 .toolbar { display: flex; align-items: center; gap: 2px; height: 38px; padding: 0 6px; background: var(--chrome); flex-shrink: 0; -webkit-user-select: none; user-select: none; }
 /* macOS draws the traffic lights over the toolbar's left end (titleBarStyle Overlay). */
 .mac-titlebar .toolbar { padding-left: 78px; }
+/* In full screen macOS hides the traffic lights, so their room goes too. */
+.mac-titlebar.window-fullscreen .toolbar { padding-left: 6px; }
+/* While another app has focus, the controls fade so a pinned reader stays quiet beside your work;
+   the title, the position and the page keep full strength. */
+.toolbar > .icon-button, .ask-mark, .caption, footer { transition: opacity .2s; }
+.window-inactive .toolbar > .icon-button, .window-inactive .ask-mark, .window-inactive .caption, .window-inactive footer { opacity: .35; }
 /* Windows: the reader's own caption buttons sit flush at the toolbar's right end, full height, the
    way Windows 11 draws them; close turns red on hover. Hidden everywhere else. */
 .caption { display: none; }
 .windows-titlebar .toolbar { padding-right: 0; }
 .windows-titlebar .caption { display: flex; align-self: stretch; margin-left: 4px; }
 /* Without a native caption the toolbar's empty space is the only grab handle, so a strip before the
-   pin always stays free; in a narrow window the file type gives way to make room for the name. */
+   pin always stays free; in a narrow window with nothing open the tagline gives way to the name. */
 .windows-titlebar #pin { margin-left: 24px; }
-@media (max-width: 480px) { .windows-titlebar .title span { display: none; } }
+@media (max-width: 480px) { .windows-titlebar:has(#empty:not([hidden])) .title span { display: none; } }
 .caption button { display: grid; place-items: center; width: 44px; height: 100%; padding: 0; border: 0; border-radius: 0; color: var(--fg); }
 .caption button:hover { background: var(--hover); }
 .caption button:disabled { opacity: .35; background: transparent; }
@@ -210,8 +220,8 @@ select:hover { border-color: var(--accent-border); }
 .title:hover { background: var(--hover); }
 .ask-mark { flex-shrink: 0; color: var(--accent-ink); }
 .title strong { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 12px; }
-/* The kind gives way long before the file name does. */
-.title span { flex: 0 100 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 10px/1.4 var(--font-mono); color: var(--muted); }
+/* Where you are matters more than the full file name, so the name truncates first. */
+.title span { flex: 0 0 auto; max-width: 60%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 10px/1.4 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
 .ask-key { display: none; flex-shrink: 0; }
 .title:hover .ask-key, .title:focus-visible .ask-key { display: block; }
 /* --find-bar-height is the find bar's real height, so the reading surface and the opening strip can
@@ -240,11 +250,16 @@ h1 { font-size: 34px; line-height: 1.15; font-weight: 550; letter-spacing: -.9px
 .recent button:first-child { overflow: hidden; text-overflow: ellipsis; text-align: left; flex: 1; padding: 6px 8px; font-size: 12px; min-width: 0; }
 .recent button:last-child { flex: 0; padding: 4px 8px; color: var(--muted); opacity: 0; }
 .recent:hover button:last-child, .recent:focus-within button:last-child { opacity: 1; }
-footer { position: relative; display: flex; gap: 2px; align-items: center; height: 30px; padding: 2px 6px 0; background: var(--chrome); flex-shrink: 0; }
+/* The footer is the window's bottom edge: while reading only the progress hairline shows. Hovering the
+   bottom of the page (a 22 px band above the edge) or focusing a footer control slides the arrows and
+   the position up over the page. It is an overlay, so the page never resizes or refits. */
+footer { position: absolute; z-index: 15; left: 0; right: 0; bottom: 0; display: flex; gap: 2px; align-items: center; height: 30px; padding: 2px 6px 0; background: var(--chrome); translate: 0 calc(100% - 3px); transition: translate .16s ease, opacity .2s, box-shadow .16s; }
+footer::before { content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: 22px; }
+footer:hover, footer:focus-within, footer:has(#progress:active) { translate: 0 0; box-shadow: 0 -6px 20px light-dark(#25203514, transparent); }
 #position { flex: 1; min-width: 0; padding: 3px 6px; overflow: hidden; text-overflow: ellipsis; font: 11px/1.5 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
 #previous, #next { padding: 3px 9px; color: var(--muted); }
-/* The scrubber is the hairline along the page's bottom edge; its thumb appears while the footer is
-   hovered or the slider has focus. The 12 px input straddles the edge so it stays easy to grab. */
+/* The scrubber is the hairline along the window's bottom edge; its thumb appears while the footer is
+   open or the slider has focus. The 12 px input straddles the edge so it stays easy to grab. */
 #progress { position: absolute; top: -5px; left: 0; width: 100%; height: 12px; margin: 0; padding: 0; appearance: none; background: transparent; cursor: pointer; --scrub-fill: 0%; }
 #progress::-webkit-slider-runnable-track { height: 2px; background: linear-gradient(to right, var(--accent) var(--scrub-fill), var(--track) var(--scrub-fill)); }
 #progress::-webkit-slider-thumb { appearance: none; width: 12px; height: 12px; margin-top: -5px; border-radius: 50%; border: 2px solid var(--surface); background: var(--accent); box-shadow: 0 0 0 1px var(--accent); opacity: 0; transition: opacity .15s; }
@@ -286,7 +301,8 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
 .image-frame img { position: absolute; left: 50%; top: 50%; max-width: none; object-fit: contain; }
 /* View controls: a floating pill over page-based content (PDF, images, fixed-layout EPUB). */
 #workspace { container: workspace / inline-size; }
-#view-controls { --idle: .7; position: absolute; z-index: 6; bottom: 14px; left: 50%; translate: -50% 0; display: flex; align-items: center; gap: 2px; padding: 3px; background: var(--card); border: 1px solid var(--border); border-radius: 9px; box-shadow: var(--shadow-page); }
+/* Sits clear of the footer's hover band and of the footer when it opens over the page. */
+#view-controls { --idle: .7; position: absolute; z-index: 6; bottom: 36px; left: 50%; translate: -50% 0; display: flex; align-items: center; gap: 2px; padding: 3px; background: var(--card); border: 1px solid var(--border); border-radius: 9px; box-shadow: var(--shadow-page); }
 /* Subtle while idle: the card stays opaque so page text never shows through; only its contents fade. */
 #view-controls:hover, #view-controls:focus-within { --idle: 1; }
 #view-controls > * { opacity: var(--idle); transition: opacity .15s; }

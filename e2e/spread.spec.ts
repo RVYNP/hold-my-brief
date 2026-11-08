@@ -56,7 +56,7 @@ test('PDF two-page spread pairs, navigates, snaps, waits for width and resumes',
   await page.locator('.reader-host').focus();
   await page.keyboard.press('Control+3');
   await expect(page.locator('#view-spread')).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('#filekind')).toHaveText('PDF · Two-page view');
+  await expect(page.locator('#filekind')).toHaveAttribute('title', 'PDF · Two-page view');
   // The cover stands alone on the right half of the open book.
   await expect(page.locator('.pdf-spread')).toHaveAttribute('data-side', 'right');
   await expect(page.locator('#position')).toContainText('Page 1 of 7');
@@ -152,7 +152,7 @@ test('fixed-layout EPUB shows spreads with the cover alone and moves by spread',
   await page.locator('.reader-host').focus();
   await page.keyboard.press('Control+3');
   await expect(page.locator('#position')).toContainText('Page 1 of 5');
-  await expect(page.locator('#filekind')).toHaveText('EPUB · Two-page view');
+  await expect(page.locator('#filekind')).toHaveAttribute('title', 'EPUB · Two-page view');
   await page.keyboard.press('PageDown');
   await expect(page.locator('#position')).toContainText('Pages 2–3 of 5');
   const visible = () => page.frames().filter(frame => frame.url().startsWith('blob:')).map(frame => frame.locator('h1'));
@@ -166,7 +166,7 @@ test('fixed-layout EPUB shows spreads with the cover alone and moves by spread',
   await expect(page.locator('#position')).toContainText('Page 5 of 5');
   await page.locator('#view-single').click();
   await expect(page.locator('#position')).toContainText('Page 5 of 5');
-  await expect(page.locator('#filekind')).toHaveText('EPUB · Page view');
+  await expect(page.locator('#filekind')).toHaveAttribute('title', 'EPUB · Page view');
   expect(errors).toEqual([]);
 });
 

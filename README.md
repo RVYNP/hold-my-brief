@@ -79,7 +79,8 @@ computer.
     </td>
     <td valign="top">
       <h3>Fits your space</h3>
-      A single slim toolbar and footer leave the page most of the window. Light and dark modes that
+      One slim toolbar, and a footer that is only a progress line until you reach for it, leave the
+      page 94% of the window; a pinned reader's controls fade while you work in another app. Light and dark modes that
       follow your system, five theme families (Brief by default), your own accent color, and a page
       tone for text. Hover a theme to preview it on the whole window.
     </td>

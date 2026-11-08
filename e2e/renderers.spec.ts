@@ -375,7 +375,7 @@ test('fixed-layout EPUB keeps physical single pages and supports next/fit', asyn
   const buffer = await epubFixture(true); await recordFixture('fixed.epub', buffer, { pages: 2, layout: 'pre-paginated', viewport: '800 x 1000' });
   await page.locator('#file-input').setInputFiles({ name: 'fixed.epub', mimeType: 'application/epub+zip', buffer });
   await expect(page.locator('#filename')).toHaveText('fixed.epub');
-  await expect(page.locator('#filekind')).toContainText('Page view');
+  await expect(page.locator('#filekind')).toHaveAttribute('title', /Page view/);
   await expect(page.locator('#position')).toContainText('Page 1 of 2');
   const first = page.frames().find(frame => frame.url().startsWith('blob:'))!;
   await expect(first.locator('h1')).toHaveText('Opening chapter');
@@ -408,7 +408,7 @@ test('PDF view controls zoom, pan 1:1 by hand tool and middle button, and keep l
   await page.keyboard.press('h');
   await expect(hand).toHaveAttribute('aria-pressed', 'true');
   await expect(host).toHaveClass(/hand-tool/);
-  await expect(page.locator('#filekind')).toHaveText('PDF · 150% · Hand');
+  await expect(page.locator('#filekind')).toHaveAttribute('title', 'PDF · 150% · Hand');
 
   // A drag moves the page exactly with the pointer and does not select text.
   const box = (await host.boundingBox())!;
