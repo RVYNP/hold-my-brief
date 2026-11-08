@@ -324,6 +324,14 @@ export class PdfAdapter implements ReaderAdapter {
     return text;
   }
 
+  async readText(limit: number): Promise<{ label: string; text: string }> {
+    const position = this.getPosition(), total = this.doc?.numPages ?? 0;
+    const first = Math.min(total, Math.max(1, Math.round(position.scrub.current)));
+    const pages = position.spread === 'active' && first < total ? [first, first + 1] : [first];
+    const texts = await Promise.all(pages.map(page => this.pageText(page)));
+    return { label: position.label, text: texts.map((text, index) => `[${this.labels?.[pages[index] - 1] || `Page ${pages[index]}`}]\n${text}`).join('\n\n').slice(0, limit) };
+  }
+
   /**
    * Navigates to a hit and marks it. Marks live in a separate absolutely-positioned layer
    * over the canvas, so the PDF text layer (which owns selection) is never mutated.

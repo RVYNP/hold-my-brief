@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod assistant;
 mod state;
 mod windows;
 mod catalog;
@@ -677,6 +678,11 @@ fn main() {
             clear_reading_data,
             read_relative_image,
             open_external,
+            assistant::assistant_status,
+            assistant::assistant_set_key,
+            assistant::assistant_forget_key,
+            assistant::assistant_models,
+            assistant::assistant_send,
             windows::set_pin,
             windows::set_lock,
             windows::set_preset

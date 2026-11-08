@@ -1,3 +1,4 @@
+import { looksLikeQuestion } from './assistant';
 import { groupCommands, parseIntent, scoreCommand, searchCommands, unavailableReason, type Command, type CommandGroup } from './commands';
 
 /**
@@ -12,7 +13,8 @@ import { groupCommands, parseIntent, scoreCommand, searchCommands, unavailableRe
  * teaches rather than hides.
  *
  * A query is also read as a request (see `parseIntent`): a number goes there, "find …" finds,
- * and free text that names no command is offered as a find in the open document.
+ * and free text that names no command is offered as a find in the open document. With the AI
+ * assistant on, any text can also be asked; a question leads the list.
  */
 
 export type PaletteContext = {
@@ -24,6 +26,8 @@ export type PaletteContext = {
   goTo: (target: string) => void | Promise<void>;
   /** Opens the find bar on `text`. */
   find: (text: string) => void;
+  /** The opt-in assistant, when the desktop app has one turned on. */
+  assistant?: { ready: () => boolean; ask: (question: string) => void };
 };
 
 /** One selectable line: a catalog command or a typed request. */
@@ -83,7 +87,10 @@ export function createPalette(context: PaletteContext): Palette {
       // find leads; when a command matches by name, the find follows the commands instead.
       const fallback: Row[] = !intent && text.length >= 2 && state.hasDocument ? [{ label: `Find “${text}” in document`, shortcut: 'Ctrl F', run: () => context.find(text) }] : [];
       const named = commands.some(command => (scoreCommand(command, query) ?? 0) >= 700);
-      sections = [{ rows: [...request, ...(named ? [] : fallback), ...commands.map(toRow), ...(named ? fallback : [])] }];
+      const assistant = context.assistant;
+      const ask: Row[] = assistant?.ready() && text.length >= 2 ? [{ label: `Ask Claude “${text}”`, run: () => assistant.ask(text) }] : [];
+      const question = !intent && looksLikeQuestion(text);
+      sections = [{ rows: [...(question ? ask : []), ...request, ...(named ? [] : fallback), ...commands.map(toRow), ...(named ? fallback : []), ...(question ? [] : ask)] }];
     }
     rows = sections.flatMap(section => section.rows);
     enabled = rows.map(row => !row.reason);

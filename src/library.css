@@ -1,12 +1,12 @@
 /* The library is an out-of-flow drawer over the reading panel at every width: it never takes
    width from #workspace, so opening, dragging or docking it cannot move or refit the page. */
 .library-root { --library-width: 270px; position: absolute; z-index: 20; top: 0; bottom: 0; left: 0; display: flex; flex: 0 0 auto; width: calc(var(--library-width) + 10px); min-width: 0; min-height: 0; margin: 0 0 0 6px; }
-.library-panel { display: flex; flex-direction: column; flex: 1 1 auto; height: 100%; min-width: 0; min-height: 0; padding: 10px; overflow: auto; border: 1px solid var(--border); border-radius: 9px; background: var(--raise); box-shadow: var(--shadow-drawer); scrollbar-width: thin; scrollbar-color: var(--faint) transparent; }
+.library-panel { display: flex; flex-direction: column; flex: 1 1 auto; height: 100%; min-width: 0; min-height: 0; padding: 8px 8px 6px; overflow: auto; border: 1px solid var(--border); border-radius: 9px; background: var(--raise); box-shadow: var(--shadow-drawer); scrollbar-width: thin; scrollbar-color: var(--faint) transparent; }
 .library-panel button, .library-panel input, .library-panel select { font-size: 12px; }
-.library-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-shrink: 0; margin-bottom: 6px; }
+.library-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-shrink: 0; margin: 0 0 4px 8px; }
 .library-header h2 { margin: 0; font-size: 14px; font-weight: 650; }
 .library-header-actions { display: flex; align-items: center; flex-shrink: 0; }
-.library-header button { display: grid; place-items: center; width: 26px; height: 28px; padding: 0; color: var(--muted); }
+.library-header button { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; color: var(--muted); }
 .library-header button:hover { color: var(--fg); }
 /* Resize handle: a 10 px hit area between the library and the reading panel. The drawer keeps the
    geometry of the retired divider, anchored to the 6 px page margin, so the panel stays put. */
@@ -40,40 +40,64 @@
 .library-resizing, .library-resizing * { cursor: col-resize !important; user-select: none; }
 /* The panel follows the pointer live; the page underneath never refits, so no reader-host width freeze is needed. */
 #library-toggle[data-library-side=right] svg { transform: scaleX(-1); }
-.library-add { flex-shrink: 0; text-align: center; border-color: var(--accent-border); color: var(--accent-ink); background: var(--accent-soft); font-weight: 600; margin-bottom: 10px; }
-.library-add:hover { background: var(--accent-soft-hover); }
-.library-search-label { display: block; flex-shrink: 0; font-size: 10px; color: var(--muted); margin-bottom: 4px; }
-.library-search { flex-shrink: 0; width: 100%; min-width: 0; padding: 7px 8px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); color: var(--fg); margin-bottom: 10px; }
-.library-facets { display: flex; flex-shrink: 0; gap: 6px; margin-bottom: 10px; }
-.library-facets select { flex: 1; min-width: 0; padding-top: 5px; padding-bottom: 5px; background-color: var(--surface); color: var(--muted); }
-.library-navigation { flex: 0 1 auto; min-height: 76px; max-height: 37%; overflow-y: auto; overflow-x: hidden; padding: 2px; margin: -2px -2px 6px; scrollbar-width: thin; }
-.library-filter { display: flex; align-items: center; gap: 5px; width: 100%; min-width: 0; text-align: left; padding: 6px 7px; }
+/* Nothing inside the drawer is a bordered box: actions are text, fields are tinted fills, filters are
+   plain dropdown text, and selection is a tint. Only the drawer's own edge is drawn. */
+.library-tools { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 6px; }
+.library-add { flex-shrink: 0; padding: 4px 8px; color: var(--accent-ink); font-weight: 600; }
+.library-add:hover { background: var(--accent-soft); }
+.library-tools button:not(.library-add) { padding: 4px 8px; color: var(--muted); }
+.library-tools button:not(.library-add):hover { color: var(--fg); }
+.library-search-label { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.library-search { flex-shrink: 0; width: 100%; min-width: 0; padding: 6px 8px; border: 0; border-radius: 6px; background: color-mix(in srgb, var(--hover) 55%, var(--raise)); color: var(--fg); margin-bottom: 4px; }
+.library-search::placeholder { color: var(--faint); }
+.library-facets { display: flex; flex-shrink: 0; flex-wrap: wrap; gap: 0 6px; margin: 0 0 4px 6px; }
+.library-facets select, .library-sort { flex: 0 1 auto; min-width: 0; max-width: 100%; padding: 4px 16px 4px 2px; border: 0; border-radius: 4px; background-color: transparent; background-position: right 6px center, right 2px center; color: var(--muted); font-size: 11px !important; }
+.library-facets select:hover, .library-sort:hover { color: var(--fg); }
+.library-navigation { flex: 0 1 auto; min-height: 76px; max-height: 37%; overflow-y: auto; overflow-x: hidden; padding: 2px; margin: 0 -2px 2px; scrollbar-width: thin; }
+.library-filter { display: flex; align-items: center; gap: 5px; width: 100%; min-width: 0; text-align: left; padding: 4px 8px; line-height: 1.35; }
+.library-filter[aria-pressed=true] { border-color: transparent; background: var(--accent-soft); color: var(--accent-ink); }
+.library-filter[aria-pressed=true]:hover { background: var(--accent-soft-hover); }
 .library-filter-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .library-count { flex-shrink: 0; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
-.library-collections-heading { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: 9px 0 3px; padding-top: 7px; border-top: 1px solid var(--border); }
-.library-collections-heading h3 { margin: 0 0 0 7px; color: var(--muted); font-size: 10px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; }
-.library-collections-heading button { font-size: 11px; color: var(--accent-ink); padding: 4px 6px; }
+.library-filter[aria-pressed=true] .library-count { color: inherit; }
+.library-collections-heading { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: 8px 0 1px; }
+.library-collections-heading h3 { margin: 0 0 0 8px; color: var(--muted); font-size: 10px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; }
+.library-collections-heading button { font-size: 11px; color: var(--accent-ink); padding: 3px 6px; }
 .library-collection { display: flex; gap: 2px; align-items: center; min-width: 0; }
 .library-collection .library-filter { flex: 1; }
 .library-collection-action { padding: 5px 4px; flex-shrink: 0; color: var(--muted); }
 .library-collection-action:last-child { font-size: 16px; }
 .library-no-collections { margin: 4px 7px 8px; color: var(--muted); font-size: 11px; line-height: 1.5; }
-.library-documents-head { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 6px; padding: 8px 0; border-top: 1px solid var(--border); }
+.library-documents-head { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 6px; padding: 4px 2px 2px 8px; }
 .library-result-count { color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
 .library-sort-label { min-width: 0; }
-.library-sort { max-width: 120px; padding: 4px 18px 4px 4px; border-color: transparent; border-radius: 4px; background-color: transparent; background-position: right 8px center, right 4px center; color: var(--muted); font-size: 10px !important; }
-.library-sort:hover { border-color: transparent; color: var(--fg); }
+.library-sort { max-width: 120px; font-size: 10px !important; }
+.library-pager { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; padding-top: 4px; color: var(--muted); font-size: 10px; }
+.library-pager:empty { display: none; }
 .library-documents { flex: 1 1 0; min-height: 78px; overflow-y: auto; overflow-x: hidden; padding: 2px; margin: -2px; scrollbar-width: thin; }
-.library-document { display: flex; align-items: center; min-width: 0; gap: 2px; padding: 3px; margin-bottom: 3px; border: 1px solid transparent; border-radius: 6px; }
+.library-document { position: relative; display: flex; align-items: center; min-width: 0; padding: 0 2px; border-radius: 6px; }
+/* Dense rows: a hairline inset from both edges separates them; hover and selection tint instead of box. */
+.library-document::after { content: ''; position: absolute; left: 8px; right: 8px; bottom: 0; height: 1px; background: var(--hairline); pointer-events: none; }
+.library-document:last-child::after, .library-document:hover::after, .library-document.is-active::after { display: none; }
 .library-document:hover { background: var(--hover-subtle); }
-.library-document.is-active { background: var(--accent-soft); border-color: var(--accent-border); }
-.library-document-open { flex: 1; display: flex; flex-direction: column; gap: 5px; min-width: 0; text-align: left; padding: 7px 3px; }
-.library-document-name { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
-.library-document-meta { color: var(--muted); font: 9px/1.4 var(--font-mono); letter-spacing: .3px; }
+.library-document.is-active { background: var(--accent-soft); }
+.library-document-open { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; text-align: left; padding: 6px 6px; border-radius: 6px; }
+.library-document-open:hover { background: transparent; }
+.library-document-name { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; line-height: 1.35; }
+.library-document-meta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font: 9px/1.35 var(--font-mono); letter-spacing: .3px; }
 .library-document.is-active .library-document-meta { color: var(--accent-ink); }
-.library-favorite, .library-organize { flex-shrink: 0; padding: 4px 3px; width: 25px; height: 30px; font-size: 17px !important; line-height: 1; color: var(--muted); }
-.library-favorite[aria-pressed=true] { color: var(--accent); background: transparent; border-color: transparent; }
+/* Star, Info and ... float over the row's right edge. They stay in the tab order but are only drawn
+   for the hovered, selected or keyboard-focused row (and the star, once set); the title makes room then. */
+.library-card-actions { position: absolute; top: 50%; right: 6px; display: flex; align-items: center; transform: translateY(-50%); pointer-events: none; }
+.library-card-actions button { height: 24px; padding: 0 6px; color: var(--muted); font-size: 11px; line-height: 1; opacity: 0; pointer-events: none; }
+.library-favorite, .library-organize { min-width: 24px; padding: 0 4px; }
+.library-favorite { font-size: 14px !important; }
 .library-organize { font-weight: 600; }
+.library-card-actions button:hover { color: var(--fg); background: var(--hover); }
+.library-card-actions .library-favorite[aria-pressed=true] { color: var(--accent); background: transparent; border-color: transparent; opacity: 1; pointer-events: auto; }
+.library-document:has(.library-favorite[aria-pressed=true]) .library-document-open { padding-right: 30px; }
+.library-document:hover .library-card-actions button, .library-document:focus-within .library-card-actions button, .library-document.is-active .library-card-actions button { opacity: 1; pointer-events: auto; }
+.library-document:hover .library-document-open, .library-document:focus-within .library-document-open, .library-document.is-active .library-document-open { padding-right: 92px; }
 .library-empty { padding: 16px 8px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .library-empty strong { color: var(--fg); font-weight: 600; }
 .library-empty p { margin: 6px 0 0; }
@@ -105,7 +129,7 @@
 @media (max-height: 480px) {
   .library-panel { padding: 7px 9px; }
   .library-header { margin-bottom: 3px; }
-  .library-add { margin-bottom: 6px; padding-top: 5px; padding-bottom: 5px; }
+  .library-tools { margin-bottom: 4px; }
   .library-search-label { margin-bottom: 2px; }
   .library-search { margin-bottom: 6px; padding-top: 5px; padding-bottom: 5px; }
   .library-facets { margin-bottom: 6px; }

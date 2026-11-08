@@ -84,6 +84,15 @@ computer.
       tone for text. Hover a theme to preview it on the whole window.
     </td>
   </tr>
+  <tr>
+    <td colspan="2" valign="top">
+      <h3>Ask it, if you want to</h3>
+      Turn on the optional AI assistant with your own Anthropic API key, then type a question into
+      the title bar: "where does Darcy first appear?", "summarize this chapter", "open the Tauri docs
+      and switch to dark". Claude finds things, answers from the page you're on, and moves, opens or
+      restyles the reader for you, listing each thing it did. It stays off until you add a key.
+    </td>
+  </tr>
 </table>
 
 ## A closer look
@@ -113,6 +122,9 @@ computer.
 ## Private by design
 
 - **Your files stay yours.** No account, no cloud, no analytics. It works offline.
+- **AI is off unless you turn it on.** The optional assistant uses your own Anthropic API key, kept in
+  the system keychain. Only when you ask something does it send your question and the text it reads
+  to answer it to Anthropic. Without a key, the app makes no network requests.
 - **Documents are never changed.** Reading positions and the library live in a small local data
   folder. Removing something from the library never deletes the file.
 - **Nothing runs behind your back.** Scripts inside documents are blocked, books open in a sandbox,

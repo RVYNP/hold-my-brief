@@ -186,6 +186,21 @@ select:hover { border-color: var(--accent-border); }
 .toolbar { display: flex; align-items: center; gap: 2px; height: 38px; padding: 0 6px; background: var(--chrome); flex-shrink: 0; -webkit-user-select: none; user-select: none; }
 /* macOS draws the traffic lights over the toolbar's left end (titleBarStyle Overlay). */
 .mac-titlebar .toolbar { padding-left: 78px; }
+/* Windows: the reader's own caption buttons sit flush at the toolbar's right end, full height, the
+   way Windows 11 draws them; close turns red on hover. Hidden everywhere else. */
+.caption { display: none; }
+.windows-titlebar .toolbar { padding-right: 0; }
+.windows-titlebar .caption { display: flex; align-self: stretch; margin-left: 4px; }
+/* Without a native caption the toolbar's empty space is the only grab handle, so a strip before the
+   pin always stays free; in a narrow window the file type gives way to make room for the name. */
+.windows-titlebar #pin { margin-left: 24px; }
+@media (max-width: 480px) { .windows-titlebar .title span { display: none; } }
+.caption button { display: grid; place-items: center; width: 44px; height: 100%; padding: 0; border: 0; border-radius: 0; color: var(--fg); }
+.caption button:hover { background: var(--hover); }
+.caption button:disabled { opacity: .35; background: transparent; }
+#caption-close:hover { background: #c42b1c; color: #fff; }
+.caption-restore, .window-maximized .caption-max { display: none; }
+.window-maximized .caption-restore { display: inline; }
 .icon-button { display: grid; place-items: center; flex-shrink: 0; width: 28px; height: 28px; padding: 0; border-radius: 6px; }
 .icon-button[aria-pressed=true], .icon-button[aria-expanded=true] { background: var(--accent-soft); border-color: transparent; color: var(--accent-ink); }
 /* The title is the way in: click it or press Ctrl K to find, go to or change anything. It stays plain
@@ -205,21 +220,26 @@ select:hover { border-color: var(--accent-border); }
 #reader-layout { --find-bar-height: 39px; --workspace-border: 1px; position: relative; display: flex; flex: 1; min-height: 0; min-width: 0; }
 /* The page is not boxed: it meets the chrome edge to edge, set apart by tone and one hairline. */
 #workspace { position: relative; flex: 1; min-height: 0; min-width: 0; border-top: var(--workspace-border) solid var(--hairline); background: var(--surface); overflow: hidden; }
-#empty { height: 100%; overflow: auto; padding: 36px 28px 24px; max-width: 640px; margin: auto; }
-.book-mark { display: grid; place-items: center; width: 42px; height: 42px; background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-border); border-radius: 10px; }
-.eyebrow { font: 10px/1.5 var(--font-mono) !important; letter-spacing: 1.5px; color: var(--muted) !important; margin-top: 26px !important; }
+/* First run is a page of type, not a stack of boxes: the mark is a plain glyph, the one filled
+   control is the call to action sized to its words, and recents are a quiet list. */
+#empty { height: 100%; overflow: auto; padding: 32px 28px 24px; max-width: 640px; margin: auto; }
+.book-mark { display: block; color: var(--accent); }
+.eyebrow { font: 10px/1.5 var(--font-mono) !important; letter-spacing: 1.5px; color: var(--muted) !important; margin-top: 22px !important; }
 h1 { font-size: 34px; line-height: 1.15; font-weight: 550; letter-spacing: -.9px; margin: 12px 0 18px; color: var(--fg); }
 #empty > p { color: var(--muted); font-size: 13px; line-height: 1.65; }
 .primary { background: var(--accent-fill); color: var(--on-accent); padding: 11px 15px; font-weight: 600; }
 .primary:hover { background: var(--accent-fill-hover); }
-#empty-open { margin-top: 14px; display: flex; justify-content: space-between; gap: 24px; width: 100%; max-width: 320px; }
+#empty-open { margin-top: 6px; display: inline-flex; align-items: center; gap: 10px; padding: 9px 14px; border-radius: 6px; }
 #empty .formats { font: 9px/1.5 var(--font-mono); letter-spacing: .7px; margin-top: 14px; color: var(--muted); }
-#preview-note { font-size: 11px !important; padding-top: 12px; border-top: 1px solid var(--border); }
-#recents { margin-top: 28px; }
-#recents h2 { font-size: 11px; font-weight: 600; color: var(--muted); }
-.recent { display: flex; border-bottom: 1px solid var(--border); }
-.recent button:first-child { overflow: hidden; text-overflow: ellipsis; text-align: left; flex: 1; font-size: 12px; min-width: 0; }
-.recent button:last-child { flex: 0; color: var(--muted); }
+#preview-note { font-size: 11px !important; margin-top: 28px; color: var(--muted) !important; }
+#recents { margin-top: 26px; }
+#recents h2 { margin: 0 0 4px; font: 10px/1.5 var(--font-mono); letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+.recent { display: flex; align-items: center; margin: 0 -8px; border-radius: 5px; }
+.recent:hover { background: var(--hover-subtle); }
+.recent button { background: transparent; }
+.recent button:first-child { overflow: hidden; text-overflow: ellipsis; text-align: left; flex: 1; padding: 6px 8px; font-size: 12px; min-width: 0; }
+.recent button:last-child { flex: 0; padding: 4px 8px; color: var(--muted); opacity: 0; }
+.recent:hover button:last-child, .recent:focus-within button:last-child { opacity: 1; }
 footer { position: relative; display: flex; gap: 2px; align-items: center; height: 30px; padding: 2px 6px 0; background: var(--chrome); flex-shrink: 0; }
 #position { flex: 1; min-width: 0; padding: 3px 6px; overflow: hidden; text-overflow: ellipsis; font: 11px/1.5 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
 #previous, #next { padding: 3px 9px; color: var(--muted); }
@@ -230,7 +250,8 @@ footer { position: relative; display: flex; gap: 2px; align-items: center; heigh
 #progress::-webkit-slider-thumb { appearance: none; width: 12px; height: 12px; margin-top: -5px; border-radius: 50%; border: 2px solid var(--surface); background: var(--accent); box-shadow: 0 0 0 1px var(--accent); opacity: 0; transition: opacity .15s; }
 footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-webkit-slider-thumb, #progress:active::-webkit-slider-thumb { opacity: 1; }
 #progress:disabled { opacity: .4; cursor: default; }
-#notice { display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin: 0 6px 6px; background: var(--notice); color: var(--notice-ink); font-size: 12px; border: 1px solid var(--notice-border); border-radius: 6px; flex-shrink: 0; }
+/* A notice is a strip under the toolbar, not a card: tinted, one hairline, plain text buttons. */
+#notice { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 4px 6px 4px 12px; background: var(--notice); color: var(--notice-ink); font-size: 12px; border-top: 1px solid var(--notice-border); flex-shrink: 0; }
 /* The opening strip is chrome, not layout: in flow it took 47 px of height from the reading area, so
    the PDF adapter fitted the page to the shorter box, revealed it at the wrong size and rasterised it
    again once the strip went away. It floats over the top of the reading panel instead, the way the
@@ -250,7 +271,9 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
   #reader-layout.library-open.library-right #loading { right: calc(var(--library-width, 270px) + 16px); }
 }
 #notice span, #loading span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-#notice button, #loading button { padding: 4px 7px; border-color: currentColor; font-size: 11px; }
+#notice button, #loading button { padding: 3px 8px; border: 0; color: inherit; font-size: 11px; font-weight: 600; }
+#notice button:hover, #loading button:hover { background: color-mix(in srgb, currentColor 12%, transparent); }
+#dismiss-notice { font-size: 15px !important; font-weight: 400 !important; line-height: 1; }
 [hidden] { display: none !important; }
 .reader-host { position: absolute; inset: 0; overflow: auto; background: var(--surface); scrollbar-color: var(--faint) transparent; scrollbar-width: thin; }
 .reader-host.text-reader, .reader-host.reflow-reader { background: var(--paper); color: var(--ink); }
@@ -294,7 +317,7 @@ dialog select { padding-right: 28px; }
 .check { display: flex; align-items: center; gap: 8px; }
 .menu-grid { display: flex; flex-direction: column; gap: 2px; }
 .menu-grid button { display: flex; justify-content: space-between; align-items: center; text-align: left; gap: 8px; font-size: 12px; white-space: normal; }
-.menu-grid button:nth-child(3), .menu-grid button:nth-child(7), .menu-grid button:nth-child(16) { border-bottom: 1px solid var(--border); border-radius: 0; padding-bottom: 12px; margin-bottom: 7px; }
+.menu-grid button:nth-child(3), .menu-grid button:nth-child(7), .menu-grid button:nth-child(17) { border-bottom: 1px solid var(--border); border-radius: 0; padding-bottom: 12px; margin-bottom: 7px; }
 .menu-label { display: inline-flex; align-items: center; gap: 8px; }
 .menu-label svg { flex-shrink: 0; color: var(--accent-ink); }
 .menu-value { color: var(--muted); font: 10px/1.4 var(--font-mono); white-space: nowrap; }
@@ -399,3 +422,29 @@ dd { margin: 0; color: var(--muted); }
 #find-bar button { flex-shrink: 0; padding: 1px 6px; font-size: 11px; border-radius: 4px; color: var(--muted); }
 #find-bar button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent-border); }
 #find-bar button:disabled { opacity: .4; }
+
+/* The opt-in assistant's answer drops from the toolbar over the top of the page, like the palette:
+   one hairline edge and the popover shadow, nothing boxed inside it. */
+#answer { position: absolute; z-index: 24; top: 0; left: 0; right: 0; display: flex; flex-direction: column; max-height: min(65%, 460px); padding: 10px 14px 12px; background: var(--card); border-bottom: 1px solid var(--hairline); box-shadow: var(--shadow-popover); outline: none; }
+.answer-head { display: flex; align-items: center; gap: 8px; color: var(--accent-ink); }
+.answer-question { flex: 1; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; }
+.answer-steps { margin: 6px 0 0; padding: 0; list-style: none; font: 10px/1.6 var(--font-mono); color: var(--muted); }
+.answer-steps li::before { content: '→ '; color: var(--faint); }
+.answer-steps:empty { display: none; }
+.answer-text { min-height: 0; overflow: auto; margin-top: 8px; color: var(--fg); font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; scrollbar-width: thin; }
+.answer-text p, .answer-text ul, .answer-text ol { margin: 0 0 8px; }
+.answer-text ul, .answer-text ol { padding-left: 18px; }
+.answer-text code { font: 12px var(--font-mono); background: var(--code); border-radius: 3px; padding: 0 3px; }
+.answer-pending { color: var(--muted); }
+.answer-error { color: var(--error); }
+.answer-follow input { width: 100%; margin-top: 8px; padding: 7px 9px; border: 0; border-radius: 6px; background: var(--hover-subtle); color: var(--fg); font: inherit; font-size: 12px; }
+.answer-follow input::placeholder { color: var(--faint); }
+.answer-follow input:disabled { opacity: .5; }
+/* Below the find bar when both are open, the same way the opening strip waits for it. */
+#reader-layout:has(#find-bar:not([hidden])) #answer { top: calc(var(--find-bar-height) + var(--workspace-border)); }
+#assistant-settings p { margin: 0 0 12px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+#assistant-settings .assistant-privacy { font-size: 11px; }
+.assistant-error { min-height: 1em; color: var(--error) !important; }
+.link-button { margin-right: auto; padding-left: 0; padding-right: 0; color: var(--accent-ink); }
+.link-button:hover { background: transparent; text-decoration: underline; }
+.danger-text { color: var(--error); }

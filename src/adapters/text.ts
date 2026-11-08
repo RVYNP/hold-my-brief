@@ -372,6 +372,13 @@ export class TextAdapter implements ReaderAdapter {
   async setOptions(options: ReaderOptions): Promise<void> { const anchor = this.getPosition().locator; this.applyOptions(options); await this.restore(anchor); }
   outline(): OutlineItem[] { return [...this.headings]; }
 
+  async readText(limit: number): Promise<{ label: string; text: string }> {
+    const { label, locator } = this.getPosition();
+    const line = Math.max(1, Number((locator as TextAnchor).line) || 1);
+    const start = this.offsets[line - 1] ?? 0;
+    return { label, text: this.source.slice(start, start + limit) };
+  }
+
   /**
    * Searches the decoded source, one unit per source line, so every hit knows its line and
    * absolute offset. Searching the source (rather than the rendered DOM) keeps results in

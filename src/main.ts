@@ -1,20 +1,21 @@
 import './style.css';
 import { defaultOptions, type Position, type ReaderAdapter, type ReaderOptions } from './types';
-import { desktop, native, state, browserFile, persist, openExternal, confirmDocument, openLibraryDocument, chooseDocument, imageFormats, type Opened, type WindowState } from './bridge';
+import { desktop, native, state, browserFile, persist, openExternal, confirmDocument, openLibraryDocument, chooseDocument, getLibrary, imageFormats, type Opened, type WindowState } from './bridge';
 import { createLibrary } from './library';
 import { ImageAdapter } from './adapters/image';
 import { createPalette } from './palette';
 import { createFindBar } from './find-bar';
 import { COMMANDS, shortcutFor, unavailableReason } from './commands';
-import { initAppearance } from './theme';
+import { appearance, initAppearance, pageTones, palettes, saveAppearance, type AppearanceMode } from './theme';
 import { appearanceSummary, createAppearanceSheet, paletteIcon } from './appearance';
+import { createAssistantPanel } from './assistant-panel';
 import { Panner } from './pan';
 import { MIN_SPREAD_WIDTH, pagesLabel, spreadPages } from './spread';
 
 initAppearance();
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-  <header class="toolbar" data-tauri-drag-region><button id="library-toggle" class="icon-button" aria-label="Document library" aria-controls="library-root" aria-expanded="false" title="Document library (Ctrl+B)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16m-3-12v8"/></svg></button><button id="ask" class="title" aria-haspopup="dialog" aria-keyshortcuts="Control+K" title="Go to, find or run a command (Ctrl+K)"><svg class="ask-mark" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M9.94 15.5a2 2 0 0 0-1.44-1.44l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0l1.58 6.13a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96l-6.13 1.58a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"/></svg><strong id="filename">Hold My Brief</strong><span id="filekind">A reader that holds.</span><kbd class="ask-key" aria-hidden="true">Ctrl K</kbd></button><button id="pin" class="icon-button" aria-label="Pin" aria-pressed="false" title="Always on top (Ctrl+Shift+T)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg></button><button id="lock" class="icon-button" aria-label="Lock" aria-pressed="false" title="Lock dimensions (Ctrl+Shift+L)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></button><button id="menu-toggle" class="icon-button" aria-label="Reader menu" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></header>
+  <header class="toolbar" data-tauri-drag-region><button id="library-toggle" class="icon-button" aria-label="Document library" aria-controls="library-root" aria-expanded="false" title="Document library (Ctrl+B)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16m-3-12v8"/></svg></button><button id="ask" class="title" aria-haspopup="dialog" aria-keyshortcuts="Control+K" title="Go to, find or run a command (Ctrl+K)"><svg class="ask-mark" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M9.94 15.5a2 2 0 0 0-1.44-1.44l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0l1.58 6.13a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96l-6.13 1.58a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"/></svg><strong id="filename">Hold My Brief</strong><span id="filekind">A reader that holds.</span><kbd class="ask-key" aria-hidden="true">Ctrl K</kbd></button><button id="pin" class="icon-button" aria-label="Pin" aria-pressed="false" title="Always on top (Ctrl+Shift+T)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg></button><button id="lock" class="icon-button" aria-label="Lock" aria-pressed="false" title="Lock dimensions (Ctrl+Shift+L)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></button><button id="menu-toggle" class="icon-button" aria-label="Reader menu" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button><div class="caption" role="group" aria-label="Window"><button id="caption-minimize" aria-label="Minimize" title="Minimize"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5.5h10" stroke="currentColor"/></svg></button><button id="caption-maximize" aria-label="Maximize" title="Maximize"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" aria-hidden="true"><rect class="caption-max" x=".5" y=".5" width="9" height="9"/><path class="caption-restore" d="M2.5 2.5V.5h7v7h-2M.5 2.5h7v7h-7z"/></svg></button><button id="caption-close" aria-label="Close" title="Close"><svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" aria-hidden="true"><path d="M.5.5l9 9m0-9l-9 9"/></svg></button></div></header>
   <aside id="notice" role="status" hidden><span></span><button id="retry-save" hidden>Retry save</button><button id="dismiss-notice" aria-label="Dismiss message">×</button></aside>
   <div id="reader-layout"><div id="loading" role="status" hidden><span></span><button id="cancel">Cancel</button></div><div id="library-root"></div>
   <main id="workspace"><section id="empty"><div class="book-mark" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M9 3v18m4-13h3m-3 4h3"/></svg></div><p class="eyebrow">KEEP YOUR PLACE</p><h1>Hand it over.</h1><p>Drop a brief and it stays pinned<br>exactly where you leave it.</p><button id="empty-open" class="primary">Hold a brief <span>↗</span></button><p class="formats">PDF · EPUB · MARKDOWN · TEXT</p><div id="recents"></div><p id="preview-note" hidden>Browser preview · Pin and size lock are available in the desktop app.</p></section>
@@ -27,7 +28,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <button data-action="compact">Compact window</button><button data-action="reading">Reading window</button>
     <button data-action="fit-page">Fit page <kbd>Ctrl 0</kbd></button><button data-action="fit-width">Fit width <kbd>Ctrl 2</kbd></button><button data-action="rotate">Rotate page 90°</button>
     <button id="spread-toggle" data-action="spread" aria-pressed="false" disabled>Two-page spread <kbd>Ctrl 3</kbd></button><button id="cover-toggle" data-action="cover" aria-pressed="true" disabled>Cover page alone</button>
-    <button data-action="smaller">Smaller text / zoom <kbd>Ctrl −</kbd></button><button data-action="larger">Larger text / zoom <kbd>Ctrl +</kbd></button><button data-action="appearance"><span class="menu-label">${paletteIcon}Appearance…</span><span class="menu-value" id="appearance-summary"></span></button><button data-action="type">Typography & wrapping</button>
+    <button data-action="smaller">Smaller text / zoom <kbd>Ctrl −</kbd></button><button data-action="larger">Larger text / zoom <kbd>Ctrl +</kbd></button><button data-action="appearance"><span class="menu-label">${paletteIcon}Appearance…</span><span class="menu-value" id="appearance-summary"></span></button><button data-action="type">Typography & wrapping</button><button data-action="assistant">AI assistant…</button>
     <button data-action="start">First location</button><button data-action="end">Last location</button><button data-action="screen-previous">Previous screen</button><button data-action="screen-next">Next screen</button>
     <button data-action="shortcuts">Keyboard shortcuts</button><button data-action="clear-recents">Clear recent files</button><button data-action="clear-data">Delete saved reading data…</button>
   </div></dialog>
@@ -39,9 +40,11 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <dialog id="shortcuts"><div class="dialog-head"><h2>Keyboard shortcuts</h2><button data-close aria-label="Close shortcuts">×</button></div><dl><dt>Next / previous page</dt><dd>PgDn / PgUp</dd><dt>Page mode navigation</dt><dd>Right / Left</dd><dt>Next / previous screen</dt><dd>Space / Shift Space</dd><dt>Scroll</dt><dd>Up / Down</dd><dt>First / last location</dt><dd>Home / End</dd><dt>Go to location</dt><dd>Ctrl G</dd><dt>Back after a jump</dt><dd>Alt Left</dd><dt>Open file</dt><dd>Ctrl O</dd><dt>Document library</dt><dd>Ctrl B</dd><dt>Resize library (divider focused)</dt><dd>Left / Right, Home / End, Enter</dd><dt>Pin / size lock</dt><dd>Ctrl Shift T / L</dd><dt>Fit page / width</dt><dd>Ctrl 0 / 2</dd><dt>Two-page spread</dt><dd>Ctrl 3</dd><dt>Zoom / text size</dt><dd>Ctrl + / −</dd><dt>Hand tool (pan a zoomed page)</dt><dd>H · or middle-drag</dd><dt>Find in document</dt><dd>Ctrl F</dd><dt>Command palette</dt><dd>Ctrl K</dd><dt>Dismiss a dialog</dt><dd>Escape</dd></dl></dialog>
   <dialog id="delete-data"><h2>Delete saved reading data?</h2><p>This removes saved positions and reading settings. Your documents and recent-file list remain. The current position will be saved again when you navigate.</p><div class="dialog-actions"><button data-close>Cancel</button><button id="confirm-delete" class="danger">Delete reading data</button></div></dialog>
   <input id="file-input" type="file" accept=".pdf,.epub,.md,.markdown,.txt,.png,.jpg,.jpeg,.webp,.gif,.avif,.bmp" hidden>`;
-// The macOS window draws its traffic lights over the toolbar (titleBarStyle Overlay), so the toolbar
-// leaves room for them; Windows keeps its native caption.
-if (desktop && navigator.userAgent.includes('Mac')) document.documentElement.classList.add('mac-titlebar');
+// The window frame is drawn by the reader on both desktop systems. macOS keeps its own traffic lights
+// over the toolbar's left end (titleBarStyle Overlay); Windows loses its native caption (see
+// windows::restore) and gets minimize, maximize and close buttons at the toolbar's right end.
+const platform = !desktop ? undefined : navigator.userAgent.includes('Mac') ? 'mac' : navigator.userAgent.includes('Windows') ? 'windows' : undefined;
+if (platform) document.documentElement.classList.add(`${platform}-titlebar`);
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const appearanceSheet = createAppearanceSheet($<HTMLDialogElement>('appearance'));
@@ -61,7 +64,7 @@ let pannedScroller: HTMLElement | undefined;
 
 function notify(message: string, retry = false) { $('notice').hidden = false; $('notice').querySelector('span')!.textContent = message; $('retry-save').hidden = !retry; }
 function fail(error: unknown) { notify(error instanceof Error ? error.message : String(error)); }
-function updateWindow(next: WindowState) { windowState = next; $('pin').setAttribute('aria-pressed', String(next.pinned)); $('pin').title = next.pinned ? 'Pinned on top (Ctrl+Shift+T)' : 'Always on top (Ctrl+Shift+T)'; $('lock').setAttribute('aria-pressed', String(next.locked)); $('lock').title = next.locked ? 'Size locked (Ctrl+Shift+L)' : 'Lock dimensions (Ctrl+Shift+L)'; }
+function updateWindow(next: WindowState) { windowState = next; $('pin').setAttribute('aria-pressed', String(next.pinned)); $('pin').title = next.pinned ? 'Pinned on top (Ctrl+Shift+T)' : 'Always on top (Ctrl+Shift+T)'; $('lock').setAttribute('aria-pressed', String(next.locked)); $('lock').title = next.locked ? 'Size locked (Ctrl+Shift+L)' : 'Lock dimensions (Ctrl+Shift+L)'; $<HTMLButtonElement>('caption-maximize').disabled = next.locked; }
 function showPosition(p: Position) {
   position = p;
   const percent = Math.max(0, Math.min(100, p.fraction * 100));
@@ -189,6 +192,7 @@ function openPalette() {
       hasDocument: () => Boolean(reader), desktop, run: id => command(id),
       goTo: target => { const current = reader; return current?.goTo(target).then(() => activeHost?.focus(), error => { if (reader === current) fail(error); }); },
       find: text => findBar.open(text),
+      assistant,
     });
     document.body.append(palette.element);
   }
@@ -207,6 +211,48 @@ const findBar = createFindBar({
 // Inside the reading panel, so it pushes the document down rather than covering it.
 $('workspace').prepend(findBar.element);
 
+/**
+ * The opt-in assistant (desktop only, off until the user saves an Anthropic key). It reaches the
+ * reader only through these functions, the same paths the palette, menu and keyboard use.
+ */
+const assistant = createAssistantPanel($('reader-layout'), {
+  desktop, openExternal,
+  returnFocus: () => activeHost?.focus(),
+  env: {
+    hasDocument: () => Boolean(reader),
+    snapshot: () => ({
+      document: active && reader ? { name: active.name, format: active.format, position: reader.getPosition().label, view: $('filekind').textContent } : null,
+      window: desktop ? { pinned: windowState.pinned, sizeLocked: windowState.locked } : 'browser preview',
+      appearance: appearanceSummary(),
+      libraryOpen: $('library-toggle').getAttribute('aria-expanded') === 'true',
+    }),
+    goTo: async target => { const current = reader!; await current.goTo(target); return current.getPosition().label; },
+    readText: async limit => reader?.readText?.(limit),
+    search: async (query, options) => reader?.search?.(query, options),
+    showMatch: async hit => { const current = reader!; await current.revealSearchMatch?.(hit); return current.getPosition().label; },
+    outline: () => reader?.outline() ?? [],
+    library: async () => (await getLibrary()).documents,
+    open: doc => load(() => openLibraryDocument(doc.path), doc.name),
+    setAppearance: change => {
+      const kept = appearance();
+      saveAppearance({
+        ...kept,
+        mode: (['system', 'light', 'dark'] as const satisfies readonly AppearanceMode[]).find(mode => mode === change.mode) ?? kept.mode,
+        palette: palettes.find(palette => palette === change.theme) ?? kept.palette,
+        page: pageTones.find(tone => tone === change.page) ?? kept.page,
+      });
+      return appearanceSummary();
+    },
+    runCommand: async id => {
+      const entry = COMMANDS.find(candidate => candidate.id === id)!;
+      const reason = unavailableReason(entry, { hasDocument: Boolean(reader), desktop });
+      if (reason) throw new Error(reason);
+      await command(id);
+      return id === 'pin' ? (windowState.pinned ? 'Pinned on top' : 'Unpinned') : id === 'lock' ? (windowState.locked ? 'Size locked' : 'Size unlocked') : entry.label;
+    },
+  },
+});
+
 /** Runs a command by catalog id. Every entry point (palette, menu, keyboard) goes through here. */
 async function command(id: string) {
   // The catalog's declared requirements are enforced here rather than by each caller, so the
@@ -217,6 +263,7 @@ async function command(id: string) {
   if (id === 'open') openFile();
   else if (id === 'library') library.toggle();
   else if (id === 'find') findBar.open();
+  else if (id === 'assistant') assistant.openSettings();
   else await action(id);
 }
 
@@ -313,6 +360,7 @@ document.addEventListener('keydown', event => {
   if (document.querySelector('dialog[open]')) return;
   const target = event.composedPath()[0];
   // Escape closes the find bar from anywhere except its own field, which handles it itself.
+  if (event.key === 'Escape' && assistant.isOpen()) { event.preventDefault(); assistant.close(); return; }
   if (event.key === 'Escape' && findBar.isOpen() && target !== findBar.element.querySelector('#find-query')) {
     event.preventDefault(); findBar.close(); activeHost?.focus(); return;
   }
@@ -344,7 +392,18 @@ async function initialize() {
     await listen<WindowState>('window-state', event => updateWindow(event.payload));
     await listen<string | null>('reader-warning', event => { if (event.payload) notify(event.payload); });
     const { getCurrentWindow } = await import('@tauri-apps/api/window');
-    let closing = false; await getCurrentWindow().onCloseRequested(async event => { if (closing) return; event.preventDefault(); await flush(); closing = true; await getCurrentWindow().close(); });
+    const appWindow = getCurrentWindow();
+    let closing = false; await appWindow.onCloseRequested(async event => { if (closing) return; event.preventDefault(); await flush(); closing = true; await appWindow.close(); });
+    if (platform === 'windows') {
+      const maximize = $('caption-maximize');
+      const syncMaximized = async () => { const maximized = await appWindow.isMaximized(); document.documentElement.classList.toggle('window-maximized', maximized); maximize.setAttribute('aria-label', maximized ? 'Restore' : 'Maximize'); maximize.title = maximized ? 'Restore down' : 'Maximize'; };
+      $('caption-minimize').onclick = () => void appWindow.minimize().catch(fail);
+      maximize.onclick = () => void appWindow.toggleMaximize().catch(fail);
+      // close() raises CloseRequested, so the reading position is flushed exactly as with Alt+F4.
+      $('caption-close').onclick = () => void appWindow.close().catch(fail);
+      await appWindow.onResized(() => void syncMaximized());
+      await syncMaximized();
+    }
     const pending = await native<string | null>('pending_open'); if (pending) openFile(pending);
   }
 }

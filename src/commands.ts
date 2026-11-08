@@ -58,6 +58,7 @@ export const COMMANDS: readonly Command[] = [
   { id: 'larger', label: 'Larger text / zoom in', group: 'View', keywords: ['increase', 'grow', 'big'], shortcut: 'Ctrl +', requiresDocument: true },
   { id: 'appearance', label: 'Appearance and theme…', group: 'View', keywords: ['dark', 'light', 'theme', 'colour', 'color', 'palette'] },
   { id: 'type', label: 'Typography & wrapping…', group: 'Reading', keywords: ['font', 'size', 'line', 'margin', 'spacing'], requiresDocument: true },
+  { id: 'assistant', label: 'AI assistant…', group: 'Reading', keywords: ['ai', 'ask', 'claude', 'chat', 'question', 'api key', 'anthropic'], requiresDesktop: true },
   { id: 'pin', label: 'Toggle pin (always on top)', group: 'Window', keywords: ['float', 'above', 'sticky'], shortcut: 'Ctrl Shift T', requiresDesktop: true },
   { id: 'lock', label: 'Toggle size lock', group: 'Window', keywords: ['resize', 'resizable', 'fixed size'], shortcut: 'Ctrl Shift L', requiresDesktop: true },
   { id: 'compact', label: 'Compact window', group: 'Window', keywords: ['small', 'shrink'], requiresDesktop: true },

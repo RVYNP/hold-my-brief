@@ -4,7 +4,7 @@ import 'foliate-js/view.js';
 import type { Locator, OutlineItem, Position, ReaderAdapter, ReaderContext, ReaderOptions, ReaderSource } from '../types';
 import { isDark, liftInk, onAppearanceChange, parseRgb, readingColors, rgbToHex, type Rgb } from '../theme';
 import { MIN_SPREAD_WIDTH, pagesLabel, pairedSides } from '../spread';
-import { findMatches, type DocumentSearch, type SearchHit, type SearchOptions, type UnitText } from '../search';
+import { excerpt, findMatches, type DocumentSearch, type SearchHit, type SearchOptions, type UnitText } from '../search';
 
 const RESOURCE_LIMIT = 64 * 1024 * 1024;
 const ARCHIVE_LIMIT = 512 * 1024 * 1024;
@@ -406,7 +406,7 @@ export class EpubAdapter implements ReaderAdapter {
       const id = book.sections[index]?.id ?? '';
       const unit: UnitText = { number: index + 1, text, label: /\.[a-z]+$/i.test(id) ? `Section ${index + 1} \u00b7 ${id.replace(/\.[^.]+$/, '')}` : `Section ${index + 1}` };
       for (const match of findMatches(unit.text, query, options)) {
-        hits.push({ text: unit.text.slice(match.start, match.end), excerpt: '', start: match.start, end: match.end, unit: unit.number, unitLabel: unit.label });
+        hits.push({ text: unit.text.slice(match.start, match.end), excerpt: excerpt(unit.text, match.start, match.end), start: match.start, end: match.end, unit: unit.number, unitLabel: unit.label });
         if (hits.length >= 2000) return { hits, truncated: true };
       }
     }
@@ -428,6 +428,17 @@ export class EpubAdapter implements ReaderAdapter {
     finally { try { section.unload(); } catch { /* already unloaded */ } }
     this.sectionText.set(index, text);
     return text;
+  }
+
+  async readText(limit: number): Promise<{ label: string; text: string }> {
+    const { label, locator } = this.position;
+    const index = typeof locator.index === 'number' ? locator.index : 0;
+    const text = (await this.sectionBodyText(index)).replace(/\n{3,}/g, '\n\n');
+    if (text.length <= limit) return { label, text };
+    // A long chapter is read from a little before the reader's place within it.
+    const within = typeof locator.within === 'number' ? locator.within : 0;
+    const start = Math.max(0, Math.min(text.length - limit, Math.round(within * text.length) - Math.round(limit / 4)));
+    return { label, text: text.slice(start, start + limit) };
   }
 
   /** Navigates so the hit is on screen, then marks it in the rendered section. */

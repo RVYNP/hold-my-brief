@@ -14,7 +14,9 @@ fn err(error: impl std::fmt::Display) -> String {
 
 /// How much larger a window's outer frame is than its content area, in logical
 /// pixels. Size setters and size constraints operate on content, while the
-/// presets and everything persisted are outer dimensions.
+/// presets and everything persisted are outer dimensions. Measured rather than
+/// assumed: the Windows reader is undecorated (see `restore`), but a system
+/// that still adds a border is handled the same way.
 #[cfg(not(target_os = "macos"))]
 fn frame(window: &WebviewWindow) -> Result<(f64, f64), String> {
     let scale = window.scale_factor().map_err(err)?;
@@ -165,6 +167,12 @@ fn constrain(
 }
 
 pub fn restore(window: &WebviewWindow) -> Result<(), String> {
+    // Windows: the reader draws its own minimize, maximize and close buttons at the right end of
+    // its toolbar (src/main.ts), so the native caption goes. The window keeps its resize border and
+    // shadow. This runs before the window is first shown, and before any size is measured, so the
+    // frame below already reflects the undecorated window.
+    #[cfg(target_os = "windows")]
+    window.set_decorations(false).map_err(err)?;
     let shared = window.state::<Shared>();
     let mut saved = shared
         .lock()
@@ -380,7 +388,7 @@ mod tests {
         assert_eq!(content_size(420.0, 620.0, mac), (420.0, 620.0));
         assert_eq!(content_size(760.0, 900.0, mac), (760.0, 900.0));
 
-        // Windows: decorations surround the client area on every side.
+        // A decorated window (borders on every side and a caption) loses them from the content.
         let win = (16.0, 39.0);
         assert_eq!(content_size(420.0, 620.0, win), (404.0, 581.0));
         let (w, h) = content_size(420.0, 620.0, win);
@@ -394,7 +402,7 @@ mod tests {
         let size = |w, h| LogicalSize::new(w, h);
         // macOS reports the overlay window's content and frame as the same size.
         assert_eq!(outer_logical(size(420.0, 620.0), Some(size(420.0, 620.0)), (0.0, 0.0)), (420.0, 620.0));
-        // Windows reports decorated sizes already, with borders on every side.
+        // A decorated window reports its outer size already, borders included.
         assert_eq!(outer_logical(size(420.0, 620.0), Some(size(404.0, 581.0)), (16.0, 39.0)), (420.0, 620.0));
         // A session that reports both as the content size despite a known border gets it added back.
         assert_eq!(outer_logical(size(404.0, 581.0), Some(size(404.0, 581.0)), (16.0, 39.0)), (420.0, 620.0));

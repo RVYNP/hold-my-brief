@@ -17,9 +17,11 @@ this build, so run the PDF through an OCR tool first if you need its text. This 
 
 ## The window
 
-The toolbar is one row. On macOS the window's close, minimize and zoom buttons sit at its left end,
-and dragging any empty part of the toolbar moves the window. The document's name in the middle opens
-the command palette (Ctrl+K), where you can open a file, jump, find or change any setting.
+The toolbar is one row, and the window has no separate title bar. On macOS the close, minimize and
+zoom buttons sit at the toolbar's left end; on Windows, minimize, maximize and close sit at its right
+end. Drag any empty part of the toolbar to move the window, and double-click it to maximize. The
+document's name in the middle opens the command
+palette (Ctrl+K), where you can open a file, jump, find or change any setting.
 
 The pin button keeps the reader above ordinary windows. The lock button captures its outer
 dimensions while allowing movement. Each is highlighted while on. Ctrl+Shift+T toggles pin;
@@ -125,12 +127,43 @@ with the reason they cannot run yet. With a document open the palette is the qui
 Contents, appearance and window presets; from the empty screen it still reaches **Open file** and the
 library.
 
+### AI assistant (optional)
+
+The desktop app can hand questions to Claude, using your own Anthropic API key. It is off until you
+turn it on, and without a key the app never makes a network request.
+
+**Turn it on:** choose **AI assistant…** in the ··· menu (or type `ai` in the palette), paste an API
+key from the [Anthropic Console](https://console.anthropic.com/settings/keys) and choose **Turn on**.
+The key is checked with Anthropic first, then kept in macOS Keychain or Windows Credential Manager.
+The app's own files never hold it, and the window never sees it again. Pick a model there too;
+the newest Sonnet is chosen by default. **Turn off and forget key** deletes the key from the
+keychain.
+
+**Ask:** type into the palette as usual. With the assistant on, every query also offers
+**Ask Claude**. When the text reads as a question ("what…", "why…", "summarize…", or anything ending
+in "?"), that row comes first; otherwise it comes last, after go to, find and the commands. The
+answer drops from the toolbar over the top of the page. It lists each thing the assistant did
+("Searched for "Darcy": 12 matches", "Went to Page 7") above a short answer, with a field for a
+follow-up. Escape or × closes it and ends the conversation.
+
+**What it can do:** read the text where you are (the page or spread on screen, the current EPUB
+chapter, or the Markdown/text lines from the top of the view), search the whole document and show a
+match, go to a page, chapter, percentage or line, read the contents, search your library and open a
+document from it, change mode, theme or page tone, and run reader commands: library, back,
+first/last location, fit, rotate, spread, zoom, pin, size lock and the window presets. It cannot open
+files outside your library, delete anything, change your library or reach the file system.
+
+**What is sent:** only when you ask, your question and the results of what it looked at (text from
+the page you're on, search excerpts, the contents, and names and tags of library documents) go to
+Anthropic over HTTPS from the app's native side. Anthropic's terms for your API account apply to
+that data. Use is billed to your API key.
+
 ### Keyboard shortcuts
 
 | Action | Shortcut |
 | --- | --- |
 | Find in document | Ctrl+F |
-| Command palette: go to, find or run a command | Ctrl+K |
+| Command palette: go to, find, run a command or ask Claude | Ctrl+K |
 | Next / previous page | PgDn / PgUp (Right / Left in page mode) |
 | Next / previous screen | Space / Shift+Space |
 | First / last location | Home / End |
