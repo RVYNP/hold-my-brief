@@ -128,7 +128,10 @@ export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextContr
     textSection.hidden = !settings; textNote.hidden = !!settings;
     if (!settings) return;
     sizeValue.value = `${settings.fontSize} px`;
-    for (const button of textSection.querySelectorAll<HTMLButtonElement>('[data-step]')) button.disabled = Number(button.dataset.step) < 0 ? settings.fontSize <= 12 : settings.fontSize >= 40;
+    const steppers = Array.from(textSection.querySelectorAll<HTMLButtonElement>('[data-step]'));
+    for (const button of steppers) button.disabled = Number(button.dataset.step) < 0 ? settings.fontSize <= 12 : settings.fontSize >= 40;
+    // Reaching 12 or 40 px disables the button that was pressed; keep keyboard focus on the other one.
+    if (steppers.some(button => button.disabled && button === document.activeElement)) steppers.find(button => !button.disabled)?.focus();
     // Spacing and margins snap to the nearest preset, so a value saved by an older build still shows a choice.
     const nearest = (options: [number, string][], value: number) => options.reduce((best, option) => Math.abs(option[0] - value) < Math.abs(best[0] - value) ? option : best)[0];
     check(spacingGroup, item => Number(item.dataset.spacing) === nearest(spacings, settings.lineHeight));
@@ -187,7 +190,7 @@ export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextContr
     /** Opens the sheet on its Colour tab, or on its Text tab (the palette's "Text size & spacing"). */
     open(section: 'colour' | 'text' = 'colour') {
       kept = appearance(); showTab(section); render(); dialog.showModal();
-      const target = section === 'text' ? textSection.querySelector<HTMLElement>('[data-step]:not(:disabled)') ?? dialog.querySelector<HTMLElement>('#appearance-tab-text') : modeGroup.querySelector<HTMLElement>('[aria-checked=true]');
+      const target = section === 'text' ? (!textSection.hidden && textSection.querySelector<HTMLElement>('[data-step]:not(:disabled)')) || dialog.querySelector<HTMLElement>('#appearance-tab-text') : modeGroup.querySelector<HTMLElement>('[aria-checked=true]');
       target?.focus();
     },
   };

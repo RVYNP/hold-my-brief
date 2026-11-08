@@ -1,10 +1,12 @@
 import { describe, expect, it, vi, type Mock } from 'vitest';
-import { MAX_TOOL_ROUNDS, chooseModel, converse, looksLikeQuestion, readerTools, type ContentBlock, type Message, type ModelResponse, type ReaderEnvironment, type Send, type Tool } from '../src/assistant';
+import { ASSISTANT_COMMANDS, Cancelled, MAX_TOOL_ROUNDS, chooseModel, converse, looksLikeQuestion, readerTools, type ContentBlock, type Message, type ModelResponse, type ReaderEnvironment, type Send, type Tool } from '../src/assistant';
+import { COMMANDS } from '../src/commands';
 import type { LibraryDocument } from '../src/catalog-types';
 
 const reply = (...content: ContentBlock[]): ModelResponse => ({ content, stop_reason: content.some(block => block.type === 'tool_use') ? 'tool_use' : 'end_turn' });
 const call = (id: string, name: string, input: Record<string, unknown> = {}): ContentBlock => ({ type: 'tool_use', id, name, input });
-const scripted = (...responses: ModelResponse[]) => vi.fn<Send>(async () => responses.shift() ?? reply({ type: 'text', text: 'out of script' }));
+// The history array is extended in place, so each request's messages are snapshotted as sent.
+const scripted = (...responses: ModelResponse[]) => { const sent: Message[][] = []; const send = vi.fn<Send>(async body => { sent.push(structuredClone(body.messages as Message[])); return responses.shift() ?? reply({ type: 'text', text: 'out of script' }); }); return Object.assign(send, { sent }); };
 const tool = (name: string, run: Tool['run']): Tool => ({ name, description: name, input_schema: { type: 'object', properties: {} }, run });
 const options = (send: Mock<Send>, tools: Tool[]) => ({ send, model: 'claude-test', system: 'system', tools });
 
@@ -19,11 +21,14 @@ describe('assistant conversation', () => {
     // The tool result answers the call it belongs to, in the next user turn.
     expect(history.map(message => message.role)).toEqual(['user', 'assistant', 'user', 'assistant']);
     expect(history[2].content).toEqual([{ type: 'tool_result', tool_use_id: 't1', content: '{"position":"Page 7"}' }]);
-    // Every request carries the model, the tool definitions without their implementations, and the history so far.
+    // Every request carries the model, the tool definitions without their implementations, and the
+    // conversation as it stood: the question first, then the call and its result.
     const body = send.mock.calls[1][0];
     expect(body.model).toBe('claude-test');
     expect(body.tools).toEqual([{ name: 'go_to', description: 'go_to', input_schema: { type: 'object', properties: {} } }]);
-    expect(body.messages).toBe(history);
+    expect(send.sent[0]).toEqual([{ role: 'user', content: 'take me to page 7' }]);
+    expect(send.sent[1].map(message => message.role)).toEqual(['user', 'assistant', 'user']);
+    expect(send.sent[1][2].content).toEqual([{ type: 'tool_result', tool_use_id: 't1', content: '{"position":"Page 7"}' }]);
   });
 
   it('reports a failing or unknown tool to the model as an error and keeps going', async () => {
@@ -56,6 +61,24 @@ describe('assistant conversation', () => {
       expect(results).toEqual(calls);
     }
   });
+
+  it('stops before the next request or tool once cancelled, so a closed answer cannot act', async () => {
+    let closed = false;
+    const goTo = vi.fn<Tool['run']>(async () => ({ result: {} }));
+    const send = scripted(reply(call('a', 'reader_state'), call('b', 'go_to', { target: '9' })));
+    const state = tool('reader_state', async () => { closed = true; return { result: {} }; });
+    await expect(converse([], 'go', { ...options(send, [state, tool('go_to', goTo)]), cancelled: () => closed })).rejects.toBeInstanceOf(Cancelled);
+    expect(goTo).not.toHaveBeenCalled();
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps only the text of a reply cut off mid tool call, so a follow-up stays valid', async () => {
+    const history: Message[] = [];
+    const send = scripted({ content: [{ type: 'text', text: 'Partial' }, call('x', 'go_to')], stop_reason: 'max_tokens' });
+    const turn = await converse(history, 'q', options(send, []));
+    expect(turn.answer).toBe('Partial');
+    expect(history.at(-1)).toEqual({ role: 'assistant', content: [{ type: 'text', text: 'Partial' }] });
+  });
 });
 
 describe('reader tools', () => {
@@ -70,14 +93,24 @@ describe('reader tools', () => {
   });
   const byName = (tools: Tool[], name: string) => tools.find(candidate => candidate.name === name)!;
 
-  it('opens only documents the assistant found in the library', async () => {
+  it('opens only documents it found, by id, and never sends full paths or private notes', async () => {
     const open = vi.fn(async () => true);
-    const tools = readerTools(environment({ open }));
-    await expect(byName(tools, 'open_document').run({ path: '/etc/passwd' })).rejects.toThrow('search_library');
+    const library = async () => [doc('Rust Book.pdf', { tags: ['rust'], path: '/Users/me/Books/lang/Rust Book.pdf', notes: 'secret plan' }), doc('Tauri Guide.pdf')];
+    const tools = readerTools(environment({ open, library }));
+    await expect(byName(tools, 'open_document').run({ id: '/etc/passwd' })).rejects.toThrow('search_library');
+    // Notes are not searched, so a probe for their contents finds nothing.
+    expect((await byName(tools, 'search_library').run({ query: 'secret' })).result).toEqual([]);
     const found = await byName(tools, 'search_library').run({ query: 'RUST' });
-    expect(found.result).toEqual([expect.objectContaining({ path: '/books/Rust Book.pdf' })]);
-    await expect(byName(tools, 'open_document').run({ path: '/books/Rust Book.pdf' })).resolves.toMatchObject({ step: 'Opened Rust Book.pdf' });
-    expect(open).toHaveBeenCalledWith(expect.objectContaining({ path: '/books/Rust Book.pdf' }));
+    expect(found.result).toEqual([{ id: 'doc-1', name: 'Rust Book.pdf', folder: 'lang', format: 'pdf', favorite: false, tags: ['rust'], available: true }]);
+    expect(JSON.stringify(found.result)).not.toContain('/Users/me');
+    // The folder name is searchable ("the lang books").
+    expect((await byName(tools, 'search_library').run({ query: 'lang' })).result).toHaveLength(1);
+    await expect(byName(tools, 'open_document').run({ id: 'doc-1' })).resolves.toMatchObject({ step: 'Opened Rust Book.pdf' });
+    expect(open).toHaveBeenCalledWith(expect.objectContaining({ path: '/Users/me/Books/lang/Rust Book.pdf' }));
+  });
+
+  it('offers only commands that exist in the catalog', () => {
+    for (const id of Object.keys(ASSISTANT_COMMANDS)) expect(COMMANDS.some(command => command.id === id), id).toBe(true);
   });
 
   it('shows a match only from the latest search, by index', async () => {

@@ -59,6 +59,9 @@ export function createAssistantPanel(layout: HTMLElement, options: { env: Reader
   let history: Message[] = [];
   let conversation = 0;
   let busy = false;
+  // Search results and library listings are remembered for the whole conversation, so a follow-up
+  // can say "open the second one" or "show that match".
+  let tools = readerTools(env);
 
   const sheet = document.createElement('section');
   sheet.id = 'answer';
@@ -83,7 +86,7 @@ export function createAssistantPanel(layout: HTMLElement, options: { env: Reader
   settings.innerHTML = `
     <div class="dialog-head"><h2 id="assistant-title">AI assistant</h2><button type="button" data-assistant-close aria-label="Close">×</button></div>
     <p>Ask about what you're reading, or ask it to find, open and change things for you. It uses Claude with your own Anthropic API key.</p>
-    <p class="assistant-privacy">Off until you add a key. When it's on, your questions and the text it reads to answer them (the page you're on, search results, the contents and your library's titles) are sent to Anthropic. Nothing is sent until you ask. The key is kept in ${store}, never in the app's files.</p>
+    <p class="assistant-privacy">Off until you add a key. When it's on, your questions and the text it reads to answer them (the page you're on, search results, the contents, and the titles, tags and folder names of library documents) are sent to Anthropic. Never full file paths or your notes. Nothing is sent until you ask. The key is kept in ${store}, never in the app's files.</p>
     <form class="assistant-off"><label for="assistant-key">Anthropic API key</label><input id="assistant-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…"><p class="assistant-error" role="alert"></p><div class="dialog-actions"><button type="button" class="link-button" data-get-key>Get a key</button><button type="submit" class="primary">Turn on</button></div></form>
     <div class="assistant-on" hidden><label for="assistant-model">Model</label><select id="assistant-model"></select><p class="assistant-error" role="alert"></p><div class="dialog-actions"><button type="button" class="link-button danger-text" data-forget>Turn off and forget key</button><button type="button" class="primary" data-assistant-close>Done</button></div></div>`;
   document.body.append(settings);
@@ -123,7 +126,8 @@ export function createAssistantPanel(layout: HTMLElement, options: { env: Reader
 
   function close() {
     if (sheet.hidden) return;
-    ++conversation; history = []; busy = false;
+    // Bumping the conversation makes the running loop stop at its next request or tool call.
+    ++conversation; history = []; tools = readerTools(env); busy = false;
     sheet.hidden = true;
     returnFocus();
   }
@@ -144,7 +148,7 @@ export function createAssistantPanel(layout: HTMLElement, options: { env: Reader
       const model = localStorage.getItem(modelKey) ?? await loadModels();
       if (!model) throw new Error('No Claude model is available to this API key.');
       return converse(history, text, {
-        send, model, system: SYSTEM_PROMPT, tools: readerTools(env),
+        send, model, system: SYSTEM_PROMPT, tools, cancelled: () => token !== conversation,
         onStep: step => { if (token !== conversation) return; const item = document.createElement('li'); item.textContent = step; stepsList.append(item); },
       });
     })().then(turn => {
@@ -153,12 +157,14 @@ export function createAssistantPanel(layout: HTMLElement, options: { env: Reader
     }).catch(error => {
       if (token !== conversation) return;
       // A failed request leaves no usable turn behind, so the next question starts clean.
-      history = [];
+      history = []; tools = readerTools(env);
       answer.classList.add('answer-error'); answer.textContent = String(error instanceof Error ? error.message : error);
     }).finally(() => {
       if (token !== conversation) return;
       busy = false; answer.classList.remove('answer-pending');
-      followInput.disabled = false; followInput.focus();
+      followInput.disabled = false;
+      // Only take focus if the reader is still in the sheet; someone back on the page keeps their keys.
+      if (sheet.contains(document.activeElement)) followInput.focus();
     });
   }
 

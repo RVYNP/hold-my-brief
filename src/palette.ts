@@ -89,7 +89,8 @@ export function createPalette(context: PaletteContext): Palette {
       const named = commands.some(command => (scoreCommand(command, query) ?? 0) >= 700);
       const assistant = context.assistant;
       const ask: Row[] = assistant?.ready() && text.length >= 2 ? [{ label: `Ask Claude “${text}”`, run: () => assistant.ask(text) }] : [];
-      const question = !intent && looksLikeQuestion(text);
+      // A command named by the query keeps the lead even when it reads like a question ("show shortcuts").
+      const question = !intent && !named && looksLikeQuestion(text);
       sections = [{ rows: [...(question ? ask : []), ...request, ...(named ? [] : fallback), ...commands.map(toRow), ...(named ? fallback : []), ...(question ? [] : ask)] }];
     }
     rows = sections.flatMap(section => section.rows);

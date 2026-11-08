@@ -33,28 +33,39 @@ const MAX_TOKENS = 1024;
 
 export type Turn = { answer: string; steps: string[] };
 
+/** Thrown when the conversation was closed while it was still working. */
+export class Cancelled extends Error { constructor() { super('Cancelled'); } }
+
 /**
  * Sends `question` after `history`, runs the tools the model asks for and returns its final
  * answer with a line per action taken. `history` is extended in place, so a follow-up question
- * continues the same conversation.
+ * continues the same conversation. `cancelled` is checked before every request and every tool,
+ * so closing the answer stops the assistant from acting on the reader.
  */
-export async function converse(history: Message[], question: string, options: { send: Send; model: string; system: string; tools: readonly Tool[]; onStep?: (step: string) => void }): Promise<Turn> {
-  const { send, model, system, tools, onStep } = options;
+export async function converse(history: Message[], question: string, options: { send: Send; model: string; system: string; tools: readonly Tool[]; onStep?: (step: string) => void; cancelled?: () => boolean }): Promise<Turn> {
+  const { send, model, system, tools, onStep, cancelled = () => false } = options;
   const byName = new Map(tools.map(tool => [tool.name, tool]));
   const definitions = tools.map(({ name, description, input_schema }) => ({ name, description, input_schema }));
   const steps: string[] = [];
   history.push({ role: 'user', content: question });
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+    if (cancelled()) throw new Cancelled();
     const response = await send({ model, max_tokens: MAX_TOKENS, system, tools: definitions, messages: history });
-    history.push({ role: 'assistant', content: response.content });
+    if (cancelled()) throw new Cancelled();
     const calls = response.content.filter((block): block is Extract<ContentBlock, { type: 'tool_use' }> => block.type === 'tool_use');
+    const texts = response.content.filter((block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text');
     if (response.stop_reason !== 'tool_use' || !calls.length) {
-      const answer = response.content.filter((block): block is Extract<ContentBlock, { type: 'text' }> => block.type === 'text').map(block => block.text).join('\n\n').trim();
-      return { answer, steps };
+      // A reply cut off by max_tokens can end in a tool call that will never be answered; keep only
+      // its text so the next follow-up is still a valid conversation.
+      if (calls.length) { if (texts.length) history.push({ role: 'assistant', content: texts }); }
+      else history.push({ role: 'assistant', content: response.content });
+      return { answer: texts.map(block => block.text).join('\n\n').trim(), steps };
     }
+    history.push({ role: 'assistant', content: response.content });
     if (round === MAX_TOOL_ROUNDS) break;
     const results: ContentBlock[] = [];
     for (const call of calls) {
+      if (cancelled()) throw new Cancelled();
       const tool = byName.get(call.name);
       try {
         if (!tool) throw new Error(`There is no tool called ${call.name}.`);
@@ -168,24 +179,32 @@ export function readerTools(env: ReaderEnvironment): Tool[] {
       },
     },
     {
-      name: 'search_library', description: `Finds documents in the user's library whose name, tags, notes or folder contain every word of the query (an empty query lists recent documents). Returns up to ${LIBRARY_LIMIT}.`,
+      name: 'search_library', description: `Finds documents in the user's library whose title, tags or folder name contain every word of the query (an empty query lists recent documents). Returns up to ${LIBRARY_LIMIT}, each with an id for open_document.`,
       input_schema: { type: 'object', properties: { query: { type: 'string' } } },
       run: async input => {
         const words = (typeof input.query === 'string' ? input.query : '').toLocaleLowerCase().split(/\s+/).filter(Boolean);
+        // Only titles, tags and the containing folder's name are searched or sent: never full paths
+        // (they carry the user's name and disk layout) and never private notes.
+        const folder = (path: string) => path.split(/[\\/]/).slice(-2, -1)[0] ?? '';
         const documents = (await env.library()).filter(doc => {
-          const haystack = [doc.name, doc.path, doc.notes, ...doc.tags].join(' ').toLocaleLowerCase();
+          const haystack = [doc.name, folder(doc.path), ...doc.tags].join(' ').toLocaleLowerCase();
           return words.every(word => haystack.includes(word));
         }).slice(0, LIBRARY_LIMIT);
-        for (const doc of documents) listed.set(doc.path, doc);
-        return { result: documents.map(doc => ({ path: doc.path, name: doc.name, format: doc.format, favorite: doc.favorite, tags: doc.tags, available: doc.availability !== 'missing' })) };
+        return {
+          result: documents.map(doc => {
+            const id = `doc-${listed.size + 1}`;
+            listed.set(id, doc);
+            return { id, name: doc.name, folder: folder(doc.path), format: doc.format, favorite: doc.favorite, tags: doc.tags, available: doc.availability !== 'missing' };
+          }),
+        };
       },
     },
     {
-      name: 'open_document', description: 'Opens a document from the library in the reader. The path must come from search_library.',
-      input_schema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] },
+      name: 'open_document', description: 'Opens a document from the library in the reader, by an id that search_library returned.',
+      input_schema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
       run: async input => {
-        const doc = listed.get(text(input.path, 'path'));
-        if (!doc) throw new Error('Only paths returned by search_library can be opened.');
+        const doc = listed.get(text(input.id, 'id'));
+        if (!doc) throw new Error('Only ids returned by search_library can be opened.');
         if (!await env.open(doc)) throw new Error(`${doc.name} could not be opened.`);
         matches = undefined;
         return { result: { opened: doc.name }, step: `Opened ${doc.name}` };

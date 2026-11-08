@@ -119,7 +119,10 @@ fn api_error_message(body: &str) -> Option<String> {
 fn status_message(status: u16, body: &str, endpoint: Endpoint) -> String {
     match status {
         401 => REJECTED_KEY.to_string(),
-        403 => "This API key is not allowed to use that model.".to_string(),
+        403 if endpoint == Endpoint::Messages => {
+            "This API key is not allowed to use that model.".to_string()
+        }
+        403 => "This API key is not allowed to use the Anthropic API.".to_string(),
         404 if endpoint == Endpoint::Messages => {
             "That model is not available to this API key.".to_string()
         }
@@ -130,13 +133,30 @@ fn status_message(status: u16, body: &str, endpoint: Endpoint) -> String {
     }
 }
 
-/// Only a non-streaming Messages request object may be forwarded.
-fn sanitize_request(mut body: Value) -> Result<Value, String> {
+/// Longest answer one request may ask for; the reader's own requests use 1,024.
+const MAX_TOKENS_CAP: u64 = 4096;
+
+/// Rebuilds the request from an allow-list, so this command (the webview's only route to the
+/// network) cannot be used as a general proxy for the user's key: no streaming, no server-side
+/// tools such as web search (they carry a `type`), and a bounded `max_tokens`.
+fn sanitize_request(body: Value) -> Result<Value, String> {
     let object = body
-        .as_object_mut()
+        .as_object()
         .ok_or_else(|| "The assistant request must be a JSON object.".to_string())?;
-    object.remove("stream");
-    Ok(body)
+    let mut clean = serde_json::Map::new();
+    for key in ["model", "system", "messages", "tools", "tool_choice"] {
+        if let Some(value) = object.get(key) {
+            clean.insert(key.to_string(), value.clone());
+        }
+    }
+    if let Some(tools) = clean.get("tools").and_then(Value::as_array) {
+        if tools.iter().any(|tool| tool.get("type").is_some() || tool.get("name").is_none()) {
+            return Err("The assistant may only use the reader's own tools.".to_string());
+        }
+    }
+    let requested = object.get("max_tokens").and_then(Value::as_u64).unwrap_or(1024);
+    clean.insert("max_tokens".to_string(), Value::from(requested.clamp(1, MAX_TOKENS_CAP)));
+    Ok(Value::Object(clean))
 }
 
 fn parse_models(body: &Value) -> Vec<ModelInfo> {
@@ -272,6 +292,7 @@ mod tests {
         let m = Endpoint::Messages;
         assert_eq!(status_message(401, "", m), "Anthropic rejected the API key.");
         assert_eq!(status_message(403, "", m), "This API key is not allowed to use that model.");
+        assert_eq!(status_message(403, "", Endpoint::Models), "This API key is not allowed to use the Anthropic API.");
         assert_eq!(status_message(404, "", m), "That model is not available to this API key.");
         assert_eq!(status_message(429, "", m), "Rate limited by Anthropic. Try again in a moment.");
         for code in [500, 529] {
@@ -305,18 +326,32 @@ mod tests {
     }
 
     #[test]
-    fn requests_must_be_objects_and_never_stream() {
+    fn requests_are_rebuilt_from_an_allow_list() {
         assert!(sanitize_request(json!("hi")).is_err());
         assert!(sanitize_request(json!([1])).is_err());
         assert!(sanitize_request(Value::Null).is_err());
         let cleaned = sanitize_request(json!({
-            "model": "m", "max_tokens": 8, "stream": true,
-            "messages": [{"role": "user", "content": "hi"}]
+            "model": "m", "max_tokens": 8, "stream": true, "metadata": {"user_id": "x"},
+            "messages": [{"role": "user", "content": "hi"}],
+            "tools": [{"name": "go_to", "description": "d", "input_schema": {"type": "object"}}]
         }))
         .unwrap();
         assert!(cleaned.get("stream").is_none());
+        assert!(cleaned.get("metadata").is_none());
         assert_eq!(cleaned["model"], "m");
+        assert_eq!(cleaned["max_tokens"], 8);
         assert_eq!(cleaned["messages"][0]["content"], "hi");
+        assert_eq!(cleaned["tools"][0]["name"], "go_to");
+    }
+
+    #[test]
+    fn server_tools_are_refused_and_max_tokens_is_capped() {
+        let web = json!({"model": "m", "messages": [], "tools": [{"type": "web_search_20250305", "name": "web_search"}]});
+        assert!(sanitize_request(web).is_err());
+        let greedy = sanitize_request(json!({"model": "m", "messages": [], "max_tokens": 1_000_000})).unwrap();
+        assert_eq!(greedy["max_tokens"], MAX_TOKENS_CAP);
+        let missing = sanitize_request(json!({"model": "m", "messages": []})).unwrap();
+        assert_eq!(missing["max_tokens"], 1024);
     }
 
     #[test]

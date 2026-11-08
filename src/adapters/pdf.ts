@@ -325,9 +325,8 @@ export class PdfAdapter implements ReaderAdapter {
   }
 
   async readText(limit: number): Promise<{ label: string; text: string }> {
-    const position = this.getPosition(), total = this.doc?.numPages ?? 0;
-    const first = Math.min(total, Math.max(1, Math.round(position.scrub.current)));
-    const pages = position.spread === 'active' && first < total ? [first, first + 1] : [first];
+    // The committed pages are what is on screen, including a cover shown alone in a spread.
+    const position = this.getPosition(), pages = [...this.pages];
     const texts = await Promise.all(pages.map(page => this.pageText(page)));
     return { label: position.label, text: texts.map((text, index) => `[${this.labels?.[pages[index] - 1] || `Page ${pages[index]}`}]\n${text}`).join('\n\n').slice(0, limit) };
   }

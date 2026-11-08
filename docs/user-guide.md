@@ -174,7 +174,8 @@ first/last location, fit, rotate, spread, zoom, pin, size lock and the window pr
 files outside your library, delete anything, change your library or reach the file system.
 
 **What is sent:** only when you ask, your question and the results of what it looked at (text from
-the page you're on, search excerpts, the contents, and names and tags of library documents) go to
+the page you're on, search excerpts, the contents, and the titles, tags and folder names of library
+documents; never full file paths or your notes) go to
 Anthropic over HTTPS from the app's native side. Anthropic's terms for your API account apply to
 that data. Use is billed to your API key.
 
