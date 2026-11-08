@@ -85,8 +85,12 @@ export function createAssistantPanel(layout: HTMLElement, options: { env: Reader
   settings.setAttribute('aria-labelledby', 'assistant-title');
   settings.innerHTML = `
     <div class="dialog-head"><h2 id="assistant-title">AI assistant</h2><button type="button" data-assistant-close aria-label="Close">×</button></div>
-    <p>Ask about what you're reading, or ask it to find, open and change things for you. It uses Claude with your own Anthropic API key.</p>
-    <p class="assistant-privacy">Off until you add a key. When it's on, your questions and the text it reads to answer them (the page you're on, search results, the contents, and the titles, tags and folder names of library documents) are sent to Anthropic. Never full file paths or your notes. Nothing is sent until you ask. The key is kept in ${store}, never in the app's files.</p>
+    <p>Ask about what you're reading, or have it find, open and change things for you. It uses Claude with your own Anthropic API key and is off until you add one.</p>
+    <dl class="assistant-terms">
+      <dt>Sent when you ask</dt><dd>Your question and what it reads to answer it: the page you're on, search results, the contents, and the titles, tags and folders of library documents.</dd>
+      <dt>Never sent</dt><dd>Full file paths and your notes. Nothing at all until you ask.</dd>
+      <dt>Your key</dt><dd>Kept in ${store}, never in the app's files.</dd>
+    </dl>
     <form class="assistant-off"><label for="assistant-key">Anthropic API key</label><input id="assistant-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…"><p class="assistant-error" role="alert"></p><div class="dialog-actions"><button type="button" class="link-button" data-get-key>Get a key</button><button type="submit" class="primary">Turn on</button></div></form>
     <div class="assistant-on" hidden><label for="assistant-model">Model</label><select id="assistant-model"></select><p class="assistant-error" role="alert"></p><div class="dialog-actions"><button type="button" class="link-button danger-text" data-forget>Turn off and forget key</button><button type="button" class="primary" data-assistant-close>Done</button></div></div>`;
   document.body.append(settings);

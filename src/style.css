@@ -514,7 +514,11 @@ dd { margin: 0; color: var(--muted); }
 /* Below the find bar when both are open, the same way the opening strip waits for it. */
 #reader-layout:has(#find-bar:not([hidden])) #answer { top: calc(var(--find-bar-height) + var(--workspace-border)); }
 #assistant-settings p { margin: 0 0 12px; color: var(--muted); font-size: 12px; line-height: 1.55; }
-#assistant-settings .assistant-privacy { font-size: 11px; }
+/* What the assistant sends, as three labelled lines rather than a paragraph: read at the moment of
+   consent, so it stays visible, but scannable. */
+.assistant-terms { grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0 0 4px; font-size: 11px; line-height: 1.5; }
+.assistant-terms dt { color: var(--fg); font-weight: 500; }
+.assistant-terms dd { color: var(--muted); }
 .assistant-error { min-height: 1em; color: var(--error) !important; }
 .link-button { margin-right: auto; padding-left: 0; padding-right: 0; color: var(--accent-ink); }
 .link-button:hover { background: transparent; text-decoration: underline; }
