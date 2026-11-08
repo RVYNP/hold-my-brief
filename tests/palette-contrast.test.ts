@@ -59,9 +59,10 @@ describe('text set in the faint tone', () => {
 
 describe('minimum text size', () => {
   it('sets no text below 11px', () => {
+    // Every px size in a font or font-size declaration, spaced or compact (`font:10px` included).
     const offenders = [css, libraryCss]
       .flatMap(sheet => sheet.split('\n'))
-      .filter(line => /(^|[;{ ])font(-size)?:[^;}]*(^|[^\d.])([0-9]|10)(\.\d+)?px/.test(line));
+      .filter(line => [...line.matchAll(/font(?:-size)?\s*:[^;}]*?(?<![\d.])(\d+(?:\.\d+)?)px/g)].some(match => Number(match[1]) < 11));
     expect(offenders).toEqual([]);
   });
 });

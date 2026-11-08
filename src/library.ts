@@ -254,7 +254,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     if (shortcutFor(event) === 'command-palette') return;
     event.stopPropagation();
   });
-  imageNavigation.addEventListener('keydown', event => event.stopPropagation());
+  imageNavigation.addEventListener('keydown', event => { if (shortcutFor(event) !== 'command-palette') event.stopPropagation(); });
   function focusKey() { return document.activeElement instanceof HTMLElement && root.contains(document.activeElement) ? document.activeElement.dataset.libraryFocus : undefined; }
   function restoreFocus(key?: string, original?: HTMLElement) {
     if (!visible) { toggleButton?.focus(); return; }

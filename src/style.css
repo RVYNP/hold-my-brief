@@ -170,17 +170,18 @@
 [data-page='sepia'] { --paper: light-dark(#f5eddb, #2a2419); --ink: light-dark(#43361f, #e2d4b6); }
 /* Dim lowers glare within the active family: a page between chrome and surface, softer ink. */
 [data-page='dim'] { --paper: light-dark(color-mix(in srgb, var(--chrome) 55%, var(--surface)), color-mix(in srgb, var(--hover) 70%, var(--surface))); --ink: light-dark(color-mix(in srgb, var(--fg) 85%, var(--muted)), color-mix(in srgb, var(--fg) 70%, var(--muted))); }
-/* Geist (Vercel, SIL Open Font License 1.1, src/fonts/OFL-Geist.txt), bundled so the app never fetches a font.
-   Geist Serif has one weight and no italic. */
+/* Bundled so the app never fetches a font and looks the same on every system (SIL Open Font License
+   1.1, src/fonts/OFL-*.txt): Geist and Geist Serif (Vercel), JetBrains Mono (JetBrains). Geist Serif
+   has one weight and no italic; JetBrains Mono ships the two weights the interface uses. */
 @font-face { font-family: 'Geist'; src: url('./fonts/Geist-Variable.woff2') format('woff2'); font-weight: 100 900; font-style: normal; font-display: block; }
 @font-face { font-family: 'Geist Serif'; src: url('./fonts/GeistSerif-Regular.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: block; }
+@font-face { font-family: 'JetBrains Mono'; src: url('./fonts/JetBrainsMono-Regular.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: block; }
+@font-face { font-family: 'JetBrains Mono'; src: url('./fonts/JetBrainsMono-Bold.woff2') format('woff2'); font-weight: 700; font-style: normal; font-display: block; }
 :root {
   /* Brand type stack: Geist Serif for what you read (document text and titles), Geist for the
      interface, JetBrains Mono for the machine voice (folios, paths, positions). */
   --font-read: 'Geist Serif', Georgia, 'Times New Roman', serif;
   --font-ui: 'Geist', 'Inter', 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
-  /* ui-monospace is SF Mono in WebKit (the macOS app); Chromium does not resolve it, so Menlo keeps
-     Chromium on macOS (captures, README media) from falling through to Courier. */
   --font-mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, ui-monospace, Menlo, monospace;
   font-family: var(--font-ui);
   font-synthesis: none;
