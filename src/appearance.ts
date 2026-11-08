@@ -13,7 +13,7 @@ const presets: [string, string][] = [['Acid', '#e13a3a'], ['Iris', '#a86af4'], [
 const tones: [PageTone, string][] = [['theme', 'Match theme'], ['white', 'White'], ['sepia', 'Sepia'], ['dim', 'Dim']];
 const spacings: [number, string][] = [[1.4, 'Tight'], [1.65, 'Normal'], [1.9, 'Relaxed'], [2.2, 'Loose']];
 const margins: [number, string][] = [[12, 'Narrow'], [24, 'Medium'], [40, 'Wide']];
-const restingHint = 'Hover a theme to try it on the whole window. Click to keep it.';
+const restingHint = 'Hover to preview, click to keep.';
 
 /** The reading settings the sheet edits for reflowable text (Markdown, TXT, reflowable EPUB). */
 export type TextSettings = { fontSize: number; lineHeight: number; margin: number; wrap: boolean };
@@ -55,12 +55,13 @@ function check(group: HTMLElement, chosen: (item: HTMLElement) => boolean) {
 export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextControls) {
   dialog.setAttribute('aria-labelledby', 'appearance-title');
   dialog.innerHTML = `
-    <div class="sheet-head"><h2 id="appearance-title">Appearance</h2><div class="segmented sheet-tabs" role="tablist" aria-label="Appearance sections"><button role="tab" id="appearance-tab-colour" data-tab="colour" aria-controls="appearance-colour">Colour</button><button role="tab" id="appearance-tab-text" data-tab="text" aria-controls="appearance-text">Text</button></div><button class="sheet-close" data-close aria-label="Close appearance">${icon(15, '<path d="M18 6 6 18M6 6l12 12"/>')}</button></div>
+    <div class="sheet-head"><h2 id="appearance-title">Appearance</h2><div class="sheet-tabs" role="tablist" aria-label="Appearance sections"><button role="tab" id="appearance-tab-colour" data-tab="colour" aria-controls="appearance-colour">Colour</button><button role="tab" id="appearance-tab-text" data-tab="text" aria-controls="appearance-text">Text</button></div><button class="sheet-close" data-close aria-label="Close appearance">${icon(15, '<path d="M18 6 6 18M6 6l12 12"/>')}</button></div>
     <div class="sheet-panel" id="appearance-colour" role="tabpanel" aria-labelledby="appearance-tab-colour">
-    <p class="appearance-hint" aria-live="polite">${restingHint}</p>
-    <div class="segmented appearance-modes" role="radiogroup" aria-label="Mode">${modes.map(([mode, label, glyph]) => `<button role="radio" data-mode="${mode}">${glyph}${label}</button>`).join('')}</div>
-    <div class="theme-group"><span class="sheet-label" id="appearance-theme-label">THEME</span>
-      <div class="theme-row" role="radiogroup" aria-labelledby="appearance-theme-label">${palettes.map(palette => `<button class="theme-card" role="radio" data-choice="${palette}"><span class="theme-tile" data-palette="${palette}"><span class="theme-sample">Aa</span><span class="theme-dots" aria-hidden="true"><span></span><span></span><span></span><span></span></span></span><span class="theme-name">${names[palette]}</span></button>`).join('')}</div></div>
+    <div class="appearance-row"><span class="sheet-label" id="appearance-mode-label">MODE</span>
+      <div class="choices appearance-modes" role="radiogroup" aria-labelledby="appearance-mode-label">${modes.map(([mode, label, glyph]) => `<button role="radio" data-mode="${mode}">${glyph}${label}</button>`).join('')}</div></div>
+    <div class="appearance-row appearance-row-top"><span class="sheet-label" id="appearance-theme-label">THEME</span>
+      <div class="theme-group"><div class="theme-row" role="radiogroup" aria-labelledby="appearance-theme-label">${palettes.map(palette => `<button class="theme-card" role="radio" data-choice="${palette}"><span class="theme-tile" data-palette="${palette}"><span class="theme-sample">Aa</span><span class="theme-dots" aria-hidden="true"><span></span><span></span><span></span></span></span><span class="theme-name">${names[palette]}</span></button>`).join('')}</div>
+      <p class="appearance-hint" aria-live="polite">${restingHint}</p></div></div>
     <div class="appearance-row"><span class="sheet-label" id="appearance-accent-label">ACCENT</span>
       <div class="swatches" role="radiogroup" aria-labelledby="appearance-accent-label">
         <button class="swatch swatch-theme" role="radio" data-accent="" aria-label="Theme accent"><span></span></button>
@@ -69,19 +70,19 @@ export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextContr
         <input class="swatch-input" type="color" tabindex="-1" aria-hidden="true">
       </div></div>
     <div class="appearance-row"><span class="sheet-label" id="appearance-page-label">PAGE</span>
-      <div class="segmented" role="radiogroup" aria-labelledby="appearance-page-label">${tones.map(([tone, label]) => `<button role="radio" data-tone="${tone}">${label}</button>`).join('')}</div></div>
+      <div class="choices" role="radiogroup" aria-labelledby="appearance-page-label">${tones.map(([tone, label]) => `<button role="radio" data-tone="${tone}">${label}</button>`).join('')}</div></div>
     <p class="appearance-note">PDF pages and images keep their original colors.</p>
     </div>
     <div class="sheet-panel" id="appearance-text" role="tabpanel" aria-labelledby="appearance-tab-text" hidden>
     <div class="appearance-text">
       <div class="appearance-row"><span class="sheet-label" id="appearance-size-label">SIZE</span>
-        <div class="segmented stepper" role="group" aria-labelledby="appearance-size-label"><button data-step="-2" aria-label="Smaller text">${icon(13, '<path d="M5 12h14"/>')}</button><output class="stepper-value" aria-live="polite"></output><button data-step="2" aria-label="Larger text">${icon(13, '<path d="M5 12h14M12 5v14"/>')}</button></div></div>
+        <div class="stepper" role="group" aria-labelledby="appearance-size-label"><button data-step="-2" aria-label="Smaller text">${icon(13, '<path d="M5 12h14"/>')}</button><output class="stepper-value" aria-live="polite"></output><button data-step="2" aria-label="Larger text">${icon(13, '<path d="M5 12h14M12 5v14"/>')}</button></div></div>
       <div class="appearance-row"><span class="sheet-label" id="appearance-spacing-label">SPACING</span>
-        <div class="segmented" role="radiogroup" aria-labelledby="appearance-spacing-label">${spacings.map(([value, label]) => `<button role="radio" data-spacing="${value}">${label}</button>`).join('')}</div></div>
+        <div class="choices" role="radiogroup" aria-labelledby="appearance-spacing-label">${spacings.map(([value, label]) => `<button role="radio" data-spacing="${value}">${label}</button>`).join('')}</div></div>
       <div class="appearance-row"><span class="sheet-label" id="appearance-margin-label">MARGINS</span>
-        <div class="segmented" role="radiogroup" aria-labelledby="appearance-margin-label">${margins.map(([value, label]) => `<button role="radio" data-margin="${value}">${label}</button>`).join('')}</div></div>
+        <div class="choices" role="radiogroup" aria-labelledby="appearance-margin-label">${margins.map(([value, label]) => `<button role="radio" data-margin="${value}">${label}</button>`).join('')}</div></div>
       <div class="appearance-row appearance-wrap"><span class="sheet-label" id="appearance-wrap-label">LINES</span>
-        <div class="segmented" role="radiogroup" aria-labelledby="appearance-wrap-label"><button role="radio" data-wrap="true">Wrap</button><button role="radio" data-wrap="false">Keep as written</button></div></div>
+        <div class="choices" role="radiogroup" aria-labelledby="appearance-wrap-label"><button role="radio" data-wrap="true">Wrap</button><button role="radio" data-wrap="false">Keep as written</button></div></div>
     </div>
     <p class="appearance-note appearance-text-note">Text settings apply to Markdown, plain text and reflowable books. PDF pages, fixed-layout books and images zoom instead (Ctrl + and Ctrl −).</p>
     </div>`;
@@ -93,7 +94,7 @@ export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextContr
   const textSection = dialog.querySelector<HTMLElement>('.appearance-text')!, textNote = dialog.querySelector<HTMLElement>('.appearance-text-note')!;
   const sizeValue = dialog.querySelector<HTMLOutputElement>('.stepper-value')!;
   const spacingGroup = dialog.querySelector<HTMLElement>('[aria-labelledby=appearance-spacing-label]')!, marginGroup = dialog.querySelector<HTMLElement>('[aria-labelledby=appearance-margin-label]')!;
-  const wrapRow = dialog.querySelector<HTMLElement>('.appearance-wrap')!, wrapGroup = wrapRow.querySelector<HTMLElement>('.segmented')!;
+  const wrapRow = dialog.querySelector<HTMLElement>('.appearance-wrap')!, wrapGroup = wrapRow.querySelector<HTMLElement>('.choices')!;
   const tabs = dialog.querySelectorAll<HTMLButtonElement>('[role=tab]');
   let tab: 'colour' | 'text' = 'colour';
   function showTab(next: 'colour' | 'text') {

@@ -389,8 +389,13 @@ h2 { font: 400 17px/1.25 var(--font-read); margin: 0 0 16px; }
 .dialog-head button { font-size: 22px; padding: 0 7px; color: var(--muted); }
 dialog p { font-size: 13px; line-height: 1.6; }
 dialog label { display: block; font-size: 12px; margin: 14px 0 6px; color: var(--muted); }
-dialog input:not([type=checkbox]):not([type=color]), dialog select { display: block; width: 100%; padding: 9px; background-color: var(--card); border: 1px solid var(--border); border-radius: 5px; margin: 7px 0 14px; color: var(--fg); }
+/* Fields are a tone, not a box, like the library search and the find field. */
+dialog input:not([type=checkbox]):not([type=color]), dialog select { display: block; width: 100%; padding: 8px 10px; background-color: var(--hover-subtle); border: 0; border-radius: 6px; margin: 6px 0 12px; color: var(--fg); }
+dialog input::placeholder { color: var(--muted); }
 dialog select { padding-right: 28px; }
+/* A dialog focuses its first control when it opens, which rings a button (Cancel, ×) even after a click;
+   button rings are kept for keyboard use (Tab), fields keep theirs because they are typed into. */
+:root:not(.keyboard-focus) dialog button:focus-visible { outline: none; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 .danger { background: var(--danger); color: var(--on-accent); }
 .danger:hover { background: var(--danger-hover); }
@@ -436,58 +441,67 @@ dd { margin: 0; color: var(--muted); }
 .jump-row .primary { padding: 7px 14px; }
 #jump-error { margin: 6px 0 0; color: var(--error); font-size: 12px; }
 #jump-error:empty { display: none; }
-/* Appearance: a bottom sheet over the document, so theme previews stay visible above it. */
-#appearance { margin: auto 0 0; width: 100%; max-width: none; max-height: calc(100dvh - 40px); padding: 14px 18px 16px; border: 0; border-top: 1px solid var(--border); border-radius: 14px 14px 0 0; background: var(--card); box-shadow: var(--shadow-sheet); }
-#appearance[open] { display: flex; flex-direction: column; gap: 13px; }
-.sheet-panel { display: flex; flex-direction: column; gap: 13px; }
-.sheet-tabs { margin-left: auto; }
-.sheet-tabs button { flex: 0 0 auto; padding: 4px 12px; }
-.sheet-tabs button[aria-selected=true] { background: var(--card); border-color: var(--border); color: var(--fg); }
+/* Appearance: a bottom sheet over the document, so theme previews stay visible above it. Inside, nothing
+   is boxed: every row is a label column and its control, choices are words that take the accent tint
+   when chosen (no track around them), and theme tiles are set apart by their own tone, not a border. */
+#appearance { margin: auto 0 0; width: 100%; max-width: none; max-height: calc(100dvh - 40px); padding: 14px 20px 18px; border: 0; border-top: 1px solid var(--border); border-radius: 14px 14px 0 0; background: var(--card); box-shadow: var(--shadow-sheet); }
+#appearance[open] { display: flex; flex-direction: column; gap: 16px; }
+.sheet-panel { display: flex; flex-direction: column; gap: 14px; }
+/* Tabs are words with an accent rule under the chosen one. */
+.sheet-tabs { display: flex; gap: 14px; margin-left: auto; align-self: stretch; }
+.sheet-tabs button { padding: 4px 0; border: 0; border-radius: 0; color: var(--muted); font-size: 12px; }
+.sheet-tabs button:hover { background: transparent; color: var(--fg); }
+.sheet-tabs button[aria-selected=true] { color: var(--fg); box-shadow: inset 0 -2px 0 var(--accent); }
 #appearance::backdrop { background: transparent; }
-.sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
 .sheet-head h2 { margin: 0; }
 .sheet-close { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; color: var(--muted); }
-#appearance .appearance-hint { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+/* A sheet opened with the mouse rings nothing; Tab brings focus rings back (as for the menu and page). */
+:root:not(.keyboard-focus) #appearance :focus-visible { outline: none; }
+#appearance .appearance-hint { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 #appearance .appearance-hint[data-previewing] { color: var(--accent-ink); }
 .sheet-label { color: var(--muted); font: 10px/1.4 var(--font-mono); letter-spacing: .6px; }
-.segmented { display: flex; gap: 2px; padding: 2px; background: var(--stage); border: 1px solid var(--hairline); border-radius: 8px; }
-.segmented button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; padding: 5px 6px; border-radius: 6px; color: var(--muted); font-size: 12px; }
-.segmented button:hover { background: var(--hover); color: var(--fg); }
-.segmented button[aria-checked=true] { background: var(--card); border-color: var(--border); color: var(--fg); }
-.segmented button:focus-visible { outline-offset: -1px; }
-.theme-group { display: flex; flex-direction: column; gap: 8px; }
+.choices { flex: 1; display: flex; gap: 2px; min-width: 0; }
+.choices button { flex: 0 1 auto; display: flex; align-items: center; gap: 6px; min-width: 0; padding: 5px 9px; border: 0; border-radius: 6px; color: var(--muted); font-size: 12px; }
+.choices button:hover { background: var(--hover-subtle); color: var(--fg); }
+.choices button[aria-checked=true] { background: var(--accent-soft); color: var(--accent-ink); }
+.theme-group { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 /* Seven families in rows of four (4 + 3): seven across would not fit the sheet, and 5 + 2 orphans two. */
-.theme-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
-.theme-card { display: flex; flex-direction: column; gap: 7px; min-width: 0; padding: 3px; border-radius: 11px; text-align: left; white-space: normal; }
+.theme-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 8px; }
+.theme-card { display: flex; flex-direction: column; gap: 5px; min-width: 0; padding: 0; border: 0; text-align: left; white-space: normal; }
 .theme-card:hover { background: transparent; }
-.theme-tile { display: flex; flex-direction: column; gap: 8px; padding: 9px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
-.theme-card[aria-checked=true] .theme-tile, .theme-card[data-previewing] .theme-tile { border-color: var(--accent); box-shadow: 0 0 0 .5px var(--accent); }
-.theme-row:has([data-previewing]) .theme-card[aria-checked=true] .theme-tile { border-color: var(--border); box-shadow: none; }
+/* Each tile is its own family's window tone (its chrome), with its page ink and accent: no border. */
+.theme-tile { display: flex; flex-direction: column; gap: 7px; padding: 8px 9px; background: var(--chrome); border-radius: 7px; transition: box-shadow .12s; }
+.theme-card:hover .theme-tile { box-shadow: 0 0 0 1px var(--track); }
+.theme-card[aria-checked=true] .theme-tile, .theme-card[data-previewing] .theme-tile { box-shadow: 0 0 0 2px var(--accent); }
+.theme-row:has([data-previewing]) .theme-card[aria-checked=true]:not([data-previewing]) .theme-tile { box-shadow: none; }
 .theme-sample { color: var(--ink); font: 16px/1.2 var(--font-read); }
 .theme-dots { display: flex; gap: 4px; }
-.theme-dots span { width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--border); background: var(--accent); }
+.theme-dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 .theme-dots span:nth-child(2) { background: var(--fg); }
 .theme-dots span:nth-child(3) { background: var(--muted); }
-.theme-dots span:nth-child(4) { background: var(--chrome); }
-.theme-name { padding: 0 3px 2px; overflow: hidden; text-overflow: ellipsis; color: var(--fg); font-size: 12px; }
-.theme-card[data-previewing] .theme-name { font-weight: 600; }
-.appearance-row { display: flex; align-items: center; gap: 12px; }
-.appearance-row > .sheet-label { flex-shrink: 0; width: 52px; }
-.appearance-row > .segmented { flex: 1; min-width: 0; }
-.appearance-text { display: flex; flex-direction: column; gap: 13px; }
-.stepper { flex: 0 0 auto !important; align-items: center; }
-.stepper button { flex: 0 0 auto; width: 30px; }
-.stepper-value { min-width: 48px; text-align: center; color: var(--fg); font: 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
-.swatches { position: relative; flex: 1; display: flex; align-items: center; justify-content: space-between; min-width: 0; }
+.theme-name { padding: 0 1px; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 11px; }
+.theme-card[aria-checked=true] .theme-name, .theme-card[data-previewing] .theme-name { color: var(--fg); }
+.appearance-row { display: flex; align-items: center; gap: 12px; min-height: 28px; }
+.appearance-row-top { align-items: flex-start; }
+.appearance-row-top > .sheet-label { padding-top: 4px; }
+.appearance-row > .sheet-label { flex-shrink: 0; width: 60px; }
+.appearance-text { display: flex; flex-direction: column; gap: 14px; }
+.stepper { display: flex; align-items: center; gap: 2px; }
+.stepper button { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; color: var(--muted); }
+.stepper button:hover { color: var(--fg); }
+.stepper-value { min-width: 44px; text-align: center; color: var(--fg); font: 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+.swatches { position: relative; flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
 .swatch-theme { --swatch: var(--accent); }
 .swatch-input { position: absolute; right: 0; bottom: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }
 .swatch { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 1.5px solid transparent; border-radius: 50%; }
+.swatch:hover { background: transparent; border-color: var(--track); }
 .swatch > span { width: 16px; height: 16px; border-radius: 50%; background: var(--swatch); }
 .swatch[aria-checked=true] { border-color: var(--swatch); }
-.swatch-custom { border: 1px solid var(--border); color: var(--muted); }
-.swatch-custom[aria-checked=true] { border-width: 1.5px; }
+.swatch-custom { color: var(--muted); }
+.swatch-custom:not([aria-checked=true]) { border: 1px dashed var(--track); }
 .swatch-custom[aria-checked=true] svg, .swatch-custom:not([aria-checked=true]) > span { display: none; }
-#appearance .appearance-note { margin: 0; color: var(--muted); font: 9px/1.4 var(--font-mono); letter-spacing: .2px; }
+#appearance .appearance-note { margin: 0; color: var(--muted); font: 10px/1.45 var(--font-mono); letter-spacing: .2px; }
 @media (min-width: 720px) {
   #appearance { width: 460px; margin-inline: auto; border: 1px solid var(--border); border-bottom: 0; }
 }
