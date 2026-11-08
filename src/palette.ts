@@ -103,7 +103,7 @@ export function createPalette(context: PaletteContext): Palette {
     if (!text && !state.hasDocument) {
       const caption = document.createElement('p');
       caption.className = 'palette-note';
-      caption.setAttribute('role', 'presentation');
+      caption.setAttribute('aria-hidden', 'true');
       caption.textContent = 'Dimmed commands need an open document.';
       list.append(caption);
     }

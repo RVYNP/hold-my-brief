@@ -304,7 +304,7 @@ select:hover { border-color: var(--accent-border); }
 .book-mark { display: block; color: var(--accent); }
 .eyebrow { font: 11px/1.35 var(--font-mono) !important; letter-spacing: .8px; color: var(--muted) !important; margin-top: 22px !important; }
 /* Headings are titles: Geist Serif at its one weight, which a display serif carries without bold. */
-h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 12px 0 18px; color: var(--fg); }
+h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 1px 0 5px; color: var(--fg); }
 #empty > p { color: var(--muted); font-size: 13px; line-height: 1.65; }
 .primary { background: var(--accent-fill); color: var(--on-accent); padding: 11px 15px; font-weight: 600; }
 .primary:hover { background: var(--accent-fill-hover); }
@@ -410,6 +410,9 @@ dialog label { display: block; font-size: 12px; margin: 14px 0 6px; color: var(-
 /* Fields are a tone, not a box, like the library search and the find field. */
 dialog input:not([type=checkbox]):not([type=color]), dialog select { display: block; width: 100%; padding: 8px 10px; background-color: var(--hover-subtle); border: 0; border-radius: 6px; margin: 6px 0 12px; color: var(--fg); }
 dialog input::placeholder { color: var(--muted); }
+/* A focused text field in a dialog takes the find field's treatment: a deeper tone and an accent underline,
+   not a ring that boxes the field in. */
+dialog input:not([type=checkbox]):not([type=color]):focus-visible { outline: none; border-radius: 6px 6px 0 0; background-color: var(--hover); box-shadow: inset 0 -2px 0 var(--accent); }
 dialog select { padding-right: 28px; }
 /* A dialog focuses its first control when it opens, which rings a button (Cancel, ×) even after a click;
    button rings are kept for keyboard use (Tab), fields keep theirs because they are typed into. */
@@ -527,7 +530,7 @@ dd { margin: 0; color: var(--muted); }
   #empty { padding-top: 18px; }
   .book-mark { display: none; }
   .eyebrow { margin-top: 8px !important; }
-  h1 { font-size: 28px; margin: 10px 0; }
+  h1 { font-size: 28px; margin: 0; }
   #recents { margin-top: 18px; }
 }
 @media (min-width: 650px) {
@@ -542,7 +545,7 @@ dd { margin: 0; color: var(--muted); }
 #palette:not([open]) { display: none; }
 .palette-search { display: flex; align-items: center; gap: 8px; padding: 0 13px; height: 44px; border-bottom: 1px solid var(--hairline); color: var(--muted); flex-shrink: 0; }
 .palette-search svg { flex-shrink: 0; }
-#palette-input { flex: 1; min-width: 0; width: auto; margin: 0; padding: 0; border: 0; background: transparent; color: var(--fg); font: inherit; font-size: 13px; outline: none; }
+#palette-input { flex: 1; min-width: 0; width: auto; margin: 0; padding: 0; border: 0; background: transparent; color: var(--fg); font: inherit; font-size: 13px; outline: none; box-shadow: none; }
 #palette-input::placeholder { color: var(--muted); }
 .palette-esc { flex-shrink: 0; }
 .palette-list { overflow-y: auto; overscroll-behavior: contain; padding: 6px; min-height: 0; }
