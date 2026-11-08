@@ -380,6 +380,11 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
 #view-controls #zoom-level { width: 44px; color: var(--fg); font: 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
 #view-controls .view-group { display: flex; align-items: center; gap: 2px; }
 #view-controls .view-sep { width: 1px; height: 16px; background: var(--hairline); }
+/* Move grip: six muted dots, no box. The default placement is CSS; dragging it (or the arrow keys) pins the pill with inline left/top. */
+#view-controls #view-grip { width: 12px; height: 26px; margin-left: -1px; border-radius: 4px; color: var(--muted); cursor: grab; touch-action: none; }
+#view-controls #view-grip:hover, #view-controls #view-grip:active { color: var(--fg); }
+#view-controls #view-grip:active { cursor: grabbing; }
+:root:not(.keyboard-focus) #view-controls #view-grip:focus-visible { outline: none; }
 /* Hand tool: drags pan the page instead of selecting text; links stay clickable. */
 .reader-host.hand-tool, .reader-host.hand-tool * { cursor: grab; -webkit-user-select: none; user-select: none; }
 .reader-host.hand-tool .pdf-link { cursor: pointer; }
