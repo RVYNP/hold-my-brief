@@ -222,8 +222,11 @@ Thank you to the Stencil team.
 
 The screenshots read public-domain documents: *The Half-Tone Process* (1895), a print manual
 scanned by the [Internet Archive](https://archive.org/details/halftoneprocessp00verf_0), and
-Jane Austen's *Pride and Prejudice*. No in-copyright scans are committed to this repository.
-`scripts/reshoot-media.mjs` regenerates every still, the hero included, from documents you supply.
+Jane Austen's *Pride and Prejudice*. The library shots also show Hokusai's *The Great Wave off
+Kanagawa* and two plates from Ernst Haeckel's *Kunstformen der Natur* (1904), from
+[Wikimedia Commons](https://commons.wikimedia.org/). No in-copyright scans are committed to this
+repository. `scripts/reshoot-media.mjs` regenerates every still, the hero included, from documents
+you supply.
 
 ## License
 

@@ -1,6 +1,7 @@
 // Reshoot the README media in docs/media against the current UI: Brief theme, light mode.
 // Documents are public-domain scans and books; nothing personal is committed.
-// Usage: node scripts/reshoot-media.mjs <page-document.pdf> <book.epub>
+// Usage: node scripts/reshoot-media.mjs <page-document.pdf> <book.epub> [public-domain-image ...]
+//        (the optional images fill the library drawer's grid with real thumbnails)
 //        (dev server must be running on :1420)
 import { createRequire } from 'node:module';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
@@ -24,7 +25,7 @@ const URL = 'http://127.0.0.1:1420/';
 //  - a public-domain book (e.g. Pride and Prejudice) for EPUB shots.
 // In-copyright magazine scans are intentionally NOT committed.
 // Pass the two documents as arguments; the README documents the sources used.
-const [PDF = '', BOOK = ''] = process.argv.slice(2);
+const [PDF = '', BOOK = '', ...IMAGES] = process.argv.slice(2);
 if (!PDF || !BOOK) {
   console.error('usage: node scripts/reshoot-media.mjs <page-document.pdf> <book.epub>');
   process.exit(1);
@@ -145,6 +146,12 @@ const browser = await chromium.launch(existsSync(CHROME) ? { executablePath: CHR
   await loadFile(page, PDF, 9000);
   await jumpTo(page, 48);
   await setLibrary(page, true);
+  // Add the book and any images through the drawer's own file picker, then wait for every thumbnail.
+  await page.locator('input[type=file][multiple]').setInputFiles([BOOK, ...IMAGES]);
+  await page.waitForFunction(() => {
+    const media = [...document.querySelectorAll('.library-tile-media[data-path]')];
+    return media.length > 0 && media.every(m => m.classList.contains('is-loaded') || m.classList.contains('is-unavailable'));
+  }, null, { timeout: 30000 });
   await page.waitForTimeout(900);
   await shot(page, 'library.png');
   await ctx.close();
