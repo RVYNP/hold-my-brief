@@ -121,7 +121,9 @@ panel is wide enough.
 **Ctrl+F** searches the open document's text. Matches are counted as you type ("3 of 12"), Enter
 goes to the next match and Shift+Enter to the previous one, wrapping at either end; the current
 match is highlighted in the page and the reader scrolls to it. **Aa** matches case exactly and
-**ab** matches whole words only. Escape closes the bar and clears the highlight.
+**ab** matches whole words only. Escape closes the bar and clears the highlight. The bar sits above
+the page and moves it down rather than covering it; with the library open it starts at the drawer's
+edge, so the drawer never hides what you type.
 
 Search runs over each format's real text: the PDF text layer, EPUB chapter text, and Markdown or
 plain-text source. A scanned PDF that has no text layer says so rather than reporting no matches,
@@ -181,6 +183,10 @@ Anthropic over HTTPS from the app's native side. Anthropic's terms for your API 
 that data. Use is billed to your API key.
 
 ### Keyboard shortcuts
+
+**Keyboard shortcuts** in the ··· menu (or the palette) shows the same list, grouped as in the
+palette and built from it, so it always matches the app; the browser preview leaves out pin and size
+lock.
 
 | Action | Shortcut |
 | --- | --- |
