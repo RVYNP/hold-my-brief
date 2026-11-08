@@ -7,10 +7,9 @@ const base = { model: 'm', system: 'be brief', tools, max_tokens: 1024 };
 
 describe('toChatCompletions', () => {
   it('puts the system prompt first and maps tools to functions', () => {
-    const body = toChatCompletions({ ...base, messages: [{ role: 'user', content: 'hi' }], tool_choice: 'auto' });
+    const body = toChatCompletions({ ...base, messages: [{ role: 'user', content: 'hi' }] });
     expect(body.messages).toEqual([{ role: 'system', content: 'be brief' }, { role: 'user', content: 'hi' }]);
     expect(body.tools).toEqual([{ type: 'function', function: { name: 'search', description: 'Find text', parameters: tools[0].input_schema } }]);
-    expect(body.tool_choice).toBe('auto');
     expect(body.max_tokens).toBe(1024);
   });
 

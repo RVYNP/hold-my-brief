@@ -162,9 +162,10 @@ export function createAssistantPanel(layout: HTMLElement, options: { env: Reader
 
   const send: Send = body => {
     if (connected === null || connected === 'anthropic') return native<ModelResponse>('assistant_send', { body });
-    const { model, system, messages, tools: toolList, max_tokens, tool_choice } = body;
-    // Same fields converse() sends; toChatCompletions drops everything else.
-    const request = toChatCompletions({ model: String(model), system: String(system), messages: Array.isArray(messages) ? messages : [], tools: Array.isArray(toolList) ? toolList : [], max_tokens: Number(max_tokens), tool_choice });
+    const { model, system, messages, tools: toolList, max_tokens } = body;
+    // Same fields converse() sends; toChatCompletions drops everything else (tool_choice included:
+    // the loop never sets it, and Anthropic's shape for it is not the Chat Completions one).
+    const request = toChatCompletions({ model: String(model), system: String(system), messages: Array.isArray(messages) ? messages : [], tools: Array.isArray(toolList) ? toolList : [], max_tokens: Number(max_tokens) });
     return native<ChatCompletion>('assistant_send', { body: request }).then(fromChatCompletion);
   };
 

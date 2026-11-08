@@ -14,7 +14,6 @@ export type ChatBody = {
   model: string;
   messages: ChatMessage[];
   tools?: { type: 'function'; function: { name: string; description: string; parameters: Tool['input_schema'] } }[];
-  tool_choice?: unknown;
   max_tokens: number;
 };
 /** The parts of a Chat Completions response the assistant reads; everything is optional because providers vary. */
@@ -22,7 +21,7 @@ export type ChatCompletion = {
   choices?: { message?: { content?: string | null; tool_calls?: { id?: string; function?: { name?: string; arguments?: string } }[] }; finish_reason?: string | null }[];
 };
 
-export function toChatCompletions(request: { model: string; system: string; messages: readonly Message[]; tools?: readonly Pick<Tool, 'name' | 'description' | 'input_schema'>[]; max_tokens: number; tool_choice?: unknown }): ChatBody {
+export function toChatCompletions(request: { model: string; system: string; messages: readonly Message[]; tools?: readonly Pick<Tool, 'name' | 'description' | 'input_schema'>[]; max_tokens: number }): ChatBody {
   const messages: ChatMessage[] = [{ role: 'system', content: request.system }];
   for (const message of request.messages) {
     if (typeof message.content === 'string') { messages.push({ role: message.role, content: message.content }); continue; }
@@ -39,7 +38,6 @@ export function toChatCompletions(request: { model: string; system: string; mess
   }
   const body: ChatBody = { model: request.model, messages, max_tokens: request.max_tokens };
   if (request.tools?.length) body.tools = request.tools.map(tool => ({ type: 'function', function: { name: tool.name, description: tool.description, parameters: tool.input_schema } }));
-  if (request.tool_choice !== undefined) body.tool_choice = request.tool_choice;
   return body;
 }
 
