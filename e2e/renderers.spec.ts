@@ -255,8 +255,8 @@ test('library drawer floats over the page and never resizes it, while drag, keyb
   // Absolute, layout-stable expectations only: the workspace and host widths. The bitmap stays in
   // the relative pageGeometry() comparison below, which is the actual regression guard -- pinning
   // its exact pixel size here would depend on the loading-bar race described above.
-  expect(untouched.workspace!.width).toBe(1068);
-  expect(untouched.hostClientWidth).toBe(1066);
+  expect(untouched.workspace!.width).toBe(1080);
+  expect(untouched.hostClientWidth).toBe(1080);
 
   // Opening the drawer rolls over the page instead of narrowing it.
   await page.locator('#library-toggle').click();

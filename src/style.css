@@ -182,21 +182,29 @@ button:focus-visible, input:focus-visible, select:focus-visible, .reader-host:fo
 select { appearance: none; color: var(--fg); background-color: var(--card); background-image: linear-gradient(45deg, transparent 40%, var(--muted) 40%, var(--muted) 62%, transparent 62%), linear-gradient(135deg, transparent 38%, var(--muted) 38%, var(--muted) 60%, transparent 60%); background-position: right 13px center, right 9px center; background-size: 4px 4px; background-repeat: no-repeat; border: 1px solid var(--border); border-radius: 5px; padding: 7px 26px 7px 8px; cursor: pointer; }
 select:hover { border-color: var(--accent-border); }
 #app { height: 100dvh; min-width: 300px; display: flex; flex-direction: column; overflow: hidden; }
-.toolbar { display: flex; align-items: center; gap: 4px; padding: 7px 8px; background: var(--chrome); flex-shrink: 0; }
-.title { min-width: 0; flex: 1; padding: 0 5px; }
-.title strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 12px; }
-.title span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 10px/1.4 var(--font-mono); color: var(--muted); margin-top: 2px; }
-.toolbar button { font-size: 12px; padding: 6px 7px; }
-.toolbar #open { border-color: var(--border); background: var(--surface); }
-.toolbar #open:hover { border-color: var(--accent-border); background: var(--accent-soft); }
-#menu-toggle { font-size: 18px; line-height: 1; }
-#library-toggle { display: grid; place-items: center; }
-#library-toggle[aria-expanded=true] { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent-ink); }
+/* One 38 px row. Empty toolbar space drags the window (data-tauri-drag-region), so it never selects text. */
+.toolbar { display: flex; align-items: center; gap: 2px; height: 38px; padding: 0 6px; background: var(--chrome); flex-shrink: 0; -webkit-user-select: none; user-select: none; }
+/* macOS draws the traffic lights over the toolbar's left end (titleBarStyle Overlay). */
+.mac-titlebar .toolbar { padding-left: 78px; }
+.icon-button { display: grid; place-items: center; flex-shrink: 0; width: 28px; height: 28px; padding: 0; border-radius: 6px; }
+.icon-button[aria-pressed=true], .icon-button[aria-expanded=true] { background: var(--accent-soft); border-color: transparent; color: var(--accent-ink); }
+/* The title is the way in: click it or press Ctrl K to find, go to or change anything. It stays plain
+   text until hovered, so it adds no box to the chrome, and it is only as wide as its text so the
+   rest of the row stays free to drag the window. */
+.title { flex: 0 1 auto; margin-right: auto; min-width: 0; display: flex; align-items: center; gap: 7px; height: 28px; padding: 0 8px; border-radius: 6px; text-align: left; }
+.title:hover { background: var(--hover); }
+.ask-mark { flex-shrink: 0; color: var(--accent-ink); }
+.title strong { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 12px; }
+/* The kind gives way long before the file name does. */
+.title span { flex: 0 100 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 10px/1.4 var(--font-mono); color: var(--muted); }
+.ask-key { display: none; flex-shrink: 0; }
+.title:hover .ask-key, .title:focus-visible .ask-key { display: block; }
 /* --find-bar-height is the find bar's real height, so the reading surface and the opening strip can
    move below it without guessing at font metrics (Windows renders the bar a pixel taller than macOS).
    --workspace-border is the reading panel's edge, which the strip is positioned outside of. */
 #reader-layout { --find-bar-height: 39px; --workspace-border: 1px; position: relative; display: flex; flex: 1; min-height: 0; min-width: 0; }
-#workspace { position: relative; flex: 1; min-height: 0; min-width: 0; margin: 0 6px; border: var(--workspace-border) solid var(--border); border-radius: 9px; background: var(--surface); overflow: hidden; }
+/* The page is not boxed: it meets the chrome edge to edge, set apart by tone and one hairline. */
+#workspace { position: relative; flex: 1; min-height: 0; min-width: 0; border-top: var(--workspace-border) solid var(--hairline); background: var(--surface); overflow: hidden; }
 #empty { height: 100%; overflow: auto; padding: 36px 28px 24px; max-width: 640px; margin: auto; }
 .book-mark { display: grid; place-items: center; width: 42px; height: 42px; background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-border); border-radius: 10px; }
 .eyebrow { font: 10px/1.5 var(--font-mono) !important; letter-spacing: 1.5px; color: var(--muted) !important; margin-top: 26px !important; }
@@ -212,12 +220,15 @@ h1 { font-size: 34px; line-height: 1.15; font-weight: 550; letter-spacing: -.9px
 .recent { display: flex; border-bottom: 1px solid var(--border); }
 .recent button:first-child { overflow: hidden; text-overflow: ellipsis; text-align: left; flex: 1; font-size: 12px; min-width: 0; }
 .recent button:last-child { flex: 0; color: var(--muted); }
-footer { position: relative; display: flex; gap: 4px; align-items: center; padding: 5px 10px 28px; background: var(--chrome); flex-shrink: 0; }
-#position { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font: 11px/1.5 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
-#previous, #next { color: var(--muted); }
-#progress { position: absolute; bottom: 2px; left: 14px; width: calc(100% - 28px); height: 24px; margin: 0; padding: 0; appearance: none; background: transparent; cursor: pointer; --scrub-fill: 0%; }
-#progress::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, var(--accent) var(--scrub-fill), var(--track) var(--scrub-fill)); }
-#progress::-webkit-slider-thumb { appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%; border: 2px solid var(--surface); background: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+footer { position: relative; display: flex; gap: 2px; align-items: center; height: 30px; padding: 2px 6px 0; background: var(--chrome); flex-shrink: 0; }
+#position { flex: 1; min-width: 0; padding: 3px 6px; overflow: hidden; text-overflow: ellipsis; font: 11px/1.5 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+#previous, #next { padding: 3px 9px; color: var(--muted); }
+/* The scrubber is the hairline along the page's bottom edge; its thumb appears while the footer is
+   hovered or the slider has focus. The 12 px input straddles the edge so it stays easy to grab. */
+#progress { position: absolute; top: -5px; left: 0; width: 100%; height: 12px; margin: 0; padding: 0; appearance: none; background: transparent; cursor: pointer; --scrub-fill: 0%; }
+#progress::-webkit-slider-runnable-track { height: 2px; background: linear-gradient(to right, var(--accent) var(--scrub-fill), var(--track) var(--scrub-fill)); }
+#progress::-webkit-slider-thumb { appearance: none; width: 12px; height: 12px; margin-top: -5px; border-radius: 50%; border: 2px solid var(--surface); background: var(--accent); box-shadow: 0 0 0 1px var(--accent); opacity: 0; transition: opacity .15s; }
+footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-webkit-slider-thumb, #progress:active::-webkit-slider-thumb { opacity: 1; }
 #progress:disabled { opacity: .4; cursor: default; }
 #notice { display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin: 0 6px 6px; background: var(--notice); color: var(--notice-ink); font-size: 12px; border: 1px solid var(--notice-border); border-radius: 6px; flex-shrink: 0; }
 /* The opening strip is chrome, not layout: in flow it took 47 px of height from the reading area, so
@@ -227,7 +238,7 @@ footer { position: relative; display: flex; gap: 4px; align-items: center; paddi
    workspace goes inert behind the compact library sheet, which would make its Cancel button dead.
    A notice keeps its own row: it is persistent, and floating it would cover the document, the find
    bar and the library header until it is dismissed. */
-#loading { position: absolute; z-index: 25; top: 0; left: 6px; right: 6px; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--accent-soft); color: var(--accent-ink); font-size: 12px; border-bottom: 1px solid var(--accent-border); box-shadow: var(--shadow-popover); }
+#loading { position: absolute; z-index: 25; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--accent-soft); color: var(--accent-ink); font-size: 12px; border-bottom: 1px solid var(--accent-border); box-shadow: var(--shadow-popover); }
 /* The find bar owns the top edge of the panel, so the strip waits below it. The bar sits inside the
    panel's 1 px border, while the strip is positioned against the layout, so that border is added back;
    the reader host, which is positioned inside the panel, only needs the bar's own height. */
@@ -244,7 +255,7 @@ footer { position: relative; display: flex; gap: 4px; align-items: center; paddi
 .reader-host { position: absolute; inset: 0; overflow: auto; background: var(--surface); scrollbar-color: var(--faint) transparent; scrollbar-width: thin; }
 .reader-host.text-reader, .reader-host.reflow-reader { background: var(--paper); color: var(--ink); }
 .reader-host.staging { visibility: hidden; pointer-events: none; }
-.reader-host:focus-visible { outline-offset: -3px; border-radius: 8px; }
+.reader-host:focus-visible { outline-offset: -3px; }
 .reader-host canvas { display: block; }
 .reader-host foliate-view { display: block; width: 100%; height: 100%; }
 .image-reader { padding: 16px 16px 60px; }
@@ -352,9 +363,10 @@ dd { margin: 0; color: var(--muted); }
   h1 { font-size: 42px; }
 }
 
-/* Command palette (Ctrl+K): a search field over the same actions the menu lists.
+/* Command palette (Ctrl+K or the title): a search field over the same actions the menu lists. It
+   drops from the toolbar, just under the title that opens it, rather than centring on the page.
    The dialog overrides the shared dialog chrome so the input sits flush at the top. */
-#palette { width: min(520px, calc(100vw - 24px)); padding: 0; overflow: hidden; max-height: calc(100dvh - 40px); display: flex; flex-direction: column; }
+#palette { margin: 40px auto auto; width: min(520px, calc(100vw - 16px)); padding: 0; overflow: hidden; max-height: calc(100dvh - 56px); display: flex; flex-direction: column; }
 #palette:not([open]) { display: none; }
 .palette-search { display: flex; align-items: center; gap: 8px; padding: 11px 13px; border-bottom: 1px solid var(--border); color: var(--muted); flex-shrink: 0; }
 .palette-search svg { flex-shrink: 0; }

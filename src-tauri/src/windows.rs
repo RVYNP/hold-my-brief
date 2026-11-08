@@ -12,17 +12,6 @@ fn err(error: impl std::fmt::Display) -> String {
     error.to_string()
 }
 
-/// Height of the standard macOS title bar in points, measured with AppKit as
-/// `NSWindow.frameRectForContentRect` minus the content rect for a
-/// Titled|Closable|Miniaturizable|Resizable window. AppKit composes a window as
-/// a title bar above the content view, so this only reduces the content height.
-///
-/// Declared on every target rather than only macOS: the unit tests below assert
-/// the conversion arithmetic for both platforms so it stays honest on any host,
-/// and an unconditional constant keeps `cargo test` compiling on Windows/Linux.
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-const MACOS_TITLEBAR: f64 = 32.0;
-
 /// How much larger a window's outer frame is than its content area, in logical
 /// pixels. Size setters and size constraints operate on content, while the
 /// presets and everything persisted are outer dimensions.
@@ -37,15 +26,14 @@ fn frame(window: &WebviewWindow) -> Result<(f64, f64), String> {
     ))
 }
 
-/// AppKit reports `NSWindow.frame` and the content rect separately, but the
-/// window server only updates them while it is running: in a session without a
-/// display both read back as the content size and the difference collapses to
-/// zero, which would silently shrink every preset by the title bar. The standard
-/// title bar has a fixed height and is already expressed in points, so use it
-/// instead of trusting a zero measurement.
+/// The macOS window uses an overlay title bar (`titleBarStyle: "Overlay"` in
+/// tauri.conf.json): the content view fills the whole frame and the traffic
+/// lights are drawn over the toolbar, so outer and content sizes are the same.
+/// Returned as a constant rather than measured because AppKit only reports the
+/// frame while the window server is running.
 #[cfg(target_os = "macos")]
 fn frame(_window: &WebviewWindow) -> Result<(f64, f64), String> {
-    Ok((0.0, MACOS_TITLEBAR))
+    Ok((0.0, 0.0))
 }
 
 /// Converts a desired OUTER logical size into the content size that `set_size`
@@ -61,9 +49,9 @@ fn content_size(outer_width: f64, outer_height: f64, border: (f64, f64)) -> (f64
 
 /// Recovers the OUTER size to persist from what the window reports. The system
 /// normally already includes the decorations in the outer size; a session that
-/// reports outer and inner as identical (a macOS window server without a
-/// display, where AppKit never composes the frame) does not, and there the known
-/// border has to be added back so presets keep their intended size.
+/// reports outer and inner as identical despite a known border (a window server
+/// that never composed the frame) does not, and there the border has to be
+/// added back so presets keep their intended size.
 fn outer_logical(
     outer: LogicalSize<f64>,
     inner: Option<LogicalSize<f64>>,
@@ -380,22 +368,17 @@ pub fn handle_event(window: &Window, event: &WindowEvent) {
 
 #[cfg(test)]
 mod tests {
-    use super::{content_size, outer_logical, LogicalSize, MACOS_TITLEBAR};
+    use super::{content_size, outer_logical, LogicalSize};
 
     /// The presets and every persisted size are OUTER logical pixels, while
     /// `set_size` and the size constraints take content dimensions. After the
     /// conversion the window must still land on the documented outer size.
     #[test]
     fn presets_keep_their_outer_size() {
-        // macOS: the standard title bar is the only difference from the content.
-        // AppKit measured frameRectForContentRect(420x620) as 420x652.
-        let mac = (0.0, MACOS_TITLEBAR);
-        assert_eq!(content_size(420.0, 620.0, mac), (420.0, 620.0 - 32.0));
-        assert_eq!(content_size(760.0, 900.0, mac), (760.0, 900.0 - 32.0));
-        // A locked window's min and max constraints are content sized too, so
-        // the resulting outer frame is exactly what the user asked for.
-        let (w, h) = content_size(420.0, 620.0, mac);
-        assert_eq!((w + mac.0, h + mac.1), (420.0, 620.0));
+        // macOS: the overlay title bar sits inside the content, so nothing is subtracted.
+        let mac = (0.0, 0.0);
+        assert_eq!(content_size(420.0, 620.0, mac), (420.0, 620.0));
+        assert_eq!(content_size(760.0, 900.0, mac), (760.0, 900.0));
 
         // Windows: decorations surround the client area on every side.
         let win = (16.0, 39.0);
@@ -408,23 +391,22 @@ mod tests {
     /// reports outer and inner as identical.
     #[test]
     fn persisted_size_is_outer() {
-        let mac = (0.0, MACOS_TITLEBAR);
         let size = |w, h| LogicalSize::new(w, h);
-        // A real macOS window: AppKit already included the title bar.
-        assert_eq!(outer_logical(size(420.0, 620.0), Some(size(420.0, 588.0)), mac), (420.0, 620.0));
-        // A display-less macOS session reports both as the content size.
-        assert_eq!(outer_logical(size(420.0, 588.0), Some(size(420.0, 588.0)), mac), (420.0, 620.0));
+        // macOS reports the overlay window's content and frame as the same size.
+        assert_eq!(outer_logical(size(420.0, 620.0), Some(size(420.0, 620.0)), (0.0, 0.0)), (420.0, 620.0));
         // Windows reports decorated sizes already, with borders on every side.
         assert_eq!(outer_logical(size(420.0, 620.0), Some(size(404.0, 581.0)), (16.0, 39.0)), (420.0, 620.0));
+        // A session that reports both as the content size despite a known border gets it added back.
+        assert_eq!(outer_logical(size(404.0, 581.0), Some(size(404.0, 581.0)), (16.0, 39.0)), (420.0, 620.0));
         // Without an inner size there is nothing to correct against.
-        assert_eq!(outer_logical(size(420.0, 588.0), None, mac), (420.0, 588.0));
+        assert_eq!(outer_logical(size(404.0, 581.0), None, (16.0, 39.0)), (404.0, 581.0));
     }
 
     /// A border larger than the request must not produce a zero or negative
     /// content size: the OS rejects those.
     #[test]
     fn tiny_requests_stay_positive() {
-        assert_eq!(content_size(10.0, 10.0, (0.0, MACOS_TITLEBAR)), (10.0, 1.0));
-        assert_eq!(content_size(0.0, 0.0, (0.0, MACOS_TITLEBAR)), (1.0, 1.0));
+        assert_eq!(content_size(10.0, 10.0, (16.0, 39.0)), (1.0, 1.0));
+        assert_eq!(content_size(0.0, 0.0, (0.0, 0.0)), (1.0, 1.0));
     }
 }

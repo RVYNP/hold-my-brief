@@ -178,6 +178,26 @@ export function searchCommands(query: string, commands: readonly Command[] = COM
     .map(entry => entry.command);
 }
 
+/** A typed request the catalog cannot express on its own: a place to go or words to find. */
+export type Intent = { kind: 'goto'; target: string } | { kind: 'find'; text: string };
+
+const GOTO_REQUEST = /^(?:go\s*to|goto|jump\s*to|page|pg|p\.?|line)?\s*(\d+(?:\.\d+)?%?)$/i;
+const FIND_REQUEST = /^(?:find|search(?:\s+for)?|where\s+is|where's)\s+(.+)$/i;
+
+/**
+ * Reads a palette query as a request, without a model: "40", "page 40" and "35%" go to that
+ * location (the adapter decides whether it is a page, a line or a percentage), and "find
+ * lifetimes" finds the words after the verb. Anything else is left to the command search.
+ */
+export function parseIntent(query: string): Intent | undefined {
+  const text = query.trim();
+  const go = GOTO_REQUEST.exec(text);
+  if (go) return { kind: 'goto', target: go[1] };
+  const find = FIND_REQUEST.exec(text);
+  if (find && find[1].trim()) return { kind: 'find', text: find[1].trim() };
+  return undefined;
+}
+
 export type GroupedCommands = { group: CommandGroup; commands: Command[] };
 
 /** Commands grouped for display, preserving catalog order within each group and dropping empty groups. */

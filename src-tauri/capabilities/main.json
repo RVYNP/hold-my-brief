@@ -1,13 +1,15 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "Only the local reader shell may receive events, close its window and match the window's theme and background to the reader's appearance. No general filesystem or shell access.",
+  "description": "Only the local reader shell may receive events, close or drag its window and match the window's theme and background to the reader's appearance. No general filesystem or shell access.",
   "windows": ["main"],
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "core:window:allow-close",
     "core:window:allow-destroy",
+    "core:window:allow-start-dragging",
+    "core:window:allow-internal-toggle-maximize",
     "core:window:allow-set-theme",
     "core:window:allow-set-background-color",
     "core:webview:allow-set-webview-background-color"

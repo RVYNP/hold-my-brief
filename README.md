@@ -61,8 +61,8 @@ computer.
     <td valign="top">
       <h3>Reads what you read</h3>
       PDFs, EPUB books, Markdown notes, plain text and images: faithful pages for PDFs, comfortable
-      reflowing text for books. Turn pages, jump to a chapter or scrub through the whole document
-      with one slider.
+      reflowing text for books. Click the title or press Ctrl+K and type a page number, a phrase or a
+      command to go straight there; the hairline under the page scrubs the whole document.
     </td>
     <td valign="top">
       <h3>Opens like a book</h3>
@@ -79,8 +79,9 @@ computer.
     </td>
     <td valign="top">
       <h3>Fits your space</h3>
-      Light and dark modes that follow your system, five theme families (Brief by default), your own accent
-      color, and a page tone for text. Hover a theme to preview it on the whole window.
+      A single slim toolbar and footer leave the page most of the window. Light and dark modes that
+      follow your system, five theme families (Brief by default), your own accent color, and a page
+      tone for text. Hover a theme to preview it on the whole window.
     </td>
   </tr>
 </table>

@@ -5,7 +5,7 @@ Everything Hold My Brief does, in detail. For a quick tour, see the [README](../
 ## Opening documents
 
 Open a PDF, DRM-free EPUB, Markdown, TXT or image file (PNG, JPEG, WebP, GIF, AVIF, BMP) with
-**Open**, Ctrl+O, a single-file drop or a command-line file argument. The Windows installer adds
+Ctrl+O, **Open file…** in the command palette, a single-file drop or a command-line file argument. The Windows installer adds
 Hold My Brief to Explorer's **Open with** list for the document formats without changing the default
 app; clean-account installer behavior has not yet been verified. A second instance routes its file
 request to the running app.
@@ -17,10 +17,14 @@ this build, so run the PDF through an OCR tool first if you need its text. This 
 
 ## The window
 
-**Pin** keeps the reader above ordinary windows. **Lock** captures its outer dimensions while
-allowing movement. Ctrl+Shift+T toggles pin; Ctrl+Shift+L toggles lock. The menu includes both
-controls, window presets (Compact 420 × 620, Reading 760 × 900), typography, fit/zoom, rotation,
-contents, Go to, Back and a shortcut reference.
+The toolbar is one row. On macOS the window's close, minimize and zoom buttons sit at its left end,
+and dragging any empty part of the toolbar moves the window. The document's name in the middle opens
+the command palette (Ctrl+K), where you can open a file, jump, find or change any setting.
+
+The pin button keeps the reader above ordinary windows. The lock button captures its outer
+dimensions while allowing movement. Each is highlighted while on. Ctrl+Shift+T toggles pin;
+Ctrl+Shift+L toggles lock. The menu includes both controls, window presets (Compact 420 × 620,
+Reading 760 × 900), typography, fit/zoom, rotation, contents, Go to, Back and a shortcut reference.
 
 ## Appearance
 
@@ -36,7 +40,8 @@ Open the menu and choose **Appearance…** to open the Appearance panel at the b
   PDF pages, fixed-layout EPUB pages and images always keep their original colors.
 
 Choices are saved on this computer and applied before the window first paints, so there is no flash
-of the wrong theme. The native title bar follows the light or dark mode.
+of the wrong theme. The window frame (the Windows title bar, the macOS window buttons) follows the
+light or dark mode.
 
 Fonts are not bundled. The interface asks for Inter and JetBrains Mono and falls back to the system
 faces your computer already has, so nothing is downloaded to draw the window. Install both fonts if
@@ -51,7 +56,8 @@ PgDn/PgUp change pages. Space/Shift+Space traverse one screen, scrolling a tall 
 advancing. Ctrl+G jumps to a physical page, EPUB chapter/percentage or source line. The footer
 reports **position**, never completion or material actually read.
 
-The footer slider scrubs the entire document. Click the track to jump, or drag the thumb to preview
+The hairline along the bottom edge of the page scrubs the entire document; hover the footer to show
+its thumb. Click the line to jump, or drag the thumb to preview
 a destination and release to navigate. PDF and fixed-layout EPUB snap to physical pages (to whole
 spreads in two-page view);
 Markdown/TXT use source lines; reflowable EPUB uses whole-book percentage. With the slider focused,
@@ -102,10 +108,17 @@ pipe is findable too.
 
 ### Command palette
 
-**Ctrl+K** opens a search field over every reader action, so you can run something without finding it
-in the menu. Start typing to filter: matching is forgiving, so `zoom` finds the four zoom commands
-through their other names and `fit pa` finds **Fit page**. Arrow keys move the highlight, Enter runs
-the highlighted command and Escape closes the palette.
+**Ctrl+K**, or a click on the document's name in the toolbar, opens a search field over every reader
+action, so you can run something without finding it in the menu. Start typing to filter: matching is
+forgiving, so `zoom` finds the four zoom commands through their other names and `fit pa` finds
+**Fit page**. Arrow keys move the highlight, Enter runs the highlighted command and Escape closes the
+palette.
+
+The field also reads what you type as a request. A number, with or without `page`, `p`, `line` or
+`go to` in front, or a percentage such as `35%`, offers **Go to** that location, read the same way as
+Ctrl+G. `find …`, `search for …` or `where is …` offers to find the rest of the text. Any other text
+that names no command is offered as a find in the open document, so typing a phrase and pressing
+Enter opens the find bar on it. None of this uses a language model or the network.
 
 Commands that need a document open, or the desktop app for pin and size lock, are listed but marked
 with the reason they cannot run yet. With a document open the palette is the quickest route to Go to,
@@ -117,7 +130,7 @@ library.
 | Action | Shortcut |
 | --- | --- |
 | Find in document | Ctrl+F |
-| Search commands (command palette) | Ctrl+K |
+| Command palette: go to, find or run a command | Ctrl+K |
 | Next / previous page | PgDn / PgUp (Right / Left in page mode) |
 | Next / previous screen | Space / Shift+Space |
 | First / last location | Home / End |
