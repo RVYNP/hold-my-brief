@@ -2,6 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { ZipWriter, Uint8ArrayWriter, TextReader } from '@zip.js/zip.js';
 import { createHash } from 'node:crypto';
 import { crc32, deflateSync } from 'node:zlib';
+import { libraryGridColumns } from '../src/library-layout';
 
 // A solid-colour PNG of exactly the requested size, so tile proportions are known to the test.
 function pngFixture(width: number, height: number, [r, g, b]: [number, number, number]) {
@@ -358,7 +359,8 @@ test('library drawer floats over the page and never resizes it, while drag, keyb
   expect(await contained()).toBe(true);
   expect(await pageGeometry()).toEqual(untouched);
   await expect(page.locator('.library-detail')).toBeHidden();
-  await page.locator('.library-tile').first().click();
+  // The board pre-selects the document being read, and pressing a selected tile opens it, so select another one.
+  await page.locator('.library-tile:not(.is-selected)').first().click();
   await expect(page.locator('.library-tile.is-selected')).toHaveCount(1);
   await expect(root).toHaveClass(/is-board/);
   expect(await pageGeometry()).toEqual(untouched);
@@ -384,9 +386,12 @@ test('library drawer floats over the page and never resizes it, while drag, keyb
   await expect(handle).toHaveAttribute('aria-valuenow', '440'); await expect(handle).toHaveAttribute('aria-valuemax', '440');
   await page.setViewportSize({ width: 1080, height: 680 }); await expect(handle).toHaveAttribute('aria-valuenow', '520');
 
-  // Every width keeps the masonry inside the drawer, and the view is remembered for the collection.
+  // Every width keeps the masonry inside the drawer, and the view is remembered for the collection. At the
+  // widest drawer the column count depends on the platform's scrollbar width (classic scrollbars take ~15 px),
+  // so it is checked against the layout rule for the measured content width rather than a fixed number.
   await handle.focus(); await page.keyboard.press('End');
-  await expect.poll(columns).toBe(4);
+  await expect.poll(async () => (await columns()) === libraryGridColumns(await documents.evaluate(el => el.clientWidth - parseFloat(getComputedStyle(el).paddingLeft) - parseFloat(getComputedStyle(el).paddingRight)))).toBe(true);
+  expect(await columns()).toBeGreaterThanOrEqual(3);
   expect(await contained()).toBe(true);
   await handle.focus(); await page.keyboard.press('Home'); await expect(handle).toHaveAttribute('aria-valuenow', '240');
   await expect.poll(columns).toBe(2);
