@@ -37,6 +37,20 @@ test('Markdown uses safe content, an outline and compact accessible controls', a
   await expect(page.locator('#position')).toContainText('Next steps');
   await expect(page.getByRole('button', { name: 'Pin', exact: true })).toBeVisible();
 });
+test('document headings never take over the reader\'s own elements', async ({ page }) => {
+  await page.goto('/');
+  // Headings named like the reader's dialogs ("Contents", "Menu", "Appearance") used to become ids that
+  // shadowed them, so the Contents popover would not open on a document that has a Contents heading.
+  const filler = Array.from({ length: 30 }, (_, i) => `Paragraph ${i + 1}, long enough that each heading sits screens apart from the next one.`).join('\n\n');
+  const markdown = ['# Contents', filler, '## Menu', filler, '## Appearance', filler, '## Jump', filler].join('\n\n');
+  await page.locator('#file-input').setInputFiles({ name: 'guide.md', mimeType: 'text/markdown', buffer: Buffer.from(markdown) });
+  await expect(page.locator('#filename')).toHaveText('guide.md');
+  expect(await page.evaluate(() => ['contents', 'menu', 'appearance', 'jump'].filter(id => document.querySelectorAll(`[id="${id}"]`).length !== 1))).toEqual([]);
+  await page.getByRole('button', { name: 'Reader menu' }).click();
+  await page.getByRole('button', { name: 'Contents', exact: true }).click();
+  await page.locator('#outline-list').getByRole('button', { name: 'Jump' }).click();
+  await expect(page.locator('#position')).toContainText('Jump');
+});
 test('text settings live in the appearance sheet, apply to the open text and keep a readable measure', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');

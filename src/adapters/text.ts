@@ -64,7 +64,9 @@ export function renderMarkdown(source: string): { html: string; outline: Outline
         let id = base, count = 0;
         while (slugs.has(id)) id = `${base}-${++count}`;
         slugs.add(id);
-        token.attrSet('id', id);
+        // A data attribute, not an id: ids share one namespace with the reader's own elements, so a
+        // heading named "Contents" or "Menu" would shadow the reader's dialogs of that name.
+        token.attrSet('data-heading', id);
         outline.push({ label, target: `heading:${id}` });
       }
       if (token.type === 'inline' && state.tokens[index - 1]?.type === 'paragraph_open' && state.tokens[index - 2]?.type === 'list_item_open') {
@@ -306,7 +308,7 @@ export class TextAdapter implements ReaderAdapter {
 
   async goTo(target: string): Promise<void> {
     if (target.startsWith('heading:')) {
-      const element = Array.from(this.content.querySelectorAll<HTMLElement>('[id]')).find(candidate => candidate.id === target.slice(8));
+      const element = Array.from(this.content.querySelectorAll<HTMLElement>('[data-heading]')).find(candidate => candidate.dataset.heading === target.slice(8));
       if (!element) throw new Error('This heading could not be found.');
       this.remember();
       await this.restore({ kind: this.format, blockLine: Number(element.dataset.sourceLine), line: Number(element.dataset.sourceLine), offset: 0 });
