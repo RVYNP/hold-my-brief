@@ -72,7 +72,9 @@ async function record(browser) {
     ring.style.left = `${x}px`; ring.style.top = `${y}px`; ring.style.opacity = pressed ? '1' : '0';
   }, { ...p, pressed });
   const frame = async () => {
+    // No focus ring in the recording: opening the drawer focuses its search field, which is not what the demo shows.
     await page.evaluate(step => {
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
       for (const animation of document.getAnimations()) {
         if (animation.effect?.target?.closest?.('#demo-cursor, #demo-press')) continue;
         animation.pause();

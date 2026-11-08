@@ -205,8 +205,9 @@ const browser = await chromium.launch(existsSync(CHROME) ? { executablePath: CHR
     const { ctx, page } = await open(browser);
     await loadFile(page, PDF, 9000);
     await jumpTo(page, 48);
-    // The browser preview cannot pin; draw the pinned state exactly as updateWindow() in src/main.ts does.
-    await page.evaluate(() => { const pin = document.getElementById('pin'); pin.setAttribute('aria-pressed', 'true'); pin.textContent = 'Pinned'; });
+    // The browser preview has no native frame and cannot pin: draw what the desktop app does on Windows
+    // (its own caption buttons in the toolbar, the pinned state as updateWindow() in src/main.ts sets it).
+    await page.evaluate(() => { document.documentElement.classList.add('windows-titlebar'); document.getElementById('pin').setAttribute('aria-pressed', 'true'); });
     reader = await shot(page);
     await ctx.close();
   }
@@ -263,7 +264,6 @@ const browser = await chromium.launch(existsSync(CHROME) ? { executablePath: CHR
     .doc p, .doc li { margin: 0 0 8px; } .doc ul { margin: 0 0 8px; padding-left: 20px; } .doc a { color: #0969da; text-decoration: none; }
     .doc code { padding: 1px 4px; background: #eff1f3; border-radius: 4px; font: 11.5px 'JetBrains Mono', Consolas, monospace; }
     .reader { right: 26px; top: 22px; width: 420px; }
-    .reader .bar { background: #f4f1ea; }
     .reader > img { display: block; width: 420px; }
     .taskbar { position: absolute; left: 0; right: 0; bottom: 0; height: 48px; display: flex; align-items: center; justify-content: center; gap: 6px;
                background: rgba(243,243,243,.92); border-top: 1px solid rgba(0,0,0,.08); }
@@ -284,7 +284,6 @@ const browser = await chromium.launch(existsSync(CHROME) ? { executablePath: CHR
       <div class="doc">${guide}</div>
     </div>
     <div class="win reader">
-      <div class="bar"><img src="${icon}"><span class="t">Hold My Brief</span>${controls}</div>
       <img src="${dataUrl(reader)}">
     </div>
     <div class="taskbar">
