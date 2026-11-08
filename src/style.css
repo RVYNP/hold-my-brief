@@ -170,11 +170,15 @@
 [data-page='sepia'] { --paper: light-dark(#f5eddb, #2a2419); --ink: light-dark(#43361f, #e2d4b6); }
 /* Dim lowers glare within the active family: a page between chrome and surface, softer ink. */
 [data-page='dim'] { --paper: light-dark(color-mix(in srgb, var(--chrome) 55%, var(--surface)), color-mix(in srgb, var(--hover) 70%, var(--surface))); --ink: light-dark(color-mix(in srgb, var(--fg) 85%, var(--muted)), color-mix(in srgb, var(--fg) 70%, var(--muted))); }
+/* Geist (Vercel, SIL Open Font License 1.1, src/fonts/OFL-Geist.txt), bundled so the app never fetches a font.
+   Geist Serif has one weight and no italic. */
+@font-face { font-family: 'Geist'; src: url('./fonts/Geist-Variable.woff2') format('woff2'); font-weight: 100 900; font-style: normal; font-display: block; }
+@font-face { font-family: 'Geist Serif'; src: url('./fonts/GeistSerif-Regular.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: block; }
 :root {
-  /* Brand type stack: Inter for the interface, JetBrains Mono for the machine voice
-     (folios, paths, positions). Both fall back to system faces so the app never
-     fetches a font and works offline. */
-  --font-ui: 'Inter', 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  /* Brand type stack: Geist Serif for what you read (document text and titles), Geist for the
+     interface, JetBrains Mono for the machine voice (folios, paths, positions). */
+  --font-read: 'Geist Serif', Georgia, 'Times New Roman', serif;
+  --font-ui: 'Geist', 'Inter', 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, ui-monospace, monospace;
   font-family: var(--font-ui);
   font-synthesis: none;
@@ -274,7 +278,8 @@ select:hover { border-color: var(--accent-border); }
 .ask-mark { flex-shrink: 0; color: var(--accent-ink); }
 /* The compact position ("12 / 24") keeps its width (up to 55% of the title); the name gives way,
    down to about five characters, so neither ever collapses to a lone ellipsis. */
-.title strong { flex: 0 1 auto; min-width: min(5em, 45%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 12px; }
+/* The document name is a title: Geist Serif at its one (regular) weight, a size up to match the sans. */
+.title strong { flex: 0 1 auto; min-width: min(5em, 45%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 14px/1.2 var(--font-read); }
 .title span { flex: 0 0 auto; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 10px/1.4 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
 .ask-key { display: none; flex-shrink: 0; }
 .title:hover .ask-key, .title:focus-visible .ask-key { display: block; }
@@ -289,7 +294,8 @@ select:hover { border-color: var(--accent-border); }
 #empty { height: 100%; overflow: auto; padding: 32px 28px 24px; max-width: 640px; margin: auto; }
 .book-mark { display: block; color: var(--accent); }
 .eyebrow { font: 10px/1.5 var(--font-mono) !important; letter-spacing: 1.5px; color: var(--muted) !important; margin-top: 22px !important; }
-h1 { font-size: 34px; line-height: 1.15; font-weight: 550; letter-spacing: -.9px; margin: 12px 0 18px; color: var(--fg); }
+/* Headings are titles: Geist Serif at its one weight, which a display serif carries without bold. */
+h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 12px 0 18px; color: var(--fg); }
 #empty > p { color: var(--muted); font-size: 13px; line-height: 1.65; }
 .primary { background: var(--accent-fill); color: var(--on-accent); padding: 11px 15px; font-weight: 600; }
 .primary:hover { background: var(--accent-fill-hover); }
@@ -377,7 +383,7 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
 .reader-host.panning, .reader-host.panning * { cursor: grabbing !important; }
 dialog { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--fg); padding: 18px; width: min(360px, calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow: auto; box-shadow: var(--shadow-popover); }
 dialog::backdrop { background: var(--scrim); }
-h2 { font-size: 15px; font-weight: 600; margin: 0 0 16px; }
+h2 { font: 400 17px/1.25 var(--font-read); margin: 0 0 16px; }
 .dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
 .dialog-head h2 { margin: 0; }
 .dialog-head button { font-size: 22px; padding: 0 7px; color: var(--muted); }
@@ -457,7 +463,7 @@ dd { margin: 0; color: var(--muted); }
 .theme-tile { display: flex; flex-direction: column; gap: 8px; padding: 9px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
 .theme-card[aria-checked=true] .theme-tile, .theme-card[data-previewing] .theme-tile { border-color: var(--accent); box-shadow: 0 0 0 .5px var(--accent); }
 .theme-row:has([data-previewing]) .theme-card[aria-checked=true] .theme-tile { border-color: var(--border); box-shadow: none; }
-.theme-sample { color: var(--ink); font: 16px/1.2 Georgia, 'Times New Roman', serif; }
+.theme-sample { color: var(--ink); font: 16px/1.2 var(--font-read); }
 .theme-dots { display: flex; gap: 4px; }
 .theme-dots span { width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--border); background: var(--accent); }
 .theme-dots span:nth-child(2) { background: var(--fg); }

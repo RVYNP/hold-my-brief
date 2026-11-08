@@ -64,9 +64,11 @@ Choices are saved on this computer and applied before the window first paints, s
 of the wrong theme. The window frame (the Windows title bar, the macOS window buttons) follows the
 light or dark mode.
 
-Fonts are not bundled. The interface asks for Inter and JetBrains Mono and falls back to the system
-faces your computer already has, so nothing is downloaded to draw the window. Install both fonts if
-you want the interface set exactly as designed.
+Markdown and text documents are set in Geist Serif, as are titles (the document name, headings,
+dialog titles); the interface is set in Geist. Both are bundled with the app (SIL Open Font License),
+so nothing is downloaded. Geist Serif has one weight, so bold and italic in a document are drawn from
+it rather than from a separate face. EPUB books keep their publisher's fonts, and PDFs their own.
+Positions, paths and key labels use JetBrains Mono if installed, otherwise a system monospace face.
 
 The theme design is inspired by [Tern](https://stencil.so/tern) by Stencil, and the Graphite theme
 uses Tern's default palette. See [Credits](../README.md#credits).

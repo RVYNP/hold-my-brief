@@ -105,10 +105,10 @@ export function renderMarkdown(source: string): { html: string; outline: Outline
 }
 
 const styles = `
-.reader-text-content{box-sizing:border-box;min-height:100%;color:inherit;overflow-wrap:anywhere;max-width:calc(var(--measure) + 2 * var(--reader-margin));margin-inline:auto}
+.reader-text-content{box-sizing:border-box;min-height:100%;color:inherit;overflow-wrap:anywhere;max-width:calc(var(--measure) + 2 * var(--reader-margin));margin-inline:auto;font-family:var(--font-read);font-synthesis:weight style}
 .reader-text-content[data-wrap="false"]{max-width:none}
 .reader-text-content :is(p,h1,h2,h3,h4,h5,h6,pre,blockquote,ul,ol,table){margin-top:0;margin-bottom:1em}
-.reader-text-content :is(h1,h2,h3,h4,h5,h6){line-height:1.25}
+.reader-text-content :is(h1,h2,h3,h4,h5,h6){line-height:1.25;font-family:inherit;font-weight:400}
 .reader-text-content h1{font-size:2em;letter-spacing:normal;color:inherit}
 .reader-text-content h2{font-size:1.5em}.reader-text-content h3{font-size:1.25em}
 .reader-text-content a{color:var(--accent-ink);text-decoration:underline}

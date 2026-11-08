@@ -220,6 +220,9 @@ picker that previews on hover shaped Hold My Brief's Appearance panel. The Graph
 the default palette in [Tern's published theme tokens](https://docs.stencil.so/tern/styles/variables.html).
 Thank you to the Stencil team.
 
+Type is [Geist and Geist Serif](https://vercel.com/font) by Vercel, bundled under the SIL Open Font
+License 1.1 (`src/fonts/OFL-Geist.txt`).
+
 The screenshots read public-domain documents: *The Half-Tone Process* (1895), a print manual
 scanned by the [Internet Archive](https://archive.org/details/halftoneprocessp00verf_0), and
 Jane Austen's *Pride and Prejudice*. The library shots also show Hokusai's *The Great Wave off
