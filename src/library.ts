@@ -6,7 +6,8 @@ import { assignMasonry, clampLibraryWidth, defaultLibraryView, libraryGrid, libr
 import { canThumbnail, createThumbnailStore, type Thumbnail } from './thumbnails';
 import { colourHex, colourMatches, colourNames, colourSwatches, nameColour, parseColourName, type ColourName } from './colour';
 
-export type LibraryFilterResult = { colour: string | null; query: string; matches: number; names: string[] };
+/** `pending` is how many pictures still had no measured colours when the answer was given (0 = `matches` is complete). */
+export type LibraryFilterResult = { colour: string | null; query: string; matches: number; names: string[]; pending: number };
 const titleCase = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
 type Callbacks = { open: (path: string) => Promise<boolean>; error: (error: unknown) => void };
@@ -95,7 +96,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   // The board is the same drawer opened across the whole reading panel; it is never saved, so the drawer width is untouched.
   let board = false; let selectedPath: string | undefined;
   // Colour filter: a named hue applied on top of the collection and search. A picture counts once its colours are known.
-  let colourFilter: ColourName | null = null; let colourIndex: Promise<number> | undefined; let colourUnknown = 0; let colourTimer = 0;
+  let colourFilter: ColourName | null = null; let colourIndex: Promise<number> | undefined; let colourUnknown = 0; let colourTimer = 0; const colourRequested = new Set<string>();
 
   root.classList.add('library-root');
   const backdrop = button('', 'Close library'); backdrop.className = 'library-backdrop'; backdrop.tabIndex = -1;
@@ -431,7 +432,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
       if (!item.parentId) continue;
       const parent = collectionMatches.get(item.parentId); if (parent) for (const path of collectionMatches.get(item.id) ?? []) parent.add(path);
     }
-    thumbs.reconcile(new Set(library.documents.map(doc => doc.path))); colourIndex = undefined;
+    thumbs.reconcile(new Set(library.documents.map(doc => doc.path))); colourIndex = undefined; colourRequested.clear();
   }
   function renderNavigation() {
     navigation.replaceChildren();
@@ -478,24 +479,37 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   const clearThumbnails = () => thumbnailObserver.disconnect();
   function observeThumbnails() { if (visible) for (const media of documents.querySelectorAll<HTMLElement>('[data-path]:not(.is-loaded):not(.is-unavailable)')) thumbnailObserver.observe(media); }
   function showThumbnail(media: HTMLElement, thumbnail: Thumbnail) {
-    const tile = tileByPath.get(media.dataset.path!); if (tile) tile.ratio = thumbnail.ratio;
+    const tile = tileByPath.get(media.dataset.path!); if (tile && Math.abs(tile.ratio - thumbnail.ratio) > .001) { tile.ratio = thumbnail.ratio; schedulePlacement(); }
     media.style.setProperty('--ratio', String(thumbnail.ratio));
     const image = media.querySelector('img')!; image.src = thumbnail.url; image.hidden = false; media.classList.add('is-loaded');
   }
+  let placementFrame = 0;
+  function schedulePlacement() { if (!placementFrame) placementFrame = requestAnimationFrame(() => { placementFrame = 0; layoutGrid(); }); }
   function markUnavailable(media: HTMLElement) { media.classList.add('is-unavailable'); media.title = 'Thumbnail unavailable. Use More actions to locate the original.'; }
   window.addEventListener('pagehide', () => { clearThumbnails(); thumbs.dispose(); });
 
-  // Board: a click selects a reference for the detail strip; Enter or a double click opens it and returns
-  // to reading. Outside the board a click opens it, as before.
+  // Board: a click selects a reference for the detail strip, and activating the selected one (a second click,
+  // Enter, VoiceOver's press) opens it and returns to reading. Outside the board a click opens it, as before.
+  function labelOpen(open: HTMLElement, doc: { name: string; path: string }) {
+    if (!board) { open.setAttribute('aria-label', `Open ${doc.name}`); open.removeAttribute('aria-pressed'); return; }
+    const selected = doc.path === selectedPath;
+    open.setAttribute('aria-pressed', String(selected)); open.setAttribute('aria-label', `${selected ? 'Open' : 'Select'} ${doc.name}`);
+  }
   function bindOpen(doc: LibraryDocument, open: HTMLElement, node: HTMLElement) {
-    node.dataset.docPath = doc.path; node.classList.toggle('is-selected', board && doc.path === selectedPath);
-    open.onclick = () => { if (board) selectDocument(doc.path); else void openDocument(doc, open, matches.filter(isImage).map(item => item.path)); };
-    open.ondblclick = () => { if (board) void openFromBoard(doc, open); };
+    node.dataset.docPath = doc.path; node.dataset.docName = doc.name; node.classList.toggle('is-selected', board && doc.path === selectedPath); labelOpen(open, doc);
+    open.onclick = () => {
+      if (!board) void openDocument(doc, open, matches.filter(isImage).map(item => item.path));
+      else if (selectedPath === doc.path) void openFromBoard(doc, open);
+      else selectDocument(doc.path);
+    };
     open.onkeydown = event => { if (board && event.key === 'Enter') { event.preventDefault(); void openFromBoard(doc, open); } };
   }
   function selectDocument(path: string | undefined) {
     selectedPath = path;
-    for (const node of documents.querySelectorAll<HTMLElement>('[data-doc-path]')) node.classList.toggle('is-selected', board && node.dataset.docPath === path);
+    for (const node of documents.querySelectorAll<HTMLElement>('[data-doc-path]')) {
+      node.classList.toggle('is-selected', board && node.dataset.docPath === path);
+      const open = node.querySelector<HTMLElement>('.library-document-open'); if (open) labelOpen(open, { name: node.dataset.docName ?? '', path: node.dataset.docPath ?? '' });
+    }
     renderDetail();
   }
   async function openFromBoard(doc: LibraryDocument, trigger: HTMLElement) {
@@ -604,22 +618,32 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     const saved = parseLibraryView(savedPreference(viewKey())); if (saved) return saved;
     const scoped = library.documents.filter(inScope); return defaultLibraryView(scoped.filter(thumbnailable).length, scoped.length);
   }
-  type Tile = { node: HTMLElement; path: string; ratio: number };
+  // Tiles sit in the DOM in sorted order (so Tab and screen readers follow the sort) and are positioned
+  // absolutely into masonry columns: each joins the shortest column, and a tile's height follows its ratio.
+  type Tile = { node: HTMLElement; path: string; ratio: number; column: number };
   let tiles: Tile[] = []; let columnCount = 0; const tileByPath = new Map<string, Tile>();
+  const gridSizer = element('div', 'library-grid-sizer'); gridSizer.setAttribute('aria-hidden', 'true');
   function contentWidth() { const style = getComputedStyle(documents); return documents.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight); }
-  function layoutGrid(force = false) {
+  /** Places every tile. The column of each tile is only reassigned when asked or when the column count changes, so a picture arriving moves what is below it, never reshuffles. */
+  function layoutGrid(assign = false) {
     if (view !== 'grid' || !tiles.length) return;
     const width = contentWidth(); if (width <= 0) return;
-    const columns = libraryGridColumns(width, board ? libraryGrid.boardMinTile : undefined); if (!force && columns === columnCount && documents.querySelector('.library-column')) return;
-    columnCount = columns; const tileWidth = (width - libraryGrid.gap * (columns - 1)) / columns;
-    const placed = assignMasonry(tiles.map(tile => 1 / tile.ratio), columns, libraryGrid.gap / tileWidth);
-    const focused = document.activeElement instanceof HTMLElement && documents.contains(document.activeElement) ? document.activeElement : undefined;
-    documents.replaceChildren(...placed.map(indices => { const column = element('div', 'library-column'); column.setAttribute('role', 'presentation'); column.append(...indices.map(index => tiles[index].node)); return column; }));
-    if (focused?.isConnected) focused.focus();
-    // Tiles built while the drawer was hidden or had no width are only attached now; observing is idempotent.
+    const columns = libraryGridColumns(width, board ? libraryGrid.boardMinTile : undefined); const gap = libraryGrid.gap;
+    const tileWidth = (width - gap * (columns - 1)) / columns;
+    if (assign || columns !== columnCount) {
+      columnCount = columns;
+      assignMasonry(tiles.map(tile => 1 / tile.ratio), columns, gap / tileWidth).forEach((indices, column) => { for (const index of indices) tiles[index].column = column; });
+    }
+    const style = getComputedStyle(documents); const left = parseFloat(style.paddingLeft), top = parseFloat(style.paddingTop); const bottoms = new Array<number>(columns).fill(0);
+    for (const tile of tiles) {
+      const y = bottoms[tile.column]; bottoms[tile.column] = y + tileWidth / tile.ratio + gap;
+      tile.node.dataset.column = String(tile.column); tile.node.style.width = `${tileWidth}px`; tile.node.style.left = `${left + tile.column * (tileWidth + gap)}px`; tile.node.style.top = `${top + y}px`;
+    }
+    gridSizer.style.height = `${Math.max(0, Math.max(...bottoms) - gap)}px`;
+    // Tiles built while the drawer was hidden or had no width are only placed now; observing is idempotent.
     observeThumbnails();
   }
-  // Only the column count is recomputed on resize; the drawer's own width is the only input.
+  // The drawer's own width is the only input; a new width re-places the tiles (and re-assigns columns if their count changed).
   new ResizeObserver(() => { if (visible) layoutGrid(); }).observe(documents);
   function actionsFor(doc: LibraryDocument) {
     const actions = element('div', 'library-card-actions');
@@ -652,7 +676,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     if (doc.path === activePath) media.append(element('span', 'library-tile-tag', 'Reading'));
     open.append(media);
     bindOpen(doc, open, node);
-    node.append(open, actionsFor(doc)); return { node, path: doc.path, ratio };
+    node.append(open, actionsFor(doc)); return { node, path: doc.path, ratio, column: 0 };
   }
   for (const mode of ['grid', 'list'] as const) viewButtons[mode].onclick = () => { if (view !== mode) { savePreference(viewKey(), mode); renderDocuments(); } };
   function renderDocuments() {
@@ -690,7 +714,8 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     }
     const shown = matches.slice(page * pageSize, (page + 1) * pageSize);
     if (view === 'grid') {
-      tiles = shown.map(documentTile); for (const tile of tiles) tileByPath.set(tile.path, tile); layoutGrid(true);
+      tiles = shown.map(documentTile); for (const tile of tiles) tileByPath.set(tile.path, tile);
+      documents.append(gridSizer, ...tiles.map(tile => tile.node)); layoutGrid(true);
       // The disk cache knows the shape of every thumbnail it holds: reserve those tiles' real height now
       // rather than letting the grid jump as pictures arrive.
       void thumbs.primeRatios(shown.map(doc => doc.path)).then(learned => {
@@ -698,9 +723,9 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
         for (const tile of tiles) { const ratio = thumbs.ratio(tile.path); if (ratio && Math.abs(ratio - tile.ratio) > .001) { tile.ratio = ratio; tile.node.querySelector<HTMLElement>('.library-tile-media')?.style.setProperty('--ratio', String(ratio)); } }
         layoutGrid(true);
       });
-      thumbs.trim(new Set(shown.map(doc => doc.path)));
     }
     else documents.append(...shown.map(documentRow));
+    thumbs.trim(new Set(shown.map(doc => doc.path)));
     if (matches.length > pageSize) {
       const previous = button('←', 'Previous library page', 'page-previous'); previous.disabled = page === 0; const next = button('→', 'Next library page', 'page-next'); next.disabled = (page + 1) * pageSize >= matches.length;
       const change = (offset: number) => { page += offset; renderDocuments(); documents.scrollTop = 0; documents.querySelector<HTMLElement>('.library-document-open')?.focus(); };
@@ -714,17 +739,34 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     add.title = collection && !collection.sourceId ? `Add files to ${collection.name}` : 'Add files to Unfiled';
     if (busy) setBusy(true); if (key && !busy && !modal?.open) restoreFocus(key);
   }
-  function setColour(next: ColourName | null) { colourFilter = next; colourSelect.value = next ?? ''; page = 0; renderDocuments(); }
+  function setColour(next: ColourName | null) { colourFilter = next; colourRequested.clear(); colourSelect.value = next ?? ''; page = 0; renderDocuments(); }
   colourChip.onclick = () => { setColour(null); search.focus(); };
   colourSelect.onchange = () => setColour(parseColourName(colourSelect.value) ?? null);
   // A picture's colours are known once its thumbnail has been made, or the disk cache already has them. While a
   // colour filter is on, the ones still unknown are made in the background and the list refreshes as they arrive.
-  function scheduleColourRender() { if (!colourTimer) colourTimer = window.setTimeout(() => { colourTimer = 0; if (colourFilter && visible) renderDocuments(); }, 250); }
+  /**
+   * Re-renders the list as colours arrive without pulling anything out from under the user: the scroll position
+   * and the focused tile or control are kept, and an open menu or dialog makes it wait for the next tick.
+   */
+  function scheduleColourRender() {
+    if (colourTimer) return;
+    colourTimer = window.setTimeout(() => {
+      colourTimer = 0; if (!colourFilter || !visible) return;
+      if (!itemMenu.hidden || modal?.open || busy) { scheduleColourRender(); return; }
+      const key = focusKey(), scrolled = documents.scrollTop, hadFocus = root.contains(document.activeElement);
+      renderDocuments(); documents.scrollTop = scrolled;
+      if (hadFocus && key) restoreFocus(key);
+    }, 250);
+  }
   function analyseColours(unknown: LibraryDocument[], generation: number) {
     colourIndex ??= thumbs.primeRatios(library.documents.filter(thumbnailable).map(doc => doc.path)).then(learned => { if (learned) scheduleColourRender(); return learned; });
     void colourIndex.then(() => {
       if (generation !== renderGeneration) return;
-      for (const doc of unknown) if (!thumbs.colours(doc.path)) void thumbs.request(doc.path, doc.format, () => colourFilter !== null && visible).then(scheduleColourRender);
+      // Each picture is asked for once per colour session, however often the list is refreshed meanwhile.
+      for (const doc of unknown) {
+        if (thumbs.colours(doc.path) || colourRequested.has(doc.path)) continue; colourRequested.add(doc.path);
+        void thumbs.request(doc.path, doc.format, () => colourFilter !== null && visible).then(made => { if (!made) colourRequested.delete(doc.path); scheduleColourRender(); });
+      }
     });
   }
   async function filterBy(change: { colour?: string | null; query?: string }): Promise<LibraryFilterResult> {
@@ -732,13 +774,13 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     if (typeof change.colour === 'string' && !colour) throw Error(`Unknown colour "${change.colour}". Choose one of: ${colourNames.join(', ')}.`);
     if (!visible) setVisible(true, false);
     if (change.query !== undefined) search.value = change.query;
-    if (colour !== undefined) { colourFilter = colour; colourSelect.value = colour ?? ''; }
+    if (colour !== undefined) { colourFilter = colour; colourRequested.clear(); colourSelect.value = colour ?? ''; }
     page = 0; renderDocuments();
     // Pictures whose colours are not known yet are analysed first, for at most 25 s, so the answer is complete.
     for (const deadline = Date.now() + 25_000; colourFilter && colourUnknown > 0 && Date.now() < deadline;) await new Promise(resolve => setTimeout(resolve, 200));
     if (colourTimer) { clearTimeout(colourTimer); colourTimer = 0; }
     if (colourFilter) renderDocuments();
-    return { colour: colourFilter, query: search.value.trim(), matches: matches.length, names: matches.slice(0, 10).map(doc => doc.name) };
+    return { colour: colourFilter, query: search.value.trim(), matches: matches.length, names: matches.slice(0, 10).map(doc => doc.name), pending: colourFilter ? colourUnknown : 0 };
   }
   search.oninput = () => { page = 0; renderDocuments(); }; sort.onchange = format.onchange = availability.onchange = () => { page = 0; renderDocuments(); };
   let chosenCollection: string | null = null;

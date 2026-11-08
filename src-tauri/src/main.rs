@@ -264,23 +264,6 @@ async fn open_library_document(path: String, app: AppHandle) -> Result<OpenedFil
     .map_err(|e| e.to_string())?
 }
 
-fn resolve_original_checked(store: &Store, path: &str) -> Result<PathBuf, String> {
-    if let Some(catalog) = store.catalog.as_ref() {
-        match catalog.resolve(&store.saved.library, path) {
-            Ok(resolved) => return Ok(resolved),
-            Err(_) => {}
-        }
-    }
-    let document = store
-        .saved
-        .library
-        .documents
-        .iter()
-        .find(|d| d.path == path)
-        .ok_or("Item is no longer in the library.")?;
-    fs::canonicalize(&document.path).map_err(|e| format!("Original is unavailable: {e}"))
-}
-
 /// Indexes the PDFs below a user-chosen folder. Cancelling leaves the library unchanged.
 #[tauri::command]
 async fn index_folder(app: AppHandle) -> Result<Library, String> {

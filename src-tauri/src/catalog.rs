@@ -108,15 +108,37 @@ impl Catalog {
         transaction.commit().map_err(|e| e.to_string())
     }
 
-    pub fn resolve(&self, library: &Library, id: &str) -> Result<PathBuf, String> {
+    /// Where an item's original is, worked out from the catalog alone (no file system access), so a caller
+    /// can drop the store lock before touching a possibly slow volume. `resolve` is `plan` then `open`.
+    pub fn plan(&self, library: &Library, id: &str) -> Result<Original, String> {
         let document = library.documents.iter().find(|d| d.path == id).ok_or("Item is not in the library")?;
-        if let Some(path) = self.override_path(id)? { return canonical_file(&path); }
+        if let Some(path) = self.override_path(id)? { return Ok(Original::Direct(path)); }
         if let Some(source) = &document.source {
             let root_id = source.root_id.as_deref().ok_or("This item has no local original. Use Locate.")?;
             let root = library.roots.iter().find(|r| r.id == root_id).and_then(|r| r.path.as_deref()).ok_or("This source root is not linked. Choose its storage folder first.")?;
             let relative = source.relative_path.as_deref().ok_or("This item has no recorded original path. Use Locate.")?;
-            resolve_under_root(Path::new(root), relative)
-        } else { canonical_file(Path::new(&document.path)) }
+            Ok(Original::UnderRoot { root: PathBuf::from(root), relative: relative.to_string() })
+        } else { Ok(Original::Direct(PathBuf::from(&document.path))) }
+    }
+
+    pub fn resolve(&self, library: &Library, id: &str) -> Result<PathBuf, String> {
+        self.plan(library, id)?.open()
+    }
+}
+
+/// An original's location before it is checked on disk.
+pub enum Original {
+    Direct(PathBuf),
+    UnderRoot { root: PathBuf, relative: String },
+}
+
+impl Original {
+    /// Canonicalises and validates the file; this is the part that touches the file system.
+    pub fn open(self) -> Result<PathBuf, String> {
+        match self {
+            Original::Direct(path) => canonical_file(&path),
+            Original::UnderRoot { root, relative } => resolve_under_root(&root, &relative),
+        }
     }
 }
 

@@ -1,4 +1,5 @@
 import type { LibraryDocument } from './catalog-types';
+import type { LibraryFilterResult } from './library';
 import type { SearchHit, SearchOptions } from './search';
 import type { OutlineItem } from './types';
 
@@ -95,7 +96,7 @@ export type ReaderEnvironment = {
   library: () => Promise<LibraryDocument[]>;
   open: (document: LibraryDocument) => Promise<boolean>;
   /** Shows the library filtered by colour and/or text; colour null clears it. Returns what is shown. */
-  filterLibrary: (change: { colour?: string | null; query?: string }) => Promise<{ colour: string | null; query: string; matches: number; names: string[] }>;
+  filterLibrary: (change: { colour?: string | null; query?: string }) => Promise<LibraryFilterResult>;
   /** Colour names the library can filter by. */
   colourNames: readonly string[];
   setAppearance: (change: { mode?: string; theme?: string; page?: string }) => string;
@@ -222,7 +223,9 @@ export function readerTools(env: ReaderEnvironment): Tool[] {
         if (colour && !env.colourNames.includes(colour)) throw new Error(`Use one of: ${env.colourNames.join(', ')}.`);
         const shown = await env.filterLibrary({ colour, query: typeof input.query === 'string' ? input.query : undefined });
         const what = [shown.colour, shown.query && `“${shown.query}”`].filter(Boolean).join(' ') || 'everything';
-        return { result: shown, step: `Library: ${what} · ${shown.matches} ${shown.matches === 1 ? 'match' : 'matches'}` };
+        // Colours not measured yet are not counted; say so rather than present a partial count as final.
+        const pending = shown.pending ? ` (${shown.pending} still being measured)` : '';
+        return { result: shown, step: `Library: ${what} · ${shown.matches} ${shown.matches === 1 ? 'match' : 'matches'}${pending}` };
       },
     },
     {

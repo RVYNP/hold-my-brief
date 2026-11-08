@@ -115,11 +115,11 @@
 .library-document:hover .library-card-actions button, .library-document:focus-within .library-card-actions button, .library-document.is-menu-open .library-card-actions button, .library-list .library-document.is-active .library-card-actions button { opacity: 1; pointer-events: auto; }
 .library-list .library-document:hover .library-document-open, .library-list .library-document:focus-within .library-document-open, .library-list .library-document.is-active .library-document-open, .library-list .library-document.is-menu-open .library-document-open { padding-right: 60px; }
 
-/* Grid view: masonry columns of true-proportion tiles. A tile is image only until it is pointed at or
+/* Grid view: masonry columns of true-proportion tiles, each absolutely placed in sorted DOM order. A tile is image only until it is pointed at or
    focused; the open reference carries an accent ring and a READING tag. No borders, no cards. */
-.library-grid { display: flex; align-items: flex-start; gap: 4px; }
-.library-column { display: flex; flex: 1 1 0; flex-direction: column; gap: 4px; min-width: 0; }
-.library-tile { display: block; padding: 0; border-radius: 4px; }
+.library-grid { position: relative; }
+.library-grid-sizer { pointer-events: none; }
+.library-tile { position: absolute; display: block; padding: 0; border-radius: 4px; }
 .library-tile::after { display: none; }
 .library-tile:hover, .library-tile.is-active { background: transparent; }
 .library-tile-open { display: block; width: 100%; padding: 0; border-radius: 4px; }

@@ -143,7 +143,10 @@ export async function indexFolder(): Promise<Library> {
   return native('index_folder');
 }
 /** A thumbnail ready to show: a JPEG (or, in the browser build, WebP) and its pixel size. */
-export type LibraryThumbnail = { width: number; height: number; blob: Blob };
+export type LibraryThumbnail = { width: number; height: number; blob: Blob; /** Names the exact state of the original this was made from; the native cache refuses a save made from an older one. */ key?: string };
+/** Length of a cache key, which the native side sends ahead of thumbnails and range reads. */
+const keyLength = 32;
+const decodeKey = (bytes: ArrayBuffer, offset: number) => new TextDecoder().decode(new Uint8Array(bytes, offset, keyLength));
 // A cached thumbnail travels as `[width u32 BE][height u32 BE][jpeg]`, the same bytes the disk cache holds.
 const thumbnailHeader = 8;
 /**
@@ -154,9 +157,9 @@ const thumbnailHeader = 8;
 export async function readLibraryThumbnail(path: string): Promise<LibraryThumbnail | null> {
   if (desktop) {
     const buffer = await native<ArrayBuffer>('read_library_thumbnail', { path });
-    if (buffer.byteLength <= thumbnailHeader) return null;
-    const view = new DataView(buffer);
-    return { width: view.getUint32(0), height: view.getUint32(4), blob: new Blob([buffer.slice(thumbnailHeader)], { type: 'image/jpeg' }) };
+    if (buffer.byteLength <= keyLength + thumbnailHeader) return null;
+    const view = new DataView(buffer, keyLength);
+    return { width: view.getUint32(0), height: view.getUint32(4), blob: new Blob([buffer.slice(keyLength + thumbnailHeader)], { type: 'image/jpeg' }), key: decodeKey(buffer, 0) };
   }
   const file = await getBrowserFile(path);
   if (!Object.hasOwn(imageFormats, file.name.split('.').pop()?.toLowerCase() ?? '') || file.name.toLowerCase().endsWith('.avif')) return null;
@@ -177,11 +180,11 @@ export async function encodeCanvas(canvas: HTMLCanvasElement, type: 'image/jpeg'
 }
 /** Stores a webview-rendered JPEG thumbnail in the native cache. The browser build keeps it in memory only. */
 export async function putLibraryThumbnail(path: string, thumbnail: LibraryThumbnail): Promise<void> {
-  if (!desktop) return;
+  if (!desktop || !thumbnail.key) return;
   const header = new Uint8Array(thumbnailHeader); const view = new DataView(header.buffer);
   view.setUint32(0, thumbnail.width); view.setUint32(4, thumbnail.height);
   const body = new Uint8Array(await new Blob([header, thumbnail.blob]).arrayBuffer());
-  await invoke('put_library_thumbnail', body, { headers: { 'x-library-path': encodeURIComponent(path) } });
+  await invoke('put_library_thumbnail', body, { headers: { 'x-library-path': encodeURIComponent(path), 'x-library-key': thumbnail.key } });
 }
 /** What the disk cache already knows about a thumbnail: pixel size and dominant colours (packed 0xRRGGBB, largest first; empty when not yet measured). */
 export type LibraryThumbnailInfo = { size: [number, number]; colours: number[] };
@@ -190,15 +193,15 @@ export async function libraryThumbnailIndex(paths: string[]): Promise<Record<str
   return desktop && paths.length ? native('library_thumbnail_index', { paths }) : {};
 }
 /** Stores the dominant colours measured for a thumbnail (desktop only; the browser build keeps them in memory). */
-export async function putLibraryColours(path: string, colours: number[]): Promise<void> {
-  if (desktop) await native('put_library_colours', { path, colours });
+export async function putLibraryColours(path: string, colours: number[], key: string | undefined): Promise<void> {
+  if (desktop && key) await native('put_library_colours', { path, colours, key });
 }
-/** Part of a library original: the total file length and the bytes from `offset` (at most 8 MiB). */
-export async function readLibraryRange(path: string, offset: number, length: number): Promise<{ total: number; bytes: Uint8Array }> {
+/** Part of a library original: the total file length, a key naming the file's current state (the same on every read until the file changes), and the bytes from `offset` (at most 8 MiB). */
+export async function readLibraryRange(path: string, offset: number, length: number): Promise<{ total: number; key: string; bytes: Uint8Array }> {
   if (desktop) {
     const buffer = await native<ArrayBuffer>('read_library_range', { path, offset, length });
-    return { total: Number(new DataView(buffer).getBigUint64(0)), bytes: new Uint8Array(buffer.slice(8)) };
+    return { total: Number(new DataView(buffer).getBigUint64(0)), key: decodeKey(buffer, 8), bytes: new Uint8Array(buffer.slice(8 + keyLength)) };
   }
   const file = await getBrowserFile(path);
-  return { total: file.size, bytes: new Uint8Array(await file.slice(offset, offset + length).arrayBuffer()) };
+  return { total: file.size, key: `${file.size}:${file.lastModified}`, bytes: new Uint8Array(await file.slice(offset, offset + length).arrayBuffer()) };
 }

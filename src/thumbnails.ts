@@ -2,6 +2,7 @@ import workerURL from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type * as PdfjsModule from 'pdfjs-dist';
 import { canvasThumbnail, encodeCanvas, imageFormats, libraryThumbnailIndex, putLibraryColours, putLibraryThumbnail, readLibraryRange, readLibraryThumbnail, type LibraryThumbnail } from './bridge';
 import { dominantColours } from './colour';
+import { Abandoned, createExclusive } from './exclusive';
 
 export type Thumbnail = { url: string; ratio: number };
 type Pdfjs = typeof PdfjsModule;
@@ -51,10 +52,13 @@ const idleWorkers: InstanceType<Pdfjs['PDFWorker']>[] = [];
 function takeWorker(lib: Pdfjs) { return idleWorkers.pop() ?? new lib.PDFWorker(); }
 
 /** Bytes `[begin, end)` of a library original, in as many native reads as the per-read limit needs. */
-async function readSpan(path: string, begin: number, end: number): Promise<Uint8Array> {
+async function readSpan(path: string, begin: number, end: number, key: string): Promise<Uint8Array> {
   const parts: Uint8Array[] = []; let at = begin;
   while (at < end) {
-    const { bytes } = await readLibraryRange(path, at, Math.min(rangeLimit, end - at));
+    const read = await readLibraryRange(path, at, Math.min(rangeLimit, end - at));
+    // Pieces of two different versions of a file would make a picture of neither.
+    if (read.key !== key) throw Error('The original changed while its thumbnail was being made.');
+    const { bytes } = read;
     if (!bytes.length) break;
     parts.push(bytes); at += bytes.length;
   }
@@ -64,11 +68,7 @@ async function readSpan(path: string, begin: number, end: number): Promise<Uint8
   return joined;
 }
 
-/** Runs `work` after every earlier exclusive job has finished. */
-let exclusiveTail: Promise<unknown> = Promise.resolve();
-function exclusive<T>(work: () => Promise<T>): Promise<T> {
-  const run = exclusiveTail.then(work, work); exclusiveTail = run.catch(() => undefined); return run;
-}
+const exclusive = createExclusive();
 
 /**
  * Page 1 of a PDF scaled to `maxEdge`, rendered by the bundled pdf.js. pdf.js asks for the ranges it
@@ -76,12 +76,13 @@ function exclusive<T>(work: () => Promise<T>): Promise<T> {
  * `read_library_range`, so a multi-page 100 MB catalogue costs its xref plus page 1. A single-page scan
  * (img2pdf) is all page 1, so it is read whole whatever the transport does.
  */
-async function renderPdfThumbnail(path: string): Promise<LibraryThumbnail> {
+async function renderPdfThumbnail(path: string, wanted: () => boolean): Promise<LibraryThumbnail> {
   const lib = await loadPdfjs();
-  const first = await readLibraryRange(path, 0, firstChunk);
-  return first.total > heavyBytes ? exclusive(() => renderFirstPage(lib, path, first)) : renderFirstPage(lib, path, first);
+  const first = await withTimeout(readLibraryRange(path, 0, firstChunk));
+  const render = () => renderFirstPage(lib, path, first);
+  return first.total > heavyBytes ? exclusive(wanted, render) : render();
 }
-async function renderFirstPage(lib: Pdfjs, path: string, first: { total: number; bytes: Uint8Array }): Promise<LibraryThumbnail> {
+async function renderFirstPage(lib: Pdfjs, path: string, first: { total: number; key: string; bytes: Uint8Array }): Promise<LibraryThumbnail> {
   const worker = takeWorker(lib);
   const root = new URL(`${import.meta.env.BASE_URL}pdfjs/`, location.href).href;
   const options = {
@@ -91,11 +92,14 @@ async function renderFirstPage(lib: Pdfjs, path: string, first: { total: number;
   // A read that fails would leave pdf.js waiting for it forever; this settles the whole render instead.
   let fail: (error: unknown) => void = () => undefined;
   const failure = new Promise<never>((_, reject) => { fail = reject; }); failure.catch(() => undefined);
+  // The time limit covers the render itself and starts now; it also ends the pdf.js task, so a stuck render
+  // cannot keep running behind the next one.
+  const timer = setTimeout(() => fail(Error('The thumbnail took too long.')), jobTimeout);
   let task;
   if (first.bytes.length >= first.total) task = lib.getDocument({ ...options, data: first.bytes });
   else {
     const transport = new lib.PDFDataRangeTransport(first.total, first.bytes);
-    transport.requestDataRange = (begin, end) => { readSpan(path, begin, Math.min(end, first.total)).then(bytes => transport.onDataRange(begin, bytes), fail); };
+    transport.requestDataRange = (begin, end) => { readSpan(path, begin, Math.min(end, first.total), first.key).then(bytes => transport.onDataRange(begin, bytes), fail); };
     task = lib.getDocument({ ...options, range: transport });
   }
   try {
@@ -106,19 +110,19 @@ async function renderFirstPage(lib: Pdfjs, path: string, first: { total: number;
     const canvas = document.createElement('canvas'); canvas.width = Math.max(1, Math.round(viewport.width)); canvas.height = Math.max(1, Math.round(viewport.height));
     await Promise.race([page.render({ canvas, viewport }).promise, failure]);
     page.cleanup();
-    return await encodeCanvas(canvas);
-  } finally { void task.destroy().then(() => idleWorkers.push(worker), () => worker.destroy()); }
+    return { ...await encodeCanvas(canvas), key: first.key };
+  } finally { clearTimeout(timer); void task.destroy().then(() => idleWorkers.push(worker), () => worker.destroy()); }
 }
 
 /** AVIF is decoded by the webview (the native side has no decoder), then scaled like the rest. */
 async function renderAvifThumbnail(path: string): Promise<LibraryThumbnail> {
-  const first = await readLibraryRange(path, 0, rangeLimit);
+  const first = await withTimeout(readLibraryRange(path, 0, rangeLimit));
   if (first.total > avifLimit) throw Error('This image is too large for a thumbnail.');
-  const bytes = first.bytes.length >= first.total ? first.bytes : await readSpan(path, 0, first.total);
+  const bytes = first.bytes.length >= first.total ? first.bytes : await withTimeout(readSpan(path, 0, first.total, first.key));
   const bitmap = await createImageBitmap(new Blob([bytes as BlobPart], { type: 'image/avif' }));
   try {
     const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
-    return await canvasThumbnail(bitmap, Math.max(1, Math.round(bitmap.width * scale)), Math.max(1, Math.round(bitmap.height * scale)));
+    return { ...await canvasThumbnail(bitmap, Math.max(1, Math.round(bitmap.width * scale)), Math.max(1, Math.round(bitmap.height * scale))), key: first.key };
   } finally { bitmap.close(); }
 }
 
@@ -139,6 +143,7 @@ type Job = { path: string; format: string; wants: (() => boolean)[]; settle: (th
 export function createThumbnailStore() {
   const ready = new Map<string, Thumbnail>(); // Insertion order doubles as least-recently-shown order.
   const jobs = new Map<string, Promise<Thumbnail | undefined>>();
+  const queued = new Map<string, Job>(); // Jobs still waiting for a slot, by path.
   const failed = new Set<string>();
   const hints = new Map<string, number>(); // Proportions known from the disk cache before any picture loaded.
   const palette = new Map<string, number[]>(); // Dominant colours per entry, largest first; kept after the picture itself is dropped.
@@ -151,11 +156,11 @@ export function createThumbnailStore() {
     const old = ready.get(path); if (old) URL.revokeObjectURL(old.url);
     ready.set(path, thumbnail); return thumbnail;
   }
-  async function make(path: string, format: string): Promise<Thumbnail> {
-    let made = await readLibraryThumbnail(path);
+  async function make(path: string, format: string, wanted: () => boolean): Promise<Thumbnail> {
+    let made = await withTimeout(readLibraryThumbnail(path));
     if (!made) {
       const lower = format.toLowerCase();
-      if (lower === 'pdf') made = await renderPdfThumbnail(path);
+      if (lower === 'pdf') made = await renderPdfThumbnail(path, wanted);
       else if (lower === 'avif') made = await renderAvifThumbnail(path);
       else throw Error('This format has no thumbnail.');
       // The disk cache only saves the next launch the work; a failed save must not hide a good picture.
@@ -164,17 +169,17 @@ export function createThumbnailStore() {
     // Thumbnails cached before the colour filter existed get their colours the first time they load.
     if (!palette.has(path)) {
       const colours = await sampleColours(made.blob); palette.set(path, colours);
-      if (colours.length) void putLibraryColours(path, colours).catch(() => undefined);
+      if (colours.length) void putLibraryColours(path, colours, made.key).catch(() => undefined);
     }
     return remember(path, made);
   }
   function pump() {
     for (let index = 0; index < queue.length;) {
       const job = queue[index], group = kind(job.format);
-      if (!job.wants.some(wants => wants())) { queue.splice(index, 1); jobs.delete(job.path); job.settle(undefined); continue; }
+      if (!job.wants.some(wants => wants())) { queue.splice(index, 1); queued.delete(job.path); jobs.delete(job.path); job.settle(undefined); continue; }
       if (active[group] >= concurrency[group]) { index++; continue; }
-      queue.splice(index, 1); active[group]++;
-      withTimeout(make(job.path, job.format)).then(thumbnail => job.settle(thumbnail), () => { failed.add(job.path); job.settle(undefined); })
+      queue.splice(index, 1); queued.delete(job.path); active[group]++;
+      make(job.path, job.format, () => job.wants.some(wants => wants())).then(thumbnail => job.settle(thumbnail), error => { if (!(error instanceof Abandoned)) failed.add(job.path); job.settle(undefined); })
         .finally(() => { active[group]--; jobs.delete(job.path); pump(); });
     }
   }
@@ -198,8 +203,8 @@ export function createThumbnailStore() {
       const hit = ready.get(path); if (hit) return Promise.resolve(hit);
       if (failed.has(path)) return Promise.resolve(undefined);
       const running = jobs.get(path);
-      if (running) { queue.find(job => job.path === path)?.wants.push(wants); return running; }
-      const promise = new Promise<Thumbnail | undefined>(settle => queue.push({ path, format, wants: [wants], settle }));
+      if (running) { queued.get(path)?.wants.push(wants); return running; }
+      const promise = new Promise<Thumbnail | undefined>(settle => { const job: Job = { path, format, wants: [wants], settle }; queue.push(job); queued.set(path, job); });
       jobs.set(path, promise); pump();
       return promise;
     },
@@ -240,7 +245,7 @@ export function createThumbnailStore() {
       }
     },
     dispose() {
-      queue = [];
+      queue = []; queued.clear();
       for (const thumbnail of ready.values()) URL.revokeObjectURL(thumbnail.url);
       ready.clear(); hints.clear(); palette.clear(); asked.clear(); failed.clear();
     },

@@ -89,7 +89,7 @@ describe('reader tools', () => {
     search: async () => ({ hits: [], truncated: false }), showMatch: async () => 'Page 1', outline: () => [],
     library: async () => [doc('Rust Book.pdf', { tags: ['rust'] }), doc('Tauri Guide.pdf')], open: async () => true,
     setAppearance: () => 'Brief · Dark', runCommand: async id => id,
-    filterLibrary: async () => ({ colour: null, query: '', matches: 0, names: [] }), colourNames: ['green'],
+    filterLibrary: async () => ({ colour: null, query: '', matches: 0, names: [], pending: 0 }), colourNames: ['green'],
     ...overrides,
   });
   const byName = (tools: Tool[], name: string) => tools.find(candidate => candidate.name === name)!;
@@ -115,13 +115,17 @@ describe('reader tools', () => {
   });
 
   it('filters the library only by a known colour, and reports what it shows', async () => {
-    const filterLibrary = vi.fn(async (change: { colour?: string | null; query?: string }) => ({ colour: change.colour ?? null, query: change.query ?? '', matches: 3, names: ['a', 'b', 'c'] }));
+    let pending = 0;
+    const filterLibrary = vi.fn(async (change: { colour?: string | null; query?: string }) => ({ colour: change.colour ?? null, query: change.query ?? '', matches: 3, names: ['a', 'b', 'c'], pending }));
     const tools = readerTools(environment({ filterLibrary, colourNames: ['green', 'red'] }));
     await expect(byName(tools, 'filter_library').run({ colour: 'chartreuse' })).rejects.toThrow('green, red');
     expect(filterLibrary).not.toHaveBeenCalled();
     const shown = await byName(tools, 'filter_library').run({ colour: 'Green', query: 'packaging' });
     expect(filterLibrary).toHaveBeenCalledWith({ colour: 'green', query: 'packaging' });
     expect(shown.step).toBe('Library: green “packaging” · 3 matches');
+    // A count taken while pictures are still being measured is labelled as partial.
+    pending = 12;
+    expect((await byName(tools, 'filter_library').run({ colour: 'red' })).step).toBe('Library: red · 3 matches (12 still being measured)');
     await byName(tools, 'filter_library').run({ colour: null });
     expect(filterLibrary).toHaveBeenLastCalledWith({ colour: null, query: undefined });
   });
