@@ -13,7 +13,7 @@ import { fromChatCompletion, toChatCompletions, type ChatCompletion } from './as
  */
 
 export type AssistantPanel = {
-  /** True once a key is saved, so the palette can offer "Ask Claude". */
+  /** True once a key is saved, so the palette can offer to ask the assistant. */
   ready: () => boolean;
   ask: (question: string) => void;
   openSettings: () => void;
