@@ -1,7 +1,7 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { Format, Locator, ReaderOptions } from './types';
 import { getBrowserFile, getBrowserLibrary, mutateBrowserLibrary } from './library-store';
-import type { Library, LibraryChange } from './catalog-types';
+import type { Library, LibraryChange, LibraryDocument } from './catalog-types';
 import { applyLibraryChange, localDocument, requireCollection } from './library-model';
 export type { Library, LibraryChange, LibraryDocument, Collection } from './catalog-types';
 export const desktop = isTauri();
@@ -30,13 +30,18 @@ function fileFormat(file: File): Format {
 export async function browserFile(file: File): Promise<Opened> {
   return readBrowserFile(file);
 }
+/** A browser file has no stable path, so its identity is its content: the same bytes under the same name are the same document, however and whenever they are picked. */
+async function browserIdentity(file: File, buffer: ArrayBuffer): Promise<{ id: string; path: string }> {
+  const digest = await crypto.subtle.digest('SHA-256', buffer);
+  const id = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+  return { id, path: `${id}/${file.name}` };
+}
 async function readBrowserFile(file: File, path?: string): Promise<Opened> {
   const format = fileFormat(file);
   const buffer = await file.arrayBuffer();
-  const digest = await crypto.subtle.digest('SHA-256', buffer);
-  const id = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
-  const saved = localStorage.getItem(`hold-my-brief:${id}`);
-  const doc: Opened = { id, path: path ?? `${id}/${file.name}`, name: file.name, format, bytes: new Uint8Array(buffer), previousState: saved ? JSON.parse(saved) : undefined };
+  const identity = await browserIdentity(file, buffer);
+  const saved = localStorage.getItem(`hold-my-brief:${identity.id}`);
+  const doc: Opened = { id: identity.id, path: path ?? identity.path, name: file.name, format, bytes: new Uint8Array(buffer), previousState: saved ? JSON.parse(saved) : undefined };
   pendingFiles.set(doc, file);
   return doc;
 }
@@ -57,14 +62,23 @@ export async function editLibrary(change: LibraryChange): Promise<Library> {
 export async function addDocuments(collectionId: string | null, files?: File[]): Promise<Library> {
   if (desktop) return native('add_documents', { collectionId });
   if (!files?.length) return getBrowserLibrary();
-  const additions = files.map(file => ({
-    file,
-    document: localDocument(`${crypto.randomUUID()}/${file.name}`, file.name, fileFormat(file), collectionId),
-  }));
+  // One buffer alive at a time: a multi-file pick of large originals must not be held in memory together.
+  const additions: { file: File; document: LibraryDocument }[] = [];
+  for (const file of files) {
+    const format = fileFormat(file);
+    const { path } = await browserIdentity(file, await file.arrayBuffer());
+    additions.push({ file, document: localDocument(path, file.name, format, collectionId) });
+  }
   return mutateBrowserLibrary((library, storedFiles) => {
     requireCollection(library, collectionId);
     if (collectionId && library.collections.find(collection => collection.id === collectionId)?.sourceId) throw Error('Add files to a personal collection, not an indexed folder collection.');
     for (const { file, document } of additions) {
+      // Same identity as the desktop catalog (which keys on the canonical path): adding a file already in the library only files it into the collection.
+      const existing = library.documents.find(item => item.path === document.path);
+      if (existing) {
+        if (collectionId && !existing.collectionIds.includes(collectionId)) existing.collectionIds.push(collectionId);
+        continue;
+      }
       storedFiles.put({ file, name: file.name, lastModified: file.lastModified }, document.path);
       library.documents.push(document);
     }

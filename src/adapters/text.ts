@@ -64,7 +64,9 @@ export function renderMarkdown(source: string): { html: string; outline: Outline
         let id = base, count = 0;
         while (slugs.has(id)) id = `${base}-${++count}`;
         slugs.add(id);
-        token.attrSet('id', id);
+        // A data attribute, not an id: ids share one namespace with the reader's own elements, so a
+        // heading named "Contents" or "Menu" would shadow the reader's dialogs of that name.
+        token.attrSet('data-heading', id);
         outline.push({ label, target: `heading:${id}` });
       }
       if (token.type === 'inline' && state.tokens[index - 1]?.type === 'paragraph_open' && state.tokens[index - 2]?.type === 'list_item_open') {
@@ -105,10 +107,10 @@ export function renderMarkdown(source: string): { html: string; outline: Outline
 }
 
 const styles = `
-.reader-text-content{box-sizing:border-box;min-height:100%;color:inherit;overflow-wrap:anywhere;max-width:calc(var(--measure) + 2 * var(--reader-margin));margin-inline:auto}
+.reader-text-content{box-sizing:border-box;min-height:100%;color:inherit;overflow-wrap:anywhere;max-width:calc(var(--measure) + 2 * var(--reader-margin));margin-inline:auto;font-family:var(--font-read);font-synthesis:weight style}
 .reader-text-content[data-wrap="false"]{max-width:none}
 .reader-text-content :is(p,h1,h2,h3,h4,h5,h6,pre,blockquote,ul,ol,table){margin-top:0;margin-bottom:1em}
-.reader-text-content :is(h1,h2,h3,h4,h5,h6){line-height:1.25}
+.reader-text-content :is(h1,h2,h3,h4,h5,h6){line-height:1.25;font-family:inherit;font-weight:400}
 .reader-text-content h1{font-size:2em;letter-spacing:normal;color:inherit}
 .reader-text-content h2{font-size:1.5em}.reader-text-content h3{font-size:1.25em}
 .reader-text-content a{color:var(--accent-ink);text-decoration:underline}
@@ -306,7 +308,7 @@ export class TextAdapter implements ReaderAdapter {
 
   async goTo(target: string): Promise<void> {
     if (target.startsWith('heading:')) {
-      const element = Array.from(this.content.querySelectorAll<HTMLElement>('[id]')).find(candidate => candidate.id === target.slice(8));
+      const element = Array.from(this.content.querySelectorAll<HTMLElement>('[data-heading]')).find(candidate => candidate.dataset.heading === target.slice(8));
       if (!element) throw new Error('This heading could not be found.');
       this.remember();
       await this.restore({ kind: this.format, blockLine: Number(element.dataset.sourceLine), line: Number(element.dataset.sourceLine), offset: 0 });

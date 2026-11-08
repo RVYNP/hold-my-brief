@@ -26,7 +26,7 @@
   --accent-ink: light-dark(#c62f2f, #ff8a80);
   --accent-soft: light-dark(#fde9e4, #3a1e1a);
   --accent-border: light-dark(#f3b3a8, #6e2b24);
-  --accent-fill: light-dark(#e13a3a, #d93a3a);
+  --accent-fill: light-dark(#db3435, #d93a3a);
   --scrim: light-dark(#1a18153d, #0000008c);
   --search-hit: light-dark(#f2dfa0, #6b5620);
 }
@@ -37,7 +37,7 @@
   --paper: light-dark(#fbfafc, #1e1d24);
   --ink: light-dark(#1d1b22, #dedbe6);
   --fg: light-dark(#303039, #e8e6ee);
-  --muted: light-dark(#6b6975, #9a97a6);
+  --muted: light-dark(#64626e, #9a97a6);
   --faint: light-dark(#a9a6b3, #5e5b69);
   --border: light-dark(#d4d1db, #302e39);
   --hairline: light-dark(#dedbe4, #28262f);
@@ -59,7 +59,7 @@
   --paper: light-dark(#fbf8f1, #201e1a);
   --ink: light-dark(#2a251d, #e6dfd2);
   --fg: light-dark(#33302a, #ece6da);
-  --muted: light-dark(#76705f, #a39b8c);
+  --muted: light-dark(#6b6554, #a39b8c);
   --faint: light-dark(#aba593, #625c51);
   --border: light-dark(#d8d3c8, #35312a);
   --hairline: light-dark(#e2ded4, #2b2823);
@@ -103,7 +103,7 @@
   --paper: light-dark(#fafcfd, #141b21);
   --ink: light-dark(#1e2731, #dce4ea);
   --fg: light-dark(#25303b, #e2e9ef);
-  --muted: light-dark(#617080, #8a99a7);
+  --muted: light-dark(#596777, #8a99a7);
   --faint: light-dark(#a3afbb, #4e5b67);
   --border: light-dark(#ced7e1, #25303a);
   --hairline: light-dark(#dae1e8, #1d262e);
@@ -118,17 +118,71 @@
   --scrim: light-dark(#1a26333d, #0000008c);
   --search-hit: light-dark(#c9e0a8, #3d5230);
 }
+/* The two pinks share Lilac's structure (each token at Lilac's OKLCH lightness) on a pink hue.
+   Blossom is soft: blush neutrals and a rose accent. Peony is bold: magenta-tinted neutrals and a
+   hot-pink accent, deep aubergine in dark mode. */
+[data-palette='blossom'] {
+  --chrome: light-dark(#ede0e1, #1e1415);
+  --surface: light-dark(#fdf9fa, #271a1c);
+  --card: light-dark(#ffffff, #2e2022);
+  --paper: light-dark(#fdf9fa, #271a1c);
+  --ink: light-dark(#25181a, #ecd7d9);
+  --fg: light-dark(#3c2c2e, #f2e3e5);
+  --muted: light-dark(#735d60, #ad9195);
+  --faint: light-dark(#b9a1a4, #6f5659);
+  --border: light-dark(#e0ced0, #3d2a2c);
+  --hairline: light-dark(#e9d8da, #332325);
+  --hover: light-dark(#ecd4d6, #372426);
+  --stage: light-dark(#f5ebec, #231618);
+  --track: light-dark(#dbc1c4, #4a3135);
+  --accent: light-dark(#c03153, #e16479);
+  --accent-ink: light-dark(#ab1c44, #f899a5);
+  --accent-soft: light-dark(#ffe7e9, #3e1d22);
+  --accent-border: light-dark(#eeb2b8, #7b333f);
+  --accent-fill: light-dark(#c03153, #c33d59);
+  --scrim: light-dark(#2a181c3d, #0000008c);
+  --search-hit: light-dark(#ffe08a, #6f5a1e);
+}
+[data-palette='peony'] {
+  --chrome: light-dark(#f0dee7, #20121a);
+  --surface: light-dark(#fef9fc, #291822);
+  --card: light-dark(#ffffff, #311d28);
+  --paper: light-dark(#fef9fc, #291822);
+  --ink: light-dark(#271620, #f0d4e3);
+  --fg: light-dark(#3f2935, #f5e1eb);
+  --muted: light-dark(#775a6a, #b28da1);
+  --faint: light-dark(#be9daf, #745164);
+  --border: light-dark(#e4cbd8, #412635);
+  --hairline: light-dark(#edd5e1, #361f2c);
+  --hover: light-dark(#f1d0e1, #3b202f);
+  --stage: light-dark(#f7eaf1, #25141e);
+  --track: light-dark(#e0bdd0, #4f2c40);
+  --accent: light-dark(#c50381, #ee45a6);
+  --accent-ink: light-dark(#a9036f, #fe8dc6);
+  --accent-soft: light-dark(#ffe6f1, #42172e);
+  --accent-border: light-dark(#f6a9cd, #832159);
+  --accent-fill: light-dark(#c50381, #cd0087);
+  --scrim: light-dark(#2a16203d, #0000008c);
+  --search-hit: light-dark(#ffe08a, #6f5a1e);
+}
 /* Page tones recolor only text documents (Markdown, TXT, reflowable EPUB). */
 [data-page='white'] { --paper: #ffffff; --ink: #1b1b1f; }
 [data-page='sepia'] { --paper: light-dark(#f5eddb, #2a2419); --ink: light-dark(#43361f, #e2d4b6); }
 /* Dim lowers glare within the active family: a page between chrome and surface, softer ink. */
 [data-page='dim'] { --paper: light-dark(color-mix(in srgb, var(--chrome) 55%, var(--surface)), color-mix(in srgb, var(--hover) 70%, var(--surface))); --ink: light-dark(color-mix(in srgb, var(--fg) 85%, var(--muted)), color-mix(in srgb, var(--fg) 70%, var(--muted))); }
+/* Bundled so the app never fetches a font and looks the same on every system (SIL Open Font License
+   1.1, src/fonts/OFL-*.txt): Geist and Geist Serif (Vercel), JetBrains Mono (JetBrains). Geist Serif
+   has one weight and no italic; JetBrains Mono ships the two weights the interface uses. */
+@font-face { font-family: 'Geist'; src: url('./fonts/Geist-Variable.woff2') format('woff2'); font-weight: 100 900; font-style: normal; font-display: block; }
+@font-face { font-family: 'Geist Serif'; src: url('./fonts/GeistSerif-Regular.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: block; }
+@font-face { font-family: 'JetBrains Mono'; src: url('./fonts/JetBrainsMono-Regular.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: block; }
+@font-face { font-family: 'JetBrains Mono'; src: url('./fonts/JetBrainsMono-Bold.woff2') format('woff2'); font-weight: 700; font-style: normal; font-display: block; }
 :root {
-  /* Brand type stack: Inter for the interface, JetBrains Mono for the machine voice
-     (folios, paths, positions). Both fall back to system faces so the app never
-     fetches a font and works offline. */
-  --font-ui: 'Inter', 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, ui-monospace, monospace;
+  /* Brand type stack: Geist Serif for what you read (document text and titles), Geist for the
+     interface, JetBrains Mono for the machine voice (folios, paths, positions). */
+  --font-read: 'Geist Serif', Georgia, 'Times New Roman', serif;
+  --font-ui: 'Geist', 'Inter', 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, ui-monospace, Menlo, monospace;
   font-family: var(--font-ui);
   font-synthesis: none;
   font-size: 14px;
@@ -227,8 +281,9 @@ select:hover { border-color: var(--accent-border); }
 .ask-mark { flex-shrink: 0; color: var(--accent-ink); }
 /* The compact position ("12 / 24") keeps its width (up to 55% of the title); the name gives way,
    down to about five characters, so neither ever collapses to a lone ellipsis. */
-.title strong { flex: 0 1 auto; min-width: min(5em, 45%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 12px; }
-.title span { flex: 0 0 auto; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 10px/1.4 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+/* The document name is a title: Geist Serif at its one (regular) weight, a size up to match the sans. */
+.title strong { flex: 0 1 auto; min-width: min(5em, 45%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 14px/1.2 var(--font-read); }
+.title span { flex: 0 0 auto; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px/1.3 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
 .ask-key { display: none; flex-shrink: 0; }
 .title:hover .ask-key, .title:focus-visible .ask-key { display: block; }
 /* --find-bar-height is the find bar's real height, so the reading surface and the opening strip can
@@ -241,16 +296,17 @@ select:hover { border-color: var(--accent-border); }
    control is the call to action sized to its words, and recents are a quiet list. */
 #empty { height: 100%; overflow: auto; padding: 32px 28px 24px; max-width: 640px; margin: auto; }
 .book-mark { display: block; color: var(--accent); }
-.eyebrow { font: 10px/1.5 var(--font-mono) !important; letter-spacing: 1.5px; color: var(--muted) !important; margin-top: 22px !important; }
-h1 { font-size: 34px; line-height: 1.15; font-weight: 550; letter-spacing: -.9px; margin: 12px 0 18px; color: var(--fg); }
+.eyebrow { font: 11px/1.35 var(--font-mono) !important; letter-spacing: .8px; color: var(--muted) !important; margin-top: 22px !important; }
+/* Headings are titles: Geist Serif at its one weight, which a display serif carries without bold. */
+h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 12px 0 18px; color: var(--fg); }
 #empty > p { color: var(--muted); font-size: 13px; line-height: 1.65; }
 .primary { background: var(--accent-fill); color: var(--on-accent); padding: 11px 15px; font-weight: 600; }
 .primary:hover { background: var(--accent-fill-hover); }
 #empty-open { margin-top: 6px; display: inline-flex; align-items: center; gap: 10px; padding: 9px 14px; border-radius: 6px; }
-#empty .formats { font: 9px/1.5 var(--font-mono); letter-spacing: .7px; margin-top: 14px; color: var(--muted); }
+#empty .formats { font: 11px/1.25 var(--font-mono); letter-spacing: .2px; margin-top: 14px; color: var(--muted); }
 #preview-note { font-size: 11px !important; margin-top: 28px; color: var(--muted) !important; }
 #recents { margin-top: 26px; }
-#recents h2 { margin: 0 0 4px; font: 10px/1.5 var(--font-mono); letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+#recents h2 { margin: 0 0 4px; font: 11px/1.35 var(--font-mono); letter-spacing: .8px; text-transform: uppercase; color: var(--muted); }
 .recent { display: flex; align-items: center; margin: 0 -8px; border-radius: 5px; }
 .recent:hover { background: var(--hover-subtle); }
 .recent button { background: transparent; }
@@ -321,7 +377,7 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
 #view-controls button { display: grid; place-items: center; width: 28px; height: 26px; padding: 0; border-radius: 6px; color: var(--muted); }
 #view-controls button[aria-pressed=true] { color: var(--accent-ink); }
 #view-controls > button:disabled, #view-controls > button[aria-disabled=true] { opacity: calc(var(--idle) * .45); cursor: default; background: transparent; }
-#view-controls #zoom-level { width: 44px; color: var(--fg); font: 10px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+#view-controls #zoom-level { width: 44px; color: var(--fg); font: 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
 #view-controls .view-group { display: flex; align-items: center; gap: 2px; }
 #view-controls .view-sep { width: 1px; height: 16px; background: var(--hairline); }
 /* Hand tool: drags pan the page instead of selecting text; links stay clickable. */
@@ -330,14 +386,19 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
 .reader-host.panning, .reader-host.panning * { cursor: grabbing !important; }
 dialog { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--fg); padding: 18px; width: min(360px, calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow: auto; box-shadow: var(--shadow-popover); }
 dialog::backdrop { background: var(--scrim); }
-h2 { font-size: 15px; font-weight: 600; margin: 0 0 16px; }
+h2 { font: 400 17px/1.25 var(--font-read); margin: 0 0 16px; }
 .dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
 .dialog-head h2 { margin: 0; }
 .dialog-head button { font-size: 22px; padding: 0 7px; color: var(--muted); }
 dialog p { font-size: 13px; line-height: 1.6; }
 dialog label { display: block; font-size: 12px; margin: 14px 0 6px; color: var(--muted); }
-dialog input:not([type=checkbox]):not([type=color]), dialog select { display: block; width: 100%; padding: 9px; background-color: var(--card); border: 1px solid var(--border); border-radius: 5px; margin: 7px 0 14px; color: var(--fg); }
+/* Fields are a tone, not a box, like the library search and the find field. */
+dialog input:not([type=checkbox]):not([type=color]), dialog select { display: block; width: 100%; padding: 8px 10px; background-color: var(--hover-subtle); border: 0; border-radius: 6px; margin: 6px 0 12px; color: var(--fg); }
+dialog input::placeholder { color: var(--muted); }
 dialog select { padding-right: 28px; }
+/* A dialog focuses its first control when it opens, which rings a button (Cancel, ×) even after a click;
+   button rings are kept for keyboard use (Tab), fields keep theirs because they are typed into. */
+:root:not(.keyboard-focus) dialog button:focus-visible { outline: none; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 .danger { background: var(--danger); color: var(--on-accent); }
 .danger:hover { background: var(--danger-hover); }
@@ -351,14 +412,14 @@ dialog select { padding-right: 28px; }
 .menu-group:not(:has(button:not([hidden]))) { display: none; }
 .menu-grid button { display: flex; justify-content: space-between; align-items: center; text-align: left; gap: 8px; padding: 6px 10px; font-size: 12px; white-space: nowrap; }
 .menu-grid button[aria-pressed=true] { background: transparent; border-color: transparent; color: var(--accent-ink); }
-.menu-grid kbd { padding: 0; border: 0; background: none; color: var(--faint); }
+.menu-grid kbd { padding: 0; border: 0; background: none; color: var(--muted); }
 /* A dialog focuses its first item when it opens, which WebKit rings even after a click; the ring is
    kept for Tab navigation, as for the page. */
 :root:not(.keyboard-focus) #menu button:focus-visible { outline: none; }
 .menu-label { display: inline-flex; align-items: center; gap: 8px; }
 .menu-label svg { flex-shrink: 0; color: var(--accent-ink); }
-.menu-value { color: var(--muted); font: 10px/1.4 var(--font-mono); white-space: nowrap; }
-kbd { color: var(--muted); background: var(--stage); border: 1px solid var(--border); border-radius: 3px; padding: 1px 4px; font: 10px/1.4 var(--font-mono); white-space: nowrap; }
+.menu-value { color: var(--muted); font: 11px/1.3 var(--font-mono); white-space: nowrap; }
+kbd { color: var(--muted); background: var(--stage); border: 1px solid var(--border); border-radius: 3px; padding: 1px 4px; font: 11px/1.3 var(--font-mono); white-space: nowrap; }
 /* Dropped from the title (Go to, Contents): a popover under the toolbar, no dimmed page. */
 dialog.drop { position: fixed; inset: auto; margin: 0; width: min(320px, calc(100vw - 12px)); max-height: calc(100dvh - 56px); padding: 10px; border-radius: 9px; background: var(--card); }
 dialog.drop::backdrop { background: transparent; }
@@ -373,67 +434,77 @@ dd { margin: 0; color: var(--muted); }
 #shortcuts:focus { outline: none; }
 #shortcut-list { columns: 2 250px; column-gap: 32px; }
 #shortcut-list section { break-inside: avoid; margin-bottom: 14px; }
-#shortcut-list h3 { margin: 0 0 5px; font-size: 10px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+#shortcut-list h3 { margin: 0 0 5px; font-size: 11px; font-weight: 500; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); }
 #shortcut-list dl { gap: 6px 12px; margin: 0; font-size: 12px; }
 #shortcut-list dd { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 3px; }
-#shortcut-list dd span { margin-left: 2px; font-size: 11px; color: var(--faint); }
+#shortcut-list dd span { margin-left: 2px; font-size: 11px; color: var(--muted); }
 #jump label { display: block; margin: 0 0 6px; color: var(--muted); font-size: 11px; }
 .jump-row { display: flex; gap: 6px; }
 .jump-row input { flex: 1; min-width: 0; margin: 0 !important; padding: 7px 9px !important; }
 .jump-row .primary { padding: 7px 14px; }
 #jump-error { margin: 6px 0 0; color: var(--error); font-size: 12px; }
 #jump-error:empty { display: none; }
-/* Appearance: a bottom sheet over the document, so theme previews stay visible above it. */
-#appearance { margin: auto 0 0; width: 100%; max-width: none; max-height: calc(100dvh - 40px); padding: 14px 18px 16px; border: 0; border-top: 1px solid var(--border); border-radius: 14px 14px 0 0; background: var(--card); box-shadow: var(--shadow-sheet); }
-#appearance[open] { display: flex; flex-direction: column; gap: 13px; }
-.sheet-panel { display: flex; flex-direction: column; gap: 13px; }
-.sheet-tabs { margin-left: auto; }
-.sheet-tabs button { flex: 0 0 auto; padding: 4px 12px; }
-.sheet-tabs button[aria-selected=true] { background: var(--card); border-color: var(--border); color: var(--fg); }
+/* Appearance: a bottom sheet over the document, so theme previews stay visible above it. Inside, nothing
+   is boxed: every row is a label column and its control, choices are words that take the accent tint
+   when chosen (no track around them), and theme tiles are set apart by their own tone, not a border. */
+#appearance { margin: auto 0 0; width: 100%; max-width: none; max-height: calc(100dvh - 40px); padding: 14px 20px 18px; border: 0; border-top: 1px solid var(--border); border-radius: 14px 14px 0 0; background: var(--card); box-shadow: var(--shadow-sheet); }
+#appearance[open] { display: flex; flex-direction: column; gap: 16px; }
+.sheet-panel { display: flex; flex-direction: column; gap: 14px; }
+/* Tabs are words with an accent rule under the chosen one. */
+.sheet-tabs { display: flex; gap: 14px; margin-left: auto; align-self: stretch; }
+.sheet-tabs button { padding: 4px 0; border: 0; border-radius: 0; color: var(--muted); font-size: 12px; }
+.sheet-tabs button:hover { background: transparent; color: var(--fg); }
+.sheet-tabs button[aria-selected=true] { color: var(--fg); box-shadow: inset 0 -2px 0 var(--accent); }
 #appearance::backdrop { background: transparent; }
-.sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
 .sheet-head h2 { margin: 0; }
 .sheet-close { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; color: var(--muted); }
-#appearance .appearance-hint { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+/* A sheet opened with the mouse rings nothing; Tab brings focus rings back (as for the menu and page). */
+:root:not(.keyboard-focus) #appearance :focus-visible { outline: none; }
+#appearance .appearance-hint { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 #appearance .appearance-hint[data-previewing] { color: var(--accent-ink); }
-.sheet-label { color: var(--muted); font: 10px/1.4 var(--font-mono); letter-spacing: .6px; }
-.segmented { display: flex; gap: 2px; padding: 2px; background: var(--stage); border: 1px solid var(--hairline); border-radius: 8px; }
-.segmented button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; padding: 5px 6px; border-radius: 6px; color: var(--muted); font-size: 12px; }
-.segmented button:hover { background: var(--hover); color: var(--fg); }
-.segmented button[aria-checked=true] { background: var(--card); border-color: var(--border); color: var(--fg); }
-.segmented button:focus-visible { outline-offset: -1px; }
-.theme-group { display: flex; flex-direction: column; gap: 8px; }
-.theme-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
-.theme-card { display: flex; flex-direction: column; gap: 7px; min-width: 0; padding: 3px; border-radius: 11px; text-align: left; white-space: normal; }
+.sheet-label { color: var(--muted); font: 11px/1.3 var(--font-mono); letter-spacing: .2px; }
+.choices { flex: 1; display: flex; gap: 2px; min-width: 0; }
+.choices button { flex: 0 1 auto; display: flex; align-items: center; gap: 6px; min-width: 0; padding: 5px 9px; border: 0; border-radius: 6px; color: var(--muted); font-size: 12px; }
+.choices button:hover { background: var(--hover-subtle); color: var(--fg); }
+.choices button[aria-checked=true] { background: var(--accent-soft); color: var(--accent-ink); }
+.theme-group { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+/* Seven families in rows of four (4 + 3): seven across would not fit the sheet, and 5 + 2 orphans two. */
+.theme-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 8px; }
+.theme-card { display: flex; flex-direction: column; gap: 5px; min-width: 0; padding: 0; border: 0; text-align: left; white-space: normal; }
 .theme-card:hover { background: transparent; }
-.theme-tile { display: flex; flex-direction: column; gap: 8px; padding: 9px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
-.theme-card[aria-checked=true] .theme-tile, .theme-card[data-previewing] .theme-tile { border-color: var(--accent); box-shadow: 0 0 0 .5px var(--accent); }
-.theme-row:has([data-previewing]) .theme-card[aria-checked=true] .theme-tile { border-color: var(--border); box-shadow: none; }
-.theme-sample { color: var(--ink); font: 16px/1.2 Georgia, 'Times New Roman', serif; }
+/* Each tile is its own family's window tone (its chrome), with its page ink and accent: no border. */
+.theme-tile { display: flex; flex-direction: column; gap: 7px; padding: 8px 9px; background: var(--chrome); border-radius: 7px; transition: box-shadow .12s; }
+.theme-card:hover .theme-tile { box-shadow: 0 0 0 1px var(--track); }
+.theme-card[aria-checked=true] .theme-tile, .theme-card[data-previewing] .theme-tile { box-shadow: 0 0 0 2px var(--accent); }
+.theme-row:has([data-previewing]) .theme-card[aria-checked=true]:not([data-previewing]) .theme-tile { box-shadow: none; }
+.theme-sample { color: var(--ink); font: 16px/1.2 var(--font-read); }
 .theme-dots { display: flex; gap: 4px; }
-.theme-dots span { width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--border); background: var(--accent); }
+.theme-dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 .theme-dots span:nth-child(2) { background: var(--fg); }
 .theme-dots span:nth-child(3) { background: var(--muted); }
-.theme-dots span:nth-child(4) { background: var(--chrome); }
-.theme-name { padding: 0 3px 2px; overflow: hidden; text-overflow: ellipsis; color: var(--fg); font-size: 12px; }
-.theme-card[data-previewing] .theme-name { font-weight: 600; }
-.appearance-row { display: flex; align-items: center; gap: 12px; }
-.appearance-row > .sheet-label { flex-shrink: 0; width: 52px; }
-.appearance-row > .segmented { flex: 1; min-width: 0; }
-.appearance-text { display: flex; flex-direction: column; gap: 13px; }
-.stepper { flex: 0 0 auto !important; align-items: center; }
-.stepper button { flex: 0 0 auto; width: 30px; }
-.stepper-value { min-width: 48px; text-align: center; color: var(--fg); font: 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
-.swatches { position: relative; flex: 1; display: flex; align-items: center; justify-content: space-between; min-width: 0; }
+.theme-name { padding: 0 1px; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 11px; }
+.theme-card[aria-checked=true] .theme-name, .theme-card[data-previewing] .theme-name { color: var(--fg); }
+.appearance-row { display: flex; align-items: center; gap: 12px; min-height: 28px; }
+.appearance-row-top { align-items: flex-start; }
+.appearance-row-top > .sheet-label { padding-top: 4px; }
+.appearance-row > .sheet-label { flex-shrink: 0; width: 60px; }
+.appearance-text { display: flex; flex-direction: column; gap: 14px; }
+.stepper { display: flex; align-items: center; gap: 2px; }
+.stepper button { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; color: var(--muted); }
+.stepper button:hover { color: var(--fg); }
+.stepper-value { min-width: 44px; text-align: center; color: var(--fg); font: 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+.swatches { position: relative; flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
 .swatch-theme { --swatch: var(--accent); }
 .swatch-input { position: absolute; right: 0; bottom: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }
 .swatch { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 1.5px solid transparent; border-radius: 50%; }
+.swatch:hover { background: transparent; border-color: var(--track); }
 .swatch > span { width: 16px; height: 16px; border-radius: 50%; background: var(--swatch); }
 .swatch[aria-checked=true] { border-color: var(--swatch); }
-.swatch-custom { border: 1px solid var(--border); color: var(--muted); }
-.swatch-custom[aria-checked=true] { border-width: 1.5px; }
+.swatch-custom { color: var(--muted); }
+.swatch-custom:not([aria-checked=true]) { border: 1px dashed var(--track); }
 .swatch-custom[aria-checked=true] svg, .swatch-custom:not([aria-checked=true]) > span { display: none; }
-#appearance .appearance-note { margin: 0; color: var(--muted); font: 9px/1.4 var(--font-mono); letter-spacing: .2px; }
+#appearance .appearance-note { margin: 0; color: var(--muted); font: 11px/1.35 var(--font-mono); letter-spacing: 0; }
 @media (min-width: 720px) {
   #appearance { width: 460px; margin-inline: auto; border: 1px solid var(--border); border-bottom: 0; }
 }
@@ -457,17 +528,17 @@ dd { margin: 0; color: var(--muted); }
 .palette-search { display: flex; align-items: center; gap: 8px; padding: 11px 13px; border-bottom: 1px solid var(--border); color: var(--muted); flex-shrink: 0; }
 .palette-search svg { flex-shrink: 0; }
 #palette-input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--fg); font: inherit; font-size: 13px; outline: none; }
-#palette-input::placeholder { color: var(--faint); }
+#palette-input::placeholder { color: var(--muted); }
 .palette-esc { flex-shrink: 0; }
 .palette-list { overflow-y: auto; overscroll-behavior: contain; padding: 6px; min-height: 0; }
-.palette-group { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); padding: 8px 8px 3px; }
+.palette-group { font-size: 11px; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); padding: 8px 8px 3px; }
 .palette-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 9px; border-radius: 5px; font-size: 12px; cursor: default; }
 .palette-row[aria-selected="true"] { background: var(--accent-soft); color: var(--accent-ink); }
 .palette-row[aria-selected="true"] kbd { color: var(--accent-ink); border-color: var(--accent-border); background: transparent; }
 .palette-row[aria-disabled="true"] { color: var(--faint); }
 .palette-row[aria-disabled="true"][aria-selected="true"] { background: var(--hover); color: var(--muted); }
 .palette-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.palette-hint { font-size: 10px; color: var(--faint); white-space: nowrap; }
+.palette-hint { font-size: 11px; color: var(--muted); white-space: nowrap; }
 .palette-empty { margin: 0; padding: 16px 13px 18px; font-size: 12px; color: var(--muted); text-align: center; }
 
 /* Find in document (Ctrl+F): a strip above the reading surface, which moves down by the strip's
@@ -486,10 +557,10 @@ dd { margin: 0; color: var(--muted); }
 #workspace:has(#find-bar:not([hidden])) .reader-host { top: var(--find-bar-height); }
 #find-bar svg { flex-shrink: 0; margin-right: 2px; }
 #find-query { flex: 0 1 320px; min-width: 0; padding: 4px 8px; border: 0; border-radius: 6px; background: var(--hover-subtle); color: var(--fg); font: inherit; font-size: 12px; }
-#find-query::placeholder { color: var(--faint); }
+#find-query::placeholder { color: var(--muted); }
 #find-query:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 #find-close { margin-left: auto; }
-#find-status { margin: 0 6px 0 4px; font-size: 10px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; min-width: 0; }
+#find-status { margin: 0 6px 0 4px; font-size: 11px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; min-width: 0; }
 #find-bar button { flex-shrink: 0; padding: 1px 6px; font-size: 11px; border-radius: 4px; color: var(--muted); }
 #find-bar button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent-border); }
 #find-bar button:disabled { opacity: .4; }
@@ -499,7 +570,7 @@ dd { margin: 0; color: var(--muted); }
 #answer { position: absolute; z-index: 24; top: 0; left: 0; right: 0; display: flex; flex-direction: column; max-height: min(65%, 460px); padding: 10px 14px 12px; background: var(--card); border-bottom: 1px solid var(--hairline); box-shadow: var(--shadow-popover); outline: none; }
 .answer-head { display: flex; align-items: center; gap: 8px; color: var(--accent-ink); }
 .answer-question { flex: 1; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; }
-.answer-steps { margin: 6px 0 0; padding: 0; list-style: none; font: 10px/1.6 var(--font-mono); color: var(--muted); }
+.answer-steps { margin: 6px 0 0; padding: 0; list-style: none; font: 11px/1.45 var(--font-mono); color: var(--muted); }
 .answer-steps li::before { content: '→ '; color: var(--faint); }
 .answer-steps:empty { display: none; }
 .answer-text { min-height: 0; overflow: auto; margin-top: 8px; color: var(--fg); font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; scrollbar-width: thin; }
@@ -509,7 +580,7 @@ dd { margin: 0; color: var(--muted); }
 .answer-pending { color: var(--muted); }
 .answer-error { color: var(--error); }
 .answer-follow input { width: 100%; margin-top: 8px; padding: 7px 9px; border: 0; border-radius: 6px; background: var(--hover-subtle); color: var(--fg); font: inherit; font-size: 12px; }
-.answer-follow input::placeholder { color: var(--faint); }
+.answer-follow input::placeholder { color: var(--muted); }
 .answer-follow input:disabled { opacity: .5; }
 /* Below the find bar when both are open, the same way the opening strip waits for it. */
 #reader-layout:has(#find-bar:not([hidden])) #answer { top: calc(var(--find-bar-height) + var(--workspace-border)); }

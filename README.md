@@ -82,7 +82,7 @@ computer.
       <h3>Fits your space</h3>
       One slim toolbar, and a footer that is only a progress line until you reach for it, leave the
       page 94% of the window; a pinned reader's controls fade while you work in another app. Light and dark modes that
-      follow your system, five theme families (Brief by default), your own accent color, and a page
+      follow your system, seven theme families (Brief by default, two of them pink), your own accent color, and a page
       tone for text. Hover a theme to preview it on the whole window.
     </td>
   </tr>
@@ -117,8 +117,8 @@ computer.
 </p>
 
 <p align="center">
-  <img src="docs/media/themes.png" alt="The opening of Pride and Prejudice in the Brief, Lilac, Birch, Graphite and Arctic themes" width="880">
-  <br><sub><b>Five theme families</b>, each with a light and a dark version. Brief is the default</sub>
+  <img src="docs/media/themes.png" alt="The opening of Pride and Prejudice in the Brief, Lilac, Birch, Graphite, Arctic, Blossom and Peony themes" width="880">
+  <br><sub><b>Seven theme families</b>, each with a light and a dark version, two of them pink. Brief is the default</sub>
 </p>
 
 ## Private by design
@@ -219,6 +219,10 @@ The look and theme system are inspired by [Tern](https://stencil.so/tern) by
 picker that previews on hover shaped Hold My Brief's Appearance panel. The Graphite theme follows
 the default palette in [Tern's published theme tokens](https://docs.stencil.so/tern/styles/variables.html).
 Thank you to the Stencil team.
+
+Type is [Geist and Geist Serif](https://vercel.com/font) by Vercel and
+[JetBrains Mono](https://www.jetbrains.com/lp/mono/) by JetBrains, bundled under the SIL Open Font
+License 1.1 (`src/fonts/OFL-*.txt`).
 
 The screenshots read public-domain documents: *The Half-Tone Process* (1895), a print manual
 scanned by the [Internet Archive](https://archive.org/details/halftoneprocessp00verf_0), and

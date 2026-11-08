@@ -423,9 +423,11 @@ document.addEventListener('keydown', event => {
   if (event.key === 'Escape' && findBar.isOpen() && target !== findBar.element.querySelector('#find-query')) {
     event.preventDefault(); findBar.close(); activeHost?.focus(); return;
   }
-  if (target instanceof HTMLElement && (target.closest('input,textarea,select,[contenteditable="true"]'))) return;
-  // Ctrl+K is checked before the command table: it opens the palette and needs no document.
+  // Ctrl+K opens the palette from anywhere, text fields included (the library search, find): it is how
+  // the interface reaches every command, and a field would otherwise swallow it as typing. It needs no
+  // document, so it is checked before the command table.
   if (shortcutFor(event) === 'command-palette') { event.preventDefault(); openPalette(); return; }
+  if (target instanceof HTMLElement && (target.closest('input,textarea,select,[contenteditable="true"]'))) return;
   const key = event.key.toLowerCase(); let operation: (() => void) | undefined;
   // Catalog shortcuts go through the same dispatcher as the menu and the palette.
   const shortcut = shortcutFor(event);

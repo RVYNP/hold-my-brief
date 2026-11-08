@@ -13,14 +13,14 @@ import { desktop } from './bridge';
  * the record's format (`mode`, `palette`, `accent`, `page`, and the derived `vars`).
  */
 export type AppearanceMode = 'system' | 'light' | 'dark';
-export type Palette = 'brief' | 'lilac' | 'birch' | 'graphite' | 'arctic';
+export type Palette = 'brief' | 'lilac' | 'birch' | 'graphite' | 'arctic' | 'blossom' | 'peony';
 export type PageTone = 'theme' | 'white' | 'sepia' | 'dim';
 export type Scheme = 'light' | 'dark';
 export type Appearance = { mode: AppearanceMode; palette: Palette; accent: string | null; page: PageTone };
 export type Rgb = [number, number, number];
 
 export const appearanceKey = 'hold-my-brief:appearance';
-export const palettes: readonly Palette[] = ['brief', 'lilac', 'birch', 'graphite', 'arctic'];
+export const palettes: readonly Palette[] = ['brief', 'lilac', 'birch', 'graphite', 'arctic', 'blossom', 'peony'];
 export const pageTones: readonly PageTone[] = ['theme', 'white', 'sepia', 'dim'];
 export const defaultAppearance: Appearance = { mode: 'system', palette: 'brief', accent: null, page: 'theme' };
 const accentTokens = ['--accent', '--accent-ink', '--accent-fill', '--accent-fill-hover', '--accent-soft', '--accent-soft-hover', '--accent-border'] as const;

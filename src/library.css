@@ -4,7 +4,7 @@
 .library-panel { position: relative; container: library-panel / inline-size; display: flex; flex-direction: column; flex: 1 1 auto; height: 100%; min-width: 0; min-height: 0; padding: 8px 8px 6px; overflow: auto; border: 1px solid var(--border); border-radius: 9px; background: var(--raise); box-shadow: var(--shadow-drawer); scrollbar-width: thin; scrollbar-color: var(--faint) transparent; }
 .library-panel button, .library-panel input, .library-panel select { font-size: 12px; }
 .library-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-shrink: 0; margin: 0 0 4px 8px; }
-.library-header h2 { margin: 0; font-size: 14px; font-weight: 650; }
+.library-header h2 { margin: 0; font-size: 16px; }
 .library-header-actions { display: flex; align-items: center; flex-shrink: 0; }
 .library-header button { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; color: var(--muted); }
 .library-header button:hover { color: var(--fg); }
@@ -29,9 +29,9 @@
 .library-resize-grip { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; width: 8px; height: 36px; border-radius: 4px; background: var(--accent); }
 .library-resize-grip span { width: 2px; height: 2px; border-radius: 50%; background: var(--on-accent); }
 /* Light: the design's dark ink pill. Dark: a raised card, so it doesn't flare against dark surfaces. */
-.library-resize-tip { position: absolute; top: 50%; left: calc(100% + 6px); display: flex; align-items: center; gap: 6px; padding: 5px 8px; border: 1px solid light-dark(var(--fg), var(--border)); border-radius: 6px; background: light-dark(var(--fg), var(--card)); color: light-dark(var(--chrome), var(--fg)); font: 10px/1.4 var(--font-mono); white-space: nowrap; pointer-events: none; transform: translateY(-50%); }
+.library-resize-tip { position: absolute; top: 50%; left: calc(100% + 6px); display: flex; align-items: center; gap: 6px; padding: 5px 8px; border: 1px solid light-dark(var(--fg), var(--border)); border-radius: 6px; background: light-dark(var(--fg), var(--card)); color: light-dark(var(--chrome), var(--fg)); font: 11px/1.3 var(--font-mono); white-space: nowrap; pointer-events: none; transform: translateY(-50%); }
 .library-right .library-resize-tip { left: auto; right: calc(100% + 6px); }
-.library-resize-value { color: light-dark(var(--faint), var(--muted)); font-variant-numeric: tabular-nums; }
+.library-resize-value { color: var(--muted); font-variant-numeric: tabular-nums; }
 .library-resize::before, .library-resize-grip, .library-resize-tip { opacity: 0; transition: opacity .12s; }
 .library-resize:hover::before, .library-resize:hover .library-resize-grip, .library-resize:focus-visible::before, .library-resize:focus-visible .library-resize-grip, .library-resize:focus-visible .library-resize-tip, .library-resizing .library-resize::before, .library-resizing .library-resize-grip, .library-resizing .library-resize-tip { opacity: 1; }
 .library-resize:hover .library-resize-tip { opacity: 1; transition-delay: .35s; }
@@ -49,7 +49,7 @@
 .library-tools button:not(.library-add):hover { color: var(--fg); }
 .library-search-label { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .library-search { flex-shrink: 0; width: 100%; min-width: 0; padding: 6px 8px; border: 0; border-radius: 6px; background: color-mix(in srgb, var(--hover) 55%, var(--raise)); color: var(--fg); margin-bottom: 4px; }
-.library-search::placeholder { color: var(--faint); }
+.library-search::placeholder { color: var(--muted); }
 .library-facets { display: flex; flex-shrink: 0; flex-wrap: wrap; gap: 0 6px; margin: 0; }
 .library-facets select, .library-sort { flex: 0 1 auto; min-width: 0; max-width: 100%; padding: 4px 16px 4px 2px; border: 0; border-radius: 4px; background-color: transparent; background-position: right 6px center, right 2px center; color: var(--muted); font-size: 11px !important; }
 .library-facets select:hover, .library-sort:hover { color: var(--fg); }
@@ -58,10 +58,10 @@
 .library-filter[aria-pressed=true] { border-color: transparent; background: var(--accent-soft); color: var(--accent-ink); }
 .library-filter[aria-pressed=true]:hover { background: var(--accent-soft-hover); }
 .library-filter-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.library-count { flex-shrink: 0; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.library-count { flex-shrink: 0; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .library-filter[aria-pressed=true] .library-count { color: inherit; }
 .library-collections-heading { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: 8px 0 1px; }
-.library-collections-heading h3 { margin: 0 0 0 8px; color: var(--muted); font-size: 10px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; }
+.library-collections-heading h3 { margin: 0 0 0 8px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .1px; text-transform: uppercase; }
 .library-collections-heading button { font-size: 11px; color: var(--accent-ink); padding: 3px 6px; }
 .library-collection { display: flex; gap: 2px; align-items: center; min-width: 0; }
 .library-collection .library-filter { flex: 1; }
@@ -74,7 +74,7 @@
 .library-scope-name[aria-expanded=true] { background: var(--hover-subtle); }
 .library-scope-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .library-chevron { flex: none; color: var(--muted); }
-.library-result-count { margin: 0 auto 0 4px; color: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.library-result-count { margin: 0 auto 0 4px; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 @container library-panel (max-width: 340px) {
   .library-result-count { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); }
   .library-scope-name { margin-right: auto; }
@@ -88,7 +88,7 @@
 .library-scope-menu .library-facets { margin: 4px 0 0 2px; padding-top: 4px; border-top: 1px solid var(--hairline); }
 .library-item-menu { position: absolute; z-index: 5; display: flex; flex-direction: column; min-width: 150px; padding: 4px; border: 1px solid var(--border); border-radius: 7px; background: var(--card); box-shadow: var(--shadow-popover); }
 .library-item-menu button { padding: 6px 10px; text-align: left; }
-.library-pager { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; padding-top: 4px; color: var(--muted); font-size: 10px; }
+.library-pager { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; padding-top: 4px; color: var(--muted); font-size: 11px; }
 .library-pager:empty { display: none; }
 .library-documents { flex: 1 1 0; min-height: 78px; overflow-y: auto; overflow-x: hidden; padding: 2px; margin: -2px; scrollbar-width: thin; scrollbar-gutter: stable; }
 .library-document { position: relative; display: flex; align-items: center; min-width: 0; padding: 0 2px; border-radius: 6px; }
@@ -100,7 +100,7 @@
 .library-document-open { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; text-align: left; padding: 6px 6px; border-radius: 6px; }
 .library-document-open:hover { background: transparent; }
 .library-document-name { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; line-height: 1.35; }
-.library-document-meta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font: 9px/1.35 var(--font-mono); letter-spacing: .3px; }
+.library-document-meta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font: 11px/1.15 var(--font-mono); letter-spacing: 0; }
 .library-document.is-active .library-document-meta { color: var(--accent-ink); }
 /* Star, Info and ... float over the row's right edge. They stay in the tab order but are only drawn
    for the hovered, selected or keyboard-focused row (and the star, once set); the title makes room then. */
@@ -129,14 +129,14 @@
 /* The ring is an overlay above the picture: inset shadows on the media itself would sit under the img. */
 .library-tile-media::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; }
 .library-tile-open:focus-visible .library-tile-media::after, .library-tile.is-active .library-tile-media::after { box-shadow: inset 0 0 0 2px var(--accent); }
-.library-tile-format { position: absolute; inset: 0; display: grid; place-items: center; color: var(--faint); font: 9px/1 var(--font-mono); letter-spacing: .6px; }
+.library-tile-format { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font: 11px/1 var(--font-mono); letter-spacing: .2px; }
 .library-tile-media.is-loaded .library-tile-format { display: none; }
 .library-tile-scrim { position: absolute; right: 0; bottom: 0; left: 0; display: flex; flex-direction: column; gap: 1px; padding: 22px 7px 6px; background: linear-gradient(to top, #000000b8, #00000000); color: #fff; text-align: left; opacity: 0; transition: opacity .12s; pointer-events: none; }
 .library-tile.is-active .library-tile-scrim { padding-bottom: 26px; }
 .library-tile:hover .library-tile-scrim, .library-tile-open:focus-visible .library-tile-scrim { opacity: 1; }
 .library-tile-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 500; line-height: 1.35; }
-.library-tile-scrim .library-tile-meta { color: #ffffffb3; font: 9px/1.35 var(--font-mono); letter-spacing: .3px; }
-.library-tile-tag { position: absolute; z-index: 1; left: 6px; bottom: 6px; padding: 2px 5px; border-radius: 2px; background: var(--accent-fill); color: var(--on-accent); font: 700 9px/1.3 var(--font-mono); letter-spacing: .6px; text-transform: uppercase; }
+.library-tile-scrim .library-tile-meta { color: #ffffffb3; font: 11px/1.15 var(--font-mono); letter-spacing: 0; }
+.library-tile-tag { position: absolute; z-index: 1; left: 6px; bottom: 6px; padding: 2px 5px; border-radius: 2px; background: var(--accent-fill); color: var(--on-accent); font: 700 11px/1.1 var(--font-mono); letter-spacing: .1px; text-transform: uppercase; }
 .library-tile .library-card-actions { top: 4px; right: 4px; transform: none; }
 .library-tile .library-card-actions button { color: #fff; text-shadow: 0 0 4px #0009; }
 .library-tile .library-card-actions button:hover { background: #0000008c; color: #fff; }
@@ -147,9 +147,9 @@
 /* Tiles without a picture: a title set in the reading face for text, a dashed glyph for a missing original. */
 .library-tile.is-text .library-tile-media { background: var(--card); box-shadow: inset 0 0 0 1px var(--hairline); }
 .library-tile-title { position: absolute; top: 10px; right: 10px; left: 10px; display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 5; font: 500 12px/1.4 Georgia, 'Iowan Old Style', 'Times New Roman', serif; text-align: left; white-space: normal; overflow-wrap: anywhere; }
-.library-tile.is-text .library-tile-meta { position: absolute; bottom: 8px; left: 10px; color: var(--muted); font: 9px/1 var(--font-mono); letter-spacing: .6px; }
+.library-tile.is-text .library-tile-meta { position: absolute; bottom: 8px; left: 10px; color: var(--muted); font: 11px/1 var(--font-mono); letter-spacing: .2px; }
 .library-tile-glyph { position: absolute; top: calc(50% - 14px); left: calc(50% - 7px); width: 14px; height: 14px; border: 1.5px dashed var(--muted); border-radius: 50%; }
-.library-tile-note { position: absolute; top: calc(50% + 6px); right: 0; left: 0; color: var(--muted); font: 9px/1 var(--font-mono); letter-spacing: .4px; text-align: center; }
+.library-tile-note { position: absolute; top: calc(50% + 6px); right: 0; left: 0; color: var(--muted); font: 11px/1 var(--font-mono); letter-spacing: .1px; text-align: center; }
 .library-tile.is-missing .library-tile-media { background: color-mix(in srgb, var(--hover) 70%, var(--raise)); }
 
 /* Board: the drawer opened across the whole reading panel. It stays out of flow like the drawer (the page
@@ -181,7 +181,7 @@
 .library-board-toggle { display: grid; place-items: center; }
 .library-board-back { display: flex; flex: none; align-items: center; gap: 5px; padding: 4px 8px; color: var(--fg); font-weight: 600; }
 .library-board-back span { white-space: nowrap; }
-.library-board-back kbd { padding: 0 4px; color: var(--muted); font: 9px/1.6 var(--font-mono); }
+.library-board-back kbd { padding: 0 4px; color: var(--muted); font: 11px/1.3 var(--font-mono); }
 .library-board-back, .is-board .library-board-toggle { display: none; }
 .is-board .library-board-back { display: flex; }
 .library-board-toggle { color: var(--muted); }
@@ -189,17 +189,17 @@
 .library-tile.is-selected .library-tile-media::after { box-shadow: inset 0 0 0 2px var(--accent); }
 .library-list .library-document.is-selected { background: var(--accent-soft); }
 .library-detail { flex-direction: column; min-width: 0; min-height: 0; gap: 6px; padding: 12px; overflow-y: auto; border-left: 1px solid var(--hairline); scrollbar-width: thin; }
-.library-detail-preview { display: grid; place-items: center; flex: none; max-height: 240px; overflow: hidden; border-radius: 4px; background: var(--hover); color: var(--faint); font: 9px/1 var(--font-mono); letter-spacing: .6px; }
+.library-detail-preview { display: grid; place-items: center; flex: none; max-height: 240px; overflow: hidden; border-radius: 4px; background: var(--hover); color: var(--muted); font: 11px/1 var(--font-mono); letter-spacing: .2px; }
 .library-detail-preview.is-empty { aspect-ratio: 4 / 3; }
 .library-detail-preview img { display: block; width: 100%; max-height: 240px; object-fit: contain; }
 .library-detail-name { margin: 6px 0 0; font-size: 14px; font-weight: 650; line-height: 1.3; overflow-wrap: anywhere; }
-.library-detail-meta { margin: 0; color: var(--muted); font: 10px/1.4 var(--font-mono); letter-spacing: .3px; }
+.library-detail-meta { margin: 0; color: var(--muted); font: 11px/1.3 var(--font-mono); letter-spacing: 0; }
 .library-detail-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; margin: 2px 0 4px -6px; }
 .library-detail-actions button { padding: 3px 6px; color: var(--muted); }
 .library-detail-actions .library-detail-open { color: var(--accent-ink); font-weight: 600; }
-.library-detail-open kbd { margin-left: 6px; color: var(--muted); font: 9px/1 var(--font-mono); }
+.library-detail-open kbd { margin-left: 6px; color: var(--muted); font: 11px/1 var(--font-mono); }
 .library-detail-section { padding-top: 8px; border-top: 1px solid var(--hairline); }
-.library-detail-section h4 { margin: 0 0 3px; color: var(--muted); font: 9px/1.4 var(--font-mono); letter-spacing: .8px; text-transform: uppercase; }
+.library-detail-section h4 { margin: 0 0 3px; color: var(--muted); font: 11px/1.15 var(--font-mono); letter-spacing: .3px; text-transform: uppercase; }
 .library-detail-section p { margin: 0; font-size: 12px; line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere; }
 .library-detail-empty { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 
@@ -214,7 +214,7 @@
 
 /* Image navigation pill: bottom centre of the reading panel, kept clear of a docked drawer exactly as
    the opening strip is (the drawer floats over the panel, so the panel's own centre would sit under it). */
-.library-image-navigation { position: absolute; z-index: 5; right: 0; bottom: 8px; left: 0; display: flex; align-items: center; gap: 6px; width: fit-content; max-width: calc(100% - 24px); margin-inline: auto; padding: 3px 4px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); box-shadow: var(--shadow-page); color: var(--muted); font: 10px/1 var(--font-mono); }
+.library-image-navigation { position: absolute; z-index: 5; right: 0; bottom: 8px; left: 0; display: flex; align-items: center; gap: 6px; width: fit-content; max-width: calc(100% - 24px); margin-inline: auto; padding: 3px 4px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); box-shadow: var(--shadow-page); color: var(--muted); font: 11px/1 var(--font-mono); }
 .library-image-navigation button { display: grid; place-items: center; flex: none; width: 24px; height: 22px; padding: 0; border-radius: 999px; color: var(--fg); font-size: 12px; }
 .library-image-navigation span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 2px; font-variant-numeric: tabular-nums; }
 @media (min-width: 720px) {
@@ -259,7 +259,7 @@
   .library-facets select { padding-top: 4px; padding-bottom: 4px; }
   .library-navigation { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-content: start; gap: 2px; max-height: 42%; min-height: 94px; }
   .library-navigation > :nth-child(n+4) { grid-column: 1 / -1; }
-  .library-navigation > .library-filter { padding: 4px; font-size: 10px; }
+  .library-navigation > .library-filter { padding: 4px; font-size: 11px; }
   .library-collections-heading { margin-top: 2px; padding-top: 4px; }
   .library-filter { padding-top: 4px; padding-bottom: 4px; }
   .library-documents-head { padding-top: 4px; padding-bottom: 4px; }

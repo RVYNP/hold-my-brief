@@ -41,7 +41,9 @@ Open the menu and choose **Appearance and text…** to open the Appearance panel
 window. Its **Colour** tab holds:
 
 - **Mode:** System (default; follows the operating system as it changes), Light or Dark.
-- **Theme:** Brief (default), Lilac, Birch, Graphite or Arctic. Each has a light and a dark version.
+- **Theme:** Brief (default), Lilac, Birch, Graphite, Arctic, and two pinks: Blossom (soft blush with a
+  rose accent) and Peony (bold, magenta-tinted, deep aubergine in dark mode). Each has a light and a
+  dark version, and every one keeps its text at WCAG AA contrast or better.
   Hover over or focus a theme to preview it on the whole window, click or press Enter to keep it, and
   move away or press Escape to go back to the theme you kept.
 - **Accent:** the theme's own accent, one of seven presets, or a custom color. Contrast is adjusted
@@ -62,9 +64,11 @@ Choices are saved on this computer and applied before the window first paints, s
 of the wrong theme. The window frame (the Windows title bar, the macOS window buttons) follows the
 light or dark mode.
 
-Fonts are not bundled. The interface asks for Inter and JetBrains Mono and falls back to the system
-faces your computer already has, so nothing is downloaded to draw the window. Install both fonts if
-you want the interface set exactly as designed.
+Markdown and text documents are set in Geist Serif, as are titles (the document name, headings,
+dialog titles); the interface is set in Geist. Both are bundled with the app (SIL Open Font License),
+so nothing is downloaded. Geist Serif has one weight, so bold and italic in a document are drawn from
+it rather than from a separate face. EPUB books keep their publisher's fonts, and PDFs their own.
+Positions, paths and key labels use JetBrains Mono, bundled as well.
 
 The theme design is inspired by [Tern](https://stencil.so/tern) by Stencil, and the Graphite theme
 uses Tern's default palette. See [Credits](../README.md#credits).

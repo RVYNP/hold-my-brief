@@ -5,6 +5,7 @@ import { isImage, searchText } from './library-query';
 import { assignMasonry, clampLibraryWidth, defaultLibraryView, libraryGrid, libraryGridColumns, libraryWidth, libraryWidthBounds, parseLibraryView, parseLibraryWidth, type LibrarySide, type LibraryView } from './library-layout';
 import { canThumbnail, createThumbnailStore, type Thumbnail } from './thumbnails';
 import { colourHex, colourMatches, colourNames, colourSwatches, nameColour, parseColourName, type ColourName } from './colour';
+import { shortcutFor } from './commands';
 
 /** `pending` is how many pictures still had no measured colours when the answer was given (0 = `matches` is complete). */
 export type LibraryFilterResult = { colour: string | null; query: string; matches: number; names: string[]; pending: number };
@@ -248,10 +249,12 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
     }
-    // Reader shortcuts must never consume typing, arrows, or space in the library.
+    // Reader shortcuts must never consume typing, arrows, or space in the library. The palette (Ctrl+K)
+    // is the exception: it is how every command is reached, so it works from the library too.
+    if (shortcutFor(event) === 'command-palette') return;
     event.stopPropagation();
   });
-  imageNavigation.addEventListener('keydown', event => event.stopPropagation());
+  imageNavigation.addEventListener('keydown', event => { if (shortcutFor(event) !== 'command-palette') event.stopPropagation(); });
   function focusKey() { return document.activeElement instanceof HTMLElement && root.contains(document.activeElement) ? document.activeElement.dataset.libraryFocus : undefined; }
   function restoreFocus(key?: string, original?: HTMLElement) {
     if (!visible) { toggleButton?.focus(); return; }
