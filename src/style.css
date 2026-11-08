@@ -179,7 +179,9 @@
      interface, JetBrains Mono for the machine voice (folios, paths, positions). */
   --font-read: 'Geist Serif', Georgia, 'Times New Roman', serif;
   --font-ui: 'Geist', 'Inter', 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, ui-monospace, monospace;
+  /* ui-monospace is SF Mono in WebKit (the macOS app); Chromium does not resolve it, so Menlo keeps
+     Chromium on macOS (captures, README media) from falling through to Courier. */
+  --font-mono: 'JetBrains Mono', 'Cascadia Mono', Consolas, ui-monospace, Menlo, monospace;
   font-family: var(--font-ui);
   font-synthesis: none;
   font-size: 14px;
@@ -280,7 +282,7 @@ select:hover { border-color: var(--accent-border); }
    down to about five characters, so neither ever collapses to a lone ellipsis. */
 /* The document name is a title: Geist Serif at its one (regular) weight, a size up to match the sans. */
 .title strong { flex: 0 1 auto; min-width: min(5em, 45%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 14px/1.2 var(--font-read); }
-.title span { flex: 0 0 auto; max-width: 66%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px/1.3 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.title span { flex: 0 0 auto; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px/1.3 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
 .ask-key { display: none; flex-shrink: 0; }
 .title:hover .ask-key, .title:focus-visible .ask-key { display: block; }
 /* --find-bar-height is the find bar's real height, so the reading surface and the opening strip can
