@@ -280,7 +280,7 @@ select:hover { border-color: var(--accent-border); }
    down to about five characters, so neither ever collapses to a lone ellipsis. */
 /* The document name is a title: Geist Serif at its one (regular) weight, a size up to match the sans. */
 .title strong { flex: 0 1 auto; min-width: min(5em, 45%); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 400 14px/1.2 var(--font-read); }
-.title span { flex: 0 0 auto; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 10px/1.4 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.title span { flex: 0 0 auto; max-width: 66%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px/1.3 var(--font-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
 .ask-key { display: none; flex-shrink: 0; }
 .title:hover .ask-key, .title:focus-visible .ask-key { display: block; }
 /* --find-bar-height is the find bar's real height, so the reading surface and the opening strip can
@@ -293,17 +293,17 @@ select:hover { border-color: var(--accent-border); }
    control is the call to action sized to its words, and recents are a quiet list. */
 #empty { height: 100%; overflow: auto; padding: 32px 28px 24px; max-width: 640px; margin: auto; }
 .book-mark { display: block; color: var(--accent); }
-.eyebrow { font: 10px/1.5 var(--font-mono) !important; letter-spacing: 1.5px; color: var(--muted) !important; margin-top: 22px !important; }
+.eyebrow { font: 11px/1.35 var(--font-mono) !important; letter-spacing: .8px; color: var(--muted) !important; margin-top: 22px !important; }
 /* Headings are titles: Geist Serif at its one weight, which a display serif carries without bold. */
 h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 12px 0 18px; color: var(--fg); }
 #empty > p { color: var(--muted); font-size: 13px; line-height: 1.65; }
 .primary { background: var(--accent-fill); color: var(--on-accent); padding: 11px 15px; font-weight: 600; }
 .primary:hover { background: var(--accent-fill-hover); }
 #empty-open { margin-top: 6px; display: inline-flex; align-items: center; gap: 10px; padding: 9px 14px; border-radius: 6px; }
-#empty .formats { font: 9px/1.5 var(--font-mono); letter-spacing: .7px; margin-top: 14px; color: var(--muted); }
+#empty .formats { font: 11px/1.25 var(--font-mono); letter-spacing: .2px; margin-top: 14px; color: var(--muted); }
 #preview-note { font-size: 11px !important; margin-top: 28px; color: var(--muted) !important; }
 #recents { margin-top: 26px; }
-#recents h2 { margin: 0 0 4px; font: 10px/1.5 var(--font-mono); letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+#recents h2 { margin: 0 0 4px; font: 11px/1.35 var(--font-mono); letter-spacing: .8px; text-transform: uppercase; color: var(--muted); }
 .recent { display: flex; align-items: center; margin: 0 -8px; border-radius: 5px; }
 .recent:hover { background: var(--hover-subtle); }
 .recent button { background: transparent; }
@@ -374,7 +374,7 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
 #view-controls button { display: grid; place-items: center; width: 28px; height: 26px; padding: 0; border-radius: 6px; color: var(--muted); }
 #view-controls button[aria-pressed=true] { color: var(--accent-ink); }
 #view-controls > button:disabled, #view-controls > button[aria-disabled=true] { opacity: calc(var(--idle) * .45); cursor: default; background: transparent; }
-#view-controls #zoom-level { width: 44px; color: var(--fg); font: 10px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+#view-controls #zoom-level { width: 44px; color: var(--fg); font: 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
 #view-controls .view-group { display: flex; align-items: center; gap: 2px; }
 #view-controls .view-sep { width: 1px; height: 16px; background: var(--hairline); }
 /* Hand tool: drags pan the page instead of selecting text; links stay clickable. */
@@ -415,8 +415,8 @@ dialog select { padding-right: 28px; }
 :root:not(.keyboard-focus) #menu button:focus-visible { outline: none; }
 .menu-label { display: inline-flex; align-items: center; gap: 8px; }
 .menu-label svg { flex-shrink: 0; color: var(--accent-ink); }
-.menu-value { color: var(--muted); font: 10px/1.4 var(--font-mono); white-space: nowrap; }
-kbd { color: var(--muted); background: var(--stage); border: 1px solid var(--border); border-radius: 3px; padding: 1px 4px; font: 10px/1.4 var(--font-mono); white-space: nowrap; }
+.menu-value { color: var(--muted); font: 11px/1.3 var(--font-mono); white-space: nowrap; }
+kbd { color: var(--muted); background: var(--stage); border: 1px solid var(--border); border-radius: 3px; padding: 1px 4px; font: 11px/1.3 var(--font-mono); white-space: nowrap; }
 /* Dropped from the title (Go to, Contents): a popover under the toolbar, no dimmed page. */
 dialog.drop { position: fixed; inset: auto; margin: 0; width: min(320px, calc(100vw - 12px)); max-height: calc(100dvh - 56px); padding: 10px; border-radius: 9px; background: var(--card); }
 dialog.drop::backdrop { background: transparent; }
@@ -431,7 +431,7 @@ dd { margin: 0; color: var(--muted); }
 #shortcuts:focus { outline: none; }
 #shortcut-list { columns: 2 250px; column-gap: 32px; }
 #shortcut-list section { break-inside: avoid; margin-bottom: 14px; }
-#shortcut-list h3 { margin: 0 0 5px; font-size: 10px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+#shortcut-list h3 { margin: 0 0 5px; font-size: 11px; font-weight: 500; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); }
 #shortcut-list dl { gap: 6px 12px; margin: 0; font-size: 12px; }
 #shortcut-list dd { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 3px; }
 #shortcut-list dd span { margin-left: 2px; font-size: 11px; color: var(--muted); }
@@ -460,7 +460,7 @@ dd { margin: 0; color: var(--muted); }
 :root:not(.keyboard-focus) #appearance :focus-visible { outline: none; }
 #appearance .appearance-hint { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 #appearance .appearance-hint[data-previewing] { color: var(--accent-ink); }
-.sheet-label { color: var(--muted); font: 10px/1.4 var(--font-mono); letter-spacing: .6px; }
+.sheet-label { color: var(--muted); font: 11px/1.3 var(--font-mono); letter-spacing: .2px; }
 .choices { flex: 1; display: flex; gap: 2px; min-width: 0; }
 .choices button { flex: 0 1 auto; display: flex; align-items: center; gap: 6px; min-width: 0; padding: 5px 9px; border: 0; border-radius: 6px; color: var(--muted); font-size: 12px; }
 .choices button:hover { background: var(--hover-subtle); color: var(--fg); }
@@ -501,7 +501,7 @@ dd { margin: 0; color: var(--muted); }
 .swatch-custom { color: var(--muted); }
 .swatch-custom:not([aria-checked=true]) { border: 1px dashed var(--track); }
 .swatch-custom[aria-checked=true] svg, .swatch-custom:not([aria-checked=true]) > span { display: none; }
-#appearance .appearance-note { margin: 0; color: var(--muted); font: 10px/1.45 var(--font-mono); letter-spacing: .2px; }
+#appearance .appearance-note { margin: 0; color: var(--muted); font: 11px/1.35 var(--font-mono); letter-spacing: 0; }
 @media (min-width: 720px) {
   #appearance { width: 460px; margin-inline: auto; border: 1px solid var(--border); border-bottom: 0; }
 }
@@ -528,14 +528,14 @@ dd { margin: 0; color: var(--muted); }
 #palette-input::placeholder { color: var(--muted); }
 .palette-esc { flex-shrink: 0; }
 .palette-list { overflow-y: auto; overscroll-behavior: contain; padding: 6px; min-height: 0; }
-.palette-group { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 8px 8px 3px; }
+.palette-group { font-size: 11px; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); padding: 8px 8px 3px; }
 .palette-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 9px; border-radius: 5px; font-size: 12px; cursor: default; }
 .palette-row[aria-selected="true"] { background: var(--accent-soft); color: var(--accent-ink); }
 .palette-row[aria-selected="true"] kbd { color: var(--accent-ink); border-color: var(--accent-border); background: transparent; }
 .palette-row[aria-disabled="true"] { color: var(--faint); }
 .palette-row[aria-disabled="true"][aria-selected="true"] { background: var(--hover); color: var(--muted); }
 .palette-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.palette-hint { font-size: 10px; color: var(--muted); white-space: nowrap; }
+.palette-hint { font-size: 11px; color: var(--muted); white-space: nowrap; }
 .palette-empty { margin: 0; padding: 16px 13px 18px; font-size: 12px; color: var(--muted); text-align: center; }
 
 /* Find in document (Ctrl+F): a strip above the reading surface, which moves down by the strip's
@@ -557,7 +557,7 @@ dd { margin: 0; color: var(--muted); }
 #find-query::placeholder { color: var(--muted); }
 #find-query:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 #find-close { margin-left: auto; }
-#find-status { margin: 0 6px 0 4px; font-size: 10px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; min-width: 0; }
+#find-status { margin: 0 6px 0 4px; font-size: 11px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; min-width: 0; }
 #find-bar button { flex-shrink: 0; padding: 1px 6px; font-size: 11px; border-radius: 4px; color: var(--muted); }
 #find-bar button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent-border); }
 #find-bar button:disabled { opacity: .4; }
@@ -567,7 +567,7 @@ dd { margin: 0; color: var(--muted); }
 #answer { position: absolute; z-index: 24; top: 0; left: 0; right: 0; display: flex; flex-direction: column; max-height: min(65%, 460px); padding: 10px 14px 12px; background: var(--card); border-bottom: 1px solid var(--hairline); box-shadow: var(--shadow-popover); outline: none; }
 .answer-head { display: flex; align-items: center; gap: 8px; color: var(--accent-ink); }
 .answer-question { flex: 1; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 12px; }
-.answer-steps { margin: 6px 0 0; padding: 0; list-style: none; font: 10px/1.6 var(--font-mono); color: var(--muted); }
+.answer-steps { margin: 6px 0 0; padding: 0; list-style: none; font: 11px/1.45 var(--font-mono); color: var(--muted); }
 .answer-steps li::before { content: '→ '; color: var(--faint); }
 .answer-steps:empty { display: none; }
 .answer-text { min-height: 0; overflow: auto; margin-top: 8px; color: var(--fg); font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; scrollbar-width: thin; }

@@ -56,3 +56,12 @@ describe('text set in the faint tone', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe('minimum text size', () => {
+  it('sets no text below 11px', () => {
+    const offenders = [css, libraryCss]
+      .flatMap(sheet => sheet.split('\n'))
+      .filter(line => /(^|[;{ ])font(-size)?:[^;}]*(^|[^\d.])([0-9]|10)(\.\d+)?px/.test(line));
+    expect(offenders).toEqual([]);
+  });
+});
