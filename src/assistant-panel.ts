@@ -192,7 +192,7 @@ export function createAssistantPanel(layout: HTMLElement, options: { env: Reader
     questionLine.textContent = text; questionLine.title = text;
     stepsList.replaceChildren();
     answer.classList.remove('answer-error'); answer.replaceChildren(); answer.textContent = 'Thinking…'; answer.classList.add('answer-pending');
-    followInput.value = ''; followInput.disabled = true; sheet.setAttribute('aria-busy', 'true');
+    followInput.value = ''; followInput.placeholder = 'Ask a follow-up…'; followInput.disabled = true; sheet.setAttribute('aria-busy', 'true');
     sheet.focus();
     void (async () => {
       const model = (connected && localStorage.getItem(modelKey(connected))) || await loadModels();
@@ -208,6 +208,7 @@ export function createAssistantPanel(layout: HTMLElement, options: { env: Reader
       if (token !== conversation) return;
       // A failed request leaves no usable turn behind, so the next question starts clean.
       history = []; tools = readerTools(env);
+      followInput.placeholder = 'Ask again…';
       answer.classList.add('answer-error'); answer.textContent = String(error instanceof Error ? error.message : error);
     }).finally(() => {
       if (token !== conversation) return;

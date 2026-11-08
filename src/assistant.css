@@ -6,6 +6,7 @@
 #assistant-settings .assistant-connected { margin: 0 0 4px; color: var(--fg); font-weight: 500; }
 #assistant-settings .assistant-on > label:first-of-type { margin-top: 10px; }
 #assistant-settings .assistant-terms { margin-top: 14px; }
+#assistant-settings .assistant-error { overflow-wrap: anywhere; }
 #assistant-settings .assistant-error:empty { display: none; }
 #assistant-settings .assistant-on select + .assistant-error { margin-top: -4px; }
 
