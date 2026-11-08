@@ -68,8 +68,8 @@ export const coverTint = { light: { lightness: .93, chroma: .03 }, dark: { light
 /** Share of `--ink` in the colour of a cover's small print (format, version); the rest is `--muted`, which on its own falls just short of 4.5:1 on the tint. */
 export const coverSecondaryInk = .3;
 
-/** Vertical layout of shelves in the grid, in px: space above every shelf but the first, the header's height, and the space under it. */
-export const shelfLayout = { gap: 16, head: 18, below: 6 } as const;
+/** Vertical layout of shelves in the grid, in px: space above every shelf but the first (several times the 4 px between rows, so a header reads as a break), the header's height, and the space under it. */
+export const shelfLayout = { gap: 28, head: 16, below: 8 } as const;
 
 /** A 32-bit hash of a collection id (FNV-1a with a final mix, so near-identical ids still differ in every bit the cover reads). */
 export function coverHash(collectionId: string): number {

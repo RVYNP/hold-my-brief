@@ -99,6 +99,8 @@
 .library-document.is-active { background: var(--accent-soft); }
 .library-document-open { flex: 1; display: flex; flex-direction: column; gap: 1px; min-width: 0; text-align: left; padding: 6px 6px; border-radius: 6px; }
 .library-document-open:hover { background: transparent; }
+/* The selected reference is shown by the row's tint (or the tile's ring), never by a boxed button inside it. */
+.library-document-open[aria-pressed=true], .library-document-open[aria-pressed=true]:hover { border-color: transparent; background: transparent; }
 .library-document-name { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; line-height: 1.35; }
 .library-document-meta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font: 11px/1.15 var(--font-mono); letter-spacing: 0; }
 .library-document.is-active .library-document-meta { color: var(--accent-ink); }
@@ -151,7 +153,7 @@
 .library-tile-media.is-loaded .library-cover { display: none; }
 .library-cover-art { display: block; flex: none; width: 100%; height: 56.25%; image-rendering: pixelated; object-fit: fill; }
 .library-cover-text { display: flex; flex: 1 1 0; flex-direction: column; justify-content: space-between; gap: 4px; min-height: 0; padding: 7px 9px 8px; text-align: left; }
-.library-cover-title { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font: 13px/1.25 var(--font-read); overflow-wrap: anywhere; white-space: normal; }
+.library-cover-title { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font: clamp(13px, 9.2cqw, 17px)/1.22 var(--font-read); overflow-wrap: anywhere; white-space: normal; }
 @container (min-width: 140px) { .library-cover-title { -webkit-line-clamp: 3; } }
 .library-cover-meta { display: flex; flex: none; justify-content: space-between; gap: 6px; color: color-mix(in srgb, var(--ink) 30%, var(--muted)); font: 11px/1.1 var(--font-mono); letter-spacing: 0; white-space: nowrap; }
 .library-cover-meta span:last-child:not(:first-child) { overflow: hidden; text-overflow: ellipsis; }
@@ -163,7 +165,7 @@
 .library-tile.is-missing .library-tile-media { background: color-mix(in srgb, var(--hover) 70%, var(--raise)); }
 
 /* Shelf: a quiet mono header above the tiles of one sub-collection (placed absolutely like the tiles). */
-.library-shelf-head { position: absolute; display: flex; align-items: baseline; gap: 6px; height: 18px; color: var(--muted); font: 11px/18px var(--font-mono); letter-spacing: .3px; pointer-events: none; }
+.library-shelf-head { position: absolute; display: flex; align-items: baseline; gap: 6px; height: 16px; color: var(--muted); font: 11px/16px var(--font-mono); letter-spacing: .3px; pointer-events: none; }
 .library-shelf-name { overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 .library-shelf-count { flex: none; font-variant-numeric: tabular-nums; }
 
@@ -206,7 +208,10 @@
 .library-detail { flex-direction: column; min-width: 0; min-height: 0; gap: 6px; padding: 12px; overflow-y: auto; border-left: 1px solid var(--hairline); scrollbar-width: thin; }
 .library-detail-preview { position: relative; display: grid; place-items: center; flex: none; max-height: 240px; overflow: hidden; border-radius: 4px; background: var(--hover); color: var(--muted); font: 11px/1 var(--font-mono); letter-spacing: .2px; }
 .library-detail-preview.is-empty { aspect-ratio: 4 / 3; }
-.library-detail-preview.is-cover { aspect-ratio: 3 / 4; width: min(100%, 180px); }
+/* A generated cover in the strip is its art alone: the title is the heading right beneath it. */
+.library-detail-preview.is-cover { aspect-ratio: 4 / 3; width: 100%; }
+.library-detail-preview .library-cover-text { display: none; }
+.library-detail-preview .library-cover-art { height: 100%; }
 .library-detail-preview > img { display: block; width: 100%; max-height: 240px; object-fit: contain; }
 .library-detail-name { margin: 6px 0 0; font-size: 14px; font-weight: 650; line-height: 1.3; overflow-wrap: anywhere; }
 .library-detail-creator { margin: -2px 0 0; color: var(--muted); font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
@@ -244,19 +249,46 @@
 .library-empty p { margin: 6px 0 0; }
 .library-backdrop { display: none; }
 .library-visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
-.library-dialog { max-width: calc(100vw - 28px); }
+.library-dialog { width: min(380px, calc(100vw - 28px)); max-width: calc(100vw - 28px); }
 .library-dialog h2, .library-dialog p { overflow-wrap: anywhere; }
-.library-dialog .dialog-actions { flex-wrap: wrap; gap: 6px; }
+.library-dialog .dialog-actions { flex-wrap: wrap; gap: 6px; align-items: center; }
 .library-dialog button { white-space: normal; }
 .library-dialog .primary, .library-dialog .danger { padding: 8px 10px; }
-.library-dialog-document { color: var(--fg); font-weight: 600; margin: 0 0 12px; }
-.library-dialog-help { color: var(--muted); font-size: 12px; }
+.library-dialog-document { margin: -8px 0 12px; color: var(--muted); font-size: 13px; font-weight: 500; }
+.library-dialog-help { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .library-dialog-error { color: var(--error); }
 .library-dialog-error:empty { display: none; }
-.library-remove { color: var(--error); padding-left: 0; }
-.library-remove-confirmation { padding: 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--stage); }
-.library-remove-confirmation p { margin-top: 0; font-size: 12px; }
-.library-remove-confirmation button { margin: 2px 3px 0 0; }
+/* Fields in a dialog are tone, never boxes: a quiet label over a filled field, checkboxes as plain rows, one hairline above the destructive action. */
+.library-dialog .library-field { margin: 14px 0 0; }
+.library-dialog .library-field:first-child { margin-top: 0; }
+.library-dialog .library-field :is(input, select, textarea) { margin: 6px 0 0; }
+.library-dialog textarea { display: block; width: 100%; min-height: 72px; padding: 8px 10px; border: 0; border-radius: 6px; background: var(--hover-subtle); color: var(--fg); font: inherit; font-size: 13px; line-height: 1.5; resize: vertical; }
+.library-dialog textarea::placeholder { color: var(--muted); }
+.library-memberships { min-width: 0; margin: 0 0 4px; padding: 0; border: 0; }
+.library-memberships legend { margin: 0 0 4px; padding: 0; color: var(--muted); font-size: 12px; }
+.library-memberships { max-height: 176px; overflow-y: auto; scrollbar-width: thin; }
+.library-dialog .library-check { display: flex; align-items: center; gap: 8px; margin: 0; padding-block: 4px; color: var(--fg); font-size: 13px; line-height: 1.35; }
+.library-dialog .library-check input { flex: none; width: 14px; height: 14px; margin: 0; accent-color: var(--accent); }
+.library-dialog .library-check input:disabled + span { color: var(--muted); }
+.library-dialog-content > .library-check { margin-top: 4px; }
+.library-dialog details { margin-top: 10px; }
+.library-dialog summary { color: var(--muted); font-size: 12px; cursor: pointer; }
+.library-dialog summary:hover { color: var(--fg); }
+.library-dialog details[open] > summary { margin-bottom: 6px; }
+.library-provenance { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 6px 0; font-size: 12px; }
+.library-provenance dt { color: var(--muted); }
+.library-provenance dd { margin: 0; overflow-wrap: anywhere; }
+.library-warning, .library-description { margin: 8px 0 0; font-size: 12px; line-height: 1.5; }
+.library-warning { color: var(--error); }
+.library-source-card { padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--hairline); }
+.library-source-card:first-child { padding-top: 0; margin-top: 0; border-top: 0; }
+.library-source-card h3 { margin: 0 0 4px; font-size: 13px; }
+.library-source-path { margin: 0 0 6px; color: var(--muted); font: 11px/1.4 var(--font-mono); overflow-wrap: anywhere; }
+.library-remove { display: block; margin-top: 12px; padding-left: 0; color: var(--error); }
+/* The confirmation is a tinted band, not a bordered card. */
+.library-remove-confirmation { margin-top: 8px; padding: 10px 12px; border-radius: 6px; background: var(--hover-subtle); }
+.library-remove-confirmation p { margin: 0 0 6px; font-size: 12px; }
+.library-remove-confirmation button { margin: 2px 6px 0 0; }
 /* Compact windows: the drawer covers the layout as a sheet over a scrim instead of floating beside it. */
 @media (max-width: 719px) {
   .library-root { position: absolute; z-index: 20; inset: 0; display: block; width: auto; margin: 0; }

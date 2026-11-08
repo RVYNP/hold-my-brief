@@ -297,7 +297,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   }
   function parentOptions(select: HTMLSelectElement, excluded = new Set<string>()) {
     option(select, '', 'Top level');
-    for (const { item, depth } of orderedTree(library.collections.filter(item => !item.sourceId))) if (!excluded.has(item.id)) option(select, item.id, `${'— '.repeat(depth)}${item.name}`);
+    for (const { item, depth } of orderedTree(library.collections.filter(item => !item.sourceId))) if (!excluded.has(item.id)) option(select, item.id, `${'— '.repeat(depth)}${collectionDisplayName(item.name)}`);
   }
   function collectionForm(trigger: HTMLElement, collection?: Collection) {
     const view = openDialog(collection ? 'Edit collection' : 'New collection', trigger); if (!view) return;
@@ -350,15 +350,15 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   function organize(doc: LibraryDocument, trigger: HTMLElement) {
     const view = openDialog('Organize reference', trigger); if (!view) return;
     view.content.append(element('p', 'library-dialog-document', docLabel(doc)));
-    const memberships = element('fieldset', 'library-memberships'); memberships.append(element('legend', '', 'Collections (choose more than one)'));
+    const memberships = element('fieldset', 'library-memberships'); memberships.append(element('legend', '', 'Collections'));
     const selected = new Set(doc.collectionIds); const collectionInputs: { collection: Collection; input: HTMLInputElement }[] = [];
     for (const { item, depth } of orderedTree(library.collections)) {
-      const choice = check(`${item.name}${item.sourceId ? ' · source-owned' : ''}`, selected.has(item.id)); choice.row.style.paddingInlineStart = `${depth * 12}px`; choice.input.disabled = Boolean(item.sourceId);
+      const choice = check(`${collectionDisplayName(item.name)}${item.sourceId ? ' · source-owned' : ''}`, selected.has(item.id)); choice.row.style.paddingInlineStart = `${depth * 14}px`; choice.input.disabled = Boolean(item.sourceId);
       memberships.append(choice.row); collectionInputs.push({ collection: item, input: choice.input });
     }
     if (!collectionInputs.length) memberships.append(element('p', 'library-dialog-help', 'Create a personal collection from the sidebar to organize this item.'));
     const favorite = check('Favorite', doc.favorite); const tags = element('input'); tags.value = doc.tags.join(', '); tags.placeholder = 'Comma-separated personal tags';
-    const notes = element('textarea'); notes.rows = 5; notes.value = doc.notes;
+    const notes = element('textarea'); notes.rows = 4; notes.value = doc.notes;
     view.content.append(memberships, favorite.row, labeled('Personal tags', tags), labeled('Personal notes', notes), element('p', 'library-dialog-help', 'Indexed folder memberships are read-only. Personal notes, tags, favorites, and collections survive re-indexing. Originals never move.'));
     const sourceDetails = element('details'); sourceDetails.append(element('summary', '', 'Source and original location')); locationActions(doc, sourceDetails, () => view.dialog.close()); view.content.append(sourceDetails);
     const submit = button('Save organization'); submit.type = 'submit'; submit.className = 'primary'; view.actions.append(submit);
@@ -380,7 +380,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     const view = openDialog(docLabel(doc), trigger); if (!view) return;
     const creator = doc.format === 'epub' ? thumbs.epub(doc.path)?.creator : undefined;
     if (creator) view.content.append(element('p', 'library-dialog-help', creator));
-    view.content.append(element('p', 'library-document-meta', `${doc.format.toUpperCase()} · ${doc.availability ?? 'ready'}${docLabel(doc) !== doc.name ? ` · ${doc.name}` : ''}`));
+    view.content.append(element('p', 'library-document-meta', rowMeta(doc)));
     if (doc.tags.length) view.content.append(element('p', 'library-dialog-help', `Personal tags: ${doc.tags.join(', ')}`));
     if (doc.notes) view.content.append(element('p', 'library-description', doc.notes));
     locationActions(doc, view.content, () => view.dialog.close());
@@ -551,7 +551,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     const actions = element('div', 'library-detail-actions'); actions.append(open, organizeButton);
     detail.append(preview, name);
     const creator = doc.format === 'epub' ? thumbs.epub(doc.path)?.creator : undefined; if (creator) detail.append(element('p', 'library-detail-creator', creator));
-    detail.append(element('p', 'library-detail-meta', `${doc.format.toUpperCase()} · ${doc.source?.removed ? 'no longer in folder' : doc.availability ?? 'ready'}`));
+    detail.append(element('p', 'library-detail-meta', rowMeta(doc, false)));
     if (docLabel(doc) !== doc.name) detail.append(element('p', 'library-detail-file', doc.name));
     detail.append(actions);
     const byId = new Map(library.collections.map(item => [item.id, item]));
@@ -635,7 +635,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   // positioned absolutely into masonry columns: each joins the shortest column of its shelf, and a tile's height
   // follows its ratio. A shelf header is placed the same way, above its tiles.
   type Tile = { node: HTMLElement; path: string; ratio: number; column: number };
-  type Section = { head?: HTMLElement; tiles: Tile[] };
+  type Section = { shelf?: string; head?: HTMLElement; tiles: Tile[] };
   let tiles: Tile[] = []; let sections: Section[] = []; let columnCount = 0; const tileByPath = new Map<string, Tile>();
   const gridSizer = element('div', 'library-grid-sizer'); gridSizer.setAttribute('aria-hidden', 'true');
   function contentWidth() { const style = getComputedStyle(documents); return documents.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight); }
@@ -682,7 +682,8 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     }
     if (board && selectedPath === path) renderDetail();
   }
-  const rowMeta = (doc: LibraryDocument) => `${doc.format.toUpperCase()} · ${doc.source?.removed ? 'no longer in folder' : doc.availability ?? 'ready'}${doc.path === activePath ? ' · Reading' : ''}${epubTitle(doc) ? ` · ${doc.name}` : ''}`;
+  /** Format, then only what is worth saying: a missing or removed original, the open reference, and the file name when the title is the book's own. A reference that is simply there says nothing about it. */
+  const rowMeta = (doc: LibraryDocument, full = true) => [doc.format.toUpperCase(), doc.source?.removed ? 'no longer in folder' : (doc.availability ?? 'ready') === 'ready' ? undefined : doc.availability, full && doc.path === activePath ? 'Reading' : undefined, full && epubTitle(doc) ? doc.name : undefined].filter(Boolean).join(' · ');
   /** A generated cover for a document with no picture: dithered art of its shelf in the top half, the title and the format (with the version in the file name) below. */
   function coverNode(doc: LibraryDocument, shelfId: string | undefined) {
     const cover = element('span', 'library-cover'); cover.style.setProperty('--cover-fill', coverFill(shelfId));
@@ -778,7 +779,8 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
       const nodes: HTMLElement[] = [];
       for (const doc of shown) {
         const shelf = shelves?.find(candidate => candidate.items.includes(doc)); const last = sections[sections.length - 1];
-        if (!last || shelf && last.head?.dataset.shelf !== shelf.id) { const head = shelf ? shelfHead(shelf) : undefined; sections.push({ head, tiles: [] }); if (head) nodes.push(head); }
+        // What sits directly in the open collection comes first and needs no header: the scope row already names it.
+        if (!last || shelf && last.shelf !== shelf.id) { const head = shelf && shelf.id !== (filter.kind === 'collection' ? filter.id : undefined) ? shelfHead(shelf) : undefined; sections.push({ shelf: shelf?.id, head, tiles: [] }); if (head) nodes.push(head); }
         const tile = documentTile(doc, shelf?.id ?? doc.collectionIds[0]); sections[sections.length - 1].tiles.push(tile); tiles.push(tile); tileByPath.set(tile.path, tile); nodes.push(tile.node);
       }
       documents.append(gridSizer, ...nodes); layoutGrid(true);

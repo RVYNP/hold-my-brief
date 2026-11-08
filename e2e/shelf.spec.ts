@@ -22,7 +22,7 @@ async function addFiles(page: Page, files: string[]) {
 async function newCollection(page: Page, name: string, parent?: string) {
   await page.getByRole('button', { name: 'New personal collection' }).click();
   await page.getByLabel('Collection name').fill(name);
-  if (parent) await page.getByLabel('Parent collection').selectOption({ label: parent });
+  if (parent) await page.getByLabel('Parent collection').selectOption({ label: parent }); // option labels are display names, like the rail
   await page.getByRole('button', { name: 'Create collection' }).click();
   await expect(page.locator('.library-dialog')).toHaveCount(0);
 }
@@ -33,10 +33,10 @@ async function buildShelves(page: Page) {
   await page.getByRole('button', { name: 'Open library board' }).click();
   await expect(page.locator('#library-root')).toHaveClass(/is-board/);
   await newCollection(page, 'reference');
-  await newCollection(page, '1-languages', 'reference');
+  await newCollection(page, '1-languages', 'Reference');
   await addFiles(page, languages);
   await expect(page.locator('.library-tile')).toHaveCount(languages.length);
-  await newCollection(page, '2-creative-apps', 'reference');
+  await newCollection(page, '2-creative-apps', 'Reference');
   await addFiles(page, creative);
   await expect(page.locator('.library-tile')).toHaveCount(creative.length);
   await page.locator('.library-filter', { hasText: /^Reference/ }).click();
@@ -76,20 +76,21 @@ test('EPUB tiles show their real title, the version in the file name and no bord
   expect(await page.locator('.library-detail-file').evaluate(node => getComputedStyle(node).fontFamily)).toContain('JetBrains Mono');
 });
 
-test('a collection with sub-collections shows shelves in name order with display names; filters apply inside each shelf', async ({ page }) => {
+test('a collection with sub-collections shows its own documents first, then one headed shelf per child in name order; filters apply inside each shelf', async ({ page }) => {
   await buildShelves(page);
   const heads = page.locator('.library-shelf-head');
-  await expect(heads).toHaveCount(3);
-  await expect(heads.locator('.library-shelf-name')).toHaveText(['Reference', 'Languages', 'Creative apps']);
-  await expect(heads.locator('.library-shelf-count')).toHaveText(['1', '3', '2']);
+  // What sits directly in Reference needs no header (the scope row names it); each child collection gets one.
+  await expect(heads).toHaveCount(2);
+  await expect(heads.locator('.library-shelf-name')).toHaveText(['Languages', 'Creative apps']);
+  await expect(heads.locator('.library-shelf-count')).toHaveText(['3', '2']);
   // The rail and the scope row show display names; the stored names are untouched.
   await expect(page.locator('.library-board-rail .library-filter-name')).toContainText(['Reference', 'Languages', 'Creative apps']);
   await expect(page.locator('.library-scope-label')).toHaveText('Reference');
   await expect(page.getByRole('button', { name: '1-languages', exact: true })).toHaveCount(0);
   // Headers sit above their tiles, in DOM order: shelf by shelf, so keyboard order follows.
   const order = await page.locator('.library-documents').evaluate(documents => Array.from(documents.children).filter(node => node.matches('.library-shelf-head, .library-tile')).map(node => node.matches('.library-shelf-head') ? `# ${node.querySelector('.library-shelf-name')!.textContent}` : (node as HTMLElement).dataset.docName));
-  expect(order[0]).toBe('# Reference'); expect(order[1]).toBe('Pride and Prejudice');
-  expect(order.indexOf('# Languages')).toBe(2); expect(order.indexOf('# Creative apps')).toBe(6);
+  expect(order[0]).toBe('Pride and Prejudice');
+  expect(order.indexOf('# Languages')).toBe(1); expect(order.indexOf('# Creative apps')).toBe(5);
   const geometry = await page.locator('.library-documents').evaluate(documents => {
     const at = (node: Element) => node.getBoundingClientRect();
     return Array.from(documents.querySelectorAll('.library-shelf-head')).map(head => ({ name: head.textContent, top: at(head).top, below: Array.from(documents.querySelectorAll(`.library-tile`)).filter(tile => at(tile).top >= at(head).bottom - 1).length }));
@@ -98,14 +99,16 @@ test('a collection with sub-collections shows shelves in name order with display
   const dark = await page.locator('.library-shelf-name').first().evaluate(node => getComputedStyle(node).textTransform);
   expect(dark).toBe('uppercase');
   // A shelf header is above every tile of its shelf and below every tile of the one before.
-  const languagesTop = (await heads.nth(1).boundingBox())!.y, languagesTiles = await page.locator('.library-tile').evaluateAll(nodes => nodes.map(node => [(node as HTMLElement).dataset.docName, node.getBoundingClientRect().top] as const));
+  const languagesTop = (await heads.nth(0).boundingBox())!.y, languagesTiles = await page.locator('.library-tile').evaluateAll(nodes => nodes.map(node => [(node as HTMLElement).dataset.docName, node.getBoundingClientRect().top, node.getBoundingClientRect().bottom] as const));
   const above = languagesTiles.find(([name]) => name === 'Pride and Prejudice')!; expect(above[1]).toBeLessThan(languagesTop);
+  // A header is a break: more air above it than the few px between rows.
+  expect(languagesTop - above[2]).toBeGreaterThanOrEqual(24);
   // Search applies inside each shelf, and shelves with nothing left hide.
   await page.locator('.library-search').fill('comfyui');
   await expect(heads.locator('.library-shelf-name')).toHaveText(['Creative apps']);
   await expect(page.locator('.library-tile')).toHaveCount(1);
   await page.locator('.library-search').fill('');
-  await expect(heads).toHaveCount(3);
+  await expect(heads).toHaveCount(2);
   // Search also finds an EPUB by the title inside it, not only by its file name.
   await page.locator('.library-search').fill('programming language');
   await expect(page.locator('.library-tile')).toHaveCount(1);
