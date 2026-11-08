@@ -26,7 +26,7 @@ palette (Ctrl+K), where you can open a file, jump, find or change any setting.
 The pin button keeps the reader above ordinary windows. The lock button captures its outer
 dimensions while allowing movement. Each is highlighted while on. Ctrl+Shift+T toggles pin;
 Ctrl+Shift+L toggles lock. The menu includes both controls, window presets (Compact 420 × 620,
-Reading 760 × 900), typography, fit/zoom, rotation, contents, Go to, Back and a shortcut reference.
+Reading 760 × 900), appearance and text, fit/zoom, rotation, contents, Go to, Back and a shortcut reference.
 
 While another app has focus, the reader's buttons and progress line fade so a pinned window stays
 quiet beside your work; the document's name, its position and the page keep full strength. Click the
@@ -34,7 +34,8 @@ reader and everything returns.
 
 ## Appearance
 
-Open the menu and choose **Appearance…** to open the Appearance panel at the bottom of the window.
+Open the menu and choose **Appearance and text…** to open the Appearance panel at the bottom of the
+window. Its **Colour** tab holds:
 
 - **Mode:** System (default; follows the operating system as it changes), Light or Dark.
 - **Theme:** Brief (default), Lilac, Birch, Graphite or Arctic. Each has a light and a dark version.
@@ -44,6 +45,15 @@ Open the menu and choose **Appearance…** to open the Appearance panel at the b
   automatically so text and controls stay readable.
 - **Page:** Match theme, White, Sepia or Dim for text documents (Markdown, TXT and reflowable EPUB).
   PDF pages, fixed-layout EPUB pages and images always keep their original colors.
+
+The **Text** tab (also **Text size & spacing…** in the palette) sets the open document's text size
+(12–40 px), line spacing (Tight, Normal, Relaxed, Loose) and margins (Narrow, Medium, Wide), and for
+plain text whether long lines wrap. Changes show on the page above the panel as you make them and are
+saved with the document. PDF pages, fixed-layout books and images zoom instead (Ctrl + and Ctrl −).
+
+In a wide window, Markdown and plain text stop at a comfortable line length (about 70 characters) and
+centre on the page instead of running edge to edge. Plain text with wrapping turned off keeps every
+column.
 
 Choices are saved on this computer and applied before the window first paints, so there is no flash
 of the wrong theme. The window frame (the Windows title bar, the macOS window buttons) follows the

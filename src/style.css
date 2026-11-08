@@ -330,10 +330,9 @@ dialog select { padding-right: 28px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 .danger { background: var(--danger); color: var(--on-accent); }
 .danger:hover { background: var(--danger-hover); }
-.check { display: flex; align-items: center; gap: 8px; }
 .menu-grid { display: flex; flex-direction: column; gap: 2px; }
 .menu-grid button { display: flex; justify-content: space-between; align-items: center; text-align: left; gap: 8px; font-size: 12px; white-space: normal; }
-.menu-grid button:nth-child(3), .menu-grid button:nth-child(7), .menu-grid button:nth-child(17) { border-bottom: 1px solid var(--border); border-radius: 0; padding-bottom: 12px; margin-bottom: 7px; }
+.menu-grid button:nth-child(3), .menu-grid button:nth-child(7), .menu-grid button:nth-child(16) { border-bottom: 1px solid var(--border); border-radius: 0; padding-bottom: 12px; margin-bottom: 7px; }
 .menu-label { display: inline-flex; align-items: center; gap: 8px; }
 .menu-label svg { flex-shrink: 0; color: var(--accent-ink); }
 .menu-value { color: var(--muted); font: 10px/1.4 var(--font-mono); white-space: nowrap; }
@@ -347,11 +346,15 @@ dd { margin: 0; color: var(--muted); }
 /* Appearance: a bottom sheet over the document, so theme previews stay visible above it. */
 #appearance { margin: auto 0 0; width: 100%; max-width: none; max-height: calc(100dvh - 40px); padding: 14px 18px 16px; border: 0; border-top: 1px solid var(--border); border-radius: 14px 14px 0 0; background: var(--card); box-shadow: var(--shadow-sheet); }
 #appearance[open] { display: flex; flex-direction: column; gap: 13px; }
+.sheet-panel { display: flex; flex-direction: column; gap: 13px; }
+.sheet-tabs { margin-left: auto; }
+.sheet-tabs button { flex: 0 0 auto; padding: 4px 12px; }
+.sheet-tabs button[aria-selected=true] { background: var(--card); border-color: var(--border); color: var(--fg); }
 #appearance::backdrop { background: transparent; }
 .sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .sheet-head h2 { margin: 0; }
 .sheet-close { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; color: var(--muted); }
-#appearance .appearance-hint { margin: -9px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+#appearance .appearance-hint { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 #appearance .appearance-hint[data-previewing] { color: var(--accent-ink); }
 .sheet-label { color: var(--muted); font: 10px/1.4 var(--font-mono); letter-spacing: .6px; }
 .segmented { display: flex; gap: 2px; padding: 2px; background: var(--stage); border: 1px solid var(--hairline); border-radius: 8px; }
@@ -360,7 +363,7 @@ dd { margin: 0; color: var(--muted); }
 .segmented button[aria-checked=true] { background: var(--card); border-color: var(--border); color: var(--fg); }
 .segmented button:focus-visible { outline-offset: -1px; }
 .theme-group { display: flex; flex-direction: column; gap: 8px; }
-.theme-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.theme-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
 .theme-card { display: flex; flex-direction: column; gap: 7px; min-width: 0; padding: 3px; border-radius: 11px; text-align: left; white-space: normal; }
 .theme-card:hover { background: transparent; }
 .theme-tile { display: flex; flex-direction: column; gap: 8px; padding: 9px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
@@ -377,6 +380,10 @@ dd { margin: 0; color: var(--muted); }
 .appearance-row { display: flex; align-items: center; gap: 12px; }
 .appearance-row > .sheet-label { flex-shrink: 0; width: 52px; }
 .appearance-row > .segmented { flex: 1; min-width: 0; }
+.appearance-text { display: flex; flex-direction: column; gap: 13px; }
+.stepper { flex: 0 0 auto !important; align-items: center; }
+.stepper button { flex: 0 0 auto; width: 30px; }
+.stepper-value { min-width: 48px; text-align: center; color: var(--fg); font: 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
 .swatches { position: relative; flex: 1; display: flex; align-items: center; justify-content: space-between; min-width: 0; }
 .swatch-theme { --swatch: var(--accent); }
 .swatch-input { position: absolute; right: 0; bottom: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }

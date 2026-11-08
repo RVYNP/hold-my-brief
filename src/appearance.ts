@@ -11,7 +11,17 @@ const modes: [AppearanceMode, string, string][] = [
 /** Accent presets offered beside the theme's own accent; any other color is a custom accent. */
 const presets: [string, string][] = [['Acid', '#e13a3a'], ['Iris', '#a86af4'], ['Blue', '#3d6fff'], ['Teal', '#2b8a84'], ['Rose', '#c2456b'], ['Moss', '#5f8a3a'], ['Amber', '#c27a1a']];
 const tones: [PageTone, string][] = [['theme', 'Match theme'], ['white', 'White'], ['sepia', 'Sepia'], ['dim', 'Dim']];
+const spacings: [number, string][] = [[1.4, 'Tight'], [1.65, 'Normal'], [1.9, 'Relaxed'], [2.2, 'Loose']];
+const margins: [number, string][] = [[12, 'Narrow'], [24, 'Medium'], [40, 'Wide']];
 const restingHint = 'Hover a theme to try it on the whole window. Click to keep it.';
+
+/** The reading settings the sheet edits for reflowable text (Markdown, TXT, reflowable EPUB). */
+export type TextSettings = { fontSize: number; lineHeight: number; margin: number; wrap: boolean };
+/** Supplied by the reader: the open document's settings (undefined when it is page-based or nothing is open) and how to change them. */
+export type TextControls = {
+  current: () => (TextSettings & { wraps: boolean }) | undefined;
+  change: (next: Partial<TextSettings>) => Promise<void>;
+};
 
 /** Menu label for the kept appearance, e.g. "Brief · System". */
 export function appearanceSummary() {
@@ -39,11 +49,14 @@ function check(group: HTMLElement, chosen: (item: HTMLElement) => boolean) {
 /**
  * Fills the Appearance bottom sheet. Hovering or focusing a theme previews it on the whole
  * window; click or Enter keeps it; leaving the cards, blur or Escape restores the kept theme.
+ * Below the colours, a Text section edits size, spacing, margins and wrapping of the open text
+ * document, live, so the change is judged on the page above the sheet.
  */
-export function createAppearanceSheet(dialog: HTMLDialogElement) {
+export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextControls) {
   dialog.setAttribute('aria-labelledby', 'appearance-title');
   dialog.innerHTML = `
-    <div class="sheet-head"><h2 id="appearance-title">Appearance</h2><button class="sheet-close" data-close aria-label="Close appearance">${icon(15, '<path d="M18 6 6 18M6 6l12 12"/>')}</button></div>
+    <div class="sheet-head"><h2 id="appearance-title">Appearance</h2><div class="segmented sheet-tabs" role="tablist" aria-label="Appearance sections"><button role="tab" id="appearance-tab-colour" data-tab="colour" aria-controls="appearance-colour">Colour</button><button role="tab" id="appearance-tab-text" data-tab="text" aria-controls="appearance-text">Text</button></div><button class="sheet-close" data-close aria-label="Close appearance">${icon(15, '<path d="M18 6 6 18M6 6l12 12"/>')}</button></div>
+    <div class="sheet-panel" id="appearance-colour" role="tabpanel" aria-labelledby="appearance-tab-colour">
     <p class="appearance-hint" aria-live="polite">${restingHint}</p>
     <div class="segmented appearance-modes" role="radiogroup" aria-label="Mode">${modes.map(([mode, label, glyph]) => `<button role="radio" data-mode="${mode}">${glyph}${label}</button>`).join('')}</div>
     <div class="theme-group"><span class="sheet-label" id="appearance-theme-label">THEME</span>
@@ -57,12 +70,42 @@ export function createAppearanceSheet(dialog: HTMLDialogElement) {
       </div></div>
     <div class="appearance-row"><span class="sheet-label" id="appearance-page-label">PAGE</span>
       <div class="segmented" role="radiogroup" aria-labelledby="appearance-page-label">${tones.map(([tone, label]) => `<button role="radio" data-tone="${tone}">${label}</button>`).join('')}</div></div>
-    <p class="appearance-note">PDF pages and images keep their original colors.</p>`;
+    <p class="appearance-note">PDF pages and images keep their original colors.</p>
+    </div>
+    <div class="sheet-panel" id="appearance-text" role="tabpanel" aria-labelledby="appearance-tab-text" hidden>
+    <div class="appearance-text">
+      <div class="appearance-row"><span class="sheet-label" id="appearance-size-label">SIZE</span>
+        <div class="segmented stepper" role="group" aria-labelledby="appearance-size-label"><button data-step="-2" aria-label="Smaller text">${icon(13, '<path d="M5 12h14"/>')}</button><output class="stepper-value" aria-live="polite"></output><button data-step="2" aria-label="Larger text">${icon(13, '<path d="M5 12h14M12 5v14"/>')}</button></div></div>
+      <div class="appearance-row"><span class="sheet-label" id="appearance-spacing-label">SPACING</span>
+        <div class="segmented" role="radiogroup" aria-labelledby="appearance-spacing-label">${spacings.map(([value, label]) => `<button role="radio" data-spacing="${value}">${label}</button>`).join('')}</div></div>
+      <div class="appearance-row"><span class="sheet-label" id="appearance-margin-label">MARGINS</span>
+        <div class="segmented" role="radiogroup" aria-labelledby="appearance-margin-label">${margins.map(([value, label]) => `<button role="radio" data-margin="${value}">${label}</button>`).join('')}</div></div>
+      <div class="appearance-row appearance-wrap"><span class="sheet-label" id="appearance-wrap-label">LINES</span>
+        <div class="segmented" role="radiogroup" aria-labelledby="appearance-wrap-label"><button role="radio" data-wrap="true">Wrap</button><button role="radio" data-wrap="false">Keep as written</button></div></div>
+    </div>
+    <p class="appearance-note appearance-text-note">Text settings apply to Markdown, plain text and reflowable books. PDF pages, fixed-layout books and images zoom instead (Ctrl + and Ctrl −).</p>
+    </div>`;
   const hint = dialog.querySelector<HTMLElement>('.appearance-hint')!;
   const modeGroup = dialog.querySelector<HTMLElement>('.appearance-modes')!, themeRow = dialog.querySelector<HTMLElement>('.theme-row')!;
   const swatches = dialog.querySelector<HTMLElement>('.swatches')!, themeSwatch = dialog.querySelector<HTMLElement>('.swatch-theme')!;
   const custom = dialog.querySelector<HTMLButtonElement>('.swatch-custom')!, picker = dialog.querySelector<HTMLInputElement>('.swatch-input')!;
   const toneGroup = dialog.querySelector<HTMLElement>('[aria-labelledby=appearance-page-label]')!;
+  const textSection = dialog.querySelector<HTMLElement>('.appearance-text')!, textNote = dialog.querySelector<HTMLElement>('.appearance-text-note')!;
+  const sizeValue = dialog.querySelector<HTMLOutputElement>('.stepper-value')!;
+  const spacingGroup = dialog.querySelector<HTMLElement>('[aria-labelledby=appearance-spacing-label]')!, marginGroup = dialog.querySelector<HTMLElement>('[aria-labelledby=appearance-margin-label]')!;
+  const wrapRow = dialog.querySelector<HTMLElement>('.appearance-wrap')!, wrapGroup = wrapRow.querySelector<HTMLElement>('.segmented')!;
+  const tabs = dialog.querySelectorAll<HTMLButtonElement>('[role=tab]');
+  let tab: 'colour' | 'text' = 'colour';
+  function showTab(next: 'colour' | 'text') {
+    tab = next;
+    for (const button of tabs) { const selected = button.dataset.tab === next; button.setAttribute('aria-selected', String(selected)); button.setAttribute('aria-checked', String(selected)); button.tabIndex = selected ? 0 : -1; }
+    for (const panel of dialog.querySelectorAll<HTMLElement>('[role=tabpanel]')) panel.hidden = panel.id !== `appearance-${next}`;
+  }
+  for (const button of tabs) button.addEventListener('click', () => showTab(button.dataset.tab as 'colour' | 'text'));
+  dialog.querySelector<HTMLElement>('.sheet-tabs')!.addEventListener('keydown', event => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault(); showTab(tab === 'colour' ? 'text' : 'colour'); dialog.querySelector<HTMLElement>('[role=tab][aria-selected=true]')!.focus();
+  });
   let kept: Appearance = appearance();
 
   function render() {
@@ -78,7 +121,22 @@ export function createAppearanceSheet(dialog: HTMLDialogElement) {
     check(toneGroup, item => item.dataset.tone === kept.page);
     hint.toggleAttribute('data-previewing', previewing);
     hint.textContent = previewing ? `Previewing ${names[shown.palette]}. Click to keep it, or move away to return to ${names[kept.palette]}.` : restingHint;
+    renderText();
   }
+  function renderText() {
+    const settings = text.current();
+    textSection.hidden = !settings; textNote.hidden = !!settings;
+    if (!settings) return;
+    sizeValue.value = `${settings.fontSize} px`;
+    for (const button of textSection.querySelectorAll<HTMLButtonElement>('[data-step]')) button.disabled = Number(button.dataset.step) < 0 ? settings.fontSize <= 12 : settings.fontSize >= 40;
+    // Spacing and margins snap to the nearest preset, so a value saved by an older build still shows a choice.
+    const nearest = (options: [number, string][], value: number) => options.reduce((best, option) => Math.abs(option[0] - value) < Math.abs(best[0] - value) ? option : best)[0];
+    check(spacingGroup, item => Number(item.dataset.spacing) === nearest(spacings, settings.lineHeight));
+    check(marginGroup, item => Number(item.dataset.margin) === nearest(margins, settings.margin));
+    wrapRow.hidden = !settings.wraps;
+    check(wrapGroup, item => item.dataset.wrap === String(settings.wrap));
+  }
+  const editText = (next: Partial<TextSettings>) => void text.change(next).then(renderText);
   function keep(change: Partial<Appearance>) { kept = { ...kept, ...change }; saveAppearance(kept); render(); }
   function preview(palette: Palette) {
     if (palette === kept.palette) restore();
@@ -86,10 +144,18 @@ export function createAppearanceSheet(dialog: HTMLDialogElement) {
   }
   function restore() { if (appearance() !== kept) { applyAppearance(kept); render(); } }
 
-  for (const group of [modeGroup, swatches, toneGroup]) radioGroup(group, true);
+  for (const group of [modeGroup, swatches, toneGroup, spacingGroup, marginGroup, wrapGroup]) radioGroup(group, true);
   radioGroup(themeRow, false);
   modeGroup.addEventListener('click', event => { const mode = (event.target as Element).closest<HTMLElement>('[data-mode]')?.dataset.mode as AppearanceMode | undefined; if (mode) keep({ mode }); });
   toneGroup.addEventListener('click', event => { const page = (event.target as Element).closest<HTMLElement>('[data-tone]')?.dataset.tone as PageTone | undefined; if (page) keep({ page }); });
+  spacingGroup.addEventListener('click', event => { const value = (event.target as Element).closest<HTMLElement>('[data-spacing]')?.dataset.spacing; if (value) editText({ lineHeight: Number(value) }); });
+  marginGroup.addEventListener('click', event => { const value = (event.target as Element).closest<HTMLElement>('[data-margin]')?.dataset.margin; if (value) editText({ margin: Number(value) }); });
+  wrapGroup.addEventListener('click', event => { const value = (event.target as Element).closest<HTMLElement>('[data-wrap]')?.dataset.wrap; if (value) editText({ wrap: value === 'true' }); });
+  textSection.addEventListener('click', event => {
+    const step = Number((event.target as Element).closest<HTMLElement>('[data-step]')?.dataset.step);
+    const settings = text.current();
+    if (step && settings) editText({ fontSize: Math.max(12, Math.min(40, settings.fontSize + step)) });
+  });
   themeRow.addEventListener('click', event => { const palette = (event.target as Element).closest<HTMLElement>('[data-choice]')?.dataset.choice as Palette | undefined; if (palette) keep({ palette }); });
   for (const card of themeRow.querySelectorAll<HTMLElement>('.theme-card')) {
     const palette = card.dataset.choice as Palette;
@@ -118,6 +184,11 @@ export function createAppearanceSheet(dialog: HTMLDialogElement) {
   dialog.addEventListener('close', restore);
 
   return {
-    open() { kept = appearance(); render(); dialog.showModal(); modeGroup.querySelector<HTMLElement>('[aria-checked=true]')?.focus(); },
+    /** Opens the sheet on its Colour tab, or on its Text tab (the palette's "Text size & spacing"). */
+    open(section: 'colour' | 'text' = 'colour') {
+      kept = appearance(); showTab(section); render(); dialog.showModal();
+      const target = section === 'text' ? textSection.querySelector<HTMLElement>('[data-step]:not(:disabled)') ?? dialog.querySelector<HTMLElement>('#appearance-tab-text') : modeGroup.querySelector<HTMLElement>('[aria-checked=true]');
+      target?.focus();
+    },
   };
 }

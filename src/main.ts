@@ -28,14 +28,13 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <button data-action="compact">Compact window</button><button data-action="reading">Reading window</button>
     <button data-action="fit-page">Fit page <kbd>Ctrl 0</kbd></button><button data-action="fit-width">Fit width <kbd>Ctrl 2</kbd></button><button data-action="rotate">Rotate page 90°</button>
     <button id="spread-toggle" data-action="spread" aria-pressed="false" disabled>Two-page spread <kbd>Ctrl 3</kbd></button><button id="cover-toggle" data-action="cover" aria-pressed="true" disabled>Cover page alone</button>
-    <button data-action="smaller">Smaller text / zoom <kbd>Ctrl −</kbd></button><button data-action="larger">Larger text / zoom <kbd>Ctrl +</kbd></button><button data-action="appearance"><span class="menu-label">${paletteIcon}Appearance…</span><span class="menu-value" id="appearance-summary"></span></button><button data-action="type">Typography & wrapping</button><button data-action="assistant">AI assistant…</button>
+    <button data-action="smaller">Smaller text / zoom <kbd>Ctrl −</kbd></button><button data-action="larger">Larger text / zoom <kbd>Ctrl +</kbd></button><button data-action="appearance"><span class="menu-label">${paletteIcon}Appearance and text…</span><span class="menu-value" id="appearance-summary"></span></button><button data-action="assistant">AI assistant…</button>
     <button data-action="start">First location</button><button data-action="end">Last location</button><button data-action="screen-previous">Previous screen</button><button data-action="screen-next">Next screen</button>
     <button data-action="shortcuts">Keyboard shortcuts</button><button data-action="clear-recents">Clear recent files</button><button data-action="clear-data">Delete saved reading data…</button>
   </div></dialog>
   <dialog id="jump"><form><div class="dialog-head"><h2>Go to location</h2><button type="button" data-close aria-label="Close">×</button></div><label id="jump-label" for="target">Location</label><input id="target" required autocomplete="off"><p id="jump-error" role="alert"></p><button class="primary" type="submit">Go to location</button></form></dialog>
   <dialog id="password"><form><h2>Password required</h2><label for="secret">Document password</label><input id="secret" type="password" autocomplete="off"><div class="dialog-actions"><button type="button" data-close>Cancel</button><button type="submit" class="primary">Open document</button></div></form></dialog>
   <dialog id="contents"><div class="dialog-head"><h2>Contents</h2><button data-close aria-label="Close contents">×</button></div><div id="outline-list"></div></dialog>
-  <dialog id="typography"><div class="dialog-head"><h2>Reading settings</h2><button data-close aria-label="Close settings">×</button></div><label>Text size <input id="font-size" type="number" min="12" max="40" value="18"></label><label>Line spacing <select id="line-height"><option>1.4</option><option selected>1.65</option><option>1.9</option><option>2.2</option></select></label><label>Margins <select id="margin"><option value="12">Narrow</option><option value="24" selected>Comfortable</option><option value="40">Wide</option></select></label><label class="check"><input id="wrap" type="checkbox" checked>Wrap plain text</label></dialog>
   <dialog id="appearance"></dialog>
   <dialog id="shortcuts"><div class="dialog-head"><h2>Keyboard shortcuts</h2><button data-close aria-label="Close shortcuts">×</button></div><dl><dt>Next / previous page</dt><dd>PgDn / PgUp</dd><dt>Page mode navigation</dt><dd>Right / Left</dd><dt>Next / previous screen</dt><dd>Space / Shift Space</dd><dt>Scroll</dt><dd>Up / Down</dd><dt>First / last location</dt><dd>Home / End</dd><dt>Go to location</dt><dd>Ctrl G</dd><dt>Back after a jump</dt><dd>Alt Left</dd><dt>Open file</dt><dd>Ctrl O</dd><dt>Document library</dt><dd>Ctrl B</dd><dt>Resize library (divider focused)</dt><dd>Left / Right, Home / End, Enter</dd><dt>Pin / size lock</dt><dd>Ctrl Shift T / L</dd><dt>Fit page / width</dt><dd>Ctrl 0 / 2</dd><dt>Two-page spread</dt><dd>Ctrl 3</dd><dt>Zoom / text size</dt><dd>Ctrl + / −</dd><dt>Hand tool (pan a zoomed page)</dt><dd>H · or middle-drag</dd><dt>Find in document</dt><dd>Ctrl F</dd><dt>Command palette</dt><dd>Ctrl K</dd><dt>Dismiss a dialog</dt><dd>Escape</dd></dl></dialog>
   <dialog id="delete-data"><h2>Delete saved reading data?</h2><p>This removes saved positions and reading settings. Your documents and recent-file list remain. The current position will be saved again when you navigate.</p><div class="dialog-actions"><button data-close>Cancel</button><button id="confirm-delete" class="danger">Delete reading data</button></div></dialog>
@@ -47,7 +46,11 @@ const platform = !desktop ? undefined : navigator.userAgent.includes('Mac') ? 'm
 if (platform) document.documentElement.classList.add(`${platform}-titlebar`);
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-const appearanceSheet = createAppearanceSheet($<HTMLDialogElement>('appearance'));
+// Text settings apply to reflowable documents only; PDF pages, fixed-layout books and images zoom instead.
+const appearanceSheet = createAppearanceSheet($<HTMLDialogElement>('appearance'), {
+  current: () => reader && active && reader.mode !== 'fixed' ? { fontSize: options.fontSize, lineHeight: options.lineHeight, margin: options.margin, wrap: options.wrap, wraps: active.format === 'txt' } : undefined,
+  change: next => changeOptions(next),
+});
 const scrubber = $<HTMLInputElement>('progress');
 let scrubbing = false, scrubRequest = 0;
 let reader: ReaderAdapter | undefined;
@@ -346,7 +349,7 @@ async function action(name: string) {
   else if (name === 'spread') { if (reader?.spreads) await changeOptions({ spread: !options.spread }); }
   else if (name === 'cover') await changeOptions({ cover: !options.cover });
   else if (name === 'smaller' || name === 'larger') { const delta = name === 'larger' ? 1 : -1; await changeOptions(reader?.mode === 'fixed' ? { zoom: Math.round(Math.max(.25, Math.min(4, options.zoom + delta * .1)) * 100) / 100 } : { fontSize: Math.max(12, Math.min(40, options.fontSize + delta * 2)) }); }
-  else if (name === 'type') { $<HTMLInputElement>('font-size').value = String(options.fontSize); $<HTMLSelectElement>('line-height').value = String(options.lineHeight); $<HTMLSelectElement>('margin').value = String(options.margin); $<HTMLInputElement>('wrap').checked = options.wrap; showDialog('typography'); }
+  else if (name === 'type') appearanceSheet.open('text');
   else if (name === 'outline') { const list = $('outline-list'); list.replaceChildren(); const entries = reader?.outline() ?? []; if (!entries.length) list.textContent = 'No contents outline in this document.'; for (const item of entries) { const button = document.createElement('button'); button.textContent = item.label; button.onclick = () => { void reader?.goTo(item.target).then(() => closeDialog($<HTMLDialogElement>('contents'))).catch(fail); }; list.append(button); } showDialog('contents'); }
   else if (name === 'shortcuts') showDialog('shortcuts');
   else if (name === 'clear-data') showDialog('delete-data');
@@ -354,7 +357,6 @@ async function action(name: string) {
   else if (['back', 'start', 'end', 'screen-next', 'screen-previous'].includes(name)) await navigate(name as Parameters<ReaderAdapter['navigate']>[0]);
 }
 document.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(button => button.onclick = () => { closeDialog($<HTMLDialogElement>('menu')); void command(button.dataset.action!).catch(fail); });
-for (const id of ['font-size', 'line-height', 'margin', 'wrap']) $(id).onchange = () => { const fontSize = Number($<HTMLInputElement>('font-size').value); if (fontSize < 12 || fontSize > 40) return; void changeOptions({ fontSize, lineHeight: Number($<HTMLSelectElement>('line-height').value), margin: Number($<HTMLSelectElement>('margin').value), wrap: $<HTMLInputElement>('wrap').checked }); };
 $('confirm-delete').onclick = () => { void (async () => { await flush(); if (desktop) await native('clear_reading_data'); else for (const key of Object.keys(localStorage)) if (key.startsWith('hold-my-brief:')) localStorage.removeItem(key); dirty = false; closeDialog($<HTMLDialogElement>('delete-data')); notify('Saved reading data deleted. Your documents are unchanged.'); })().catch(fail); };
 
 // Tab marks keyboard navigation (the page's focus ring returns); a pointer press clears it.
