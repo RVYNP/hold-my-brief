@@ -1,3 +1,33 @@
-/* Provider choice in the assistant settings: the shared .choices row, spaced from the terms and the key field. */
-#assistant-settings .choices { flex: none; margin: 12px 0 14px -9px; }
-#assistant-settings .assistant-connected { color: var(--fg); font-weight: 500; }
+/* The assistant's two surfaces. The base rules live in style.css; this file refines them. */
+
+/* Settings: the provider row sits under the intro, its pill reaching 9px past the text margin so the
+   label itself lines up with everything else; the terms below it then read as about the chosen one. */
+#assistant-settings .choices { flex: none; margin: 0 0 12px -9px; }
+#assistant-settings .assistant-connected { margin: 0 0 4px; color: var(--fg); font-weight: 500; }
+#assistant-settings .assistant-on > label:first-of-type { margin-top: 10px; }
+#assistant-settings .assistant-terms { margin-top: 14px; }
+#assistant-settings .assistant-error { overflow-wrap: anywhere; }
+#assistant-settings .assistant-error:empty { display: none; }
+#assistant-settings .assistant-on select + .assistant-error { margin-top: -4px; }
+
+/* Answer sheet: a reading measure, centred on the page's own column, instead of a line the width of the window. */
+#reader-layout #answer { padding-inline: max(14px, calc((100% - 600px) / 2)); }
+#answer .answer-head { align-items: flex-start; gap: 9px; }
+#answer .answer-head > svg { flex: none; margin-top: 2px; }
+#answer .answer-question { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; line-height: 1.4; padding-top: 2px; }
+#answer .sheet-close { margin: -2px -6px 0 0; }
+/* Actions are a quieter tier than the answer, and the answer gets room before the follow-up field. */
+#answer .answer-steps { margin-top: 4px; padding-left: 22px; }
+#answer .answer-steps:not(:empty) + .answer-text { margin-top: 12px; }
+#answer .answer-text > :last-child { margin-bottom: 0; }
+#answer .answer-follow input { margin-top: 12px; }
+/* While it works there is nothing to ask yet: no faded field, just the status line. */
+#answer[aria-busy=true] .answer-follow { display: none; }
+/* Focus is the field's tone, not a ring around it; the keyboard still gets the ring. */
+#answer .answer-follow input:focus-visible { outline: none; background: var(--hover); }
+.keyboard-focus #answer .answer-follow input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* A slow pulse so a long wait reads as working, not stuck; still for reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  #answer .answer-pending { animation: answer-pending 1.8s ease-in-out infinite; }
+}
+@keyframes answer-pending { 50% { opacity: .55; } }
