@@ -153,9 +153,11 @@ const browser = await chromium.launch(existsSync(CHROME) ? { executablePath: CHR
     const media = [...document.querySelectorAll('.library-tile-media[data-path]')];
     return media.length > 0 && media.every(m => m.classList.contains('is-loaded') || m.classList.contains('is-unavailable'));
   }, null, { timeout: 30000 });
-  // Several files arrived at once, so the intake sheet opens; keep everything to see the drawer.
-  await page.getByRole('button', { name: 'Keep all' }).click();
-  await page.waitForSelector('.library-dialog', { state: 'detached' });
+  // Several files arriving at once open the intake sheet; keep everything to see the drawer. A lone book with a cover opens none.
+  if (await page.locator('.library-dialog').count()) {
+    await page.getByRole('button', { name: 'Keep all' }).click();
+    await page.waitForSelector('.library-dialog', { state: 'detached' });
+  }
   await page.waitForTimeout(900);
   await shot(page, 'library.png');
   await ctx.close();
