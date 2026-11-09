@@ -4,7 +4,8 @@
 //        (the optional images fill the library drawer's grid with real thumbnails)
 //        (dev server must be running on :1420)
 import { createRequire } from 'node:module';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -152,10 +153,81 @@ const browser = await chromium.launch(existsSync(CHROME) ? { executablePath: CHR
     const media = [...document.querySelectorAll('.library-tile-media[data-path]')];
     return media.length > 0 && media.every(m => m.classList.contains('is-loaded') || m.classList.contains('is-unavailable'));
   }, null, { timeout: 30000 });
+  // Several files arrived at once, so the intake sheet opens; keep everything to see the drawer.
+  await page.getByRole('button', { name: 'Keep all' }).click();
+  await page.waitForSelector('.library-dialog', { state: 'detached' });
   await page.waitForTimeout(900);
   await shot(page, 'library.png');
   await ctx.close();
   console.log('library');
+}
+
+// Shelves: the library board with a parent collection whose children are shelves. Markdown files named after
+// public-domain works get generated covers; the EPUB (a real cover image) and the PDF (its first page) are
+// the real pictures. The collections are built the way e2e/shelf.spec.ts builds them.
+{
+  const works = {
+    novels: [
+      ['Moby-Dick', 'Call me Ishmael.'],
+      ['Middlemarch', 'Miss Brooke had that kind of beauty which seems to be thrown into relief by poor dress.'],
+      ['Frankenstein', 'You will rejoice to hear that no disaster has accompanied the commencement of an enterprise which you have regarded with such evil forebodings.'],
+      ['Dracula', '3 May. Bistritz.—Left Munich at 8:35 P. M., on 1st May, arriving at Vienna early next morning.'],
+    ],
+    poetry: [
+      ['The Odyssey', 'Tell me, O Muse, of that ingenious hero who travelled far and wide after he had sacked the famous town of Troy.'],
+      ['Leaves of Grass', 'I celebrate myself, and sing myself, and what I assume you shall assume, for every atom belonging to me as good belongs to you.'],
+    ],
+    science: [
+      ['The Origin of Species', 'When on board H.M.S. “Beagle,” as naturalist, I was much struck with certain facts in the distribution of the inhabitants of South America.'],
+      ['Principia', 'The quantity of matter is the measure of the same, arising from its density and bulk conjointly.'],
+    ],
+  };
+  const dir = mkdtempSync(join(tmpdir(), 'hmb-shelf-'));
+  const files = Object.fromEntries(Object.entries(works).map(([shelf, books]) => [shelf, books.map(([title, line]) => {
+    const path = join(dir, `${title}.md`);
+    writeFileSync(path, `# ${title}\n\n${line}\n`);
+    return path;
+  })]));
+  const { ctx, page } = await open(browser, { viewport: { width: 1440, height: 900 } });
+  await page.getByRole('button', { name: 'Open library board' }).click();
+  await page.waitForSelector('#library-root.is-board');
+  const addFiles = async paths => {
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: 'Add local documents or images' }).click()]);
+    await chooser.setFiles(paths);
+    await page.waitForTimeout(1500);
+  };
+  // Files with generated covers open the intake sheet; keeping everything closes it.
+  const keepAll = async () => {
+    await page.getByRole('button', { name: 'Keep all' }).click();
+    await page.waitForSelector('.library-dialog', { state: 'detached' });
+  };
+  const newCollection = async (name, parent) => {
+    await page.getByRole('button', { name: 'New personal collection' }).click();
+    await page.getByLabel('Collection name').fill(name);
+    if (parent) await page.getByLabel('Parent collection').selectOption({ label: parent });
+    await page.getByRole('button', { name: 'Create collection' }).click();
+    await page.waitForSelector('.library-dialog', { state: 'detached' });
+  };
+  // The real pictures sit in their own shelves: the EPUB's cover among the novels, the PDF's first page among the science.
+  const pdf = join(dir, 'The Half-Tone Process.pdf');
+  copyFileSync(PDF, pdf);
+  const extras = { novels: [BOOK], science: [pdf] };
+  await newCollection('classics');
+  for (const [index, shelf] of Object.keys(works).entries()) {
+    await newCollection(`${index + 1}-${shelf}`, 'Classics');
+    await addFiles([...files[shelf], ...(extras[shelf] ?? [])]);
+    await keepAll();
+  }
+  await page.locator('.library-filter', { hasText: /^Classics/ }).click();
+  await page.getByRole('button', { name: 'Grid view' }).click();
+  await page.locator('.library-sort').selectOption({ label: 'Name A–Z' });
+  await page.waitForFunction(() => document.querySelectorAll('.library-tile-media.is-loaded').length >= 2, null, { timeout: 30000 });
+  await page.locator('.library-tile', { hasText: 'Pride and Prejudice' }).locator('.library-tile-open').click();
+  await page.waitForTimeout(900);
+  await shot(page, 'shelf.png');
+  await ctx.close();
+  rmSync(dir, { recursive: true, force: true });
+  console.log('shelf');
 }
 
 // Appearance panel

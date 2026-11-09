@@ -67,32 +67,38 @@ computer.
     <td valign="top">
       <h3>Opens like a book</h3>
       Show two pages side by side, the way a printed book lies open. Zoom in on a small detail and
-      drag the page around by hand. Every control also works from the keyboard.
+      drag the page around by hand; if the zoom controls are in the way, drag them somewhere else.
+      Every control also works from the keyboard.
     </td>
   </tr>
   <tr>
     <td valign="top">
       <h3>A library for your references</h3>
-      Collect documents into collections, star favorites, search, or point it at a folder of PDFs, EPUBs, Markdown or text.
-      Browse a collection as a grid of thumbnails at their real proportions, PDFs included, or as a
-      list. It opens as a drawer over the page: widen it, narrow it or move it to either side without
-      the page ever moving. It never copies or moves your files.
+      Collect PDFs, EPUBs, Markdown and text into collections, star favorites and search, or index a
+      folder of them (index it again to pick up changes). Collections with sub-collections show as
+      shelves. An EPUB shows the title and cover from inside the book; a document without a cover gets
+      its own generated, dithered one, which you can re-roll with ↻. Browse as a grid of thumbnails at
+      their real proportions, or as a list. New arrivals open in an intake sheet where you can review
+      covers and titles or move a shelf. The library is a drawer over the page: widen it, narrow it or
+      move it to either side without the page ever moving. It never copies or moves your files.
     </td>
     <td valign="top">
       <h3>Fits your space</h3>
       One slim toolbar, and a footer that is only a progress line until you reach for it, leave the
-      page 94% of the window; a pinned reader's controls fade while you work in another app. Light and dark modes that
-      follow your system, seven theme families (Brief by default, two of them pink), your own accent color, and a page
-      tone for text. Hover a theme to preview it on the whole window.
+      page 94% of the window; a pinned reader's controls fade while you work in another app. Light and
+      dark modes that follow your system, seven theme families (Brief by default, two of them pink),
+      your own accent color, and a page tone for text. Every theme keeps its text at AA contrast, and
+      nothing is set smaller than 11 px. Hover a theme to preview it on the whole window.
     </td>
   </tr>
   <tr>
     <td colspan="2" valign="top">
       <h3>Ask it, if you want to</h3>
-      Turn on the optional AI assistant with your own Anthropic, OpenRouter or OpenAI API key, then type a question into
-      the title bar: "where does Darcy first appear?", "summarize this chapter", "open the Tauri docs
-      and switch to dark". Claude finds things, answers from the page you're on, and moves, opens or
-      restyles the reader for you, listing each thing it did. It stays off until you add a key.
+      Turn on the optional AI assistant with your own Anthropic, OpenRouter or OpenAI API key (one at a
+      time, kept in your system keychain), then choose <b>Ask the assistant</b> from the command palette
+      and type a question: "where does Darcy first appear?", "summarize this chapter", "open the Tauri
+      docs and switch to dark". It answers from the page you're on, and moves, opens or restyles the
+      reader for you, listing each thing it did. It stays off until you add a key.
     </td>
   </tr>
 </table>
@@ -102,13 +108,18 @@ computer.
 <table>
   <tr>
     <td align="center" width="50%"><img src="docs/media/hand-tool.png" alt="A PDF page zoomed to 120% with the hand tool switched on in the floating zoom controls"><br><sub><b>Zoom in</b>, then drag the page with the hand tool</sub></td>
-    <td align="center" width="50%"><img src="docs/media/appearance.png" alt="The Appearance panel's Colour tab, with five theme cards in a row, over a book"><br><sub><b>Appearance</b>: hover to preview, click to keep. Text size and spacing are on its Text tab</sub></td>
+    <td align="center" width="50%"><img src="docs/media/appearance.png" alt="The Appearance panel's Colour tab, with seven theme cards (Brief, Lilac, Birch, Graphite, Arctic, Blossom and Peony) in two rows, over a book"><br><sub><b>Appearance</b>: hover to preview, click to keep. Text size and spacing are on its Text tab</sub></td>
   </tr>
 </table>
 
 <p align="center">
   <img src="docs/media/library.png" alt="The library drawer as a grid of thumbnails at their real proportions (a print manual marked Reading, Hokusai's Great Wave, Haeckel plates and a book) floating over a PDF page" width="880">
   <br><sub><b>The library</b> floats over the page as a grid of thumbnails or a list. Put it on either side and the page keeps its place</sub>
+</p>
+
+<p align="center">
+  <img src="docs/media/shelf.png" alt="The library board showing a Classics collection as three shelves, Novels, Poetry and Science, with generated dithered covers in one colour per shelf, Pride and Prejudice with its real cover and a print manual's first page" width="880">
+  <br><sub><b>Shelves</b>: a collection with sub-collections groups its books by shelf. Books without a cover get a generated one in their shelf's colours</sub>
 </p>
 
 <p align="center">
@@ -229,7 +240,10 @@ The screenshots read public-domain documents: *The Half-Tone Process* (1895), a 
 scanned by the [Internet Archive](https://archive.org/details/halftoneprocessp00verf_0), and
 Jane Austen's *Pride and Prejudice*. The library shots also show Hokusai's *The Great Wave off
 Kanagawa* and two plates from Ernst Haeckel's *Kunstformen der Natur* (1904), from
-[Wikimedia Commons](https://commons.wikimedia.org/). No in-copyright scans are committed to this
+[Wikimedia Commons](https://commons.wikimedia.org/). The shelf shot adds generated covers for
+Markdown files named after public-domain works (*Moby-Dick*, *Middlemarch*, *Frankenstein*,
+*Dracula*, *The Odyssey*, *Leaves of Grass*, *The Origin of Species* and *Principia*), each holding
+only an opening line. No in-copyright scans are committed to this
 repository. `scripts/reshoot-media.mjs` regenerates every still, the hero included, from documents
 you supply.
 
