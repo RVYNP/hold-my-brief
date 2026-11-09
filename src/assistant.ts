@@ -5,8 +5,8 @@ import type { OutlineItem } from './types';
 import { palettes } from './theme';
 
 /**
- * The opt-in assistant: Claude, through the user's own Anthropic API key, finding and changing
- * things in the reader on request.
+ * The opt-in assistant: Claude or another model, through the user's own Anthropic, OpenRouter or
+ * OpenAI API key, finding and changing things in the reader on request.
  *
  * This module is the conversation loop and the reader tools, free of DOM and network so both are
  * unit-tested. The network lives in Rust (src-tauri/src/assistant.rs), reached through `Send`;
@@ -261,8 +261,13 @@ const QUESTION = /\?\s*$|^(what|why|how|who|whom|whose|where|when|which|is|are|w
 /** True when a palette query reads as a question for the assistant rather than a command or a phrase to find. */
 export const looksLikeQuestion = (query: string) => QUESTION.test(query.trim());
 
-/** Picks the model to use: the saved choice if still offered, otherwise the newest Sonnet, otherwise the newest model. */
-export function chooseModel(models: readonly { id: string }[], saved: string | null): string | undefined {
+export type Provider = 'anthropic' | 'openrouter' | 'openai';
+
+/** Picks the model to use: the saved choice if still offered, otherwise a sensible default for the provider. */
+export function chooseModel(models: readonly { id: string }[], saved: string | null, provider: Provider): string | undefined {
   if (saved && models.some(model => model.id === saved)) return saved;
-  return (models.find(model => /sonnet/i.test(model.id)) ?? models[0])?.id;
+  const find = (test: (id: string) => boolean) => models.find(model => test(model.id))?.id;
+  if (provider === 'openrouter') return find(id => /^anthropic\/claude-sonnet/i.test(id)) ?? find(id => /^openai\/gpt-/i.test(id)) ?? models[0]?.id;
+  if (provider === 'openai') return find(id => /^gpt-/i.test(id) && !/mini|nano/i.test(id)) ?? models[0]?.id;
+  return find(id => /sonnet/i.test(id)) ?? models[0]?.id;
 }

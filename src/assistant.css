@@ -1,0 +1,3 @@
+/* Provider choice in the assistant settings: the shared .choices row, spaced from the terms and the key field. */
+#assistant-settings .choices { flex: none; margin: 12px 0 14px -9px; }
+#assistant-settings .assistant-connected { color: var(--fg); font-weight: 500; }

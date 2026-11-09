@@ -813,3 +813,124 @@ test('fixed-layout EPUB pans inside its zoomed page frame and keeps frame links 
   await expect(page.locator('#position')).toContainText('Page 2 of 2');
   expect(errors).toEqual([]);
 });
+
+/** Opens the fixture PDF at the given viewport with the library drawer closed, and waits for a settled page. */
+async function openPdfForPill(page: Page, viewport: { width: number; height: number }) {
+  await page.setViewportSize(viewport);
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles({ name: 'pill.pdf', mimeType: 'application/pdf', buffer: pdfFixture() });
+  await expect(page.locator('#position')).toContainText('Page 1 of 3');
+  await expect(page.locator('#loading')).toBeHidden();
+  await expect(page.locator('#view-controls')).toBeVisible();
+  if (await page.locator('#library-root').isVisible()) await page.locator('#library-toggle').click();
+  await expect(page.locator('#library-root')).toBeHidden();
+}
+
+test('view controls pill moves by its grip, stays inside the panel, persists, resets, and never refits the page', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+  await openPdfForPill(page, { width: 1080, height: 700 });
+  const pill = page.locator('#view-controls'), grip = page.getByRole('button', { name: 'Move view controls' });
+  const workspace = page.locator('#workspace'), host = page.locator('.pdf-reader'), canvas = page.locator('.pdf-page canvas');
+  await expect(grip).toHaveAttribute('title', 'Drag to move · double-click to reset');
+  const geometry = async () => ({
+    workspace: await workspace.boundingBox(), hostClientWidth: await host.evaluate(el => el.clientWidth),
+    canvasBox: await canvas.boundingBox(), bitmap: await canvas.evaluate((el: HTMLCanvasElement) => ({ width: el.width, height: el.height })),
+  });
+  // Wait out the deferred refit so the baseline is the settled page; anything after it is the regression.
+  await expect.poll(async () => { const before = JSON.stringify(await geometry()); await page.waitForTimeout(200); return JSON.stringify(await geometry()) === before; }, { timeout: 5000 }).toBe(true);
+  const untouched = await geometry();
+  const inside = async () => {
+    const box = (await pill.boundingBox())!, panel = (await workspace.boundingBox())!;
+    // The panel's top border is 1 px; the pill keeps 8 px from every edge and 36 px above the bottom.
+    expect(box.x).toBeGreaterThanOrEqual(panel.x + 8 - .5); expect(box.y).toBeGreaterThanOrEqual(panel.y + 1 + 8 - .5);
+    expect(box.x + box.width).toBeLessThanOrEqual(panel.x + panel.width - 8 + .5); expect(box.y + box.height).toBeLessThanOrEqual(panel.y + panel.height - 36 + .5);
+    return box;
+  };
+  const home = await inside();
+  expect(await pill.evaluate(el => el.getAttribute('style'))).toBeFalsy(); // Untouched: pure CSS placement.
+  expect(await page.evaluate(() => localStorage.getItem('hold-my-brief:view-controls'))).toBeNull();
+
+  // A plain click on the grip is not a move.
+  await grip.click(); expect(await pill.evaluate(el => el.getAttribute('style'))).toBeFalsy();
+
+  // Drag past the top-left corner: the pill follows, clamps to the 8 px margin, and the page is untouched.
+  const panel = (await workspace.boundingBox())!, handle = (await grip.boundingBox())!;
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2); await page.mouse.down();
+  await page.mouse.move(panel.x + 200, panel.y + 120, { steps: 6 });
+  await page.mouse.move(panel.x + 1, panel.y + 1, { steps: 6 }); await page.mouse.up();
+  const moved = await inside();
+  expect(moved.x).toBeCloseTo(panel.x + 8, 0); expect(moved.y).toBeCloseTo(panel.y + 1 + 8, 0);
+  expect(await geometry()).toEqual(untouched);
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('hold-my-brief:view-controls')!))).toEqual({ x: expect.any(Number), y: expect.any(Number) });
+
+  // The buttons keep working where the pill now sits.
+  await page.locator('#zoom-in').click();
+  await expect(page.locator('#zoom-level')).not.toHaveText('Fit');
+  await page.locator('#zoom-level').click();
+  await expect(page.locator('#zoom-level')).toHaveText('Fit');
+  await expect.poll(async () => JSON.stringify(await geometry()) === JSON.stringify(untouched)).toBe(true);
+
+  // A reload keeps the position.
+  await page.reload();
+  await page.locator('#file-input').setInputFiles({ name: 'pill.pdf', mimeType: 'application/pdf', buffer: pdfFixture() });
+  await expect(page.locator('#position')).toContainText('Page 1 of 3');
+  await expect(pill).toBeVisible();
+  await expect.poll(async () => Math.abs((await pill.boundingBox())!.x - moved.x) < 1.5 && Math.abs((await pill.boundingBox())!.y - moved.y) < 1.5).toBe(true);
+
+  // Shrinking the window keeps it inside and proportional; growing it back restores the position.
+  await page.setViewportSize({ width: 420, height: 500 });
+  await expect.poll(async () => (await pill.boundingBox())!.x + (await pill.boundingBox())!.width <= (await workspace.boundingBox())!.width - 8 + .5).toBe(true);
+  await inside();
+  await page.setViewportSize({ width: 1080, height: 700 });
+  await expect.poll(async () => Math.abs((await pill.boundingBox())!.x - moved.x) < 1.5 && Math.abs((await pill.boundingBox())!.y - moved.y) < 1.5).toBe(true);
+
+  // Double-click resets to the CSS placement and clears the stored position.
+  await grip.dblclick();
+  await expect.poll(async () => { const box = (await pill.boundingBox())!; return Math.abs(box.x - home.x) < 1.5 && Math.abs(box.y - home.y) < 1.5; }).toBe(true);
+  expect(await pill.evaluate(el => el.style.left)).toBe('');
+  expect(await page.evaluate(() => localStorage.getItem('hold-my-brief:view-controls'))).toBeNull();
+
+  // Keyboard: arrows move 16 px (Shift 64 px) from wherever the pill is; Home resets.
+  await grip.focus(); await page.keyboard.press('ArrowUp');
+  let box = (await pill.boundingBox())!;
+  expect(box.x).toBeCloseTo(home.x, 0); expect(box.y).toBeCloseTo(home.y - 16, 0);
+  await page.keyboard.press('ArrowLeft');
+  box = (await pill.boundingBox())!; expect(box.x).toBeCloseTo(home.x - 16, 0);
+  await page.keyboard.press('Shift+ArrowUp');
+  box = (await pill.boundingBox())!; expect(box.y).toBeCloseTo(home.y - 80, 0);
+  await page.keyboard.press('Shift+ArrowDown'); await page.keyboard.press('ArrowDown');
+  box = (await pill.boundingBox())!; expect(box.y).toBeCloseTo(home.y, 0);
+  for (let i = 0; i < 40; i++) await page.keyboard.press('Shift+ArrowUp'); // Held against the top edge, never outside.
+  await inside();
+  expect(await geometry()).toEqual(untouched);
+  await page.keyboard.press('Home');
+  await expect.poll(async () => { const b = (await pill.boundingBox())!; return Math.abs(b.x - home.x) < 1.5 && Math.abs(b.y - home.y) < 1.5; }).toBe(true);
+  expect(await page.evaluate(() => localStorage.getItem('hold-my-brief:view-controls'))).toBeNull();
+  expect(errors).toEqual([]);
+});
+
+test('a moved view-controls pill steps out from under the library drawer and returns when it closes', async ({ page }) => {
+  await openPdfForPill(page, { width: 1080, height: 700 });
+  const pill = page.locator('#view-controls'), grip = page.getByRole('button', { name: 'Move view controls' }), workspace = page.locator('#workspace');
+  const panel = (await workspace.boundingBox())!, handle = (await grip.boundingBox())!;
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2); await page.mouse.down();
+  await page.mouse.move(panel.x + 1, panel.y + 1, { steps: 8 }); await page.mouse.up();
+  const corner = (await pill.boundingBox())!;
+  expect(corner.x).toBeCloseTo(panel.x + 8, 0);
+
+  await page.locator('#library-toggle').click();
+  await expect(page.locator('#library-root')).toBeVisible();
+  const drawer = (await page.locator('#library-root').boundingBox())!;
+  await expect.poll(async () => (await pill.boundingBox())!.x >= drawer.x + drawer.width + 8 - .5).toBe(true);
+  expect((await pill.boundingBox())!.x + (await pill.boundingBox())!.width).toBeLessThanOrEqual(panel.x + panel.width - 8 + .5);
+
+  // Docking the drawer to the other side moves the pill back to its own place.
+  await page.getByRole('button', { name: 'Move library to the right' }).click();
+  await expect.poll(async () => Math.abs((await pill.boundingBox())!.x - corner.x) < 1.5).toBe(true);
+  await page.getByRole('button', { name: 'Move library to the left' }).click();
+  await expect.poll(async () => (await pill.boundingBox())!.x >= drawer.x + drawer.width + 8 - .5).toBe(true);
+
+  await page.locator('#library-toggle').click();
+  await expect(page.locator('#library-root')).toBeHidden();
+  await expect.poll(async () => Math.abs((await pill.boundingBox())!.x - corner.x) < 1.5).toBe(true);
+});

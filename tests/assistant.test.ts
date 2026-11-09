@@ -163,9 +163,21 @@ describe('palette and model choices', () => {
 
   it('keeps a saved model that is still offered, else prefers the newest Sonnet', () => {
     const models = [{ id: 'claude-opus-9' }, { id: 'claude-sonnet-9' }, { id: 'claude-sonnet-8' }];
-    expect(chooseModel(models, 'claude-sonnet-8')).toBe('claude-sonnet-8');
-    expect(chooseModel(models, 'claude-retired')).toBe('claude-sonnet-9');
-    expect(chooseModel([{ id: 'claude-haiku-9' }], null)).toBe('claude-haiku-9');
-    expect(chooseModel([], null)).toBeUndefined();
+    expect(chooseModel(models, 'claude-sonnet-8', 'anthropic')).toBe('claude-sonnet-8');
+    expect(chooseModel(models, 'claude-retired', 'anthropic')).toBe('claude-sonnet-9');
+    expect(chooseModel([{ id: 'claude-haiku-9' }], null, 'anthropic')).toBe('claude-haiku-9');
+    expect(chooseModel([], null, 'anthropic')).toBeUndefined();
+  });
+
+  it('chooses per provider', () => {
+    const routed = [{ id: 'meta/llama' }, { id: 'openai/gpt-5' }, { id: 'anthropic/claude-sonnet-9' }];
+    expect(chooseModel(routed, null, 'openrouter')).toBe('anthropic/claude-sonnet-9');
+    expect(chooseModel(routed.slice(0, 2), null, 'openrouter')).toBe('openai/gpt-5');
+    expect(chooseModel([{ id: 'meta/llama' }], null, 'openrouter')).toBe('meta/llama');
+    expect(chooseModel(routed, 'meta/llama', 'openrouter')).toBe('meta/llama');
+    const openai = [{ id: 'o3' }, { id: 'gpt-5-mini' }, { id: 'gpt-5' }];
+    expect(chooseModel(openai, null, 'openai')).toBe('gpt-5');
+    expect(chooseModel([{ id: 'gpt-5-nano' }, { id: 'o3' }], null, 'openai')).toBe('gpt-5-nano');
+    expect(chooseModel([{ id: 'o3' }], null, 'openai')).toBe('o3');
   });
 });
