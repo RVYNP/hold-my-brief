@@ -2,6 +2,7 @@ import workerURL from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type * as PdfjsModule from 'pdfjs-dist';
 import { canvasThumbnail, encodeCanvas, imageFormats, libraryThumbnailIndex, putLibraryColours, putLibraryThumbnail, readLibraryRange, readLibraryThumbnail, type LibraryThumbnail } from './bridge';
 import { dominantColours } from './colour';
+import { readEpubMeta } from './epub-meta';
 import { Abandoned, createExclusive } from './exclusive';
 
 export type Thumbnail = { url: string; ratio: number };
@@ -35,11 +36,24 @@ const maxImagePixels = 200_000_000, heavyBytes = 32 * 1024 * 1024;
 const keepReady = 600;
 const concurrency = { pdf: 4, image: 3 } as const;
 
-/** Formats that can have a thumbnail: every raster image, and PDF (its first page). */
+/** Formats that can have a thumbnail: every raster image, PDF (its first page) and EPUB (its cover, when it has one). */
 export function canThumbnail(format: string): boolean {
   const lower = format.toLowerCase();
-  return lower === 'pdf' || Object.hasOwn(imageFormats, lower);
+  return lower === 'pdf' || lower === 'epub' || Object.hasOwn(imageFormats, lower);
 }
+
+/** Title and authors of an EPUB, and the state of the file they were read from. */
+type EpubInfo = { key: string; title?: string; creator?: string; cover: boolean };
+const epubCacheKey = 'hold-my-brief:epub-meta', epubCacheCap = 2000;
+/** Insertion order doubles as age, oldest first; a read moves nothing, a fresh read re-inserts. */
+function loadEpubCache(): Map<string, EpubInfo> {
+  try {
+    const saved = JSON.parse(localStorage.getItem(epubCacheKey) ?? '[]') as unknown;
+    return new Map(Array.isArray(saved) ? saved.filter((entry): entry is [string, EpubInfo] => Array.isArray(entry) && typeof entry[0] === 'string' && typeof entry[1]?.key === 'string').slice(-epubCacheCap) : []);
+  } catch { return new Map(); }
+}
+/** An EPUB with no cover picture: nothing to make, and nothing wrong. */
+class NoPicture extends Error {}
 
 let pdfjs: Promise<Pdfjs> | undefined;
 function loadPdfjs() {
@@ -114,6 +128,17 @@ async function renderFirstPage(lib: Pdfjs, path: string, first: { total: number;
   } finally { clearTimeout(timer); void task.destroy().then(() => idleWorkers.push(worker), () => worker.destroy()); }
 }
 
+/** The cover of an EPUB, scaled like the rest. Its title and authors are read on the way and kept. */
+async function renderEpubThumbnail(read: (path: string, wantCover: boolean) => Promise<{ info: EpubInfo; cover?: Blob }>, path: string): Promise<LibraryThumbnail> {
+  const { info, cover } = await withTimeout(read(path, true));
+  if (!cover) throw new NoPicture();
+  const bitmap = await createImageBitmap(cover);
+  try {
+    const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+    return { ...await canvasThumbnail(bitmap, Math.max(1, Math.round(bitmap.width * scale)), Math.max(1, Math.round(bitmap.height * scale))), key: info.key };
+  } finally { bitmap.close(); }
+}
+
 /** AVIF is decoded by the webview (the native side has no decoder), then scaled like the rest. */
 async function renderAvifThumbnail(path: string): Promise<LibraryThumbnail> {
   const first = await withTimeout(readLibraryRange(path, 0, rangeLimit));
@@ -148,6 +173,9 @@ export function createThumbnailStore() {
   const hints = new Map<string, number>(); // Proportions known from the disk cache before any picture loaded.
   const palette = new Map<string, number[]>(); // Dominant colours per entry, largest first; kept after the picture itself is dropped.
   const asked = new Set<string>();
+  const none = new Set<string>(); // Entries with nothing to show: an EPUB without a cover.
+  const epubs = loadEpubCache(); const metaJobs = new Map<string, Promise<EpubInfo | undefined>>(); const metaChecked = new Set<string>();
+  let metaActive = 0; const metaWaiting: (() => void)[] = []; let saveTimer = 0;
   let queue: Job[] = []; const active = { pdf: 0, image: 0 };
 
   const kind = (format: string) => format.toLowerCase() === 'pdf' ? 'pdf' : 'image';
@@ -156,11 +184,33 @@ export function createThumbnailStore() {
     const old = ready.get(path); if (old) URL.revokeObjectURL(old.url);
     ready.set(path, thumbnail); return thumbnail;
   }
+  function saveEpubCache() {
+    if (saveTimer) return;
+    saveTimer = window.setTimeout(() => {
+      saveTimer = 0; while (epubs.size > epubCacheCap) epubs.delete(epubs.keys().next().value!);
+      try { localStorage.setItem(epubCacheKey, JSON.stringify([...epubs])); } catch { /* Optional cache. */ }
+    }, 500);
+  }
+  /**
+   * Title, authors and (on request) cover of an EPUB. What was read is kept per path with the file's state key, so
+   * an unchanged book costs one byte read to confirm; a book whose cover is wanted is opened again.
+   */
+  async function readEpub(path: string, wantCover: boolean): Promise<{ info: EpubInfo; cover?: Blob }> {
+    const first = await readLibraryRange(path, 0, 1); const cached = epubs.get(path);
+    if (cached?.key === first.key && !(wantCover && cached.cover)) return { info: cached };
+    const meta = await readEpubMeta((offset, length) => readSpan(path, offset, offset + length, first.key), first.total, wantCover);
+    const info: EpubInfo = { key: first.key, title: meta.title, creator: meta.creator, cover: meta.hasCover };
+    epubs.delete(path); epubs.set(path, info); saveEpubCache();
+    return { info, cover: meta.cover };
+  }
   async function make(path: string, format: string, wanted: () => boolean): Promise<Thumbnail> {
     let made = await withTimeout(readLibraryThumbnail(path));
+    const lower = format.toLowerCase();
+    // A picture from the disk cache says nothing of the title, which is read now unless it is already known.
+    if (made && lower === 'epub') await withTimeout(readEpub(path, false)).catch(() => undefined);
     if (!made) {
-      const lower = format.toLowerCase();
-      if (lower === 'pdf') made = await renderPdfThumbnail(path, wanted);
+      if (lower === 'epub') made = await renderEpubThumbnail(readEpub, path);
+      else if (lower === 'pdf') made = await renderPdfThumbnail(path, wanted);
       else if (lower === 'avif') made = await renderAvifThumbnail(path);
       else throw Error('This format has no thumbnail.');
       // The disk cache only saves the next launch the work; a failed save must not hide a good picture.
@@ -179,7 +229,7 @@ export function createThumbnailStore() {
       if (!job.wants.some(wants => wants())) { queue.splice(index, 1); queued.delete(job.path); jobs.delete(job.path); job.settle(undefined); continue; }
       if (active[group] >= concurrency[group]) { index++; continue; }
       queue.splice(index, 1); queued.delete(job.path); active[group]++;
-      make(job.path, job.format, () => job.wants.some(wants => wants())).then(thumbnail => job.settle(thumbnail), error => { if (!(error instanceof Abandoned)) failed.add(job.path); job.settle(undefined); })
+      make(job.path, job.format, () => job.wants.some(wants => wants())).then(thumbnail => job.settle(thumbnail), error => { if (error instanceof NoPicture) none.add(job.path); else if (!(error instanceof Abandoned)) failed.add(job.path); job.settle(undefined); })
         .finally(() => { active[group]--; jobs.delete(job.path); pump(); });
     }
   }
@@ -195,13 +245,34 @@ export function createThumbnailStore() {
     /** Dominant colours (packed 0xRRGGBB, largest first) once measured or read from the disk cache; undefined until then. */
     colours(path: string): number[] | undefined { return palette.get(path); },
     failed(path: string): boolean { return failed.has(path); },
+    /** True once an entry is known to have no picture to make (an EPUB without a cover). */
+    none(path: string): boolean { return none.has(path); },
+    /** Title and authors of an EPUB as last read (possibly in an earlier session); undefined until known. */
+    epub(path: string): { title?: string; creator?: string } | undefined { return epubs.get(path); },
+    /**
+     * Reads an EPUB's title and authors without making its thumbnail, at most three books at a time. `wants` is
+     * asked when the book's turn comes; a book nobody wants any more is skipped. Resolves undefined when skipped or unreadable.
+     */
+    loadEpub(path: string, wants: () => boolean): Promise<{ title?: string; creator?: string } | undefined> {
+      if (metaChecked.has(path)) return Promise.resolve(epubs.get(path));
+      const running = metaJobs.get(path); if (running) return running;
+      const job = (async () => {
+        if (metaActive >= 3) await new Promise<void>(resume => metaWaiting.push(resume)); else metaActive++;
+        try {
+          if (!wants()) return undefined;
+          const { info } = await withTimeout(readEpub(path, false)); metaChecked.add(path); return info;
+        } catch { return undefined; }
+        finally { if (metaWaiting.length) metaWaiting.shift()!(); else metaActive--; metaJobs.delete(path); }
+      })();
+      metaJobs.set(path, job); return job;
+    },
     /**
      * Makes (or fetches) a thumbnail. `wants` says whether anyone still needs it when its turn comes, so
      * tiles that scrolled away or were re-rendered cost nothing. Resolves undefined when it was skipped or failed.
      */
     request(path: string, format: string, wants: () => boolean): Promise<Thumbnail | undefined> {
       const hit = ready.get(path); if (hit) return Promise.resolve(hit);
-      if (failed.has(path)) return Promise.resolve(undefined);
+      if (failed.has(path) || none.has(path)) return Promise.resolve(undefined);
       const running = jobs.get(path);
       if (running) { queued.get(path)?.wants.push(wants); return running; }
       const promise = new Promise<Thumbnail | undefined>(settle => { const job: Job = { path, format, wants: [wants], settle }; queue.push(job); queued.set(path, job); });
@@ -227,14 +298,14 @@ export function createThumbnailStore() {
     reconcile(paths: Set<string>) {
       for (const [path, thumbnail] of ready) if (!paths.has(path)) { URL.revokeObjectURL(thumbnail.url); ready.delete(path); }
       for (const known of [hints, palette]) for (const path of known.keys()) if (!paths.has(path)) known.delete(path);
-      for (const known of [asked, failed]) for (const path of known) if (!paths.has(path)) known.delete(path);
+      for (const known of [asked, failed, none, metaChecked]) for (const path of known) if (!paths.has(path)) known.delete(path);
     },
     /** Lets thumbnails that failed (an unmounted volume, say) try again. */
     retryFailed() { failed.clear(); },
     /** Drops everything known about one entry whose original was replaced. */
     forget(path: string) {
       const old = ready.get(path); if (old) URL.revokeObjectURL(old.url);
-      ready.delete(path); hints.delete(path); palette.delete(path); asked.delete(path); failed.delete(path);
+      ready.delete(path); hints.delete(path); palette.delete(path); asked.delete(path); failed.delete(path); none.delete(path); metaChecked.delete(path); epubs.delete(path); saveEpubCache();
     },
     /** Caps memory: drops the least recently shown pictures that no tile is showing. */
     trim(showing: Set<string>) {
@@ -247,7 +318,7 @@ export function createThumbnailStore() {
     dispose() {
       queue = []; queued.clear();
       for (const thumbnail of ready.values()) URL.revokeObjectURL(thumbnail.url);
-      ready.clear(); hints.clear(); palette.clear(); asked.clear(); failed.clear();
+      ready.clear(); hints.clear(); palette.clear(); asked.clear(); failed.clear(); none.clear();
     },
   };
 }

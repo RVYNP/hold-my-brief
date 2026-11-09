@@ -269,7 +269,7 @@ async fn open_library_document(path: String, app: AppHandle) -> Result<OpenedFil
 async fn index_folder(app: AppHandle) -> Result<Library, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let shared = app.state::<Shared>();
-        let mut dialog = rfd::FileDialog::new().set_title("Choose a folder of PDFs to index");
+        let mut dialog = rfd::FileDialog::new().set_title("Choose a folder of documents to index");
         if let Some(window) = app.get_webview_window("main") {
             dialog = dialog.set_parent(&window);
         }

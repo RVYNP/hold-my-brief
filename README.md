@@ -73,7 +73,7 @@ computer.
   <tr>
     <td valign="top">
       <h3>A library for your references</h3>
-      Collect documents into collections, star favorites, search, or point it at a folder of PDFs.
+      Collect documents into collections, star favorites, search, or point it at a folder of PDFs, EPUBs, Markdown or text.
       Browse a collection as a grid of thumbnails at their real proportions, PDFs included, or as a
       list. It opens as a drawer over the page: widen it, narrow it or move it to either side without
       the page ever moving. It never copies or moves your files.
