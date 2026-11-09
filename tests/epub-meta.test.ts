@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { BlobWriter, TextReader, Uint8ArrayReader, ZipWriter } from '@zip.js/zip.js';
+import { TextReader, Uint8ArrayReader, Uint8ArrayWriter, ZipWriter } from '@zip.js/zip.js';
 import { describe, expect, it } from 'vitest';
 import { parseContainer, parseOpf, readEpubMeta, resolveArchivePath } from '../src/epub-meta';
 
@@ -50,14 +50,15 @@ describe('package document', () => {
 describe('reading an archive by ranges', () => {
   const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4]);
   async function build(title: string, withCover: boolean) {
-    const writer = new ZipWriter(new BlobWriter('application/epub+zip'), { useWebWorkers: false });
+    // Bytes, not a Blob: jsdom on Node 22 turns zip.js's BlobWriter output into the text "[object Blob]".
+    const writer = new ZipWriter(new Uint8ArrayWriter(), { useWebWorkers: false });
     await writer.add('mimetype', new TextReader('application/epub+zip'), { level: 0 });
     await writer.add('META-INF/container.xml', new TextReader('<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf"/></rootfiles></container>'));
     await writer.add('OEBPS/content.opf', new TextReader(opf(`<dc:title>${title}</dc:title><dc:creator>A. Writer</dc:creator>`, withCover ? '<item id="c" href="cover.png" media-type="image/png" properties="cover-image"/>' : '')));
     if (withCover) await writer.add('OEBPS/cover.png', new Uint8ArrayReader(png));
     // A large chapter that must never be fetched.
     await writer.add('OEBPS/big.xhtml', new TextReader('x'.repeat(5_000_000)), { level: 0 });
-    return new Uint8Array(await (await writer.close()).arrayBuffer());
+    return await writer.close();
   }
   const source = (bytes: Uint8Array) => { const reads: number[] = []; return { reads, read: async (offset: number, length: number) => { reads.push(length); return bytes.slice(offset, offset + length); } }; };
 
