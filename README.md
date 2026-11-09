@@ -88,7 +88,7 @@ computer.
       page 94% of the window; a pinned reader's controls fade while you work in another app. Light and
       dark modes that follow your system, seven theme families (Brief by default, two of them pink),
       your own accent color, and a page tone for text. Every theme keeps its text at AA contrast, and
-      nothing is set smaller than 11 px. Hover a theme to preview it on the whole window.
+      no interface text is smaller than 11 px. Hover a theme to preview it on the whole window.
     </td>
   </tr>
   <tr>
