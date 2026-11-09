@@ -254,12 +254,13 @@ resized, and closes on a click outside it or after you open a document from it. 
 while focus is inside the drawer.
 
 - **Add files** selects several documents or images at once without opening them. Select a
-  collection first to add new entries directly to it.
+  collection first to add new entries directly to it. New references with no picture of their own
+  open the **intake** sheet (below).
 - **Index a folder** (desktop only) picks a folder and adds every PDF, EPUB, Markdown and text file
   beneath it. The folder becomes a collection, and each first-level subfolder that contains such
   files becomes a child collection. Entries point at the original files; nothing is copied. Indexing
   the same folder again refreshes it without duplicating entries or losing favorites and reading
-  positions.
+  positions. When it finishes, the intake sheet shows what came in.
 - **New collection** creates a named group. Use **Edit** beside a collection to rename it, or its
   **×** control to delete it after confirmation. Deleting a collection puts its documents in
   **Unfiled**; it does not delete them.
@@ -297,14 +298,23 @@ read again until the file changes. The file name stays visible in the board's de
 monospaced type, and on the list's second line.
 
 **Generated covers.** A reference with no picture (an EPUB without a cover, Markdown, plain text)
-gets a borderless 3:4 cover in the colours of its shelf. A band of simple dithered pixel art fills the
+gets a borderless 3:4 cover in the colours of its shelf. A band of calm dithered pixel art fills the
 top half and carries no text; below it sit the title in the reading face, then the format and, at
 the right, the version or date a file name ends with (`Rust-Book-1.99.epub` gives 1.99,
-`Photoshop-UXP-Docs-2026-10-29.epub` gives 2026-10-29). The art and tint come from the collection:
-the same collection always gets the same colour and pattern, so a shelf reads as a set and another
-collection looks different; a reference in no collection gets a neutral grey. Light and dark mode
-each have their own quiet version, and all of the text keeps at least 4.5:1 contrast. The open or
+`Photoshop-UXP-Docs-2026-10-29.epub` gives 2026-10-29). **Every book's cover is its own pattern**,
+made on this computer from a seed that comes from the book's path, so the same book always looks the
+same and no two look alike. The shelf sets the rest: the colour, and the kind of pattern (contours,
+flow, stripes and so on), so a shelf reads as a set and another collection looks different; a
+reference in no collection gets a quiet blue-grey and a pattern of its own. Light and dark mode each
+have their own quiet version, and all of the text keeps at least 4.5:1 contrast. The open or
 selected reference carries the same accent ring as a picture.
+
+**A new pattern.** Point at or Tab to a generated cover in the grid or the board and a small **↻**
+appears at its top right (named *New cover pattern for* the title): it gives that book a fresh random
+pattern, in the same colours and kind as its shelf, and the book keeps it. The ··· menu has the same
+**New cover pattern**, and **Reset cover** (shown once the book has a pattern of its own) goes back to
+the one its path gives. The board's detail strip has its own ↻ on the cover. A book that shows a real
+picture has no pattern to change.
 
 **Shelves.** When you open a collection that has child collections, the grid and board group its
 references into shelves: a quiet monospaced header (the collection's name in capitals, then a count)
@@ -319,6 +329,26 @@ number and its separator are dropped, hyphens and underscores become spaces, and
 capitalised, so `1-languages` shows as **Languages** and `2-creative-apps` as **Creative apps**. This
 is display only: the stored name, and the folder it came from, are unchanged, and the edit dialog
 shows the real name.
+
+### Intake
+
+When files arrive with **Add files**, or a folder with **Index a folder**, a sheet opens titled *n new
+references*, with where they came from in small monospaced type under the title (the folder, or
+*Added files*). It does not open for a single PDF, image or EPUB that has its own cover, nor when
+every added file does; it always opens after indexing a folder. The new references are grouped by shelf (their
+first collection, shown by display name; those in none are *Unfiled*), each shelf with a quiet
+header and its count, then its books as covers 132 px wide, as on the board: the generated cover (or the real
+picture), with the title, format and version.
+
+- **↻** on a cover, shown on hover or focus (Tab to it, **Enter**), gives that book a new pattern.
+  **New patterns** does so for every book on the sheet.
+- **shelf ▾** in a shelf's header moves that shelf's books to another personal collection you pick
+  (or to Unfiled). The books take that collection's colour and pattern kind; memberships that belong
+  to an indexed folder stay.
+- **Keep all** closes the sheet; **Esc** does the same. Nothing is waiting on your answer: the books
+  are already in your library and every change you made is saved, so the sheet is a review, not a
+  confirmation. At most 60 books are shown per shelf, with *and n more* under them; **New patterns** and
+  **shelf ▾** still apply to all of them.
 
 ### Library board
 
