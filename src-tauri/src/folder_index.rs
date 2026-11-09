@@ -195,7 +195,7 @@ mod tests {
 
         // Re-indexing yields the same identities and does not duplicate records.
         let mut organized = merged.clone();
-        organized.documents.iter_mut().find(|d| d.name == "top.pdf").unwrap().favorite = true;
+        { let top = organized.documents.iter_mut().find(|d| d.name == "top.pdf").unwrap(); top.favorite = true; top.cover_seed = Some(31337); }
         let again = index_folder(&root).unwrap();
         assert_eq!(again.library.roots[0].id, *root_id);
         let ids = |l: &Library| { let mut ids: Vec<_> = l.documents.iter().map(|d| d.path.clone()).collect(); ids.sort(); ids };
@@ -204,7 +204,9 @@ mod tests {
         assert_eq!(ids(&remerged), ids(&merged));
         assert_eq!(remerged.collections.len(), merged.collections.len());
         assert_eq!(remerged.roots.len(), 1);
-        assert!(remerged.documents.iter().find(|d| d.name == "top.pdf").unwrap().favorite);
+        let kept = remerged.documents.iter().find(|d| d.name == "top.pdf").unwrap();
+        assert!(kept.favorite);
+        assert_eq!(kept.cover_seed, Some(31337));
     }
 
     #[test]

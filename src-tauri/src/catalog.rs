@@ -229,6 +229,7 @@ pub fn merge_import(old: &Library, incoming: &Library, repository: &str, revisio
             replacement.favorite = existing.favorite;
             replacement.tags = existing.tags.clone();
             replacement.notes = existing.notes.clone();
+            replacement.cover_seed = existing.cover_seed;
             replacement.last_opened = existing.last_opened;
             // Keep personal memberships and source memberships outside the refreshed scope.
             replacement.collection_ids.retain(|id| scope.contains(id));
@@ -330,7 +331,7 @@ mod tests {
         old.collections.push(Collection { id: "personal".into(), ..Collection::default() });
         old.collections.push(Collection { id: "other".into(), source_id: Some("repo:gallery".into()), ..Collection::default() });
         old.documents[0].collection_ids.extend(["personal".into(), "other".into()]);
-        old.documents[0].favorite = true; old.documents[0].tags = vec!["mine".into()]; old.documents[0].notes = "private notes".into(); old.documents[0].last_opened = 42;
+        old.documents[0].favorite = true; old.documents[0].tags = vec!["mine".into()]; old.documents[0].notes = "private notes".into(); old.documents[0].last_opened = 42; old.documents[0].cover_seed = Some(77);
         let selected = vec!["source:board".into()];
         let first = merge_import(&old, &incoming, "repo", "sha", &["gallery".into()], &selected).unwrap();
         let second = merge_import(&first, &incoming, "repo", "sha", &["gallery".into()], &selected).unwrap();
@@ -339,6 +340,7 @@ mod tests {
         assert_eq!(second.documents[0].tags, vec!["mine"]);
         assert_eq!(second.documents[0].notes, "private notes");
         assert_eq!(second.documents[0].last_opened, 42);
+        assert_eq!(second.documents[0].cover_seed, Some(77));
         assert_eq!(second.documents[0].collection_ids.len(), 3);
         assert_eq!(second.imports[0].collection_ids, selected);
     }
