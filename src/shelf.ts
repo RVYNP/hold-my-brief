@@ -1,7 +1,6 @@
 // Pure helpers for the reference shelf: display names, the version in a file name, generated covers and
 // the grouping of a collection's documents into shelves. No DOM, so every edge stays testable.
-import { oklchToRgb } from './colour';
-import { artTone, motifFor, motifs, type Motif } from './dither';
+import { coverFamilies, coverPalette, familyFor, seedFrom, type CoverFamily } from './procedural-cover';
 
 const knownExtension = /\.(pdf|epub|md|markdown|txt|png|jpe?g|webp|gif|avif|bmp)$/i;
 // A date may be the whole name (`2026-10-29.md`); a number or `master` needs a name before it.
@@ -63,8 +62,6 @@ export function groupIntoShelves<T extends { collectionIds: string[] }>(scopeId:
 /** Generated covers are always 3:4, width over height. */
 export const coverRatio = 3 / 4;
 
-/** OKLCH lightness and chroma of a generated cover's plain tint, per colour scheme. */
-export const coverTint = { light: { lightness: .93, chroma: .03 }, dark: { lightness: .30, chroma: .035 } } as const;
 /** Share of `--ink` in the colour of a cover's small print (format, version); the rest is `--muted`, which on its own falls just short of 4.5:1 on the tint. */
 export const coverSecondaryInk = .3;
 
@@ -81,7 +78,7 @@ export function coverHash(collectionId: string): number {
 
 /**
  * Siblings (collections under the same parent) get distinct styles by position rather than by hash, so two shelves
- * side by side can never share a motif or a hue. `assignCoverSlots` takes each sibling group in display order; a
+ * side by side can never share a pattern family or a hue. `assignCoverSlots` takes each sibling group in display order; a
  * collection with no slot (not yet known) falls back to its hash.
  */
 const slots = new Map<string, { index: number; count: number }>();
@@ -90,33 +87,37 @@ export function assignCoverSlots(groups: readonly (readonly string[])[]): void {
   for (const ids of groups) ids.forEach((id, index) => slots.set(id, { index, count: ids.length }));
 }
 
+/** Hue (degrees) of the covers of a document in no collection: a quiet blue-grey, so Unfiled reads as one set too. */
+export const unfiledHue = 250;
+
 /** Hue (degrees) of a collection's covers: siblings are spaced evenly round the wheel (120° apart for three). */
-export function coverHue(collectionId: string): number {
+export function coverHue(collectionId: string | undefined): number {
+  if (collectionId === undefined) return unfiledHue;
   const slot = slots.get(collectionId);
   return slot === undefined ? coverHash(collectionId) % 360 : Math.round(20 + slot.index * 360 / slot.count) % 360;
 }
 
-/** The motif of a collection's cover art: the same collection always gets the same one, and siblings different ones. */
-export function coverMotif(collectionId: string | undefined): Motif {
-  if (collectionId === undefined) return motifFor(undefined);
-  const slot = slots.get(collectionId);
-  return slot === undefined ? motifFor(coverHash(collectionId)) : motifs[slot.index % motifs.length];
+/** The pattern family of a collection's covers by its sibling slot (every shelf of a set differs, up to eight), or undefined when the collection has no slot: the book's seed then picks. */
+export function coverFamily(collectionId: string | undefined): CoverFamily | undefined {
+  const slot = collectionId === undefined ? undefined : slots.get(collectionId);
+  return slot === undefined ? undefined : coverFamilies[slot.index % coverFamilies.length];
 }
 
-/** Plain tint of a cover as a packed colour, for the given scheme (no collection: undefined, the cover uses `--hover`). */
-export function coverTintRgb(collectionId: string, scheme: 'light' | 'dark'): number {
-  return oklchToRgb(coverTint[scheme].lightness, coverTint[scheme].chroma, coverHue(collectionId));
+/** The seed of a book's cover: the one it was given by a re-roll, else one made from its path, so every book looks different and the same book always looks the same. */
+export const coverSeedOf = (doc: { path: string; coverSeed?: number }): number => doc.coverSeed ?? seedFrom(doc.path);
+
+/** What a cover of a book on a shelf is made of: the shelf's hue and family, the book's seed. */
+export function coverStyle(seed: number, shelfId: string | undefined): { hue: number; family: CoverFamily } {
+  return { hue: coverHue(shelfId), family: coverFamily(shelfId) ?? familyFor(seed) };
 }
 
-/** Colour of the art's ink for a collection and scheme, as a packed colour. */
-export function coverInkRgb(collectionId: string, scheme: 'light' | 'dark'): number {
-  const { lightness, chroma } = artTone[scheme].ink;
-  return oklchToRgb(lightness, chroma, coverHue(collectionId));
+/** Plain tint of a cover as a packed colour, for the given scheme: the ground tone (first colour) of the cover's palette, so the band under the art is the art's own ground. `undefined`: a document in no collection. */
+export function coverTintRgb(collectionId: string | undefined, scheme: 'light' | 'dark'): number {
+  const [r, g, b] = coverPalette(coverHue(collectionId), scheme)[0]; return r << 16 | g << 8 | b;
 }
 
-/** The CSS fill of a generated cover: the shelf's tint in the current scheme, or the neutral hover tone when the document has no collection. */
+/** The CSS fill of a generated cover: the shelf's ground tint in the current scheme (see `coverTintRgb`). */
 export function coverFill(collectionId: string | undefined): string {
-  if (!collectionId) return 'var(--hover)';
-  const hue = coverHue(collectionId), { light, dark } = coverTint;
-  return `light-dark(oklch(${light.lightness} ${light.chroma} ${hue}), oklch(${dark.lightness} ${dark.chroma} ${hue}))`;
+  const css = (scheme: 'light' | 'dark') => { const [r, g, b] = coverPalette(coverHue(collectionId), scheme)[0]; return `rgb(${r} ${g} ${b})`; };
+  return `light-dark(${css('light')}, ${css('dark')})`;
 }

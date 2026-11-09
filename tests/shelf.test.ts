@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { assignCoverSlots, collectionDisplayName, coverHash, coverHue, coverInkRgb, coverMotif, coverSecondaryInk, coverTintRgb, fileTitle, fileVersion, groupIntoShelves } from '../src/shelf';
-import { motifs } from '../src/dither';
+import { assignCoverSlots, collectionDisplayName, coverFamily, coverFill, coverHash, coverHue, coverSecondaryInk, coverSeedOf, coverStyle, coverTintRgb, fileTitle, fileVersion, groupIntoShelves, unfiledHue } from '../src/shelf';
+import { coverFamilies, coverPalette, familyFor, seedFrom } from '../src/procedural-cover';
 import { contrast, palettes, type Rgb } from '../src/theme';
 
 describe('version and title from a file name', () => {
@@ -75,23 +75,38 @@ describe('shelves', () => {
 
 describe('generated cover colours', () => {
   const ids = ['languages', 'creative-apps', 'libraries-tools', 'f0c1e1b2-7d51-4a8e-8f1a-0d2d4d9a1b11', 'a', 'b', 'c', '1', '2', '3'];
-  it('gives the same collection the same hue and motif every time, and the different ones differ', () => {
-    for (const id of ids) { expect(coverHue(id)).toBe(coverHue(id)); expect(coverMotif(id)).toBe(coverMotif(id)); expect(coverHue(id)).toBeGreaterThanOrEqual(0); expect(coverHue(id)).toBeLessThan(360); }
+  it('gives the same collection the same hue every time, and the different ones differ', () => {
+    for (const id of ids) { expect(coverHue(id)).toBe(coverHue(id)); expect(coverHue(id)).toBeGreaterThanOrEqual(0); expect(coverHue(id)).toBeLessThan(360); }
     expect(new Set(ids.map(coverHue)).size).toBeGreaterThan(7);
-    expect(new Set(ids.map(id => coverMotif(id))).size).toBeGreaterThanOrEqual(3);
-    expect(coverMotif(undefined)).toBe('neutral');
+    expect(coverHue(undefined)).toBe(unfiledHue);
     expect(coverHash('a')).not.toBe(coverHash('b'));
-    for (const id of ids) expect(motifs).toContain(coverMotif(id));
   });
-  it('never gives two siblings the same motif or a close hue, whatever their ids hash to', () => {
-    const siblings = ['languages', 'creative-apps', 'libraries-tools', 'x', 'y', 'z'];
+  it('never gives two siblings the same pattern family or a close hue, whatever their ids hash to', () => {
+    const siblings = ['languages', 'creative-apps', 'libraries-tools', 'x', 'y', 'z', 'w', 'v'].slice(0, coverFamilies.length);
     assignCoverSlots([siblings]);
     try {
-      expect(new Set(siblings.map(id => coverMotif(id))).size).toBe(siblings.length);
+      expect(new Set(siblings.map(id => coverFamily(id))).size).toBe(siblings.length);
+      for (const id of siblings) expect(coverFamilies).toContain(coverFamily(id));
       const hues = siblings.map(coverHue).sort((a, b) => a - b);
       const gaps = hues.map((hue, index) => (index ? hue - hues[index - 1] : hue + 360 - hues[hues.length - 1]));
       expect(Math.min(...gaps)).toBeGreaterThanOrEqual(40);
     } finally { assignCoverSlots([]); }
+  });
+  it('styles a cover by its shelf (hue, family) and its book (seed): the seed picks the family only where the shelf has no slot', () => {
+    const seed = seedFrom('/books/rust.epub');
+    assignCoverSlots([['a', 'b', 'c']]);
+    try {
+      expect(coverStyle(seed, 'b')).toEqual({ hue: coverHue('b'), family: coverFamily('b') });
+      expect(coverStyle(seed ^ 0xff000000, 'b')).toEqual(coverStyle(seed, 'b'));
+      expect(coverStyle(seed, 'unknown-shelf')).toEqual({ hue: coverHue('unknown-shelf'), family: familyFor(seed) });
+      expect(coverStyle(seed, undefined)).toEqual({ hue: unfiledHue, family: familyFor(seed) });
+    } finally { assignCoverSlots([]); }
+  });
+  it('seeds a book from its own seed when it has one, else from its path', () => {
+    expect(coverSeedOf({ path: '/a.md' })).toBe(seedFrom('/a.md'));
+    expect(coverSeedOf({ path: '/a.md', coverSeed: 7 })).toBe(7);
+    expect(coverSeedOf({ path: '/a.md', coverSeed: 0 })).toBe(0);
+    expect(coverSeedOf({ path: '/a.md' })).not.toBe(coverSeedOf({ path: '/b.md' }));
   });
 
   // Read from disk, like the palette contrast test: the tokens are the stylesheet's own.
@@ -106,8 +121,14 @@ describe('generated cover colours', () => {
   }
   const hues = Array.from({ length: 36 }, (_, index) => index * 10);
 
+  it('fills a cover with the ground tone of its palette in both schemes, light first', () => {
+    const [light, dark] = (['light', 'dark'] as const).map(mode => coverPalette(coverHue('x'), mode)[0].join(' '));
+    expect(coverFill('x')).toBe(`light-dark(rgb(${light}), rgb(${dark}))`);
+    expect(coverFill(undefined)).toBe(`light-dark(rgb(${coverPalette(unfiledHue, 'light')[0].join(' ')}), rgb(${coverPalette(unfiledHue, 'dark')[0].join(' ')}))`);
+  });
+
   describe.each(palettes.flatMap(name => (['light', 'dark'] as const).map((mode, column) => ({ name: `${name} ${mode}`, mode, column, found: tokens(name) }))))('$name', ({ mode, column, found }) => {
-    const ink = found.ink[column], muted = found.muted[column], hover = found.hover[column];
+    const ink = found.ink[column], muted = found.muted[column];
     const small = mix(ink, muted, coverSecondaryInk);
     it('reads the title and the small print at 4.5:1 or better on every shelf tint', () => {
       for (const id of ids) {
@@ -124,15 +145,13 @@ describe('generated cover colours', () => {
         expect(contrast(small, tint), `hue ${hue}`).toBeGreaterThanOrEqual(4.5);
       }
     });
-    it('reads on the neutral tint of a document with no collection', () => {
-      expect(contrast(ink, hover)).toBeGreaterThanOrEqual(4.5);
-      expect(contrast(small, hover)).toBeGreaterThanOrEqual(4.5);
+    it('reads on the tint of a document with no collection', () => {
+      const tint = unpack(coverTintRgb(undefined, mode));
+      expect(contrast(ink, tint)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(small, tint)).toBeGreaterThanOrEqual(4.5);
     });
-    it('keeps the art a quiet texture: its ink sits 1.4 to 1.9 times the tint\'s luminance step away', () => {
-      for (const id of ids) {
-        const ratio = contrast(unpack(coverInkRgb(id, mode)), unpack(coverTintRgb(id, mode)));
-        expect(ratio, id).toBeGreaterThanOrEqual(1.4); expect(ratio, id).toBeLessThanOrEqual(1.9);
-      }
+    it('keeps the plain band the very colour of the art\'s ground tone, so the two meet without a seam', () => {
+      for (const id of [...ids, undefined]) expect(unpack(coverTintRgb(id, mode)), String(id)).toEqual(coverPalette(coverHue(id), mode)[0]);
     });
   });
 });

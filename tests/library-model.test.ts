@@ -36,6 +36,17 @@ describe('library migration and personal organization', () => {
     expect(library.collections.find(item => item.id === 'head')?.parentId).toBeNull();
   });
 
+  it('sets and clears a generated cover seed', () => {
+    const library = emptyLibrary();
+    library.documents.push(localDocument('a.pdf', 'A', 'pdf'));
+    applyLibraryChange(library, { action: 'setCoverSeed', path: 'a.pdf', coverSeed: 4242 });
+    expect(library.documents[0].coverSeed).toBe(4242);
+    applyLibraryChange(library, { action: 'setCoverSeed', path: 'a.pdf', coverSeed: null });
+    expect('coverSeed' in library.documents[0]).toBe(false);
+    expect(() => applyLibraryChange(library, { action: 'setCoverSeed', path: 'a.pdf', coverSeed: -1 })).toThrow(/32-bit/);
+    expect(() => applyLibraryChange(library, { action: 'setCoverSeed', path: 'missing', coverSeed: 1 })).toThrow(/no longer/);
+  });
+
   it('preserves source memberships when personal organization changes and refuses invented source memberships', () => {
     const library = emptyLibrary();
     library.collections.push({ id: 'source-board', name: 'Board', parentId: null, sourceId: 'folder:0123456789abcdef' });

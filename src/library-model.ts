@@ -105,5 +105,13 @@ export function applyLibraryChange(library: Library, change: LibraryChange) {
       library.documents = library.documents.filter(item => item.path !== change.path);
       break;
     }
+    case 'setCoverSeed': {
+      const document = library.documents.find(item => item.path === change.path);
+      if (!document) throw Error('Document is no longer in the library.');
+      if (change.coverSeed === null) delete document.coverSeed;
+      else if (Number.isInteger(change.coverSeed) && change.coverSeed >= 0 && change.coverSeed <= 0xffffffff) document.coverSeed = change.coverSeed;
+      else throw Error('Cover seed must be an unsigned 32-bit integer.');
+      break;
+    }
   }
 }

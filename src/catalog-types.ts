@@ -19,6 +19,7 @@ export type LibraryDocument = {
   tags: string[];
   notes: string;
   source?: Provenance;
+  coverSeed?: number;
   availability?: Availability;
 };
 export type Collection = {
@@ -49,5 +50,6 @@ export type LibraryChange =
   | { action: 'moveCollection'; id: string; parentId: string | null }
   | { action: 'deleteCollection'; id: string }
   | { action: 'updateDocument'; path: string; collectionIds: string[]; favorite: boolean; tags: string[]; notes: string }
-  | { action: 'removeDocument'; path: string };
+  | { action: 'removeDocument'; path: string }
+  | { action: 'setCoverSeed'; path: string; coverSeed: number | null };
 export const emptyLibrary = (): Library => ({ documents: [], collections: [], roots: [], imports: [] });

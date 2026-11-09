@@ -163,6 +163,10 @@
 .library-tile-glyph { position: absolute; top: calc(50% - 14px); left: calc(50% - 7px); width: 14px; height: 14px; border: 1.5px dashed var(--muted); border-radius: 50%; }
 .library-tile-note { position: absolute; top: calc(50% + 6px); right: 0; left: 0; color: var(--muted); font: 11px/1 var(--font-mono); letter-spacing: .1px; text-align: center; }
 .library-tile.is-missing .library-tile-media { background: color-mix(in srgb, var(--hover) 70%, var(--raise)); }
+/* ↻ New cover pattern: shown like the star, over the art's top right in the strong ink (which holds 4.5:1 on every tone of a cover), and gone once a real picture covers the generated one. */
+.library-reroll { min-width: 24px; padding: 0 4px; font-size: 15px !important; }
+.library-tile.is-cover:not(:has(.is-loaded)) .library-card-actions .library-reroll { color: var(--ink); text-shadow: none; }
+.library-tile:has(.is-loaded) .library-reroll { display: none; }
 
 /* Shelf: a quiet mono header above the tiles of one sub-collection (placed absolutely like the tiles). */
 .library-shelf-head { position: absolute; display: flex; align-items: baseline; gap: 6px; height: 16px; color: var(--muted); font: 11px/16px var(--font-mono); letter-spacing: .3px; pointer-events: none; }
@@ -212,6 +216,8 @@
 .library-detail-preview.is-cover { aspect-ratio: 4 / 3; width: 100%; }
 .library-detail-preview .library-cover-text { display: none; }
 .library-detail-preview .library-cover-art { height: 100%; }
+.library-detail-reroll { position: absolute; z-index: 1; top: 4px; right: 4px; width: 24px; height: 24px; padding: 0; color: var(--ink); opacity: 0; transition: opacity .12s; }
+.library-detail-preview:hover .library-detail-reroll, .library-detail-preview:focus-within .library-detail-reroll { opacity: 1; }
 .library-detail-preview > img { display: block; width: 100%; max-height: 240px; object-fit: contain; }
 .library-detail-name { margin: 6px 0 0; font-size: 14px; font-weight: 650; line-height: 1.3; overflow-wrap: anywhere; }
 .library-detail-creator { margin: -2px 0 0; color: var(--muted); font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
@@ -289,6 +295,28 @@
 .library-remove-confirmation { margin-top: 8px; padding: 10px 12px; border-radius: 6px; background: var(--hover-subtle); }
 .library-remove-confirmation p { margin: 0 0 6px; font-size: 12px; }
 .library-remove-confirmation button { margin: 2px 6px 0 0; }
+/* Intake: the review sheet for new arrivals. One quiet dialog: a mono source line, a mono header per shelf, covers 132 px wide (3:4) with the ↻ shown on hover or focus, and the actions underneath. */
+.library-dialog.library-intake { width: min(724px, calc(100vw - 28px)); }
+.library-intake-source { margin: -8px 0 14px !important; color: var(--muted); font: 11px/1.4 var(--font-mono) !important; letter-spacing: 0; }
+.library-intake-body { max-height: min(calc(100dvh - 200px), 640px); margin: 0 -8px; padding: 2px 8px 4px; overflow-y: auto; scrollbar-width: thin; }
+/* A soft fade over the last 32 px while more is below, so a row is never sliced at the edge (toggled by intake.ts). */
+.library-intake-body.has-more { mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent); }
+.library-intake-group + .library-intake-group { margin-top: 24px; }
+.library-intake-head { position: relative; display: flex; align-items: center; gap: 6px; height: 22px; margin-bottom: 8px; color: var(--muted); font: 11px/16px var(--font-mono); letter-spacing: .3px; }
+.library-intake-shelf { margin-left: auto; padding: 2px 6px; color: var(--muted); font: inherit; letter-spacing: 0; text-transform: lowercase; }
+.library-intake-shelf:hover { color: var(--fg); }
+.library-intake-menu { top: calc(100% + 2px); right: 0; max-height: 220px; overflow-y: auto; font: 12px/1.35 var(--font-ui); letter-spacing: 0; scrollbar-width: thin; }
+.library-intake-menu button { white-space: nowrap; }
+/* Fixed-width covers with the board's own 4 px gap (libraryGrid.gap), rows left-aligned like a shelf. */
+.library-intake-tiles { display: grid; grid-template-columns: repeat(auto-fill, 132px); justify-content: start; align-items: start; gap: 4px; }
+.library-intake-tile { position: relative; min-width: 0; }
+.library-intake-tile .library-tile-media.is-loaded .library-tile-scrim { padding-top: 32px; background: linear-gradient(to top, #000000db, #00000000); opacity: 1; }
+.library-intake-tile .library-reroll { position: absolute; z-index: 1; top: 4px; right: 4px; width: 24px; height: 24px; padding: 0; color: var(--ink); opacity: 0; transition: opacity .12s; }
+.library-intake-tile:hover .library-reroll, .library-intake-tile:focus-within .library-reroll { opacity: 1; }
+.library-intake-tile:has(.is-loaded) .library-reroll { display: none; }
+.library-intake-more { margin: 10px 0 0 !important; color: var(--muted); font: 11px/1.4 var(--font-mono) !important; }
+.library-dialog .library-intake-patterns { margin-right: auto; color: var(--muted); }
+.library-dialog .library-intake-patterns:hover { color: var(--fg); }
 /* Compact windows: the drawer covers the layout as a sheet over a scrim instead of floating beside it. */
 @media (max-width: 719px) {
   .library-root { position: absolute; z-index: 20; inset: 0; display: block; width: auto; margin: 0; }

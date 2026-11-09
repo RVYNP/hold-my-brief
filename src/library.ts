@@ -7,7 +7,8 @@ import { canThumbnail, createThumbnailStore, type Thumbnail } from './thumbnails
 import { colourHex, colourMatches, colourNames, colourSwatches, nameColour, parseColourName, type ColourName } from './colour';
 import { shortcutFor } from './commands';
 import { coverArt } from './covers';
-import { assignCoverSlots, collectionDisplayName, compareCollections, coverFill, coverRatio, fileTitle, fileVersion, groupIntoShelves, shelfLayout, type Shelf } from './shelf';
+import { createIntake, intakeSource, intakeTitle, newArrivals, movedCollectionIds, type IntakeHost } from './intake';
+import { assignCoverSlots, collectionDisplayName, compareCollections, coverFill, coverRatio, coverSeedOf, fileTitle, fileVersion, groupIntoShelves, shelfLayout, type Shelf } from './shelf';
 import { onAppearanceChange, scheme } from './theme';
 
 /** `pending` is how many pictures still had no measured colours when the answer was given (0 = `matches` is complete). */
@@ -274,9 +275,9 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   }
   function report(error: unknown) { if (modalError) modalError.textContent = error instanceof Error ? error.message : String(error); callbacks.error(error); }
   async function mutate(operation: () => Promise<Library>, after?: () => void) {
-    if (busy) return; const key = focusKey(), hadDialog = Boolean(modal?.open); if (modalError) modalError.textContent = '';
+    if (busy) return; const key = focusKey(), hadDialog = Boolean(modal?.open), scrolled = documents.scrollTop; if (modalError) modalError.textContent = '';
     ++revision; setBusy(true);
-    try { library = await operation(); ++revision; loaded = true; loadError = false; rebuildIndex(); render(); after?.(); }
+    try { library = await operation(); ++revision; loaded = true; loadError = false; rebuildIndex(); render(); documents.scrollTop = scrolled; after?.(); }
     catch (error) { report(error); }
     finally { setBusy(false); if (!hadDialog && !modal?.open) restoreFocus(key); }
   }
@@ -417,7 +418,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     const view = openDialog('Sources and originals', trigger); if (!view) return;
     if (desktop) {
       const indexButton = button('Index a folder', undefined, 'index-folder'); indexButton.className = 'primary';
-      indexButton.onclick = () => void mutate(() => indexFolder(), () => view.dialog.close());
+      indexButton.onclick = () => void addAndReview(() => indexFolder(), 'Indexed folder', true, sourcesButton, () => view.dialog.close());
       const row = element('section', 'library-source-card');
       row.append(element('h3', '', 'Folders'), element('p', 'library-dialog-help', 'PDF, EPUB, Markdown and text; files stay where they are.'), element('p', 'library-dialog-help', 'Choose a folder to list its documents, grouped by subfolder. Each entry points at its real file; nothing is copied. Index the same folder again to pick up changes.'), indexButton);
       view.content.append(row);
@@ -548,7 +549,13 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     const missing = (doc.availability ?? 'ready') === 'missing'; const cached = thumbs.peek(doc.path);
     const preview = element('div', 'library-detail-preview'); preview.classList.toggle('is-empty', !cached); preview.classList.toggle('is-cover', !cached && hasCover(doc));
     if (cached) { const image = element('img'); image.alt = ''; image.src = cached.url; preview.append(image); }
-    else { if (!missing && hasCover(doc)) preview.append(coverNode(doc, doc.collectionIds[0])); else preview.append(element('span', '', missing ? 'Missing' : doc.format.toUpperCase())); if (thumbnailable(doc) && !missing) void thumbs.request(doc.path, doc.format, () => board && selectedPath === doc.path).then(made => { if (made && board && selectedPath === doc.path) renderDetail(); }); }
+    else {
+      if (!missing && hasCover(doc)) {
+        preview.append(coverNode(doc, coverShelf.has(doc.path) ? coverShelf.get(doc.path) : doc.collectionIds[0]));
+        const reroll = rerollButton(doc, 'detail-reroll'); reroll.classList.add('library-detail-reroll'); preview.append(reroll);
+      } else preview.append(element('span', '', missing ? 'Missing' : doc.format.toUpperCase()));
+      if (thumbnailable(doc) && !missing) void thumbs.request(doc.path, doc.format, () => board && selectedPath === doc.path).then(made => { if (made && board && selectedPath === doc.path) renderDetail(); });
+    }
     const name = element('h3', 'library-detail-name', docLabel(doc)); name.title = doc.path;
     const open = button('Open in reader'); open.className = 'library-detail-open'; open.append(element('kbd', '', 'Enter')); open.onclick = () => void openFromBoard(doc, open);
     const organizeButton = button('Organize…'); organizeButton.onclick = () => organize(doc, organizeButton);
@@ -598,6 +605,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     if (busy || modal?.open) return; if (!itemMenu.hidden && menuAnchor === anchor) { closeItemMenu(); return; }
     closeItemMenu(false); setScope(false); itemMenu.replaceChildren();
     const entries: [string, () => void][] = [['Details', () => referenceDetails(doc, anchor)], ['Organize…', () => organize(doc, anchor)]];
+    if (hasCover(doc) && !thumbs.peek(doc.path)) { entries.push(['New cover pattern', () => void rerollCovers([doc.path])]); if (doc.coverSeed !== undefined) entries.push(['Reset cover', () => void rerollCovers([doc.path], true)]); }
     if (desktop) entries.push(['Locate original…', () => locateOriginal(doc)]);
     for (const [label, run] of entries) { const item = button(label); item.setAttribute('role', 'menuitem'); item.onclick = () => { closeItemMenu(false); run(); }; itemMenu.append(item); }
     menuAnchor = anchor; anchor.setAttribute('aria-expanded', 'true'); anchor.closest('.library-document')?.classList.add('is-menu-open'); itemMenu.hidden = false;
@@ -641,6 +649,8 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   type Tile = { node: HTMLElement; path: string; ratio: number; column: number };
   type Section = { shelf?: string; head?: HTMLElement; tiles: Tile[] };
   let tiles: Tile[] = []; let sections: Section[] = []; let columnCount = 0; const tileByPath = new Map<string, Tile>();
+  // The shelf each tile's cover was made for (which tints and styles it), so the detail strip shows the very same cover.
+  const coverShelf = new Map<string, string | undefined>();
   const gridSizer = element('div', 'library-grid-sizer'); gridSizer.setAttribute('aria-hidden', 'true');
   function contentWidth() { const style = getComputedStyle(documents); return documents.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight); }
   /** Places every header and tile. The column of each tile is only reassigned when asked or when the column count changes, so a picture arriving moves what is below it, never reshuffles. */
@@ -691,18 +701,31 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   /** A generated cover for a document with no picture: dithered art of its shelf in the top half, the title and the format (with the version in the file name) below. */
   function coverNode(doc: LibraryDocument, shelfId: string | undefined) {
     const cover = element('span', 'library-cover'); cover.style.setProperty('--cover-fill', coverFill(shelfId));
-    const art = element('img', 'library-cover-art'); art.alt = ''; art.dataset.cover = shelfId ?? ''; art.src = coverArt(shelfId, scheme());
+    const seed = coverSeedOf(doc);
+    const art = element('img', 'library-cover-art'); art.alt = ''; art.dataset.cover = shelfId ?? ''; art.dataset.seed = String(seed); art.src = coverArt(seed, shelfId, scheme());
     const meta = element('span', 'library-cover-meta'); meta.append(element('span', '', doc.format.toUpperCase())); const version = fileVersion(doc.name); if (version) meta.append(element('span', '', version));
     const text = element('span', 'library-cover-text'); text.append(element('span', 'library-cover-title', epubTitle(doc) ?? fileTitle(doc.name)), meta);
     cover.append(art, text); return cover;
   }
   const hasCover = (doc: LibraryDocument) => (doc.availability ?? 'ready') !== 'missing' && (!thumbnailable(doc) || doc.format === 'epub');
-  onAppearanceChange(() => { for (const art of root.querySelectorAll<HTMLImageElement>('.library-cover-art')) art.src = coverArt(art.dataset.cover || undefined, scheme()); });
-  function actionsFor(doc: LibraryDocument) {
+  onAppearanceChange(() => { for (const art of root.querySelectorAll<HTMLImageElement>('.library-cover-art')) art.src = coverArt(Number(art.dataset.seed), art.dataset.cover || undefined, scheme()); });
+  // A new random pattern for each document, in one library change (one render), or none at all (`reset`: the pattern its path gives).
+  const rerollCovers = (paths: string[], reset = false) => mutate(async () => {
+    let next = library;
+    for (const path of paths) next = await editLibrary({ action: 'setCoverSeed', path, coverSeed: reset ? null : crypto.getRandomValues(new Uint32Array(1))[0] });
+    return next;
+  });
+  /** The ↻ over a cover: hidden until the cover is pointed at or focused, and for good once a real picture shows instead. */
+  function rerollButton(doc: LibraryDocument, key: string) {
+    const reroll = button('↻', `New cover pattern for ${docLabel(doc)}`, key); reroll.className = 'library-reroll'; reroll.onclick = () => void rerollCovers([doc.path]);
+    return reroll;
+  }
+  function actionsFor(doc: LibraryDocument, generated = false) {
     const actions = element('div', 'library-card-actions');
     const favorite = button(doc.favorite ? '★' : '☆', `${doc.favorite ? 'Unfavorite' : 'Favorite'} ${doc.name}`, `favorite:${doc.path}`); favorite.className = 'library-favorite'; favorite.setAttribute('aria-pressed', String(doc.favorite));
     favorite.onclick = () => void mutate(() => editLibrary({ action: 'updateDocument', path: doc.path, collectionIds: doc.collectionIds, favorite: !doc.favorite, tags: doc.tags, notes: doc.notes }));
     const more = button('···', `More actions for ${doc.name}`, `more:${doc.path}`); more.className = 'library-organize'; more.setAttribute('aria-haspopup', 'menu'); more.setAttribute('aria-expanded', 'false'); more.onclick = () => openItemMenu(doc, more);
+    if (generated) actions.append(rerollButton(doc, `reroll:${doc.path}`));
     actions.append(favorite, more); return actions;
   }
   function documentRow(doc: LibraryDocument) {
@@ -722,7 +745,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     const format = doc.format.toUpperCase();
     if (missing) media.append(element('span', 'library-tile-glyph'), element('span', 'library-tile-note', 'Missing'));
     else {
-      if (generated) media.append(coverNode(doc, shelfId));
+      if (generated) { media.append(coverNode(doc, shelfId)); coverShelf.set(doc.path, shelfId); }
       if (thumbnailable(doc)) {
         if (!generated) media.append(element('span', 'library-tile-format', format));
         const image = element('img'); image.alt = ''; image.hidden = true; image.decoding = 'async'; media.dataset.path = doc.path; media.dataset.format = doc.format; media.append(image);
@@ -733,7 +756,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     if (doc.path === activePath) media.append(element('span', 'library-tile-tag', 'Reading'));
     open.append(media);
     bindOpen(doc, open, node);
-    node.append(open, actionsFor(doc)); return { node, path: doc.path, ratio, column: 0 };
+    node.append(open, actionsFor(doc, generated)); return { node, path: doc.path, ratio, column: 0 };
   }
   for (const mode of ['grid', 'list'] as const) viewButtons[mode].onclick = () => { if (view !== mode) { savePreference(viewKey(), mode); renderDocuments(); } };
   function shelfHead(shelf: Shelf<LibraryDocument>) {
@@ -741,7 +764,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     head.append(element('span', 'library-shelf-name', shelf.name), element('span', 'library-shelf-count', String(shelf.items.length))); return head;
   }
   function renderDocuments() {
-    clearThumbnails(); documents.replaceChildren(); pager.replaceChildren(); tiles = []; sections = []; tileByPath.clear(); columnCount = 0; closeItemMenu(false); const generation = ++renderGeneration;
+    clearThumbnails(); documents.replaceChildren(); pager.replaceChildren(); tiles = []; sections = []; tileByPath.clear(); coverShelf.clear(); columnCount = 0; closeItemMenu(false); const generation = ++renderGeneration;
     const unknown: LibraryDocument[] = [];
     const query = search.value.trim().toLocaleLowerCase();
     matches = library.documents.filter(doc => {
@@ -857,8 +880,44 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   }
   search.oninput = () => { page = 0; renderDocuments(); }; sort.onchange = format.onchange = availability.onchange = () => { page = 0; renderDocuments(); };
   let chosenCollection: string | null = null;
-  add.onclick = () => { if (busy) return; const collection = filter.kind === 'collection' ? library.collections.find(item => filter.kind === 'collection' && item.id === filter.id) : undefined; chosenCollection = collection && !collection.sourceId ? collection.id : null; if (desktop) void mutate(() => addDocuments(chosenCollection)); else fileInput.click(); };
-  fileInput.onchange = () => { const files = Array.from(fileInput.files ?? []); fileInput.value = ''; if (files.length) void mutate(() => addDocuments(chosenCollection, files)); };
+  add.onclick = () => { if (busy) return; const collection = filter.kind === 'collection' ? library.collections.find(item => filter.kind === 'collection' && item.id === filter.id) : undefined; chosenCollection = collection && !collection.sourceId ? collection.id : null; if (desktop) void addAndReview(() => addDocuments(chosenCollection), 'Added files', false, add); else fileInput.click(); };
+  fileInput.onchange = () => { const files = Array.from(fileInput.files ?? []); fileInput.value = ''; if (files.length) void addAndReview(() => addDocuments(chosenCollection, files), 'Added files', false, add); };
+  // Intake: once files arrive (Add files, Index a folder) a quiet sheet shows what came in, grouped by shelf, each with its cover.
+  const intakeHost: IntakeHost = {
+    documents: () => library.documents, collections: () => library.collections, label: docLabel,
+    generated: doc => hasCover(doc) && !thumbs.peek(doc.path),
+    cover: coverNode,
+    picture: doc => thumbnailable(doc) ? { peek: () => thumbs.peek(doc.path), request: wants => thumbs.request(doc.path, doc.format, wants) } : undefined,
+    reroll: paths => rerollCovers(paths),
+    move: (paths, from, to) => mutate(async () => {
+      let next = library;
+      for (const path of paths) {
+        const doc = next.documents.find(item => item.path === path); if (!doc) continue;
+        next = await editLibrary({ action: 'updateDocument', path, collectionIds: movedCollectionIds(doc.collectionIds, next.collections, from, to), favorite: doc.favorite, tags: doc.tags, notes: doc.notes });
+      }
+      return next;
+    }),
+  };
+  /** A folder always gets a review. Files do unless they all show a real picture: a lone PDF, image or EPUB with a cover is just there. Several files are reviewed when any of them would get a generated cover. */
+  async function worthReview(arrived: LibraryDocument[], folder: boolean) {
+    if (folder) return true;
+    if (arrived.length > 1) return arrived.some(hasCover);
+    const [only] = arrived; if (!hasCover(only)) return false;
+    return only.format !== 'epub' || !(await thumbs.request(only.path, 'epub', () => true));
+  }
+  async function addAndReview(operation: () => Promise<Library>, fallback: string, folder: boolean, trigger: HTMLElement, after?: () => void) {
+    if (busy) return; const before = new Set(library.documents.map(doc => doc.path));
+    await mutate(operation, after);
+    const arrived = newArrivals(before, library.documents); if (!arrived.length) return;
+    await new Promise(resolve => setTimeout(resolve)); // a dialog that was just closed finishes closing first
+    if (!await worthReview(arrived, folder)) return;
+    const view = openDialog(intakeTitle(arrived.length), trigger); if (!view) return;
+    view.dialog.classList.add('library-intake');
+    const sheet = createIntake(intakeHost, arrived.map(doc => doc.path), intakeSource(arrived, fallback), view);
+    view.dialog.showModal(); sheet.focus();
+    // An EPUB's own title replaces the file's name on its cover as soon as it is read.
+    for (const doc of arrived) if (doc.format === 'epub' && !thumbs.epub(doc.path)) void thumbs.loadEpub(doc.path, () => view.dialog.open).then(info => { if (info && view.dialog.isConnected) sheet.retitle(doc.path); });
+  }
   sourcesButton.onclick = () => sourceManager(sourcesButton);
   async function refresh(path?: string) {
     if (path !== undefined) activePath = path; const token = ++revision;

@@ -51,6 +51,37 @@ pub struct LibraryDocument {
     pub notes: String,
     pub source: Option<Provenance>,
     pub availability: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cover_seed: Option<u32>,
+}
+
+#[cfg(test)]
+mod cover_seed_tests {
+    use super::*;
+
+    #[test]
+    fn cover_seed_round_trips_and_is_optional() {
+        let plain: LibraryDocument = serde_json::from_str(r#"{"path":"a.pdf"}"#).unwrap();
+        assert_eq!(plain.cover_seed, None);
+        assert!(!serde_json::to_string(&plain).unwrap().contains("coverSeed"));
+        let seeded: LibraryDocument = serde_json::from_str(r#"{"path":"a.pdf","coverSeed":99}"#).unwrap();
+        assert_eq!(seeded.cover_seed, Some(99));
+        assert!(serde_json::to_string(&seeded).unwrap().contains(r#""coverSeed":99"#));
+    }
+
+    #[test]
+    fn set_cover_seed_change_sets_and_clears() {
+        let mut library = Library::default();
+        library.documents.push(LibraryDocument { path: "a.pdf".into(), ..LibraryDocument::default() });
+        let set: LibraryChange = serde_json::from_str(r#"{"action":"setCoverSeed","path":"a.pdf","coverSeed":5}"#).unwrap();
+        library.apply(&set).unwrap();
+        assert_eq!(library.documents[0].cover_seed, Some(5));
+        let clear: LibraryChange = serde_json::from_str(r#"{"action":"setCoverSeed","path":"a.pdf","coverSeed":null}"#).unwrap();
+        library.apply(&clear).unwrap();
+        assert_eq!(library.documents[0].cover_seed, None);
+        let missing: LibraryChange = serde_json::from_str(r#"{"action":"setCoverSeed","path":"x","coverSeed":1}"#).unwrap();
+        assert!(library.apply(&missing).is_err());
+    }
 }
 
 impl<'de> Deserialize<'de> for LibraryDocument {
@@ -60,7 +91,7 @@ impl<'de> Deserialize<'de> for LibraryDocument {
         struct Input {
             path: String, name: String, format: String, last_opened: u64,
             collection_id: Option<String>, collection_ids: Vec<String>, favorite: bool,
-            tags: Vec<String>, notes: String, source: Option<Provenance>, availability: Option<String>,
+            tags: Vec<String>, notes: String, source: Option<Provenance>, availability: Option<String>, cover_seed: Option<u32>,
         }
         let mut input = Input::deserialize(deserializer)?;
         if let Some(id) = input.collection_id {
@@ -69,7 +100,7 @@ impl<'de> Deserialize<'de> for LibraryDocument {
         Ok(Self {
             path: input.path, name: input.name, format: input.format, last_opened: input.last_opened,
             collection_ids: input.collection_ids, favorite: input.favorite, tags: input.tags,
-            notes: input.notes, source: input.source, availability: input.availability,
+            notes: input.notes, source: input.source, availability: input.availability, cover_seed: input.cover_seed,
         })
     }
 }
@@ -127,6 +158,12 @@ pub enum LibraryChange {
         favorite: bool, tags: Vec<String>, notes: String,
     },
     RemoveDocument { path: String },
+    /// `Some(seed)` sets, `None` clears the generated-cover seed.
+    SetCoverSeed {
+        path: String,
+        #[serde(rename = "coverSeed")]
+        cover_seed: Option<u32>,
+    },
 }
 
 impl Library {
@@ -210,6 +247,10 @@ impl Library {
             LibraryChange::RemoveDocument { path } => {
                 if !self.documents.iter().any(|d| d.path == *path) { return Err("Document is no longer in the library.".into()); }
                 self.documents.retain(|d| d.path != *path);
+            }
+            LibraryChange::SetCoverSeed { path, cover_seed } => {
+                let document = self.documents.iter_mut().find(|d| d.path == *path).ok_or("Document is no longer in the library.")?;
+                document.cover_seed = *cover_seed;
             }
         }
         Ok(())

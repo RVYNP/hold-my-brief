@@ -19,6 +19,11 @@ async function addFiles(page: Page, files: string[]) {
   const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: 'Add local documents or images' }).click()]);
   await chooser.setFiles(files);
 }
+/** Files whose covers are generated open the intake sheet; keeping everything closes it. */
+async function keepAll(page: Page) {
+  await page.getByRole('button', { name: 'Keep all' }).click();
+  await expect(page.locator('.library-dialog')).toHaveCount(0);
+}
 async function newCollection(page: Page, name: string, parent?: string) {
   await page.getByRole('button', { name: 'New personal collection' }).click();
   await page.getByLabel('Collection name').fill(name);
@@ -35,9 +40,11 @@ async function buildShelves(page: Page) {
   await newCollection(page, 'reference');
   await newCollection(page, '1-languages', 'Reference');
   await addFiles(page, languages);
+  await keepAll(page);
   await expect(page.locator('.library-tile')).toHaveCount(languages.length);
   await newCollection(page, '2-creative-apps', 'Reference');
   await addFiles(page, creative);
+  await keepAll(page);
   await expect(page.locator('.library-tile')).toHaveCount(creative.length);
   await page.locator('.library-filter', { hasText: /^Reference/ }).click();
   await addFiles(page, [pride]);
@@ -139,6 +146,42 @@ test('generated covers follow the colour scheme, and a shelf keeps one tint', as
   const tint = (name: string) => byShelf.find(entry => entry.startsWith(name))!.split('|')[1];
   expect(tint('The Rust Programming Language')).toBe(tint('The Cargo Book'));
   expect(tint('The Rust Programming Language')).not.toBe(tint('UXP for Adobe Photoshop'));
+});
+
+test('every cover is its own pattern, a shelf shares one tint, and ↻ re-rolls only the cover it is on', async ({ page }) => {
+  await buildShelves(page);
+  const covers = page.locator('.library-tile:has(.library-tile-media:not(.is-loaded) .library-cover)');
+  await expect(covers).toHaveCount(5);
+  const art = (name: string) => page.locator('.library-tile', { has: page.locator('.library-cover-title', { hasText: name }) }).locator('.library-cover-art');
+  const sources = async () => Promise.all(['The Rust Programming Language', 'The Cargo Book', 'Python 3.13 Library Reference', 'UXP for Adobe Photoshop', 'ComfyUI Documentation'].map(name => art(name).getAttribute('src')));
+  const before = await sources();
+  expect(new Set(before).size).toBe(5);
+  for (const source of before) expect(source).toMatch(/^data:image\/png;base64,/);
+  // The ↻ is hidden until the cover is pointed at, then says what it does and for which book.
+  const tile = page.locator('.library-tile', { has: page.locator('.library-cover-title', { hasText: 'The Cargo Book' }) });
+  const reroll = tile.getByRole('button', { name: 'New cover pattern for The Cargo Book' });
+  await expect(reroll).toHaveCSS('opacity', '0');
+  await tile.hover();
+  await expect(reroll).toHaveCSS('opacity', '1');
+  await reroll.click();
+  await expect.poll(async () => (await sources())[1]).not.toBe(before[1]);
+  const after = await sources();
+  expect(after.filter((source, index) => source !== before[index])).toHaveLength(1);
+  // The book keeps its new pattern while the detail strip shows the very same cover.
+  await tile.locator('.library-document-open').click();
+  await expect(page.locator('.library-detail-preview .library-cover-art')).toHaveAttribute('src', after[1]!);
+  // The item menu offers a new pattern, and Reset cover once the book has one of its own.
+  await tile.hover(); await tile.getByRole('button', { name: /More actions for/ }).click();
+  await expect(page.getByRole('menuitem', { name: 'Reset cover' })).toBeVisible();
+  await page.getByRole('menuitem', { name: 'Reset cover' }).click();
+  await expect.poll(async () => (await sources())[1]).toBe(before[1]);
+  await tile.hover(); await tile.getByRole('button', { name: /More actions for/ }).click();
+  await expect(page.getByRole('menuitem', { name: 'New cover pattern' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Reset cover' })).toHaveCount(0);
+  // A cover that shows a real picture has nothing to re-roll.
+  await page.keyboard.press('Escape');
+  const prideTile = page.locator('.library-tile', { has: page.locator('[data-format=epub] .library-tile-name', { hasText: 'Pride and Prejudice' }) });
+  await expect(prideTile.getByRole('button', { name: /New cover pattern/ })).toBeHidden();
 });
 
 test('Index a folder explains what it takes', async ({ page }) => {
