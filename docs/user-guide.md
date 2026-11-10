@@ -10,6 +10,12 @@ Hold My Brief to Explorer's **Open with** list for the document formats without 
 app; clean-account installer behavior has not yet been verified. A second instance routes its file
 request to the running app.
 
+With nothing saved, the window opens on **Hand it over.** Once documents have been opened, it opens
+on **Home**: a row of what you looked at last, as covers, and a second row of the rest of the library.
+Click a cover to open it. A picture fills in when its thumbnail is ready; a book without one keeps the
+cover it has on its shelf. **Open…** is still there. Removing a recent (the × on its cover) leaves the
+library entry.
+
 A scanned PDF with no text layer shows its pages as images: text on those pages can't be selected
 or searched, and each such page carries an "Image-only page" note. Hold My Brief doesn't run OCR in
 this build, so run the PDF through an OCR tool first if you need its text. This is a known limit
@@ -247,7 +253,12 @@ the drawer floats over the page, a wider drawer covers more of the page. Double-
 reset it to 270 pixels. The divider is also focusable: Left and Right resize by 16 pixels
 (Shift: 64), Home and End jump to the narrowest and widest sizes, and Enter resets. The header button
 beside **×** moves the drawer to the other side of the reading panel; compact windows follow the same
-side. Width and side are remembered, and the width is re-fitted when the window shrinks.
+side. **Undock library**, the button just before that one (or **Undock library** in the command
+palette), tears the drawer off into its own window beside the reader, on the side it was docked, so
+the page is no longer covered. The panel's **×** is then **Dock library** and puts the drawer back.
+Closing that window from its caption dismisses the library; **Ctrl+B** opens the drawer again,
+or focuses the library window while it is undocked. Pinning the reader pins the library window too.
+Width and side are remembered, and the width is re-fitted when the window shrinks.
 
 In compact windows (below 720 pixels) the drawer covers the reading panel behind a scrim, cannot be
 resized, and closes on a click outside it or after you open a document from it. Escape closes it

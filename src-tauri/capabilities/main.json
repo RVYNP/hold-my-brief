@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
   "description": "Only the local reader shell may receive events, close, minimize, maximize or drag its window and match the window's theme and background to the reader's appearance. No general filesystem or shell access.",
-  "windows": ["main"],
+  "windows": ["main", "library"],
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",

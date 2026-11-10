@@ -1,18 +1,21 @@
 import './style.css';
 import { defaultOptions, type Position, type ReaderAdapter, type ReaderOptions } from './types';
 import { nudgeFor, parsePlacement, placementOf, resolvePlacement, serialisePlacement, type Placement, type Point } from './view-controls-position';
-import { desktop, native, state, browserFile, persist, openExternal, confirmDocument, openLibraryDocument, chooseDocument, getLibrary, imageFormats, type Opened, type WindowState } from './bridge';
+import { desktop, native, state, browserFile, persist, openExternal, confirmDocument, openLibraryDocument, chooseDocument, getLibrary, imageFormats, type Opened, type Recent, type WindowState } from './bridge';
+import { emptyLibrary, type Library } from './catalog-types';
 import { createLibrary } from './library';
 import { ImageAdapter } from './adapters/image';
 import { createPalette } from './palette';
 import { createFindBar } from './find-bar';
 import { COMMANDS, shortcutFor, shortcutReference, unavailableReason } from './commands';
-import { appearance, initAppearance, pageTones, palettes, saveAppearance, type AppearanceMode } from './theme';
+import { appearance, initAppearance, onAppearanceChange, pageTones, palettes, saveAppearance, scheme, type AppearanceMode } from './theme';
 import { appearanceSummary, createAppearanceSheet, paletteIcon } from './appearance';
 import { createAssistantPanel } from './assistant-panel';
 import { Panner } from './pan';
 import { MIN_SPREAD_WIDTH, pagesLabel, spreadPages } from './spread';
-
+import { assignShelfSlots, fillHomePictures, homeRows, renderHome } from './home';
+import { coverArt } from './covers';
+import { canThumbnail, createThumbnailStore } from './thumbnails';
 initAppearance();
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
@@ -70,6 +73,12 @@ let active: Opened | undefined;
 let options: ReaderOptions = { ...defaultOptions };
 let position: Position | undefined;
 let windowState: WindowState = { width: 420, height: 620, pinned: false, locked: false };
+let libraryFloating = false;
+let homeRecents: Recent[] = [];
+let homeLibrary: Library = emptyLibrary();
+let splashHtml: string | undefined;
+let homePicture = 0;
+const homeThumbs = createThumbnailStore();
 let request = 0, dirty = false, saveTimer: ReturnType<typeof setTimeout> | undefined;
 let saveQueue = Promise.resolve();
 let activeHost: HTMLElement | undefined;
@@ -276,8 +285,9 @@ document.querySelectorAll<HTMLDialogElement>('dialog.drop').forEach(dialog => di
 const library = createLibrary($('library-root'), {
   open: path => load(() => openLibraryDocument(path), path.split(/[\\/]/).pop()),
   error: fail,
+  undock: desktop ? () => { void undockLibrary().catch(fail); } : undefined,
 });
-$('library-toggle').onclick = () => library.toggle();
+$('library-toggle').onclick = () => { if (libraryFloating) void native('set_library_window', { undocked: true, restore: false, width: 0, side: 'left' }).catch(fail); else library.toggle(); };
 
 /**
  * The palette is mounted after the actions it dispatches, since `run` closes over `action`
@@ -366,8 +376,9 @@ async function command(id: string) {
   const reason = entry && unavailableReason(entry, { hasDocument: Boolean(reader), desktop });
   if (reason) { notify(reason); return; }
   if (id === 'open') openFile();
-  else if (id === 'library') library.toggle();
+  else if (id === 'library') { if (libraryFloating) void native('set_library_window', { undocked: true, restore: false, width: 0, side: 'left' }).catch(fail); else library.toggle(); }
   else if (id === 'library-board') library.board();
+  else if (id === 'library-undock') await undockLibrary();
   else if (id === 'find') findBar.open();
   else if (id === 'assistant') assistant.openSettings();
   else await action(id);
@@ -466,7 +477,7 @@ async function action(name: string) {
   else if (name === 'outline') { const list = $('outline-list'); list.replaceChildren(); const entries = reader?.outline() ?? []; if (!entries.length) list.textContent = 'No contents outline in this document.'; for (const item of entries) { const button = document.createElement('button'); button.textContent = item.label; button.onclick = () => { void reader?.goTo(item.target).then(() => closeDialog($<HTMLDialogElement>('contents'))).catch(fail); }; list.append(button); } showDialog('contents'); }
   else if (name === 'shortcuts') showDialog('shortcuts');
   else if (name === 'clear-data') showDialog('delete-data');
-  else if (name === 'clear-recents') { if (desktop) await native('clear_recents'); $('recents').replaceChildren(); notify('Recent-file list cleared. Documents and saved positions are unchanged.'); }
+  else if (name === 'clear-recents') { if (desktop) await native('clear_recents'); homeRecents = []; paintHome(); notify('Recent-file list cleared. Documents and saved positions are unchanged.'); }
   else if (['back', 'start', 'end', 'screen-next', 'screen-previous'].includes(name)) await navigate(name as Parameters<ReaderAdapter['navigate']>[0]);
 }
 document.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(button => button.onclick = () => { closeDialog($<HTMLDialogElement>('menu')); void command(button.dataset.action!).catch(fail); });
@@ -503,13 +514,54 @@ document.addEventListener('keydown', event => {
   if (operation) { event.preventDefault(); operation(); }
 });
 if (!desktop) { $('preview-note').hidden = false; document.addEventListener('dragover', event => event.preventDefault()); document.addEventListener('drop', event => { event.preventDefault(); if (event.dataTransfer?.files.length !== 1) return notify('Drop one document at a time.'); const file = event.dataTransfer.files[0]; void load(() => browserFile(file), file.name); }); }
+async function undockLibrary() {
+  if (!desktop) return notify('Undocking the library is available in the desktop app.');
+  if (libraryFloating) { await native('set_library_window', { undocked: true, restore: false, width: 0, side: 'left' }); return; }
+  const saved = Number(localStorage.getItem('hold-my-brief:library-width'));
+  const width = Number.isFinite(saved) && saved > 0 ? saved : 270;
+  const docked = localStorage.getItem('hold-my-brief:library-side') === 'right' ? 'right' : 'left';
+  await native('set_library_window', { undocked: true, restore: false, width, side: docked });
+  applyLibraryWindow(true, false);
+}
+function applyLibraryWindow(undocked: boolean, restore: boolean) {
+  libraryFloating = undocked;
+  document.documentElement.classList.toggle('library-floating', undocked);
+  if (undocked) library.suspend(true);
+  else if (restore) { library.suspend(false); void library.refresh(); }
+  else library.suspend(true);
+}
+function paintHome() {
+  const empty = $('empty');
+  splashHtml ??= empty.innerHTML;
+  assignShelfSlots(homeLibrary.collections);
+  const rows = homeRows(homeRecents, homeLibrary.documents);
+  if (!rows.length) {
+    if (empty.classList.contains('is-home')) { empty.classList.remove('is-home'); empty.innerHTML = splashHtml; $('empty-open').onclick = () => openFile(); }
+    return;
+  }
+  const generation = ++homePicture;
+  renderHome(empty, rows, {
+    open: (path, name) => { void load(() => openLibraryDocument(path), name); },
+    openFile: () => openFile(),
+    remove: path => { void native('remove_recent', { path }).then(() => { homeRecents = homeRecents.filter(item => item.path !== path); paintHome(); }).catch(fail); },
+  }, scheme());
+  fillHomePictures(empty, (path, format) => canThumbnail(format) ? homeThumbs.request(path, format, () => generation === homePicture && empty.classList.contains('is-home')) : Promise.resolve(undefined), () => generation === homePicture);
+}
+onAppearanceChange(() => {
+  const mode = scheme();
+  for (const art of document.querySelectorAll<HTMLImageElement>('#empty.is-home img.library-cover-art')) art.src = coverArt(Number(art.dataset.seed), art.dataset.cover || undefined, mode);
+});
 async function initialize() {
   const saved = await state(); updateWindow(saved.window); if (saved.warning) notify(saved.warning);
-  if (saved.recents.length) { const heading = document.createElement('h2'); heading.textContent = 'Recently opened'; $('recents').append(heading); for (const recent of saved.recents) { const row = document.createElement('div'); row.className = 'recent'; const button = document.createElement('button'); button.textContent = recent.name; button.title = recent.path; button.onclick = () => { void load(() => openLibraryDocument(recent.path), recent.name); }; const remove = document.createElement('button'); remove.textContent = '×'; remove.setAttribute('aria-label', `Remove ${recent.name} from recents`); remove.onclick = () => { void native('remove_recent', { path: recent.path }).then(() => row.remove()).catch(fail); }; row.append(button, remove); $('recents').append(row); } }
+  homeRecents = saved.recents;
   await library.refresh().catch(fail);
+  homeLibrary = await getLibrary().catch(() => emptyLibrary());
+  paintHome();
   if (desktop) {
     const { listen } = await import('@tauri-apps/api/event');
     await listen<string>('open-request', event => openFile(event.payload));
+    await listen<{ undocked: boolean; restore: boolean }>('library-window', event => applyLibraryWindow(event.payload.undocked, event.payload.restore));
+    await listen<string>('library-open', event => { void load(() => openLibraryDocument(event.payload), event.payload.split(/[\\/]/).pop()); });
     await listen<WindowState>('window-state', event => updateWindow(event.payload));
     await listen<string | null>('reader-warning', event => { if (event.payload) notify(event.payload); });
     const { getCurrentWindow } = await import('@tauri-apps/api/window');

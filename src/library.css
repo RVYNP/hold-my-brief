@@ -344,3 +344,16 @@
   .library-documents { min-height: 56px; }
   .library-empty { padding-top: 8px; }
 }
+/* Undocked: the panel is the window. No drawer shadow, no divider, no scrim. */
+html.library-window, html.library-window body, html.library-window #app { height: 100%; }
+html.library-window #app { display: flex; flex-direction: column; min-height: 0; }
+html.library-window .library-window-toolbar { flex: none; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 8px 0 12px; }
+html.library-window .library-window-toolbar strong { font: 400 15px/1 var(--font-read); }
+html.mac-titlebar.library-window .library-window-toolbar { padding-left: 78px; }
+#library-window-status { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--error); font-size: 12px; white-space: nowrap; }
+#library-window-status:empty { display: none; }
+html.library-window .library-window-layout { position: relative; flex: 1 1 auto; min-height: 0; }
+html.library-window .library-root, html.library-window .library-right > .library-root { position: absolute; inset: 0; width: auto; margin: 0; }
+html.library-window .library-panel { width: auto; margin: 0; border: 0; border-radius: 0; box-shadow: none; }
+html.library-window .library-resize, html.library-window .library-backdrop { display: none; }
+
