@@ -104,6 +104,28 @@ CI ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) runs the same sui
 `windows-latest` and `macos-latest`, builds the release binary, runs the native smoke test and builds
 the NSIS installer on Windows, and bundles the `.app` on macOS.
 
+### Clean-install smoke check
+
+For a source-build check without touching an existing library on macOS, quit other test instances and
+build a separate app identity:
+
+```bash
+npx tauri build --bundles app --config '{"identifier":"xyz.rpayton.holdmybrief.installcheck"}'
+```
+
+Launch the resulting bundle by its explicit path, not `open -a`, which may select another installed copy.
+With no saved data it must show **Hand it over.** Add only disposable documents, reopen without a file,
+and verify Home, title wrapping, recent removal and Favorites. Undock the library and check that
+**View all** changes its scope without turning a narrow library into the full-width board.
+Edits there must refresh Home. Quit and remove only the disposable profile when finished.
+
+This checks empty app data and the native bundle, not Gatekeeper approval under a new macOS account.
+For an installed-app update, back up the existing app and complete data folder before replacement;
+verify the real library remains intact afterward. Never use the real data folder as a clean-install fixture.
+
+Home and the library intentionally share card classes. Browser scenarios measuring the drawer must
+scope their tile selectors to `.library-documents`, rather than counting Home's tiles too.
+
 > **Windows build status.** After the macOS port, the Windows build was rebuilt and re-tested on
 > Windows 11 x64 with WebView2: `build-native.ps1` (GNU toolchain) produces the portable executable,
 > `npm run package` produces the NSIS installer, and `npm run test:native` passes against the real

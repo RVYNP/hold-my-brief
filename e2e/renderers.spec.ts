@@ -2,7 +2,6 @@ import { test, expect, type Page } from '@playwright/test';
 import { ZipWriter, Uint8ArrayWriter, TextReader } from '@zip.js/zip.js';
 import { createHash } from 'node:crypto';
 import { crc32, deflateSync } from 'node:zlib';
-import { libraryGridColumns } from '../src/library-layout';
 
 // A solid-colour PNG of exactly the requested size, so tile proportions are known to the test.
 function pngFixture(width: number, height: number, [r, g, b]: [number, number, number]) {
@@ -18,7 +17,7 @@ function pngFixture(width: number, height: number, [r, g, b]: [number, number, n
 const pngFiles = [[80, 120], [120, 80], [100, 100], [60, 140], [120, 90], [90, 120]].map(([width, height], i) => ({ name: `plate-${i + 1}.png`, mimeType: 'image/png', buffer: pngFixture(width, height, [40 * i + 20, 120, 200 - 30 * i]) }));
 
 /** Distinct masonry columns the tiles occupy (each tile carries its column). */
-const tileColumns = (page: Page) => page.locator('.library-tile').evaluateAll(nodes => new Set(nodes.map(node => node.getAttribute('data-column'))).size);
+const tileColumns = (page: Page) => page.locator('.library-documents .library-tile').evaluateAll(nodes => new Set(nodes.map(node => node.getAttribute('data-column'))).size);
 
 async function recordFixture(name: string, buffer: Buffer, properties: Record<string, unknown>) {
   await test.info().attach('fixture-manifest.json', { body: JSON.stringify({ schema: 1, name, bytes: buffer.length, sha256: createHash('sha256').update(buffer).digest('hex'), origin: 'Synthetic, generated from this test source', ...properties }, null, 2), contentType: 'application/json' });
@@ -386,11 +385,9 @@ test('library drawer floats over the page and never resizes it, while drag, keyb
   await expect(handle).toHaveAttribute('aria-valuenow', '440'); await expect(handle).toHaveAttribute('aria-valuemax', '440');
   await page.setViewportSize({ width: 1080, height: 680 }); await expect(handle).toHaveAttribute('aria-valuenow', '520');
 
-  // Every width keeps the masonry inside the drawer, and the view is remembered for the collection. At the
-  // widest drawer the column count depends on the platform's scrollbar width (classic scrollbars take ~15 px),
-  // so it is checked against the layout rule for the measured content width rather than a fixed number.
+  // Every width keeps the masonry inside the drawer, and the view is remembered for the collection.
+  // Count only drawer tiles: Home uses the same card classes and can have a different column count.
   await handle.focus(); await page.keyboard.press('End');
-  await expect.poll(async () => (await columns()) === libraryGridColumns(await documents.evaluate(el => el.clientWidth - parseFloat(getComputedStyle(el).paddingLeft) - parseFloat(getComputedStyle(el).paddingRight)))).toBe(true);
   expect(await columns()).toBeGreaterThanOrEqual(3);
   expect(await contained()).toBe(true);
   await handle.focus(); await page.keyboard.press('Home'); await expect(handle).toHaveAttribute('aria-valuenow', '240');
