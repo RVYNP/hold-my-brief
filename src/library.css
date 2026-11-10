@@ -346,7 +346,8 @@
 }
 /* Undocked: the panel is the window. No drawer shadow, no divider, no scrim. */
 html.library-window, html.library-window body, html.library-window #app { height: 100%; }
-html.library-window #app { display: flex; flex-direction: column; min-height: 0; }
+/* The native library minimum is 280 px; it must not inherit the reader's 300 px shell minimum. */
+html.library-window #app { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 html.library-window .library-window-toolbar { flex: none; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 8px 0 12px; }
 html.library-window .library-window-toolbar strong { font: 400 15px/1 var(--font-read); }
 html.mac-titlebar.library-window .library-window-toolbar { padding-left: 78px; }
