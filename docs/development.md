@@ -111,6 +111,8 @@ build a separate app identity:
 
 ```bash
 npx tauri build --bundles app --config '{"identifier":"xyz.rpayton.holdmybrief.installcheck"}'
+codesign --force --deep --sign - "src-tauri/target/release/bundle/macos/Hold My Brief.app"
+codesign --verify --deep --strict "src-tauri/target/release/bundle/macos/Hold My Brief.app"
 ```
 
 Launch the resulting bundle by its explicit path, not `open -a`, which may select another installed copy.
