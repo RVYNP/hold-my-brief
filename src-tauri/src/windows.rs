@@ -273,34 +273,27 @@ fn move_library(library: &WebviewWindow, app: &AppHandle, width: f64, side: &str
     Ok(())
 }
 
-#[derive(serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LibraryWindowRequest {
-    undocked: bool,
-    restore: bool,
-    width: f64,
-    side: String,
-}
-
 /// Tears the library off into its own window, focuses that window, or docks it
 /// back. `width` of 0 focuses without moving. `restore` puts the drawer back
 /// when docking; closing the window from its own caption does not.
+/// Arguments are flat, the same way `set_pin` takes `enabled`: a struct parameter
+/// would require the frontend to wrap them under `request`.
 #[tauri::command]
-pub fn set_library_window(request: LibraryWindowRequest, app: AppHandle) -> Result<(), String> {
-    if !request.undocked {
+pub fn set_library_window(undocked: bool, restore: bool, width: f64, side: String, app: AppHandle) -> Result<(), String> {
+    if !undocked {
         if let Some(library) = app.get_webview_window("library") {
-            if request.restore {
+            if restore {
                 LIBRARY_DOCKING.store(true, Ordering::SeqCst);
             }
             library.destroy().map_err(err)?;
-        } else if request.restore {
+        } else if restore {
             let _ = app.emit("library-window", serde_json::json!({ "undocked": false, "restore": true }));
         }
         return Ok(());
     }
     if let Some(library) = app.get_webview_window("library") {
-        if request.width > 0.0 {
-            move_library(&library, &app, request.width, &request.side)?;
+        if width > 0.0 {
+            move_library(&library, &app, width, &side)?;
         }
         let _ = library.unminimize();
         library.show().map_err(err)?;
@@ -309,16 +302,17 @@ pub fn set_library_window(request: LibraryWindowRequest, app: AppHandle) -> Resu
         return Ok(());
     }
     let main = app.get_webview_window("main").ok_or("The reader window is missing.")?;
-    let (x, y, width, height) = place_library(reader_frame(&main)?, &request.side, request.width, 8.0, work_area(&main));
+    let (x, y, placed_width, height) = place_library(reader_frame(&main)?, &side, width, 8.0, work_area(&main));
     let pinned = app.state::<Shared>().lock().map(|store| store.saved.window.pinned).unwrap_or(false);
     let mut builder = WebviewWindowBuilder::new(&app, "library", WebviewUrl::App("index.html?panel=library#library".into()))
         .title("Library — Hold My Brief")
-        .inner_size(width, height)
+        .inner_size(placed_width, height)
         .min_inner_size(280.0, 420.0)
         .position(x, y)
         .resizable(true)
         .focused(true)
         .always_on_top(pinned);
+
     #[cfg(target_os = "macos")]
     {
         builder = builder
