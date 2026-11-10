@@ -76,6 +76,7 @@ let windowState: WindowState = { width: 420, height: 620, pinned: false, locked:
 let libraryFloating = false;
 let homeRecents: Recent[] = [];
 let homeLibrary: Library = emptyLibrary();
+let homeFormat = '';
 let splashHtml: string | undefined;
 let homePicture = 0;
 const homeThumbs = createThumbnailStore();
@@ -534,8 +535,8 @@ function paintHome() {
   const empty = $('empty');
   splashHtml ??= empty.innerHTML;
   assignShelfSlots(homeLibrary.collections);
-  const rows = homeRows(homeRecents, homeLibrary.documents);
-  if (!rows.length) {
+  const rows = homeRows(homeRecents, homeLibrary.documents, homeFormat);
+  if (!homeRecents.length && !homeLibrary.documents.length) {
     if (empty.classList.contains('is-home')) { empty.classList.remove('is-home'); empty.innerHTML = splashHtml; $('empty-open').onclick = () => openFile(); }
     return;
   }
@@ -543,6 +544,8 @@ function paintHome() {
   renderHome(empty, rows, {
     open: (path, name) => { void load(() => openLibraryDocument(path), name); },
     openFile: () => openFile(),
+    format: homeFormat,
+    selectFormat: value => { homeFormat = value; paintHome(); $('home-format').focus(); },
     remove: path => { void native('remove_recent', { path }).then(() => { homeRecents = homeRecents.filter(item => item.path !== path); paintHome(); }).catch(fail); },
   }, scheme());
   fillHomePictures(empty, (path, format) => canThumbnail(format) ? homeThumbs.request(path, format, () => generation === homePicture && empty.classList.contains('is-home')) : Promise.resolve(undefined), () => generation === homePicture);

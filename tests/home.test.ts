@@ -62,4 +62,26 @@ describe('homeRows', () => {
     const [row] = homeRows([recent('gone.pdf')], [doc('gone.pdf', 3, { availability: 'missing' })]);
     expect(row.items[0].missing).toBe(true);
   });
+
+  it('filters recents before the row cap and excludes those PDFs from the library row', () => {
+    const textRecents = Array.from({ length: homeRowLimit + 1 }, (_, index) => ({
+      path: `notes-${index}.txt`, name: `notes-${index}.txt`, format: 'txt',
+    }));
+    const rows = homeRows([...textRecents, recent('scan.pdf')], [doc('scan.pdf', 8), doc('other.pdf', 2)], 'pdf');
+    expect(rows.map(row => row.items.map(item => item.path))).toEqual([['scan.pdf'], ['other.pdf']]);
+  });
+
+  it.each([
+    ['pdf', ['scan.pdf']], ['epub', ['book.epub']],
+    ['md', ['notes.md', 'outline.markdown']], ['txt', ['plain.txt']],
+    ['image', ['photo.jpg', 'sketch.png']], ['missing', []],
+  ] as const)('selects only %s files, including aliases and case-insensitive formats', (selected, paths) => {
+    const files = [
+      doc('scan.pdf', 0, { format: 'PDF' }), doc('book.epub', 0, { format: 'epub' }),
+      doc('notes.md', 0, { format: 'md' }), doc('outline.markdown', 0, { format: 'markdown' }),
+      doc('plain.txt', 0, { format: 'txt' }), doc('photo.jpg', 0, { format: 'jpg' }),
+      doc('sketch.png', 0, { format: 'PNG' }),
+    ];
+    expect(homeRows([], files, selected).flatMap(row => row.items.map(item => item.path))).toEqual(paths);
+  });
 });

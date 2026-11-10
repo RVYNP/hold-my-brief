@@ -1,7 +1,7 @@
 import './library.css';
 import { addDocuments, desktop, editLibrary, getLibrary, chooseSourceRoot, locateLibraryDocument, indexFolder } from './bridge';
 import { emptyLibrary, type Collection, type Library, type LibraryDocument } from './catalog-types';
-import { isImage, searchText } from './library-query';
+import { fileTypeChoices, isImage, matchesFileType, searchText } from './library-query';
 import { assignMasonry, clampLibraryWidth, defaultLibraryView, libraryGrid, libraryGridColumns, libraryWidth, libraryWidthBounds, parseLibraryView, parseLibraryWidth, type LibrarySide, type LibraryView } from './library-layout';
 import { canThumbnail, createThumbnailStore, type Thumbnail } from './thumbnails';
 import { colourHex, colourMatches, colourNames, colourSwatches, nameColour, parseColourName, type ColourName } from './colour';
@@ -136,7 +136,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   const search = element('input', 'library-search'); search.type = 'search'; search.placeholder = 'Title, tags, notes, folder…'; search.id = 'library-search'; search.autocomplete = 'off'; searchLabel.htmlFor = search.id;
   const facets = element('div', 'library-facets');
   const format = element('select'); format.setAttribute('aria-label', 'Filter by format');
-  for (const [value, text] of [['', 'All formats'], ['image', 'Images'], ['document', 'Documents']]) option(format, value, text);
+  for (const [value, text] of fileTypeChoices) option(format, value, text);
   const availability = element('select'); availability.setAttribute('aria-label', 'Filter by availability');
   for (const [value, text] of [['', 'Any availability'], ['ready', 'Ready'], ['missing', 'Missing']]) option(availability, value, text);
   facets.append(format, availability);
@@ -790,7 +790,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     const query = search.value.trim().toLocaleLowerCase();
     matches = library.documents.filter(doc => {
       if (!inScope(doc)) return false;
-      if (format.value === 'image' && !isImage(doc) || format.value === 'document' && !['pdf', 'epub', 'md', 'markdown', 'txt'].includes(doc.format)) return false;
+      if (!matchesFileType(doc, format.value)) return false;
       if (availability.value && (doc.availability ?? 'ready') !== availability.value) return false;
       const categories = doc.collectionIds.map(id => { const item = library.collections.find(collection => collection.id === id); return item ? `${item.name} ${collectionDisplayName(item.name)}` : ''; }).join(' ').toLocaleLowerCase();
       const info = thumbs.epub(doc.path); const known = `${info?.title ?? ''} ${info?.creator ?? ''}`.toLocaleLowerCase();
