@@ -11,13 +11,20 @@ app; clean-account installer behavior has not yet been verified. A second instan
 request to the running app.
 
 With nothing saved, the window opens on **Hand it over.** Once documents have been opened, it opens
-on **Home**: a row of what you looked at last, as covers, and a second row of the rest of the library.
-Click a cover to open it. A picture fills in when its thumbnail is ready; a book without one keeps the
-cover it has on its shelf. **Open…** is still there. Removing a recent (the × on its cover) leaves the
-library entry.
+on **Home**, a page of covers that wraps to the window's width, with tall and short pictures kept in their
+own proportions. **Recently opened** shows what you looked at last, most recent first. **Favorites** appears
+once you have starred something (it may repeat a recent). **Library** is a small selection of everything
+else, most recently opened first; **View all** opens the full Favorites or Library view, and
+**Browse library** in the header opens all references. These actions also work with the library undocked,
+and edits there refresh Home. A section with nothing in it is left out. Click a cover to open it.
+A picture fills in when its thumbnail is ready, and tiles keep their columns as pictures arrive; a
+book without a picture keeps the generated cover it has on its shelf. An EPUB shows the title from its own
+metadata once it has been read, and its file name cleaned up until then. A cover looks the same here as in
+the library. **Open files** is in the header. Removing a recent (the × on its cover) leaves the library
+entry. A file whose original has gone is dimmed and marked **Missing**.
 
 Use **File type** on Home to show PDFs, EPUBs, Markdown, Text, or Images separately. **All formats**
-restores the mixed view. The selection filters both rows before their display limit is applied; if
+restores the mixed view. The selection filters every section before its display limit is applied; if
 there are no files of that type, the selector stays available so you can switch back.
 
 The library offers the same choices under **Choose collection and filters → Filter by format**,

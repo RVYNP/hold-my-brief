@@ -2,13 +2,13 @@ import './library.css';
 import { addDocuments, desktop, editLibrary, getLibrary, chooseSourceRoot, locateLibraryDocument, indexFolder } from './bridge';
 import { emptyLibrary, type Collection, type Library, type LibraryDocument } from './catalog-types';
 import { fileTypeChoices, isImage, matchesFileType, searchText } from './library-query';
-import { assignMasonry, clampLibraryWidth, defaultLibraryView, libraryGrid, libraryGridColumns, libraryWidth, libraryWidthBounds, parseLibraryView, parseLibraryWidth, type LibrarySide, type LibraryView } from './library-layout';
+import { clampLibraryWidth, defaultLibraryView, libraryGrid, libraryGridColumns, libraryWidth, libraryWidthBounds, parseLibraryView, parseLibraryWidth, type LibrarySide, type LibraryView } from './library-layout';
 import { canThumbnail, createThumbnailStore, type Thumbnail } from './thumbnails';
 import { colourHex, colourMatches, colourNames, colourSwatches, nameColour, parseColourName, type ColourName } from './colour';
 import { shortcutFor } from './commands';
-import { coverArt } from './covers';
+import { coverNode as cardCover, markUnavailable, placeTiles, repaintCovers, showPicture, tileMedia } from './cards';
 import { createIntake, intakeSource, intakeTitle, newArrivals, movedCollectionIds, type IntakeHost } from './intake';
-import { assignCoverSlots, collectionDisplayName, compareCollections, coverFill, coverRatio, coverSeedOf, fileTitle, fileVersion, groupIntoShelves, shelfLayout, type Shelf } from './shelf';
+import { assignCoverSlots, collectionDisplayName, compareCollections, coverRatio, coverSeedOf, fileTitle, groupIntoShelves, shelfLayout, type Shelf } from './shelf';
 import { onAppearanceChange, scheme } from './theme';
 
 /** `pending` is how many pictures still had no measured colours when the answer was given (0 = `matches` is complete). */
@@ -18,6 +18,8 @@ const titleCase = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 type Callbacks = {
   open: (path: string) => Promise<boolean>;
   error: (error: unknown) => void;
+  /** The library changed (an edit, a refresh): the opening page shows part of it too. */
+  changed?: (library: Library) => void;
   /** Desktop reader: tear the drawer off into its own window. */
   undock?: () => void;
   /** This library already is that window. Closing it docks it back into the reader. */
@@ -88,6 +90,8 @@ function orderedTree<T extends { id: string; name: string; parentId: string | nu
 
 export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   refresh: (activePath?: string) => Promise<void>; toggle: () => void; board: () => void;
+  /** Opens the library on all references or on favorites (the board where there is room). */
+  browse: (scope: 'all' | 'favorites') => void;
   /** Hides the drawer without changing the saved open/closed preference. Used while the library is its own window. */
   suspend: (hidden: boolean) => void;
   /** Sets the colour and/or search text of the library list (opening the drawer if needed) and reports what matches. `colour: null` clears it; omitted fields are left alone. */
@@ -298,7 +302,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   async function mutate(operation: () => Promise<Library>, after?: () => void) {
     if (busy) return; const key = focusKey(), hadDialog = Boolean(modal?.open), scrolled = documents.scrollTop; if (modalError) modalError.textContent = '';
     ++revision; setBusy(true);
-    try { library = await operation(); ++revision; loaded = true; loadError = false; rebuildIndex(); render(); documents.scrollTop = scrolled; after?.(); }
+    try { library = await operation(); ++revision; loaded = true; loadError = false; rebuildIndex(); render(); callbacks.changed?.(library); documents.scrollTop = scrolled; after?.(); }
     catch (error) { report(error); }
     finally { setBusy(false); if (!hadDialog && !modal?.open) restoreFocus(key); }
   }
@@ -515,12 +519,11 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   function observeThumbnails() { if (visible) for (const media of documents.querySelectorAll<HTMLElement>('[data-path]:not(.is-loaded):not(.is-unavailable)')) thumbnailObserver.observe(media); }
   function showThumbnail(media: HTMLElement, thumbnail: Thumbnail) {
     const tile = tileByPath.get(media.dataset.path!); if (tile && Math.abs(tile.ratio - thumbnail.ratio) > .001) { tile.ratio = thumbnail.ratio; schedulePlacement(); }
-    media.style.setProperty('--ratio', String(thumbnail.ratio));
-    const image = media.querySelector<HTMLImageElement>(':scope > img')!; image.src = thumbnail.url; image.hidden = false; media.classList.add('is-loaded');
+    showPicture(media, thumbnail);
   }
   let placementFrame = 0;
   function schedulePlacement() { if (!placementFrame) placementFrame = requestAnimationFrame(() => { placementFrame = 0; layoutGrid(); }); }
-  function markUnavailable(media: HTMLElement) { media.classList.add('is-unavailable'); media.title = 'Thumbnail unavailable. Use More actions to locate the original.'; }
+  // The picture box, its cover and the placement of tiles are shared with Home (src/cards.ts).
   window.addEventListener('pagehide', () => { clearThumbnails(); thumbs.dispose(); });
 
   // Board: a click selects a reference for the detail strip, and activating the selected one (a second click,
@@ -687,13 +690,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
         if (index) y += shelfLayout.gap;
         section.head.style.left = `${left}px`; section.head.style.top = `${top + y}px`; section.head.style.width = `${width}px`; y += shelfLayout.head + shelfLayout.below;
       }
-      if (reassign) assignMasonry(section.tiles.map(tile => 1 / tile.ratio), columns, gap / tileWidth).forEach((indices, column) => { for (const at of indices) section.tiles[at].column = column; });
-      const bottoms = new Array<number>(columns).fill(0);
-      for (const tile of section.tiles) {
-        const offset = bottoms[tile.column]; bottoms[tile.column] = offset + tileWidth / tile.ratio + gap;
-        tile.node.dataset.column = String(tile.column); tile.node.style.width = `${tileWidth}px`; tile.node.style.left = `${left + tile.column * (tileWidth + gap)}px`; tile.node.style.top = `${top + y + offset}px`;
-      }
-      y += Math.max(...bottoms) - gap;
+      y += placeTiles(section.tiles, { columns, tileWidth, gap, left, top: top + y, reassign });
     });
     gridSizer.style.height = `${Math.max(0, y)}px`;
     // Tiles built while the drawer was hidden or had no width are only placed now; observing is idempotent.
@@ -720,16 +717,9 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   /** Format, then only what is worth saying: a missing or removed original, the open reference, and the file name when the title is the book's own. A reference that is simply there says nothing about it. */
   const rowMeta = (doc: LibraryDocument, full = true) => [doc.format.toUpperCase(), doc.source?.removed ? 'no longer in folder' : (doc.availability ?? 'ready') === 'ready' ? undefined : doc.availability, full && doc.path === activePath ? 'Reading' : undefined, full && epubTitle(doc) ? doc.name : undefined].filter(Boolean).join(' · ');
   /** A generated cover for a document with no picture: dithered art of its shelf in the top half, the title and the format (with the version in the file name) below. */
-  function coverNode(doc: LibraryDocument, shelfId: string | undefined) {
-    const cover = element('span', 'library-cover'); cover.style.setProperty('--cover-fill', coverFill(shelfId));
-    const seed = coverSeedOf(doc);
-    const art = element('img', 'library-cover-art'); art.alt = ''; art.dataset.cover = shelfId ?? ''; art.dataset.seed = String(seed); art.src = coverArt(seed, shelfId, scheme());
-    const meta = element('span', 'library-cover-meta'); meta.append(element('span', '', doc.format.toUpperCase())); const version = fileVersion(doc.name); if (version) meta.append(element('span', '', version));
-    const text = element('span', 'library-cover-text'); text.append(element('span', 'library-cover-title', epubTitle(doc) ?? fileTitle(doc.name)), meta);
-    cover.append(art, text); return cover;
-  }
+  const coverNode = (doc: LibraryDocument, shelfId: string | undefined) => cardCover({ name: doc.name, format: doc.format, title: epubTitle(doc) ?? fileTitle(doc.name), seed: coverSeedOf(doc), shelfId }, scheme());
   const hasCover = (doc: LibraryDocument) => (doc.availability ?? 'ready') !== 'missing' && (!thumbnailable(doc) || doc.format === 'epub');
-  onAppearanceChange(() => { for (const art of root.querySelectorAll<HTMLImageElement>('.library-cover-art')) art.src = coverArt(Number(art.dataset.seed), art.dataset.cover || undefined, scheme()); });
+  onAppearanceChange(() => repaintCovers(root, scheme()));
   // A new random pattern for each document, in one library change (one render), or none at all (`reset`: the pattern its path gives).
   const rerollCovers = (paths: string[], reset = false) => mutate(async () => {
     let next = library;
@@ -762,18 +752,9 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     const node = element('div', 'library-document library-tile'); node.setAttribute('role', 'listitem');
     node.classList.toggle('is-active', doc.path === activePath); node.classList.toggle('is-missing', missing); node.classList.toggle('is-cover', generated);
     const open = button('', `Open ${docLabel(doc)}`, `open:${doc.path}`); open.className = 'library-document-open library-tile-open'; open.title = doc.path; if (doc.path === activePath) open.setAttribute('aria-current', 'true');
-    const media = element('span', 'library-tile-media'); media.style.setProperty('--ratio', String(ratio));
-    const format = doc.format.toUpperCase();
-    if (missing) media.append(element('span', 'library-tile-glyph'), element('span', 'library-tile-note', 'Missing'));
-    else {
-      if (generated) { media.append(coverNode(doc, shelfId)); coverShelf.set(doc.path, shelfId); }
-      if (thumbnailable(doc)) {
-        if (!generated) media.append(element('span', 'library-tile-format', format));
-        const image = element('img'); image.alt = ''; image.hidden = true; image.decoding = 'async'; media.dataset.path = doc.path; media.dataset.format = doc.format; media.append(image);
-        const cached = thumbs.peek(doc.path); if (cached) showThumbnail(media, cached); else if (thumbs.failed(doc.path)) markUnavailable(media);
-        const scrim = element('span', 'library-tile-scrim'); scrim.append(element('span', 'library-tile-name', docLabel(doc)), element('span', 'library-tile-meta', format)); media.append(scrim);
-      }
-    }
+    const media = tileMedia({ path: doc.path, name: doc.name, format: doc.format, title: epubTitle(doc) ?? fileTitle(doc.name), label: docLabel(doc), seed: coverSeedOf(doc), shelfId, ratio, missing, generated, thumbnailable: thumbnailable(doc) }, scheme());
+    if (generated && !missing) coverShelf.set(doc.path, shelfId);
+    if (!missing && thumbnailable(doc)) { const cached = thumbs.peek(doc.path); if (cached) showThumbnail(media, cached); else if (thumbs.failed(doc.path)) markUnavailable(media); }
     if (doc.path === activePath) media.append(element('span', 'library-tile-tag', 'Reading'));
     open.append(media);
     bindOpen(doc, open, node);
@@ -942,7 +923,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   sourcesButton.onclick = () => sourceManager(sourcesButton);
   async function refresh(path?: string) {
     if (path !== undefined) activePath = path; const token = ++revision;
-    try { const next = await getLibrary(); if (token !== revision) return; library = next; loaded = true; loadError = false; rebuildIndex(); render(); }
+    try { const next = await getLibrary(); if (token !== revision) return; library = next; loaded = true; loadError = false; rebuildIndex(); render(); callbacks.changed?.(library); }
     catch (error) { if (token !== revision) return; loadError = true; render(); callbacks.error(error); }
   }
   toggleButton?.setAttribute('aria-controls', root.id); applySide(); applyWidth(preferredWidth); rebuildIndex(); applyVisibility(); render();
@@ -952,6 +933,8 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     suspend(hidden: boolean) { suspended = hidden; if (hidden) { setBoard(false, 'none'); setScope(false); closeItemMenu(false); } applyVisibility(); },
     // Library board (palette command): open the drawer if needed, then enter or leave the board. Below 720 px there is only the sheet.
     board: () => { if (suspended) return; if (!visible) setVisible(true, false); if (roomy()) setBoard(!board, 'control'); else search.focus(); if (visible && loadError) void refresh(); },
+    /** Home's "View all": the drawer opened on the whole library (or its favorites), as the board where there is room. */
+    browse: (scope: 'all' | 'favorites') => { if (suspended) return; filter = { kind: scope }; page = 0; search.value = ''; format.value = ''; availability.value = ''; colourFilter = null; colourRequested.clear(); colourSelect.value = ''; if (!visible) setVisible(true, false); if (!callbacks.detached && roomy()) setBoard(true, 'control'); else search.focus(); render(); if (visible && loadError) void refresh(); },
     filter: filterBy,
     colourNames,
   };

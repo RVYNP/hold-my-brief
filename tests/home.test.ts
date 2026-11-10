@@ -24,7 +24,7 @@ describe('homeRows', () => {
   it('keeps recents in store order and caps the row', () => {
     const recents = Array.from({ length: homeRowLimit + 3 }, (_, index) => recent(`b${index}.pdf`, `Book ${index}.pdf`));
     const [row] = homeRows(recents, []);
-    expect(row.title).toBe('Recently opened');
+    expect(row.id).toBe('recent');
     expect(row.items.map(item => item.path)).toEqual(recents.slice(0, homeRowLimit).map(item => item.path));
     expect(row.items[0].title).toBe('Book 0');
   });
@@ -42,20 +42,30 @@ describe('homeRows', () => {
       [recent('now.pdf')],
       [doc('now.pdf', 5), doc('old.pdf', 1), doc('newer.pdf', 4), doc('unused.pdf', 0)],
     );
-    expect(rows.map(row => row.title)).toEqual(['Recently opened', 'In the library']);
+    expect(rows.map(row => row.id)).toEqual(['recent', 'library']);
     expect(rows[1].items.map(item => item.path)).toEqual(['newer.pdf', 'old.pdf', 'unused.pdf']);
   });
 
-  it('uses the library as the opening row when there are no recents', () => {
-    const [row] = homeRows([], [doc('b.pdf', 2), doc('a.pdf', 8)]);
-    expect(row).toMatchObject({ id: 'recent', title: 'Recently opened' });
-    expect(row.items.map(item => item.path)).toEqual(['a.pdf', 'b.pdf']);
+  it('leaves out the recent section when nothing was opened from the list, and orders the library by last opened then name', () => {
+    const rows = homeRows([], [doc('b.pdf', 2), doc('a.pdf', 8), doc('d.pdf'), doc('c.pdf')]);
+    expect(rows.map(row => row.id)).toEqual(['library']);
+    expect(rows[0].items.map(item => item.path)).toEqual(['a.pdf', 'b.pdf', 'c.pdf', 'd.pdf']);
   });
 
-  it('calls an unopened library what it is', () => {
-    const [row] = homeRows([], [doc('b.pdf'), doc('a.pdf')]);
-    expect(row).toMatchObject({ id: 'library', title: 'In the library' });
-    expect(row.items.map(item => item.name)).toEqual(['a.pdf', 'b.pdf']);
+  it('shows favorites only when there are some, may repeat a recent, and keeps both out of the library selection', () => {
+    expect(homeRows([], [doc('a.pdf')]).map(row => row.id)).toEqual(['library']);
+    const rows = homeRows(
+      [recent('r.pdf')],
+      [doc('r.pdf', 5, { favorite: true }), doc('f.pdf', 3, { favorite: true }), doc('other.pdf', 1)],
+    );
+    expect(rows.map(row => [row.id, row.items.map(item => item.path)])).toEqual([
+      ['recent', ['r.pdf']], ['favorites', ['r.pdf', 'f.pdf']], ['library', ['other.pdf']],
+    ]);
+  });
+
+  it('prefers a known book title over the file name for the cover and the label', () => {
+    const [row] = homeRows([], [doc('book.epub', 1, { name: 'book_v2.epub', format: 'epub' })], '', () => 'The Real Title');
+    expect(row.items[0]).toMatchObject({ title: 'The Real Title', label: 'The Real Title', name: 'book_v2.epub' });
   });
 
   it('still shows a missing original: it was looked at', () => {

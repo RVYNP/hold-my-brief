@@ -139,7 +139,7 @@ Follow [docs/development.md](development.md); in short:
 ### 4. Confirm it works
 
 Launch Hold My Brief without a file: Start menu on Windows, `open -a "Hold My Brief"` on macOS. A fresh
-install shows "Hand it over." A machine that already has a library opens on Home (recent covers)
+install shows "Hand it over." A machine that already has a library opens on Home (recent, favorite and library covers)
 instead. Don't open one of the user's documents as a test, because opening
 a file adds it to the app's recent list and library.
 
