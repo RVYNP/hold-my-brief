@@ -31,6 +31,11 @@ npm run dev            # browser preview at http://127.0.0.1:1420
 a library backed by IndexedDB copies of selected files. Pinning, size lock, native recent files, and
 authorized relative images require the desktop app.
 
+The reader (`index.html`) and undocked library (`library.html`) use separate static module entries.
+Vite builds both pages. Keeping reader startup synchronous avoids a gap where the page has loaded but
+keyboard shortcuts are not registered. Native library-window creation runs in an async Tauri command,
+as required by WebView2 to avoid synchronous window-creation deadlocks.
+
 ## Build a distributable
 
 **macOS**
