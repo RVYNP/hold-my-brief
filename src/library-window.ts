@@ -2,6 +2,7 @@
 // The reader has its own static entrypoint so its controls are ready when the page loads.
 import './style.css';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { emitTo, listen } from '@tauri-apps/api/event';
 import { native } from './bridge';
 import { createLibrary } from './library';
 import { initAppearance } from './theme';
@@ -35,8 +36,13 @@ const library = createLibrary(document.getElementById('library-root')!, {
   },
   dock: () => { void native('set_library_window', { undocked: false, restore: true, width: drawerWidth, side: savedSide }).catch(fail); },
   place: next => { void native('set_library_window', { undocked: true, restore: false, width: drawerWidth, side: next }).catch(fail); },
+  changed: () => { void emitTo('main', 'library-updated').catch(fail); },
   error: fail,
 });
+
+void listen<'all' | 'favorites'>('library-browse', event => {
+  if (event.payload === 'all' || event.payload === 'favorites') library.browse(event.payload);
+}).catch(fail);
 
 void library.refresh().catch(fail);
 

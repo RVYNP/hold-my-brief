@@ -13,8 +13,8 @@ import { appearanceSummary, createAppearanceSheet, paletteIcon } from './appeara
 import { createAssistantPanel } from './assistant-panel';
 import { Panner } from './pan';
 import { MIN_SPREAD_WIDTH, pagesLabel, spreadPages } from './spread';
-import { assignShelfSlots, fillHomePictures, homeRows, renderHome } from './home';
-import { coverArt } from './covers';
+import { assignShelfSlots, closeHome, fillHomePictures, homeRows, renderHome } from './home';
+import { repaintCovers } from './cards';
 import { canThumbnail, createThumbnailStore } from './thumbnails';
 initAppearance();
 
@@ -286,6 +286,7 @@ document.querySelectorAll<HTMLDialogElement>('dialog.drop').forEach(dialog => di
 const library = createLibrary($('library-root'), {
   open: path => load(() => openLibraryDocument(path), path.split(/[\\/]/).pop()),
   error: fail,
+  changed: next => { homeLibrary = next; if ($('empty').classList.contains('is-home')) paintHome(); },
   undock: desktop ? () => { void undockLibrary().catch(fail); } : undefined,
 });
 $('library-toggle').onclick = () => { if (libraryFloating) void native('set_library_window', { undocked: true, restore: false, width: 0, side: 'left' }).catch(fail); else library.toggle(); };
@@ -535,24 +536,40 @@ function paintHome() {
   const empty = $('empty');
   splashHtml ??= empty.innerHTML;
   assignShelfSlots(homeLibrary.collections);
-  const rows = homeRows(homeRecents, homeLibrary.documents, homeFormat);
+  const rows = homeRows(homeRecents, homeLibrary.documents, homeFormat, item => item.format.toLowerCase() === 'epub' ? homeThumbs.epub(item.path)?.title?.trim() || undefined : undefined);
   if (!homeRecents.length && !homeLibrary.documents.length) {
-    if (empty.classList.contains('is-home')) { empty.classList.remove('is-home'); empty.innerHTML = splashHtml; $('empty-open').onclick = () => openFile(); }
+    if (empty.classList.contains('is-home')) { closeHome(); empty.classList.remove('is-home'); empty.innerHTML = splashHtml; $('empty-open').onclick = () => openFile(); }
     return;
   }
   const generation = ++homePicture;
   renderHome(empty, rows, {
     open: (path, name) => { void load(() => openLibraryDocument(path), name); },
     openFile: () => openFile(),
+    viewAll: scope => {
+      if (!libraryFloating) { library.browse(scope); return; }
+      void (async () => {
+        await native('set_library_window', { undocked: true, restore: false, width: 0, side: 'left' });
+        const { emitTo } = await import('@tauri-apps/api/event');
+        await emitTo('library', 'library-browse', scope);
+      })().catch(fail);
+    },
+    picture: { can: canThumbnail, ratio: path => homeThumbs.ratio(path), peek: path => homeThumbs.peek(path) },
     format: homeFormat,
     selectFormat: value => { homeFormat = value; paintHome(); $('home-format').focus(); },
     remove: path => { void native('remove_recent', { path }).then(() => { homeRecents = homeRecents.filter(item => item.path !== path); paintHome(); }).catch(fail); },
   }, scheme());
-  fillHomePictures(empty, (path, format) => canThumbnail(format) ? homeThumbs.request(path, format, () => generation === homePicture && empty.classList.contains('is-home')) : Promise.resolve(undefined), () => generation === homePicture);
+  fillHomePictures(empty, {
+    picture: (path, format) => homeThumbs.request(path, format, () => generation === homePicture && empty.classList.contains('is-home')),
+    epub: path => homeThumbs.loadEpub(path, () => generation === homePicture && empty.classList.contains('is-home')),
+    title: path => homeThumbs.epub(path)?.title?.trim() || undefined,
+    failed: path => homeThumbs.failed(path),
+    prime: paths => homeThumbs.primeRatios(paths),
+    ratio: path => homeThumbs.ratio(path),
+  }, () => generation === homePicture);
 }
 onAppearanceChange(() => {
-  const mode = scheme();
-  for (const art of document.querySelectorAll<HTMLImageElement>('#empty.is-home img.library-cover-art')) art.src = coverArt(Number(art.dataset.seed), art.dataset.cover || undefined, mode);
+  const home = $('empty');
+  if (home.classList.contains('is-home')) repaintCovers(home, scheme());
 });
 async function initialize() {
   const saved = await state(); updateWindow(saved.window); if (saved.warning) notify(saved.warning);
@@ -564,6 +581,7 @@ async function initialize() {
     const { listen } = await import('@tauri-apps/api/event');
     await listen<string>('open-request', event => openFile(event.payload));
     await listen<{ undocked: boolean; restore: boolean }>('library-window', event => applyLibraryWindow(event.payload.undocked, event.payload.restore));
+    await listen('library-updated', () => { void library.refresh().catch(fail); });
     await listen<string>('library-open', event => { void load(() => openLibraryDocument(event.payload), event.payload.split(/[\\/]/).pop()); });
     await listen<WindowState>('window-state', event => updateWindow(event.payload));
     await listen<string | null>('reader-warning', event => { if (event.payload) notify(event.payload); });
