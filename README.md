@@ -24,14 +24,10 @@
 
 ## Why it exists
 
-Reading something *while* you work (a spec beside a design file, a paper beside your notes, a book on a
-second screen) usually means juggling a full-size viewer: switching windows, resizing, scrolling to
-find your place again.
+Reading while you work usually means juggling a full-size viewer and losing your place.
 
-Hold My Brief is a pocket-sized window built for that. Pin it above everything else, lock its size so
-it never gets in the way, and pick up on the same passage tomorrow. It opens the formats people
-actually read (PDF, EPUB books, Markdown, plain text and images), and your files never leave your
-computer.
+Hold My Brief is a pocket-sized window for that. Pin it on top, lock its size, and pick up tomorrow
+where you stopped. PDF, EPUB, Markdown, text and images. Your files never leave your computer.
 
 <p align="center">
   <img src="docs/media/desktop.png" alt="Hold My Brief pinned in the top-right corner of a cluttered Windows desktop, above a code editor and a browser" width="880">
@@ -48,57 +44,42 @@ computer.
   <tr>
     <td width="50%" valign="top">
       <h3>Stays where you put it</h3>
-      <b>Pin</b> keeps the window above other apps. <b>Lock</b> fixes its size, so you can still move
-      it but never resize it by accident.
+      <b>Pin</b> keeps it above other apps. <b>Lock</b> fixes its size.
     </td>
     <td width="50%" valign="top">
       <h3>Remembers your place</h3>
-      Close a book and reopen it next week, even after renaming the file, and you're back on the
-      same page, chapter or line.
+      Reopen a book next week, even renamed, and you're on the same page.
     </td>
   </tr>
   <tr>
     <td valign="top">
       <h3>Reads what you read</h3>
-      PDFs, EPUB books, Markdown notes, plain text and images: faithful pages for PDFs, comfortable
-      reflowing text for books. Click the title or press Ctrl+K and type a page number, a phrase or a
-      command to go straight there; the hairline under the page scrubs the whole document.
+      Faithful PDF pages, reflowing books. Press Ctrl+K to jump to a page, a phrase or a command.
     </td>
     <td valign="top">
       <h3>Opens like a book</h3>
-      Show two pages side by side, the way a printed book lies open. Zoom in on a small detail and
-      drag the page around by hand; if the zoom controls are in the way, drag them somewhere else.
-      Every control also works from the keyboard.
+      Two pages side by side. Zoom in and drag the page by hand; move the zoom controls anywhere.
     </td>
   </tr>
   <tr>
     <td valign="top">
       <h3>A library for your references</h3>
-      Collect PDFs, EPUBs, Markdown and text into collections, star favorites and search, or index a
-      folder of them (index it again to pick up changes). Collections with sub-collections show as
-      shelves. An EPUB shows the title and cover from inside the book; a document without a cover gets
-      its own generated, dithered one, which you can re-roll with ↻. Browse as a grid of thumbnails at
-      their real proportions, or as a list. New arrivals open in an intake sheet where you can review
-      covers and titles or move a shelf. The library is a drawer over the page: widen it, narrow it or
-      move it to either side without the page ever moving. It never copies or moves your files.
+      Collections, favorites, search, or index a whole folder. Sub-collections become shelves, and
+      books without a cover get a generated one. New arrivals land in an intake sheet. Your files are
+      never copied or moved.
     </td>
     <td valign="top">
       <h3>Fits your space</h3>
-      One slim toolbar, and a footer that is only a progress line until you reach for it, leave the
-      page 94% of the window; a pinned reader's controls fade while you work in another app. Light and
-      dark modes that follow your system, seven theme families (Brief by default, two of them pink),
-      your own accent color, and a page tone for text. Every theme keeps its text at AA contrast, and
-      no interface text is smaller than 11 px. Hover a theme to preview it on the whole window.
+      One slim toolbar and a progress line leave the page 94% of the window. Seven themes in light
+      and dark, your own accent, AA contrast throughout.
     </td>
   </tr>
   <tr>
     <td colspan="2" valign="top">
       <h3>Ask it, if you want to</h3>
-      Turn on the optional AI assistant with your own Anthropic, OpenRouter or OpenAI API key (one at a
-      time, kept in your system keychain), then choose <b>Ask the assistant</b> from the command palette
-      and type a question: "where does Darcy first appear?", "summarize this chapter", "open the Tauri
-      docs and switch to dark". It answers from the page you're on, and moves, opens or restyles the
-      reader for you, listing each thing it did. It stays off until you add a key.
+      Bring your own Anthropic, OpenRouter or OpenAI key and choose <b>Ask the assistant</b>: "where
+      does Darcy first appear?", "switch to dark". It answers from the page and can drive the reader.
+      Off until you add a key.
     </td>
   </tr>
 </table>
@@ -108,42 +89,40 @@ computer.
 <table>
   <tr>
     <td align="center" width="50%"><img src="docs/media/hand-tool.png" alt="A PDF page zoomed to 120% with the hand tool switched on in the floating zoom controls"><br><sub><b>Zoom in</b>, then drag the page with the hand tool</sub></td>
-    <td align="center" width="50%"><img src="docs/media/appearance.png" alt="The Appearance panel's Colour tab, with seven theme cards (Brief, Lilac, Birch, Graphite, Arctic, Blossom and Peony) in two rows, over a book"><br><sub><b>Appearance</b>: hover to preview, click to keep. Text size and spacing are on its Text tab</sub></td>
+    <td align="center" width="50%"><img src="docs/media/appearance.png" alt="The Appearance panel's Colour tab, with seven theme cards (Brief, Lilac, Birch, Graphite, Arctic, Blossom and Peony) in two rows, over a book"><br><sub><b>Appearance</b>: hover to preview, click to keep</sub></td>
   </tr>
 </table>
 
 <p align="center">
   <img src="docs/media/library.png" alt="The library drawer as a grid of thumbnails at their real proportions (a print manual marked Reading, Hokusai's Great Wave, Haeckel plates and a book) floating over a PDF page" width="880">
-  <br><sub><b>The library</b> floats over the page as a grid of thumbnails or a list. Put it on either side and the page keeps its place</sub>
+  <br><sub><b>The library</b> floats over the page, on either side</sub>
 </p>
 
 <p align="center">
   <img src="docs/media/shelf.png" alt="The library board showing a Classics collection as three shelves, Novels, Poetry and Science, with generated dithered covers in one colour per shelf, Pride and Prejudice with its real cover and a print manual's first page" width="880">
-  <br><sub><b>Shelves</b>: a collection with sub-collections groups its books by shelf. Books without a cover get a generated one in their shelf's colours</sub>
+  <br><sub><b>Shelves</b>, with a generated cover for every book that lacks one</sub>
 </p>
 
 <p align="center">
   <img src="docs/media/intake.png" alt="The intake sheet over the library board, titled 5 new references: four generated dithered pink covers for Moby Dick, Middlemarch, Frankenstein and Dracula beside Pride and Prejudice with its real cover, under a Novels shelf header with a shelf menu, and New patterns and Keep all buttons" width="880">
-  <br><sub><b>Intake</b>: new books arrive with their titles and a generated cover each; ↻ on a cover for another pattern, Keep all to file them</sub>
+  <br><sub><b>Intake</b>: review new arrivals; ↻ for another pattern</sub>
 </p>
 
 <p align="center">
   <img src="docs/media/library-resize.gif" alt="The library opens over the page, is dragged wider, reset with a double-click and closed, and the page never moves" width="880">
-  <br><sub><b>Make it wider</b>: open the drawer, drag the divider, double-click to reset. The page never moves</sub>
+  <br><sub><b>Make it wider</b>: drag the divider, double-click to reset</sub>
 </p>
 
 <p align="center">
   <img src="docs/media/themes.png" alt="The opening of Pride and Prejudice in the Brief, Lilac, Birch, Graphite, Arctic, Blossom and Peony themes" width="880">
-  <br><sub><b>Seven theme families</b>, each with a light and a dark version, two of them pink. Brief is the default</sub>
+  <br><sub><b>Seven themes</b>, light and dark. Brief is the default</sub>
 </p>
 
 ## Private by design
 
 - **Your files stay yours.** No account, no cloud, no analytics. It works offline.
-- **AI is off unless you turn it on.** The optional assistant uses your own API key from Anthropic,
-  OpenRouter or OpenAI (one at a time), kept in the system keychain. Only when you ask something does
-  it send your question and the text it reads to answer it to that provider; OpenRouter forwards the
-  request to the provider of the model you pick. Without a key, the app makes no network requests.
+- **AI is off unless you turn it on.** Your own key, kept in the keychain. Only your question and the
+  text needed to answer it go to the provider you chose.
 - **Documents are never changed.** Reading positions and the library live in a small local data
   folder. Removing something from the library never deletes the file.
 - **Nothing runs behind your back.** Scripts inside documents are blocked, books open in a sandbox,
@@ -151,8 +130,7 @@ computer.
 
 ## How it was made
 
-Hold My Brief was planned before it was built, and every claim about it is backed by a test or a
-measurement.
+Planned before it was built; every claim is backed by a test or a measurement.
 
 ```mermaid
 flowchart LR
@@ -166,9 +144,9 @@ flowchart LR
 
 | Step | What it produced |
 | --- | --- |
-| **Research** | A [research brief](docs/floating-reader-research-2026-10-22.md) comparing Readest, Thorium, Koodo, SumatraPDF and PowerToys "Always on Top": what each does well and where none of them fit this use case. |
-| **Requirements** | A [product requirements document](docs/floating-reader-prd.md) with user journeys, priorities and testable acceptance criteria for every behavior. For example, "locking the size must survive snapping, maximize and display changes". |
-| **Design** | Every change is laid out on a design board first, then refined in rounds against screenshots of the real app. The generated covers took three rounds: pattern families, then one pattern per book, then variety in the stripes. Accessibility rules are enforced by tests: an 11 px floor for interface text and AA contrast in all seven themes. |
+| **Research** | A [research brief](docs/floating-reader-research-2026-10-22.md) comparing Readest, Thorium, Koodo, SumatraPDF and PowerToys "Always on Top". |
+| **Requirements** | A [product requirements document](docs/floating-reader-prd.md) with user journeys and testable acceptance criteria. |
+| **Design** | Each change laid out on a design board, then refined in rounds against screenshots of the real app. Tests enforce an 11 px interface floor and AA contrast. |
 | **Build** | A native Rust/Tauri shell for files, windows and saved state, plus a small web interface using PDF.js, foliate-js and markdown-it. The Windows app is a single ~7 MB executable. |
 | **Test** | Unit tests, real-browser scenarios and native tests run on Windows and macOS in [CI](.github/workflows/ci.yml) for every change, including a smoke test that drives the real desktop app. |
 | **Measure** | A [performance pass](docs/floating-reader-performance.md) that halved PDF time-to-first-page (248 → 128 ms) and made flipping back and forth through 120 pages 16× faster (2,000 → 122 ms). |
