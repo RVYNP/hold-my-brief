@@ -1,5 +1,5 @@
-// Shell for the library once it has been torn off the reader. Loaded only for that window
-// (see boot.ts); the reader never imports this file.
+// Shell for the undocked library, loaded by library.html.
+// The reader has its own static entrypoint so its controls are ready when the page loads.
 import './style.css';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { native } from './bridge';

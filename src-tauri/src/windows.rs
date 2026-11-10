@@ -279,7 +279,7 @@ fn move_library(library: &WebviewWindow, app: &AppHandle, width: f64, side: &str
 /// Arguments are flat, the same way `set_pin` takes `enabled`: a struct parameter
 /// would require the frontend to wrap them under `request`.
 #[tauri::command]
-pub fn set_library_window(undocked: bool, restore: bool, width: f64, side: String, app: AppHandle) -> Result<(), String> {
+pub async fn set_library_window(undocked: bool, restore: bool, width: f64, side: String, app: AppHandle) -> Result<(), String> {
     if !undocked {
         if let Some(library) = app.get_webview_window("library") {
             if restore {
@@ -304,7 +304,7 @@ pub fn set_library_window(undocked: bool, restore: bool, width: f64, side: Strin
     let main = app.get_webview_window("main").ok_or("The reader window is missing.")?;
     let (x, y, placed_width, height) = place_library(reader_frame(&main)?, &side, width, 8.0, work_area(&main));
     let pinned = app.state::<Shared>().lock().map(|store| store.saved.window.pinned).unwrap_or(false);
-    let mut builder = WebviewWindowBuilder::new(&app, "library", WebviewUrl::App("index.html?panel=library#library".into()))
+    let mut builder = WebviewWindowBuilder::new(&app, "library", WebviewUrl::App("library.html".into()))
         .title("Library — Hold My Brief")
         .inner_size(placed_width, height)
         .min_inner_size(280.0, 420.0)
