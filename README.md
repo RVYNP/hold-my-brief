@@ -123,6 +123,11 @@ computer.
 </p>
 
 <p align="center">
+  <img src="docs/media/intake.png" alt="The intake sheet over the library board, titled 5 new references: four generated dithered pink covers for Moby Dick, Middlemarch, Frankenstein and Dracula beside Pride and Prejudice with its real cover, under a Novels shelf header with a shelf menu, and New patterns and Keep all buttons" width="880">
+  <br><sub><b>Intake</b>: new books arrive with their titles and a generated cover each; ↻ on a cover for another pattern, Keep all to file them</sub>
+</p>
+
+<p align="center">
   <img src="docs/media/library-resize.gif" alt="The library opens over the page, is dragged wider, reset with a double-click and closed, and the page never moves" width="880">
   <br><sub><b>Make it wider</b>: open the drawer, drag the divider, double-click to reset. The page never moves</sub>
 </p>
@@ -152,7 +157,8 @@ measurement.
 ```mermaid
 flowchart LR
   R[Research<br><sub>compared existing readers</sub>] --> P[Requirements<br><sub>journeys + acceptance criteria</sub>]
-  P --> B[Build<br><sub>Rust + Tauri, web UI</sub>]
+  P --> D[Design<br><sub>design board + screenshot rounds</sub>]
+  D --> B[Build<br><sub>Rust + Tauri, web UI</sub>]
   B --> T[Test<br><sub>unit, browser, native</sub>]
   T --> M[Measure<br><sub>performance + platform audit</sub>]
   M --> B
@@ -162,6 +168,7 @@ flowchart LR
 | --- | --- |
 | **Research** | A [research brief](docs/floating-reader-research-2026-10-22.md) comparing Readest, Thorium, Koodo, SumatraPDF and PowerToys "Always on Top": what each does well and where none of them fit this use case. |
 | **Requirements** | A [product requirements document](docs/floating-reader-prd.md) with user journeys, priorities and testable acceptance criteria for every behavior. For example, "locking the size must survive snapping, maximize and display changes". |
+| **Design** | Every change is laid out on a design board first, then refined in rounds against screenshots of the real app. The generated covers took three rounds: pattern families, then one pattern per book, then variety in the stripes. Accessibility rules are enforced by tests: an 11 px floor for interface text and AA contrast in all seven themes. |
 | **Build** | A native Rust/Tauri shell for files, windows and saved state, plus a small web interface using PDF.js, foliate-js and markdown-it. The Windows app is a single ~7 MB executable. |
 | **Test** | Unit tests, real-browser scenarios and native tests run on Windows and macOS in [CI](.github/workflows/ci.yml) for every change, including a smoke test that drives the real desktop app. |
 | **Measure** | A [performance pass](docs/floating-reader-performance.md) that halved PDF time-to-first-page (248 → 128 ms) and made flipping back and forth through 120 pages 16× faster (2,000 → 122 ms). |
