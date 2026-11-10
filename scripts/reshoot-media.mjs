@@ -218,6 +218,12 @@ const browser = await chromium.launch(existsSync(CHROME) ? { executablePath: CHR
   for (const [index, shelf] of Object.keys(works).entries()) {
     await newCollection(`${index + 1}-${shelf}`, 'Classics');
     await addFiles([...files[shelf], ...(extras[shelf] ?? [])]);
+    // The first shelf's arrivals (generated covers and the EPUB's real one) are the intake still, shot before Keep all.
+    if (index === 0) {
+      await page.waitForSelector('.library-dialog');
+      await page.waitForTimeout(1500);
+      await shot(page, 'intake.png');
+    }
     await keepAll();
   }
   await page.locator('.library-filter', { hasText: /^Classics/ }).click();
