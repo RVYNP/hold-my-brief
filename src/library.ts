@@ -15,7 +15,17 @@ import { onAppearanceChange, scheme } from './theme';
 export type LibraryFilterResult = { colour: string | null; query: string; matches: number; names: string[]; pending: number };
 const titleCase = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
-type Callbacks = { open: (path: string) => Promise<boolean>; error: (error: unknown) => void };
+type Callbacks = {
+  open: (path: string) => Promise<boolean>;
+  error: (error: unknown) => void;
+  /** Desktop reader: tear the drawer off into its own window. */
+  undock?: () => void;
+  /** This library already is that window. Closing it docks it back into the reader. */
+  detached?: boolean;
+  dock?: () => void;
+  /** The undocked window should move to the other side of the reader. */
+  place?: (side: LibrarySide) => void;
+};
 type Filter = { kind: 'all' | 'favorites' | 'unfiled' } | { kind: 'collection' | 'source'; id: string };
 const pageSize = 40;
 
@@ -52,6 +62,7 @@ function icon(paths: string) {
   return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
 }
 const panelIcon = { left: icon('<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/>'), right: icon('<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/>') };
+const undockIcon = icon('<rect x="3" y="8" width="12" height="13" rx="1.5"/><rect x="9" y="3" width="12" height="13" rx="1.5"/>');
 const closeIcon = icon('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>');
 const chevronIcon = '<svg class="library-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 const viewIcon = { grid: icon('<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>'), list: icon('<path d="M3 6h.01M3 12h.01M3 18h.01M8 6h13M8 12h13M8 18h13"/>') };
@@ -77,6 +88,8 @@ function orderedTree<T extends { id: string; name: string; parentId: string | nu
 
 export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   refresh: (activePath?: string) => Promise<void>; toggle: () => void; board: () => void;
+  /** Hides the drawer without changing the saved open/closed preference. Used while the library is its own window. */
+  suspend: (hidden: boolean) => void;
   /** Sets the colour and/or search text of the library list (opening the drawer if needed) and reports what matches. `colour: null` clears it; omitted fields are left alone. */
   filter: (change: { colour?: string | null; query?: string }) => Promise<LibraryFilterResult>;
   colourNames: readonly string[];
@@ -84,12 +97,14 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   // Drawer mode: at >=720 px the library is a resizable drawer floating over the page; below it
   // becomes a compact sheet with a scrim, a focus trap and workspace `inert`.
   const wide = window.matchMedia('(min-width: 720px)');
+  // An undocked window is always the drawer, never the compact sheet, whatever its width.
+  const roomy = () => Boolean(callbacks.detached) || wide.matches;
   const layout = document.getElementById('reader-layout');
   const toggleButton = document.getElementById('library-toggle');
   const workspace = document.getElementById('workspace');
   const preferenceKey = () => `hold-my-brief:library-${wide.matches ? 'wide' : 'narrow'}`;
   function preference() { try { const saved = localStorage.getItem(preferenceKey()); return saved === null ? wide.matches : saved === 'open'; } catch { return wide.matches; } }
-  let visible = preference(); let library: Library = emptyLibrary(); let filter: Filter = { kind: 'all' };
+  let visible = callbacks.detached ? true : preference(); let suspended = false; let library: Library = emptyLibrary(); let filter: Filter = { kind: 'all' };
   let activePath: string | undefined; let busy = false, loaded = false, revision = 0, page = 0;
   let loadError = false; let modal: HTMLDialogElement | undefined; let modalError: HTMLElement | undefined;
   let matches: LibraryDocument[] = []; let imageSequence: string[] = [];
@@ -104,11 +119,15 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   let colourFilter: ColourName | null = null; let colourIndex: Promise<number> | undefined; let colourUnknown = 0; let colourTimer = 0; const colourRequested = new Set<string>();
 
   root.classList.add('library-root');
+  if (callbacks.detached) root.classList.add('is-detached');
   const backdrop = button('', 'Close library'); backdrop.className = 'library-backdrop'; backdrop.tabIndex = -1;
   const panel = element('aside', 'library-panel'); panel.setAttribute('aria-label', 'Reference library');
   const header = element('div', 'library-header'); const headerActions = element('div', 'library-header-actions');
   const dock = button('', undefined, 'dock'); dock.className = 'library-dock';
-  const close = button('', 'Close library'); close.innerHTML = closeIcon; close.title = 'Close library';
+  const undock = callbacks.undock ? button('', 'Undock library', 'undock') : undefined;
+  if (undock) { undock.className = 'library-undock'; undock.title = 'Open the library in its own window'; undock.innerHTML = undockIcon; undock.onclick = () => callbacks.undock?.(); }
+  const close = button('', callbacks.detached ? 'Dock library' : 'Close library'); close.innerHTML = closeIcon; close.title = callbacks.detached ? 'Dock library into the reader' : 'Close library';
+  if (undock) headerActions.append(undock);
   headerActions.append(dock, close); header.append(element('h2', '', 'Library'), headerActions);
   const tools = element('div', 'library-tools');
   const add = button('Add files', 'Add local documents or images', 'add'); add.className = 'library-add';
@@ -193,7 +212,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     toggleButton?.setAttribute('data-library-side', side);
     dock.innerHTML = panelIcon[other]; dock.setAttribute('aria-label', `Move library to the ${other}`); dock.title = `Move library to the ${other}`;
   }
-  dock.onclick = () => { side = side === 'left' ? 'right' : 'left'; savePreference(sideKey, side); applySide(); };
+  dock.onclick = () => { side = side === 'left' ? 'right' : 'left'; savePreference(sideKey, side); applySide(); callbacks.place?.(side); };
   // While dragging, only the drawer follows the pointer; it is out of flow, so the reading panel,
   // the page box and the canvas bitmap keep their exact geometry and never refit.
   let drag: { pointer: number; x: number; start: number; next?: number } | undefined; let dragFrame = 0;
@@ -201,7 +220,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     document.documentElement.classList.toggle('library-resizing', on);
   }
   resizeHandle.addEventListener('pointerdown', event => {
-    if (event.button !== 0 || drag || !wide.matches) return;
+    if (event.button !== 0 || drag || callbacks.detached || !wide.matches) return;
     event.preventDefault(); resizeHandle.setPointerCapture(event.pointerId);
     drag = { pointer: event.pointerId, x: event.clientX, start: width }; setResizing(true);
   });
@@ -232,22 +251,24 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   window.addEventListener('resize', () => { if (!windowFrame) windowFrame = requestAnimationFrame(() => { windowFrame = 0; if (!drag) applyWidth(preferredWidth); }); });
 
   function applyVisibility() {
-    root.hidden = !visible; layout?.classList.toggle('library-open', visible); toggleButton?.setAttribute('aria-expanded', String(visible));
-    if (workspace) workspace.inert = visible && (!wide.matches || board);
-    if (visible) { thumbs.retryFailed(); for (const media of documents.querySelectorAll('.is-unavailable')) media.classList.remove('is-unavailable'); observeThumbnails(); } else { setBoard(false, 'none'); setScope(false); closeItemMenu(false); clearThumbnails(); }
+    const shown = visible && !suspended;
+    root.hidden = !shown; layout?.classList.toggle('library-open', shown); toggleButton?.setAttribute('aria-expanded', String(shown));
+    if (workspace) workspace.inert = shown && (!roomy() || board);
+    if (shown) { thumbs.retryFailed(); for (const media of documents.querySelectorAll('.is-unavailable')) media.classList.remove('is-unavailable'); observeThumbnails(); } else { setBoard(false, 'none'); setScope(false); closeItemMenu(false); clearThumbnails(); }
   }
   function setVisible(next: boolean, focus = true, persist = true) {
+    if (callbacks.detached) { if (!next) callbacks.dock?.(); return; }
     visible = next; if (persist) try { localStorage.setItem(preferenceKey(), next ? 'open' : 'closed'); } catch { /* Optional preference. */ }
     applyVisibility(); if (focus) (next ? search : toggleButton)?.focus();
   }
-  function toggle() { if (!modal?.open) setVisible(!visible); }
+  function toggle() { if (modal?.open) return; if (suspended) { suspended = false; setVisible(true); return; } setVisible(!visible); }
   backdrop.onclick = close.onclick = () => { if (!busy) setVisible(false); };
-  wide.addEventListener('change', () => { const hadFocus = root.contains(document.activeElement); if (!wide.matches) setBoard(false, 'none'); visible = modal?.open ? true : preference(); applyVisibility(); if (!visible && hadFocus) toggleButton?.focus(); });
+  wide.addEventListener('change', () => { if (callbacks.detached) return; const hadFocus = root.contains(document.activeElement); if (!wide.matches) setBoard(false, 'none'); visible = modal?.open ? true : preference(); applyVisibility(); if (!visible && hadFocus) toggleButton?.focus(); });
   root.addEventListener('keydown', event => {
     if (event.key === 'Escape' && (!itemMenu.hidden || scopeOpen)) { event.preventDefault(); event.stopPropagation(); if (!itemMenu.hidden) closeItemMenu(); else { setScope(false); scopeButton.focus(); } return; }
     if (event.key === 'Escape' && board && !modal?.open) { event.preventDefault(); event.stopPropagation(); if (!busy) setBoard(false, 'control'); return; }
     if (event.key === 'Escape' && !modal?.open) { event.preventDefault(); event.stopPropagation(); if (!busy) setVisible(false); }
-    if (event.key === 'Tab' && visible && !wide.matches && !modal?.open) {
+    if (event.key === 'Tab' && visible && !roomy() && !modal?.open) {
       const controls = Array.from(panel.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled):not([hidden]), select:not(:disabled), summary')).filter(node => node.getClientRects().length);
       const first = controls[0], last = controls[controls.length - 1];
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
@@ -394,7 +415,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     setBusy(true); let opened = false;
     try {
       opened = await callbacks.open(doc.path);
-      if (opened) { activePath = doc.path; renderImageNavigation(); if (!wide.matches) { setVisible(false, false, false); workspace?.querySelector<HTMLElement>('.reader-host:not(.staging)')?.focus(); } }
+      if (opened) { activePath = doc.path; renderImageNavigation(); if (!roomy()) { setVisible(false, false, false); workspace?.querySelector<HTMLElement>('.reader-host:not(.staging)')?.focus(); } }
     } catch (error) { report(error); }
     finally { setBusy(false); if (!opened) restoreFocus(`open:${doc.path}`, trigger); }
   }
@@ -531,11 +552,11 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     if (activePath === doc.path) setBoard(false, 'reader');
   }
   function setBoard(next: boolean, focus: 'none' | 'control' | 'reader') {
-    if (next === board || next && (!wide.matches || !visible || modal?.open)) return;
+    if (next === board || next && (!roomy() || !visible || suspended || modal?.open)) return;
     closeItemMenu(false); setScope(false); board = next;
     root.classList.toggle('is-board', board); boardButton.setAttribute('aria-pressed', String(board));
     scopeMenu.hidden = !board; scopeButton.tabIndex = board ? -1 : 0;
-    if (workspace) workspace.inert = visible && (!wide.matches || board);
+    if (workspace) workspace.inert = visible && !suspended && (!roomy() || board);
     arrange(); renderDocuments();
     if (focus === 'reader') workspace?.querySelector<HTMLElement>('.reader-host:not(.staging)')?.focus();
     else if (focus === 'control') (board ? documents.querySelector<HTMLElement>('.is-selected .library-document-open') ?? search : boardButton).focus();
@@ -927,9 +948,10 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   toggleButton?.setAttribute('aria-controls', root.id); applySide(); applyWidth(preferredWidth); rebuildIndex(); applyVisibility(); render();
   return {
     refresh,
-    toggle: () => { toggle(); if (visible && loadError) void refresh(); },
+    toggle: () => { toggle(); if (visible && !suspended && loadError) void refresh(); },
+    suspend(hidden: boolean) { suspended = hidden; if (hidden) { setBoard(false, 'none'); setScope(false); closeItemMenu(false); } applyVisibility(); },
     // Library board (palette command): open the drawer if needed, then enter or leave the board. Below 720 px there is only the sheet.
-    board: () => { if (!visible) setVisible(true, false); if (wide.matches) setBoard(!board, 'control'); else search.focus(); if (visible && loadError) void refresh(); },
+    board: () => { if (suspended) return; if (!visible) setVisible(true, false); if (roomy()) setBoard(!board, 'control'); else search.focus(); if (visible && loadError) void refresh(); },
     filter: filterBy,
     colourNames,
   };

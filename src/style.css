@@ -319,6 +319,29 @@ h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 1px 0 
 .recent button:first-child { overflow: hidden; text-overflow: ellipsis; text-align: left; flex: 1; padding: 6px 8px; font-size: 12px; min-width: 0; }
 .recent button:last-child { flex: 0; padding: 4px 8px; color: var(--muted); opacity: 0; }
 .recent:hover button:last-child, .recent:focus-within button:last-child { opacity: 1; }
+/* Once there is something to return to, the opening page is a shelf, not a centred slogan.
+   Rows scroll sideways, the way a player shows what you listened to last. */
+#empty.is-home { max-width: none; width: 100%; align-items: stretch; padding: 18px 16px 28px; }
+#empty.is-home::before, #empty.is-home::after { display: none; }
+#empty.is-home h1 { font-size: 22px; margin: 0; }
+.home-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+.home-file { padding: 6px 10px; border-radius: 6px; color: var(--muted); font-size: 12px; }
+.home-file:hover { color: var(--fg); background: var(--hover-subtle); }
+.home-section { align-self: stretch; min-width: 0; margin: 0 0 22px; }
+.home-section h2 { margin: 0 0 8px; font: 11px/1.35 var(--font-mono); letter-spacing: .8px; text-transform: uppercase; color: var(--muted); }
+.home-row { display: flex; gap: 12px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; padding: 2px 2px 6px; }
+.home-tile { position: relative; flex: 0 0 112px; width: 112px; }
+.home-open { display: block; width: 100%; padding: 0; border-radius: 4px; background: transparent; text-align: left; }
+.home-open:hover { background: transparent; }
+.home-cover { position: relative; display: block; aspect-ratio: 3 / 4; overflow: hidden; border-radius: 4px; }
+.home-cover .library-cover { border-radius: 4px; }
+.home-thumb { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.home-cover.is-photo .library-cover { display: none; }
+.home-tile.is-missing { opacity: .55; }
+.home-remove { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; padding: 0; border-radius: 999px; background: var(--card); color: var(--muted); opacity: 0; }
+.home-tile:hover .home-remove, .home-tile:focus-within .home-remove { opacity: 1; }
+.home-remove:hover { color: var(--fg); }
+
 /* The footer is the window's bottom edge: while reading only the progress hairline shows. Hovering the
    last 12 px of the page (a band just above the edge) or focusing a footer control slides the arrows
    and the position up over the page. It is an overlay, so the page never resizes or refits. The band
