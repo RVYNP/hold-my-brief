@@ -273,7 +273,8 @@ palette), tears the drawer off into its own window beside the reader, on the sid
 the page is no longer covered. The panel's **×** is then **Dock library** and puts the drawer back.
 Closing that window from its caption dismisses the library; **Ctrl+B** opens the drawer again,
 or focuses the library window while it is undocked. Pinning the reader pins the library window too.
-Width and side are remembered, and the width is re-fitted when the window shrinks.
+Width and side are remembered, and the width is re-fitted when the window shrinks. The undocked
+library can be narrowed to 280 pixels; its controls and thumbnail grid fit inside that width.
 
 In compact windows (below 720 pixels) the drawer covers the reading panel behind a scrim, cannot be
 resized, and closes on a click outside it or after you open a document from it. Escape closes it
