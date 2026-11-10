@@ -2,6 +2,7 @@
 // saved keeps the splash in main.ts. After that this is a shelf of what was opened, not a slogan.
 import { coverArt } from './covers';
 import { assignCoverSlots, compareCollections, coverFill, coverSeedOf, fileTitle, fileVersion } from './shelf';
+import { fileTypeChoices, matchesFileType } from './library-query';
 
 export const homeRowLimit = 12;
 
@@ -49,12 +50,13 @@ function tileOf(item: HomeDocument): HomeTile {
  * library entry's cover when the path matches. Anything else in the library, most recently opened
  * first, is a second row. With no recents the library itself is the first row.
  */
-export function homeRows(recents: readonly HomeRecent[], documents: readonly HomeDocument[]): HomeRow[] {
+export function homeRows(recents: readonly HomeRecent[], documents: readonly HomeDocument[], selectedFormat = ''): HomeRow[] {
   const byPath = new Map(documents.map(doc => [doc.path, doc]));
-  const recentTiles = recents.slice(0, homeRowLimit).map(recent => tileOf(byPath.get(recent.path) ?? recent));
+  const recentTiles = recents.map(recent => byPath.get(recent.path) ?? recent)
+    .filter(item => matchesFileType(item, selectedFormat)).slice(0, homeRowLimit).map(item => tileOf(item));
   const seen = new Set(recentTiles.map(item => item.path));
   const rest = documents
-    .filter(doc => !seen.has(doc.path))
+    .filter(doc => matchesFileType(doc, selectedFormat) && !seen.has(doc.path))
     .map(doc => ({ doc, opened: openedAt(doc.lastOpened) }))
     .sort((a, b) => b.opened - a.opened || a.doc.name.localeCompare(b.doc.name))
     .slice(0, homeRowLimit)
@@ -65,7 +67,7 @@ export function homeRows(recents: readonly HomeRecent[], documents: readonly Hom
     return rows;
   }
   if (!rest.length) return [];
-  const anyOpened = documents.some(doc => openedAt(doc.lastOpened) > 0);
+  const anyOpened = documents.some(doc => matchesFileType(doc, selectedFormat) && openedAt(doc.lastOpened) > 0);
   return [{ id: anyOpened ? 'recent' : 'library', title: anyOpened ? 'Recently opened' : 'In the library', items: rest }];
 }
 
@@ -79,6 +81,8 @@ export function assignShelfSlots(collections: readonly HomeCollection[]): void {
 export type HomeActions = {
   open: (path: string, name: string) => void;
   openFile: () => void;
+  format: string;
+  selectFormat: (value: string) => void;
   /** Present for the recent row, whose entries can leave the recent list without leaving the library. */
   remove?: (path: string, name: string) => void;
 };
@@ -120,6 +124,23 @@ export function renderHome(root: HTMLElement, rows: readonly HomeRow[], actions:
   openFile.onclick = () => actions.openFile();
   bar.append(element('h1', '', 'Home'), openFile);
   root.append(bar);
+  const formatLabel = element('label', 'home-format', 'File type');
+  const format = element<HTMLSelectElement>('select');
+  format.id = 'home-format';
+  for (const [value, label] of fileTypeChoices) {
+    const option = element<HTMLOptionElement>('option', '', label);
+    option.value = value;
+    format.append(option);
+  }
+  format.value = actions.format;
+  format.onchange = () => actions.selectFormat(format.value);
+  formatLabel.append(format);
+  root.append(formatLabel);
+  if (!rows.length) {
+    const empty = element('p', 'home-no-matches', 'No files of this type. Choose another file type or open a file.');
+    empty.setAttribute('role', 'status');
+    root.append(empty);
+  }
   for (const row of rows) {
     const section = element('section', 'home-section');
     const heading = element('h2', '', row.title);

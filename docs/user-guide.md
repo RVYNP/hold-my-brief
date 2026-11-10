@@ -16,6 +16,14 @@ Click a cover to open it. A picture fills in when its thumbnail is ready; a book
 cover it has on its shelf. **Open…** is still there. Removing a recent (the × on its cover) leaves the
 library entry.
 
+Use **File type** on Home to show PDFs, EPUBs, Markdown, Text, or Images separately. **All formats**
+restores the mixed view. The selection filters both rows before their display limit is applied; if
+there are no files of that type, the selector stays available so you can switch back.
+
+The library offers the same choices under **Choose collection and filters → Filter by format**,
+combined with the selected collection, search, availability, and colour. These are view filters, not
+conversions: PDFs stay PDFs, EPUBs stay EPUBs, and TXT identifies an actual plain-text file.
+
 A scanned PDF with no text layer shows its pages as images: text on those pages can't be selected
 or searched, and each such page carries an "Image-only page" note. Hold My Brief doesn't run OCR in
 this build, so run the PDF through an OCR tool first if you need its text. This is a known limit

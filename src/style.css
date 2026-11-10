@@ -327,6 +327,9 @@ h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 1px 0 
 .home-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
 .home-file { padding: 6px 10px; border-radius: 6px; color: var(--muted); font-size: 12px; }
 .home-file:hover { color: var(--fg); background: var(--hover-subtle); }
+.home-format { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; color: var(--muted); font-size: 12px; }
+.home-format select { max-width: 100%; font-size: 12px; }
+.home-no-matches { color: var(--muted); font-size: 13px; line-height: 1.6; }
 .home-section { align-self: stretch; min-width: 0; margin: 0 0 22px; }
 .home-section h2 { margin: 0 0 8px; font: 11px/1.35 var(--font-mono); letter-spacing: .8px; text-transform: uppercase; color: var(--muted); }
 .home-row { display: flex; gap: 12px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; padding: 2px 2px 6px; }
