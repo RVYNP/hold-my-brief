@@ -860,11 +860,27 @@ test('hand tool turns on below 100% and starts panning once the page overflows',
   await page.mouse.move(box.x + 160, box.y + 240, { steps: 4 }); await page.mouse.up();
   expect(await scroll()).toEqual([left + 40, top + 60]);
 
-  // And the `H` key is the same switch once a page overflows (it was the switch below 100% too).
+  // The `H` key is the same switch above 100%: off, then on again. The title follows the
+  // geometry, not the tool state, so it still says "drag to pan" while the page overflows.
   await host.focus(); await page.keyboard.press('h');
   await expect(hand).toHaveAttribute('aria-pressed', 'false');
+  await expect(hand).toHaveAttribute('title', 'Hand tool: drag to pan (H)');
+  await expect(host).not.toHaveClass(/hand-tool/); // Off, so no grab cursor either.
   await page.keyboard.press('h');
   await expect(hand).toHaveAttribute('aria-pressed', 'true');
+  await expect(host).toHaveClass(/hand-tool/);
+
+  // Back below 100% the key is still the switch: it turns the tool ON with nothing to pan,
+  // which is the behaviour the old contract refused.
+  for (let i = 0; i < 20 && !(await zoomOut.isDisabled()); i++) await zoomOut.click();
+  const shrunk = await overflow();
+  expect(shrunk.x).toBeLessThanOrEqual(1); expect(shrunk.y).toBeLessThanOrEqual(1);
+  await host.focus(); await page.keyboard.press('h'); // On -> off.
+  await expect(hand).toHaveAttribute('aria-pressed', 'false');
+  await page.keyboard.press('h'); // Off -> on, at a zoom below 100%.
+  await expect(hand).toHaveAttribute('aria-pressed', 'true');
+  await expect(hand).toHaveAttribute('title', 'Hand tool on · nothing to pan at this zoom (H)');
+  await expect(host).not.toHaveClass(/hand-tool/); // On, but honest about having nothing to move.
   expect(errors).toEqual([]);
 });
 
