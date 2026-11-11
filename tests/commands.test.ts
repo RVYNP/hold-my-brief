@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COMMANDS, INTERFACE_SHORTCUTS, SHORTCUTS, groupCommands, parseIntent, scoreCommand, searchCommands, shortcutFor, shortcutReference, unavailableReason, type Command } from '../src/commands';
+import { COMMANDS, INTERFACE_SHORTCUTS, SHORTCUTS, appliesTo, groupCommands, parseIntent, scoreCommand, searchCommands, shortcutFor, shortcutReference, unavailableReason, type Command } from '../src/commands';
 
 const byId = (id: string): Command => {
   const found = COMMANDS.find(command => command.id === id);
@@ -54,6 +54,13 @@ describe('shortcut matching', () => {
     expect(shortcutFor(event('='))).toBeUndefined();
   });
 
+  it('reaches page previews on Ctrl+4 and nowhere else', () => {
+    expect(shortcutFor(event('4', { ctrlKey: true }))).toBe('page-strip');
+    expect(shortcutFor(event('4'))).toBeUndefined();
+    expect(shortcutFor(event('4', { ctrlKey: true, shiftKey: true }))).toBeUndefined();
+    expect(byId('page-strip').shortcut).toBe('Ctrl 4');
+  });
+
   it('ignores the meta key so OS-level shortcuts still reach the webview', () => {
     expect(shortcutFor(event('k', { metaKey: true }))).toBeUndefined();
     expect(shortcutFor(event('o', { ctrlKey: true, metaKey: true }))).toBeUndefined();
@@ -101,6 +108,18 @@ describe('command availability', () => {
 
   it('always allows commands with no requirements', () => {
     expect(unavailableReason(byId('open'), { hasDocument: false, desktop: false })).toBeUndefined();
+  });
+
+  it('offers page previews to PDFs only, and says why a document of another format cannot use them', () => {
+    const previews = byId('page-strip'), pdf = { hasDocument: true, desktop: false, format: 'pdf' };
+    expect(appliesTo(previews, 'pdf')).toBe(true);
+    expect(appliesTo(previews, 'md')).toBe(false);
+    expect(appliesTo(previews, 'epub')).toBe(false);
+    expect(appliesTo(previews, undefined)).toBe(false);
+    expect(appliesTo(byId('fit-page'), 'md')).toBe(true);
+    expect(unavailableReason(previews, pdf)).toBeUndefined();
+    expect(unavailableReason(previews, { ...pdf, format: 'md' })).toBe('Available for PDF documents');
+    expect(unavailableReason(previews, { ...pdf, hasDocument: false })).toBe('Open a document first');
   });
 });
 

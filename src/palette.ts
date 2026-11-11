@@ -1,5 +1,5 @@
 import { looksLikeQuestion } from './assistant';
-import { groupCommands, parseIntent, scoreCommand, searchCommands, unavailableReason, type Command, type CommandGroup } from './commands';
+import { appliesTo, groupCommands, parseIntent, scoreCommand, searchCommands, unavailableReason, type Command, type CommandGroup } from './commands';
 
 /**
  * A keyboard-first palette over the command catalog.
@@ -10,7 +10,8 @@ import { groupCommands, parseIntent, scoreCommand, searchCommands, unavailableRe
  *
  * Availability is evaluated at render time: a command that needs a document stays visible
  * but disabled, with the reason as its description, which is why the empty document case
- * teaches rather than hides.
+ * teaches rather than hides. A command that applies to some formats only (page previews: PDF) is the
+ * exception: it is not offered for a document of another format, since nothing the user does would make it work.
  *
  * A query is also read as a request (see `parseIntent`): a number goes there, "find …" finds,
  * and free text that names no command is offered as a find in the open document. With the AI
@@ -19,6 +20,8 @@ import { groupCommands, parseIntent, scoreCommand, searchCommands, unavailableRe
 
 export type PaletteContext = {
   hasDocument: () => boolean;
+  /** Format of the open document, for commands that apply to some formats only. */
+  format: () => string | undefined;
   desktop: boolean;
   /** Runs a command by id. Errors are the caller's to report. */
   run: (id: string) => void | Promise<void>;
@@ -66,10 +69,10 @@ export function createPalette(context: PaletteContext): Palette {
   let actived = 0;
 
   function render(query: string): void {
-    const state = { hasDocument: context.hasDocument(), desktop: context.desktop };
+    const state = { hasDocument: context.hasDocument(), desktop: context.desktop, format: context.format() };
     const needsDocument = state.hasDocument ? undefined : 'Open a document first';
     const text = query.trim();
-    const commands = searchCommands(query).slice(0, MAX_ROWS);
+    const commands = searchCommands(query).filter(command => !state.hasDocument || appliesTo(command, state.format)).slice(0, MAX_ROWS);
     const toRow = (command: Command): Row => ({ label: command.label, shortcut: command.shortcut, reason: unavailableReason(command, state), run: () => context.run(command.id) });
 
     let sections: { group?: CommandGroup; rows: Row[] }[];

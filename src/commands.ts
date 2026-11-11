@@ -11,6 +11,7 @@
  * The module is deliberately free of DOM and reader state so it can be unit-tested, and so
  * the palette and the shortcut reference dialog can both be generated from it.
  */
+import type { Format } from './types';
 
 export type CommandGroup = 'File' | 'Navigate' | 'View' | 'Window' | 'Reading' | 'Data';
 
@@ -27,6 +28,8 @@ export type Command = {
   shortcut?: string;
   /** True when the command needs a document open. */
   requiresDocument?: boolean;
+  /** Formats the command applies to; absent means every format. A document of another format cannot run it. */
+  formats?: readonly Format[];
   /** True when the command needs the desktop app (native IPC). */
   requiresDesktop?: boolean;
 };
@@ -56,6 +59,7 @@ export const COMMANDS: readonly Command[] = [
   { id: 'rotate', label: 'Rotate page 90°', group: 'View', keywords: ['orientation', 'landscape', 'sideways'], requiresDocument: true },
   { id: 'spread', label: 'Two-page spread', group: 'View', keywords: ['facing', 'dual', 'pair'], shortcut: 'Ctrl 3', requiresDocument: true },
   { id: 'cover', label: 'Cover page alone', group: 'View', keywords: ['spread', 'first page'], requiresDocument: true },
+  { id: 'page-strip', label: 'Page previews', group: 'View', keywords: ['thumbnails', 'filmstrip', 'next pages'], shortcut: 'Ctrl 4', requiresDocument: true, formats: ['pdf'] },
   { id: 'smaller', label: 'Smaller text / zoom out', group: 'View', keywords: ['decrease', 'reduce', 'small'], shortcut: 'Ctrl −', requiresDocument: true },
   { id: 'larger', label: 'Larger text / zoom in', group: 'View', keywords: ['increase', 'grow', 'big'], shortcut: 'Ctrl +', requiresDocument: true },
   { id: 'appearance', label: 'Appearance and text…', group: 'View', keywords: ['dark', 'light', 'theme', 'colour', 'color', 'palette'] },
@@ -97,6 +101,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: 'fit-page', key: '0', ctrl: true },
   { id: 'fit-width', key: '2', ctrl: true },
   { id: 'spread', key: '3', ctrl: true },
+  { id: 'page-strip', key: '4', ctrl: true },
   { id: 'smaller', key: '-', ctrl: true },
   { id: 'larger', key: '+', ctrl: true },
   { id: 'larger', key: '=', ctrl: true },
@@ -119,10 +124,16 @@ export function shortcutFor(event: { key: string; ctrlKey: boolean; altKey: bool
     && Boolean(shortcut.shift) === event.shiftKey)?.id;
 }
 
+/** Whether a document of `format` can use the command; a command with no `formats` suits every document. */
+export function appliesTo(command: Command, format: string | undefined): boolean {
+  return !command.formats || command.formats.some(candidate => candidate === format);
+}
+
 /** Why a command cannot run right now, or undefined when it can. */
-export function unavailableReason(command: Command, context: { hasDocument: boolean; desktop: boolean }): string | undefined {
+export function unavailableReason(command: Command, context: { hasDocument: boolean; desktop: boolean; format?: string }): string | undefined {
   if (command.requiresDocument && !context.hasDocument) return 'Open a document first';
   if (command.requiresDesktop && !context.desktop) return 'Available in the desktop app';
+  if (context.hasDocument && !appliesTo(command, context.format)) return `Available for ${command.formats!.map(format => format.toUpperCase()).join(' and ')} documents`;
   return undefined;
 }
 

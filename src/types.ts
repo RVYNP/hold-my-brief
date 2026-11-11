@@ -25,6 +25,21 @@ export type ReaderContext = {
   /** A same-origin content frame finished loading. Pointer input inside it never reaches the host, so the hand tool listens there directly. */
   onFrame?: (doc: Document) => void;
 };
+/** One button of the page-preview strip: the pages it stands for, drawn side by side at the CSS size given for each. */
+export type PagePreview = {
+  pages: { number: number; width: number; height: number }[];
+  /** What the footer calls these pages: the printed label, "iv–v" for a spread. */
+  label: string;
+  /** Turns to these pages the way a page turn does. */
+  open: () => Promise<void>;
+};
+/** Where an adapter shows page previews: the strip below the reading surface, which lives outside the adapter's host. */
+export interface PreviewSink {
+  /** Replaces what the strip lists; empty at the end of the document. */
+  show(previews: PagePreview[]): void;
+  /** Pixels for a page of the current list; a page no longer listed is ignored. */
+  paint(page: number, bitmap: HTMLCanvasElement): void;
+}
 export interface ReaderAdapter {
   readonly mode: 'fixed' | 'paginated' | 'scroll';
   /** True when the adapter honours `ReaderOptions.spread`. */
@@ -60,5 +75,10 @@ export interface ReaderAdapter {
   readText?(limit: number): Promise<{ label: string; text: string }>;
   /** The element that scrolls page-based content, for the view controls and hand tool; absent when content reflows instead of zooming. */
   scroller?(): HTMLElement | undefined;
+  /**
+   * Reports the pages after those on screen, with thumbnails, to `sink` until it is replaced or `undefined` is
+   * passed. Absent when the format has no pages to preview (only PDF has).
+   */
+  setPreviews?(sink: PreviewSink | undefined): void;
   destroy(): void;
 }
