@@ -1,14 +1,16 @@
-import { getDocument, GlobalWorkerOptions, TextLayer, type PDFDocumentProxy, type PDFPageProxy, type RenderTask } from 'pdfjs-dist';
+import { getDocument, GlobalWorkerOptions, TextLayer, type PageViewport, type PDFDocumentProxy, type PDFPageProxy, type RenderTask } from 'pdfjs-dist';
 import workerURL from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import 'pdfjs-dist/web/pdf_viewer.css';
 import './pdf.css';
-import type { Locator, OutlineItem, Position, ReaderAdapter, ReaderContext, ReaderOptions, ReaderSource } from '../types';
+import type { Locator, OutlineItem, PagePreview, Position, PreviewSink, ReaderAdapter, ReaderContext, ReaderOptions, ReaderSource } from '../types';
 import { MIN_SPREAD_WIDTH, pagesLabel, spreadPages } from '../spread';
 import { searchUnits, type DocumentSearch, type SearchHit, type SearchOptions, type UnitText } from '../search';
+import { BitmapCache, nextPages, PREVIEW_CACHE_BYTES, THUMBNAIL_HEIGHT } from '../page-strip';
 
 GlobalWorkerOptions.workerSrc = workerURL;
 /** Bound on decoded page bitmaps kept for instant page turns (bytes of canvas backing store). */
 const PAGE_CACHE_BYTES = 32 * 1024 * 1024;
+type PreviewJob = { number: number; page: PDFPageProxy; viewport: PageViewport; dpr: number; pixelsWidth: number; pixelsHeight: number; key: string };
 const clamp = (value: number, min = 0, max = 1) => Math.max(min, Math.min(max, Number.isFinite(value) ? value : min));
 
 export class PdfAdapter implements ReaderAdapter {
@@ -45,6 +47,10 @@ export class PdfAdapter implements ReaderAdapter {
   private marks = new Map<number, SearchHit>();
   private prefetchAbort?: AbortController;
   private prefetching = false;
+  /** The page-preview strip while it is on, and its own bounded bitmap cache. */
+  private previews?: PreviewSink;
+  private previewCache = new BitmapCache<HTMLCanvasElement>(PREVIEW_CACHE_BYTES);
+  private previewTasks: RenderTask[] = [];
   private explicitEnd = false;
   private onScroll = () => { if (!this.host.hasAttribute('aria-busy')) {
     if (this.host.scrollTop < this.host.scrollHeight - this.host.clientHeight - 2) this.explicitEnd = false;
@@ -107,6 +113,7 @@ export class PdfAdapter implements ReaderAdapter {
     const state = this.spreadState(), spread = state === 'active';
     const numbers = this.pagesAt(pageNumber, spread);
     this.requested = numbers[0];
+    this.cancelPreviews();
     for (const task of this.tasks) task.cancel();
     for (const layer of this.layers) layer.cancel();
     this.tasks = []; this.layers = [];
@@ -160,6 +167,7 @@ export class PdfAdapter implements ReaderAdapter {
       // Show the pages as soon as they have pixels. The text layer and links are layered on
       // afterwards: waiting for them would delay first content by a full frame budget.
       this.commit(view, numbers, pages, size, y, x, atEnd, state);
+      const listed = this.listPreviews(generation);
       const texts = await Promise.all(pages.map(page => page.getTextContent()));
       if (generation !== this.generation || this.disposed) { for (const { task } of shown) task?.cancel(); return; }
       for (const [index, { page, surface, canvas, viewport, key, task }] of shown.entries()) {
@@ -191,6 +199,7 @@ export class PdfAdapter implements ReaderAdapter {
         }
       }
       this.prefetchNeighbours(numbers, spread);
+      void listed.then(jobs => this.paintPreviews(generation, jobs));
     } catch (error) {
       if (generation !== this.generation || this.disposed || (error as Error).name === 'RenderingCancelledException') return;
       this.requested = this.pages[0]; this.host.removeAttribute('aria-busy');
@@ -205,7 +214,7 @@ export class PdfAdapter implements ReaderAdapter {
    * fit width its width. A page alone in two-page view keeps the size of half a spread.
    */
   private layout(pages: PDFPageProxy[], numbers: number[], spread: boolean) {
-    const rotation = (page: PDFPageProxy) => ((page.rotate + this.options.rotation) % 360 + 360) % 360;
+    const rotation = (page: PDFPageProxy) => this.rotationOf(page);
     const bases = pages.map(page => page.getViewport({ scale: 1, rotation: rotation(page) }));
     const width = Math.max(100, this.host.clientWidth - 32), height = Math.max(100, this.host.clientHeight - 32);
     const aspect = bases.reduce((sum, base) => sum + base.width / base.height, 0) * (spread && pages.length === 1 ? 2 : 1);
@@ -282,6 +291,75 @@ export class PdfAdapter implements ReaderAdapter {
       } catch { /* Prefetch is an optimization; a failure must never surface to the reader. */ }
       finally { if (this.prefetchAbort === controller) this.prefetching = false; }
     })();
+  }
+
+  private rotationOf(page: PDFPageProxy) { return ((page.rotate + this.options.rotation) % 360 + 360) % 360; }
+
+  setPreviews(sink?: PreviewSink) {
+    if (sink === this.previews) return;
+    this.cancelPreviews();
+    this.previews = sink;
+    // A page that is still loading lists the previews when it commits.
+    if (!sink || this.disposed || !this.doc || this.host.hasAttribute('aria-busy')) return;
+    const generation = this.generation;
+    void this.listPreviews(generation).then(jobs => this.paintPreviews(generation, jobs));
+  }
+  private cancelPreviews() { for (const task of this.previewTasks) task.cancel(); this.previewTasks = []; }
+
+  /**
+   * Lists the pages after the committed ones on the strip, with thumbnails already in the cache painted,
+   * and resolves to the thumbnails still to be rendered. It runs at commit so the strip follows every
+   * page turn, but rendering waits for the page itself (see `paintPreviews`).
+   */
+  private async listPreviews(generation: number): Promise<PreviewJob[]> {
+    const sink = this.previews, doc = this.doc;
+    if (!sink || !doc || this.disposed) return [];
+    const groups = nextPages(this.pages, doc.numPages, this.shownSpread === 'active', this.options.cover !== false);
+    const numbers = groups.flat();
+    let pages: PDFPageProxy[];
+    try { pages = await Promise.all(numbers.map(number => doc.getPage(number))); } catch { return []; } // A strip that cannot list stays as it was; it never raises an error.
+    if (generation !== this.generation || sink !== this.previews || this.disposed) return [];
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    const jobs = new Map(numbers.map((number, index): [number, PreviewJob] => {
+      const page = pages[index], rotation = this.rotationOf(page);
+      const base = page.getViewport({ scale: 1, rotation });
+      // Every thumbnail is as tall as the strip allows; an extreme banner is narrowed instead of crowding out the rest.
+      const viewport = page.getViewport({ scale: Math.min(THUMBNAIL_HEIGHT / base.height, 2 * THUMBNAIL_HEIGHT / base.width), rotation });
+      const pixelsWidth = Math.ceil(viewport.width * dpr), pixelsHeight = Math.ceil(viewport.height * dpr);
+      return [number, { number, page, viewport, dpr, pixelsWidth, pixelsHeight, key: `${number}:${rotation}:${pixelsWidth}x${pixelsHeight}` }];
+    }));
+    sink.show(groups.map((group): PagePreview => ({
+      pages: group.map(number => ({ number, width: jobs.get(number)!.viewport.width, height: jobs.get(number)!.viewport.height })),
+      label: group.map(number => this.labels?.[number - 1] || String(number)).join('–'),
+      open: () => this.render(group[0]),
+    })));
+    const missing: PreviewJob[] = [];
+    for (const job of jobs.values()) {
+      const cached = this.previewCache.get(job.key);
+      if (cached) sink.paint(job.number, cached); else missing.push(job);
+    }
+    return missing;
+  }
+
+  /**
+   * Renders thumbnails one at a time, after the main page has finished (the strip never delays first paint) and
+   * only for the generation that listed them: a page turn cancels the running one and drops the rest, so holding
+   * PgDn never queues thumbnail work.
+   */
+  private async paintPreviews(generation: number, jobs: PreviewJob[]) {
+    const sink = this.previews;
+    try {
+      for (const { number, page, viewport, dpr, pixelsWidth, pixelsHeight, key } of jobs) {
+        if (generation !== this.generation || sink !== this.previews || this.disposed) return;
+        const canvas = document.createElement('canvas');
+        canvas.width = pixelsWidth; canvas.height = pixelsHeight;
+        const task = page.render({ canvas, viewport, transform: dpr === 1 ? undefined : [dpr, 0, 0, dpr, 0, 0] });
+        this.previewTasks.push(task);
+        await task.promise;
+        if (generation !== this.generation || sink !== this.previews || this.disposed) return;
+        this.previewCache.set(key, canvas); sink?.paint(number, canvas);
+      }
+    } catch { /* A cancelled render (a page turn, the strip turned off) rejects; a thumbnail that fails stays a blank tile and never surfaces. */ }
   }
 
   private pushHistory() { this.history.push(this.getPosition().locator); if (this.history.length > 20) this.history.shift(); }
@@ -429,9 +507,9 @@ export class PdfAdapter implements ReaderAdapter {
   outline() { return this.items; }
   scroller() { return this.host; }
   destroy() {
-    this.disposed = true; ++this.generation; for (const task of this.tasks) task.cancel(); for (const layer of this.layers) layer.cancel(); this.observer?.disconnect(); clearTimeout(this.resizeTimer);
+    this.disposed = true; ++this.generation; for (const task of this.tasks) task.cancel(); this.cancelPreviews(); for (const layer of this.layers) layer.cancel(); this.observer?.disconnect(); clearTimeout(this.resizeTimer);
     this.host?.removeEventListener('scroll', this.onScroll); this.host?.classList.remove('pdf-reader');
-    this.prefetchAbort?.abort(); this.pageCache.clear();
+    this.prefetchAbort?.abort(); this.pageCache.clear(); this.previews = undefined; this.previewCache.clear();
     void this.loading?.destroy(); this.surface = undefined; this.doc = undefined; this.currentPages = [];
   }
 }

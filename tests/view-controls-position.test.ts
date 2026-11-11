@@ -87,6 +87,30 @@ describe('view-controls and the library drawer', () => {
   });
 });
 
+describe('view-controls and the page-preview strip', () => {
+  const strip = 112;
+
+  it('keeps the margin above the strip instead of the footer clearance', () => {
+    expect(clampPoint({ left: 100, top: 5000 }, panel, pill, strip).top).toBe(600 - 32 - strip - pillMargin);
+    expect(clampPoint({ left: 100, top: 5000 }, panel, pill, 0).top).toBe(600 - 32 - pillBottomClearance);
+  });
+
+  it('lifts a stored placement that sat low, and lets it fall back when the strip goes', () => {
+    const low = { x: .5, y: .97 };
+    expect(resolvePlacement(low, panel, pill, null, strip).top + pill.height).toBe(panel.height - strip - pillMargin);
+    expect(resolvePlacement(low, panel, pill, null, 0).top + pill.height).toBe(panel.height - pillBottomClearance);
+  });
+
+  it('leaves a placement that is already above the strip where it was', () => {
+    const high = { x: .3, y: .4 };
+    expect(resolvePlacement(high, panel, pill, null, strip)).toEqual(resolvePlacement(high, panel, pill));
+  });
+
+  it('still pins a panel too short for pill and strip to the top margin', () => {
+    expect(clampPoint({ left: 40, top: 40 }, { width: 600, height: 120 }, pill, strip)).toEqual({ left: 40, top: pillMargin });
+  });
+});
+
 describe('view-controls storage', () => {
   it('round-trips a placement', () => {
     expect(parsePlacement(serialisePlacement({ x: .123456, y: .9 }))).toEqual({ x: .1235, y: .9 });

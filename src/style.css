@@ -425,6 +425,27 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
 .reader-host.hand-tool, .reader-host.hand-tool * { cursor: grab; -webkit-user-select: none; user-select: none; }
 .reader-host.hand-tool .pdf-link { cursor: pointer; }
 .reader-host.panning, .reader-host.panning * { cursor: grabbing !important; }
+/* Page previews (PDF): a fixed band along the panel's bottom, outside the scroll container. The reading surface
+   stops above it while it is shown (`has-page-strip`), so showing it refits the page once and a page turn never
+   does. Its bottom 15 px are padding on purpose: the footer's hover band lies there, and hovering the band must
+   not open the footer over a thumbnail's label. The pill's default spot rises with it (see clampPoint). */
+#reader-layout { --page-strip-height: 112px; }
+#workspace.has-page-strip .reader-host { bottom: var(--page-strip-height); }
+#workspace.has-page-strip #view-controls { bottom: calc(var(--page-strip-height) + 8px); }
+#page-strip { position: absolute; z-index: 4; left: 0; right: 0; bottom: 0; height: var(--page-strip-height); display: flex; align-items: flex-start; gap: 10px; padding: 8px 12px 0; overflow: hidden; background: var(--raise); border-top: 1px solid var(--hairline); }
+/* The library drawer floats over the panel's edge, so the strip starts beside it, like the find bar. */
+@media (min-width: 720px) {
+  #reader-layout.library-open:not(.library-right) #page-strip { left: calc(var(--library-width, 270px) + 16px); }
+  #reader-layout.library-open.library-right #page-strip { right: calc(var(--library-width, 270px) + 16px); }
+}
+.page-strip-item { position: relative; flex: 0 0 auto; padding: 0; border: 0; border-radius: 4px; overflow: hidden; background: var(--hover-subtle); box-shadow: 0 0 0 1px var(--border); }
+.page-strip-item:hover { background: var(--hover-subtle); box-shadow: 0 0 0 1px var(--accent-border); }
+.page-strip-pages { display: flex; }
+.page-strip-pages canvas { display: block; }
+/* The label sits on the thumbnail, so the strip needs no row of its own for it. */
+.page-strip-label { position: absolute; left: 4px; bottom: 4px; max-width: calc(100% - 8px); padding: 1px 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 3px; background: var(--card); color: var(--fg); font: 11px/1.3 var(--font-mono); font-variant-numeric: tabular-nums; box-shadow: 0 0 0 1px var(--border); }
+.page-strip-item:hover .page-strip-label { color: var(--accent-ink); }
+.page-strip-end { display: flex; align-items: center; height: 88px; margin: 0; color: var(--muted); font: 11px/1.3 var(--font-mono); letter-spacing: .2px; }
 dialog { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--fg); padding: 18px; width: min(360px, calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow: auto; box-shadow: var(--shadow-popover); }
 dialog::backdrop { background: var(--scrim); }
 h2 { font: 400 17px/1.25 var(--font-read); margin: 0 0 16px; }

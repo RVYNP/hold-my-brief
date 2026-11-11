@@ -18,11 +18,15 @@ export interface Point { left: number; top: number }
 /** Horizontal band, in reading-panel pixels, covered by something floating over the panel (the library drawer). */
 export interface Band { left: number; right: number }
 
-/** Clamps a top-left so the whole pill sits inside the panel with the margin, above the bottom clearance. */
-export function clampPoint(point: Point, panel: Size, pill: Size): Point {
+/**
+ * Clamps a top-left so the whole pill sits inside the panel with the margin, above the bottom clearance. With a
+ * page-preview strip `strip` px tall along the panel's bottom the pill keeps the margin above the strip instead:
+ * the footer then opens over the strip, not over the page.
+ */
+export function clampPoint(point: Point, panel: Size, pill: Size, strip = 0): Point {
   // A panel too small for the pill pins it to the top-left margin rather than producing a negative range.
   const maxLeft = Math.max(pillMargin, panel.width - pill.width - pillMargin);
-  const maxTop = Math.max(pillMargin, panel.height - pill.height - pillBottomClearance);
+  const maxTop = Math.max(pillMargin, panel.height - pill.height - (strip > 0 ? strip + pillMargin : pillBottomClearance));
   return {
     left: Math.round(Math.min(maxLeft, Math.max(pillMargin, Number.isFinite(point.left) ? point.left : pillMargin))),
     top: Math.round(Math.min(maxTop, Math.max(pillMargin, Number.isFinite(point.top) ? point.top : pillMargin))),
@@ -41,11 +45,11 @@ export function avoidBand(point: Point, panel: Size, pill: Size, band: Band | nu
   return { left: Math.round(left), top: point.top };
 }
 
-/** Pixel position for a stored placement: centre fractions → top-left, clamped inside the panel, clear of the band. */
-export function resolvePlacement(placement: Placement, panel: Size, pill: Size, band: Band | null = null): Point {
+/** Pixel position for a stored placement: centre fractions → top-left, clamped inside the panel, clear of the band and of the strip. */
+export function resolvePlacement(placement: Placement, panel: Size, pill: Size, band: Band | null = null, strip = 0): Point {
   const raw = { left: placement.x * panel.width - pill.width / 2, top: placement.y * panel.height - pill.height / 2 };
-  const clamped = clampPoint(raw, panel, pill);
-  return clampPoint(avoidBand(clamped, panel, pill, band), panel, pill);
+  const clamped = clampPoint(raw, panel, pill, strip);
+  return clampPoint(avoidBand(clamped, panel, pill, band), panel, pill, strip);
 }
 
 /** Pixel top-left → centre fractions, clamped to the panel. */

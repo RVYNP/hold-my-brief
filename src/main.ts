@@ -16,6 +16,7 @@ import { MIN_SPREAD_WIDTH, pagesLabel, spreadPages } from './spread';
 import { assignShelfSlots, closeHome, fillHomePictures, homeRows, renderHome } from './home';
 import { repaintCovers } from './cards';
 import { canThumbnail, createThumbnailStore } from './thumbnails';
+import { createPageStrip, MIN_PANEL_HEIGHT } from './page-strip';
 initAppearance();
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
@@ -23,7 +24,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <aside id="notice" role="status" hidden><span></span><button id="retry-save" hidden>Retry save</button><button id="dismiss-notice" aria-label="Dismiss message">×</button></aside>
   <div id="reader-layout"><div id="loading" role="status" hidden><span></span><button id="cancel">Cancel</button></div><div id="library-root"></div>
   <main id="workspace"><section id="empty"><div class="book-mark" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M9 3v18m4-13h3m-3 4h3"/></svg></div><p class="eyebrow">KEEP YOUR PLACE</p><h1>Hand it over.</h1><p>Drop a brief and it stays pinned<br>exactly where you leave it.</p><button id="empty-open" class="primary">Hold a brief <span>↗</span></button><p class="formats">PDF · EPUB · MARKDOWN · TEXT</p><div id="recents"></div><p id="preview-note" hidden>Browser preview · Pin and size lock are available in the desktop app.</p></section>
-  <div id="view-controls" role="group" aria-label="View controls" hidden><button id="view-grip" type="button" aria-label="Move view controls" title="Drag to move · double-click to reset"><svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" aria-hidden="true"><circle cx="2" cy="3" r="1"/><circle cx="6" cy="3" r="1"/><circle cx="2" cy="7" r="1"/><circle cx="6" cy="7" r="1"/><circle cx="2" cy="11" r="1"/><circle cx="6" cy="11" r="1"/></svg></button><button id="zoom-out" aria-label="Zoom out" title="Zoom out (Ctrl −)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button><button id="zoom-level">Fit</button><button id="zoom-in" aria-label="Zoom in" title="Zoom in (Ctrl +)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button><span class="view-sep" aria-hidden="true"></span><button id="hand-tool" aria-label="Hand tool" aria-pressed="false" aria-disabled="true" title="Zoom in to pan"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg></button><span id="view-layout" class="view-group" role="group" aria-label="Page layout" hidden><span class="view-sep" aria-hidden="true"></span><button id="view-single" aria-label="Single page" aria-pressed="true" title="Single page"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg></button><button id="view-spread" aria-label="Two pages" aria-pressed="false" title="Two-page spread (Ctrl 3)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></button></span></div></main>
+  <div id="view-controls" role="group" aria-label="View controls" hidden><button id="view-grip" type="button" aria-label="Move view controls" title="Drag to move · double-click to reset"><svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" aria-hidden="true"><circle cx="2" cy="3" r="1"/><circle cx="6" cy="3" r="1"/><circle cx="2" cy="7" r="1"/><circle cx="6" cy="7" r="1"/><circle cx="2" cy="11" r="1"/><circle cx="6" cy="11" r="1"/></svg></button><button id="zoom-out" aria-label="Zoom out" title="Zoom out (Ctrl −)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button><button id="zoom-level">Fit</button><button id="zoom-in" aria-label="Zoom in" title="Zoom in (Ctrl +)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button><span class="view-sep" aria-hidden="true"></span><button id="hand-tool" aria-label="Hand tool" aria-pressed="false" aria-disabled="true" title="Zoom in to pan"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg></button><span id="view-layout" class="view-group" role="group" aria-label="Page layout" hidden><span class="view-sep" aria-hidden="true"></span><button id="view-single" aria-label="Single page" aria-pressed="true" title="Single page"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg></button><button id="view-spread" aria-label="Two pages" aria-pressed="false" title="Two-page spread (Ctrl 3)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></button></span><span id="view-previews" class="view-group" hidden><span class="view-sep" aria-hidden="true"></span><button id="page-strip-toggle" aria-label="Page previews" aria-pressed="false" title="Page previews (Ctrl 4)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="10" rx="2"/><rect x="3" y="17" width="4.5" height="4" rx="1"/><rect x="9.75" y="17" width="4.5" height="4" rx="1"/><rect x="16.5" y="17" width="4.5" height="4" rx="1"/></svg></button></span></div></main>
   </div>
   <footer><button id="previous" aria-label="Previous page" title="Previous page (PgUp)" disabled>←</button><button id="position" title="Go to location (Ctrl+G)" disabled>Ready when you are</button><button id="next" aria-label="Next page" title="Next page (PgDn)" disabled>→</button><input id="progress" type="range" aria-label="Document position" title="Click or drag to jump through the document" min="0" max="100" step="1" value="0" disabled></footer>
   <dialog id="menu" aria-label="Reader menu"><div class="menu-grid">
@@ -121,6 +122,7 @@ function updateScrubValue(preview = false) {
 /** Syncs the view-controls pill, page-layout toggles and the title subtitle with the current position, zoom, layout and hand-tool state. */
 function updateViewControls() {
   if (!reader || !active) return;
+  syncPageStrip();
   // Fixed-layout EPUB rebuilds its renderer when the page layout changes; follow it.
   const scroller = reader.scroller?.();
   if (scroller !== pannedScroller) { pannedScroller = scroller; pan.attach(scroller, activeHost); }
@@ -153,6 +155,12 @@ function updateViewControls() {
   $('spread-toggle').hidden = !spreads;
   cover.hidden = !spreads || reader.mode !== 'fixed';
   $('view-layout').hidden = !spreads;
+  // Page previews are a PDF feature: the toggle is offered only where the adapter has them, and says why when a short panel hides the strip.
+  const previewable = Boolean(reader.setPreviews), hidden = previewable && stripWanted && workspace.clientHeight < MIN_PANEL_HEIGHT ? `Hidden while the reading area is shorter than ${MIN_PANEL_HEIGHT} px` : '';
+  $('view-previews').hidden = !previewable;
+  $('page-strip-toggle').setAttribute('aria-pressed', String(stripWanted));
+  $('page-strip-toggle').title = hidden ? `Page previews (Ctrl 4) · ${hidden}` : 'Page previews (Ctrl 4)';
+  if (hidden) $('page-strip-toggle').setAttribute('aria-description', hidden); else $('page-strip-toggle').removeAttribute('aria-description');
   $('view-controls').hidden = !pan.pannable;
   if (!pan.pannable) return;
   // Clicking the level toggles fit page/fit width; while zoomed it first returns to the current fit.
@@ -176,6 +184,7 @@ $('zoom-level').onclick = () => void action($('zoom-level').dataset.next ?? 'fit
 $('hand-tool').onclick = () => { if ($('hand-tool').getAttribute('aria-disabled') !== 'true') toggleHand(); };
 $('view-single').onclick = () => void changeOptions({ spread: false });
 $('view-spread').onclick = () => void changeOptions({ spread: true });
+$('page-strip-toggle').onclick = () => void command('page-strip').catch(fail);
 // Movable pill: the grip drags it anywhere in the reading panel. Without a stored position the CSS
 // placement stands untouched; with one, inline left/top (kept as centre fractions of the panel so a
 // resize keeps it proportional) win, clamped inside the panel and clear of an open library drawer.
@@ -184,6 +193,8 @@ let pillPlacement: Placement | null = null;
 try { pillPlacement = parsePlacement(localStorage.getItem(pillKey)); } catch { /* Optional preference. */ }
 const pillPanel = () => ({ width: workspace.clientWidth, height: workspace.clientHeight });
 const pillBox = () => ({ width: pill.offsetWidth, height: pill.offsetHeight });
+/** Height of the page-preview strip while it is shown: the pill keeps above it. */
+const pillStrip = () => workspace.classList.contains('has-page-strip') ? pageStrip.element.offsetHeight : 0;
 function drawerBand() {
   // The compact sheet covers the whole layout over a scrim; only the side-by-side drawer is steered around.
   if (!$('reader-layout').classList.contains('library-open') || matchMedia('(max-width: 719px)').matches) return null;
@@ -197,11 +208,11 @@ function showPill(point: Point | null) {
 function placePill() {
   if (!pillPlacement) return showPill(null);
   const size = pillBox();
-  if (size.width) showPill(resolvePlacement(pillPlacement, pillPanel(), size, drawerBand())); // A hidden pill has no size to place.
+  if (size.width) showPill(resolvePlacement(pillPlacement, pillPanel(), size, drawerBand(), pillStrip())); // A hidden pill has no size to place.
 }
 /** Moves the pill to the clamped, drawer-clear form of `point` and remembers what is actually on screen. */
 function movePill(point: Point, save: boolean) {
-  const panel = pillPanel(), size = pillBox(), resolved = resolvePlacement(placementOf(point, panel, size), panel, size, drawerBand());
+  const panel = pillPanel(), size = pillBox(), resolved = resolvePlacement(placementOf(point, panel, size), panel, size, drawerBand(), pillStrip());
   pillPlacement = placementOf(resolved, panel, size); showPill(resolved);
   if (save) try { localStorage.setItem(pillKey, serialisePlacement(pillPlacement)); } catch { /* Optional preference. */ }
 }
@@ -237,6 +248,30 @@ const viewChanged = () => { cancelAnimationFrame(viewFrame); viewFrame = request
 const viewObserver = new ResizeObserver(viewChanged);
 for (const element of [workspace, pill, $('library-root')]) viewObserver.observe(element);
 new MutationObserver(viewChanged).observe($('reader-layout'), { attributes: true, attributeFilter: ['class'] });
+// Page previews (PDF): the next pages in a fixed band under the reading surface. The preference is global and
+// off until chosen; the band is shown only for a document that has previews and a panel tall enough to spare
+// it. It is room the reading surface leaves (CSS, `has-page-strip`), not a row in the page's flow, so turning
+// a page never resizes what the page was fitted to.
+const stripKey = 'hold-my-brief:page-strip', pageStrip = createPageStrip(fail);
+let stripWanted = false, stripReader: ReaderAdapter | undefined;
+try { stripWanted = localStorage.getItem(stripKey) === 'on'; } catch { /* Optional preference. */ }
+workspace.append(pageStrip.element);
+/** Reserves or releases the strip's room for the document `adapter` shows; true when the strip is shown. */
+function stripSpace(adapter: ReaderAdapter | undefined) {
+  // Measured on the panel, which the strip never resizes, so showing the strip cannot hide it again.
+  const shown = Boolean(adapter?.setPreviews) && stripWanted && workspace.clientHeight >= MIN_PANEL_HEIGHT;
+  const changed = workspace.classList.contains('has-page-strip') !== shown;
+  workspace.classList.toggle('has-page-strip', shown); pageStrip.element.hidden = !shown;
+  if (changed) placePill();
+  return shown;
+}
+/** Points the strip at the open document while it is shown, and away from it otherwise. */
+function syncPageStrip() {
+  const feeder = stripSpace(reader) ? reader : undefined;
+  if (feeder === stripReader) return;
+  stripReader?.setPreviews?.(undefined); pageStrip.clear();
+  stripReader = feeder; feeder?.setPreviews?.(pageStrip.sink);
+}
 scrubber.oninput = () => { scrubbing = true; ++scrubRequest; updateScrubValue(true); };
 scrubber.onchange = () => {
   if (!reader || !position) return;
@@ -301,7 +336,7 @@ function openPalette() {
     // Created on first use, and appended after the static dialogs, so the shared close handler
     // above (which focuses the reading surface) never attaches to it; the palette owns its focus.
     palette = createPalette({
-      hasDocument: () => Boolean(reader), desktop, run: id => command(id),
+      hasDocument: () => Boolean(reader), format: () => active?.format, desktop, run: id => command(id),
       goTo: target => { const current = reader; return current?.goTo(target).then(() => activeHost?.focus(), error => { if (reader === current) fail(error); }); },
       find: text => findBar.open(text),
       assistant,
@@ -359,7 +394,7 @@ const assistant = createAssistantPanel($('reader-layout'), {
     },
     runCommand: async id => {
       const entry = COMMANDS.find(candidate => candidate.id === id)!;
-      const reason = unavailableReason(entry, { hasDocument: Boolean(reader), desktop });
+      const reason = unavailableReason(entry, { hasDocument: Boolean(reader), desktop, format: active?.format });
       if (reason) throw new Error(reason);
       const before = { pinned: windowState.pinned, locked: windowState.locked };
       await command(id);
@@ -375,7 +410,7 @@ async function command(id: string) {
   // The catalog's declared requirements are enforced here rather than by each caller, so the
   // keyboard, the menu and the palette cannot drift into different behaviour.
   const entry = COMMANDS.find(candidate => candidate.id === id);
-  const reason = entry && unavailableReason(entry, { hasDocument: Boolean(reader), desktop });
+  const reason = entry && unavailableReason(entry, { hasDocument: Boolean(reader), desktop, format: active?.format });
   if (reason) { notify(reason); return; }
   if (id === 'open') openFile();
   else if (id === 'library') { if (libraryFloating) void native('set_library_window', { undocked: true, restore: false, width: 0, side: 'left' }).catch(fail); else library.toggle(); }
@@ -411,6 +446,7 @@ async function load(open: () => Promise<Opened | null>, label = 'document'): Pro
     await flush(); const doc = await open(); if (!doc || token !== request) return false;
     $('loading').querySelector('span')!.textContent = `Opening ${doc.name}…`;
     candidate = await adapter(doc.format); if (token !== request) return false;
+    stripSpace(candidate); // A page-preview strip's room is there before the document is fitted, so opening never refits it.
     staging = document.createElement('section'); staging.className = 'reader-host staging'; staging.tabIndex = 0; staging.setAttribute('aria-label', 'Reading surface'); $('view-controls').before(staging);
     const prefs = { ...defaultOptions, ...doc.previousState?.options };
     const current = candidate;
@@ -437,12 +473,12 @@ async function load(open: () => Promise<Opened | null>, label = 'document'): Pro
     await library.refresh(doc.path).catch(fail);
     return true;
   } catch (error) { if (token === request) fail(error); return false; }
-  finally { candidate?.destroy(); staging?.remove(); if (token === request) { $('loading').hidden = true; cancelPending = undefined; } }
+  finally { candidate?.destroy(); staging?.remove(); if (token === request) { $('loading').hidden = true; cancelPending = undefined; syncPageStrip(); } }
 }
 function openFile(path?: string) { if (desktop) void load(() => chooseDocument(path), path?.split(/[\\/]/).pop()); else $<HTMLInputElement>('file-input').click(); }
 $('ask').onclick = () => openPalette(); $('empty-open').onclick = () => openFile();
 $<HTMLInputElement>('file-input').onchange = event => { const input = event.target as HTMLInputElement; if (input.files?.[0]) { const file = input.files[0]; void load(() => browserFile(file), file.name); } input.value = ''; };
-$('cancel').onclick = () => { ++request; cancelPending?.(); cancelPending = undefined; $<HTMLDialogElement>('password').close(); $('loading').hidden = true; };
+$('cancel').onclick = () => { ++request; cancelPending?.(); cancelPending = undefined; $<HTMLDialogElement>('password').close(); $('loading').hidden = true; syncPageStrip(); };
 $('dismiss-notice').onclick = () => { $('notice').hidden = true; };
 $('retry-save').onclick = () => { dirty = true; void flush(); };
 async function navigate(action: Parameters<ReaderAdapter['navigate']>[0]) { try { await reader?.navigate(action); } catch (error) { fail(error); } }
@@ -474,6 +510,11 @@ async function action(name: string) {
   else if (name === 'rotate') await changeOptions({ rotation: (options.rotation + 90) % 360 });
   else if (name === 'spread') { if (reader?.spreads) await changeOptions({ spread: !options.spread }); }
   else if (name === 'cover') await changeOptions({ cover: !options.cover });
+  else if (name === 'page-strip') {
+    stripWanted = !stripWanted;
+    try { localStorage.setItem(stripKey, stripWanted ? 'on' : 'off'); } catch { /* Optional preference. */ }
+    updateViewControls();
+  }
   else if (name === 'smaller' || name === 'larger') { const delta = name === 'larger' ? 1 : -1; await changeOptions(reader?.mode === 'fixed' ? { zoom: Math.round(Math.max(.25, Math.min(4, options.zoom + delta * .1)) * 100) / 100 } : { fontSize: Math.max(12, Math.min(40, options.fontSize + delta * 2)) }); }
   else if (name === 'type') appearanceSheet.open('text');
   else if (name === 'outline') { const list = $('outline-list'); list.replaceChildren(); const entries = reader?.outline() ?? []; if (!entries.length) list.textContent = 'No contents outline in this document.'; for (const item of entries) { const button = document.createElement('button'); button.textContent = item.label; button.onclick = () => { void reader?.goTo(item.target).then(() => closeDialog($<HTMLDialogElement>('contents'))).catch(fail); }; list.append(button); } showDialog('contents'); }
@@ -502,16 +543,19 @@ document.addEventListener('keydown', event => {
   if (shortcutFor(event) === 'command-palette') { event.preventDefault(); openPalette(); return; }
   if (target instanceof HTMLElement && (target.closest('input,textarea,select,[contenteditable="true"]'))) return;
   const key = event.key.toLowerCase(); let operation: (() => void) | undefined;
+  const inStrip = target instanceof Node && pageStrip.element.contains(target);
   // Catalog shortcuts go through the same dispatcher as the menu and the palette.
   const shortcut = shortcutFor(event);
   if (shortcut === 'back') operation = () => void navigate('back');
+  else if (shortcut === 'page-strip' && reader && !reader.setPreviews) return; // Only a PDF has previews; for any other document the key is not ours.
   else if (shortcut) operation = () => void command(shortcut).catch(fail);
   else if (key === 'h' && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey && !event.repeat && pan.pannable && (target === document.body || target instanceof Node && (activeHost?.contains(target) || $('view-controls').contains(target)))) operation = toggleHand;
-  else if (!event.ctrlKey && !event.altKey && activeHost && (target === document.body || target instanceof Node && activeHost.contains(target))) {
+  else if (!event.ctrlKey && !event.altKey && activeHost && (target === document.body || target instanceof Node && (activeHost.contains(target) || inStrip))) {
     const horizontal = target instanceof HTMLElement && target.closest('pre,table,[data-horizontal-scroll]');
     const mapping: Record<string, Parameters<ReaderAdapter['navigate']>[0]> = { pagedown: 'next', pageup: 'previous', home: 'start', end: 'end', ' ': event.shiftKey ? 'screen-previous' : 'screen-next' };
     if (reader?.mode !== 'scroll' && !horizontal) { mapping.arrowright = 'next'; mapping.arrowleft = 'previous'; }
-    if (mapping[key]) operation = () => void navigate(mapping[key]);
+    // Arrow and page keys turn pages from a focused thumbnail too; Space is left to press it.
+    if (mapping[key] && !(inStrip && key === ' ')) operation = () => void navigate(mapping[key]);
   }
   if (operation) { event.preventDefault(); operation(); }
 });
