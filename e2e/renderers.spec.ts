@@ -45,6 +45,31 @@ function pdfFixture() {
   return Buffer.from(out);
 }
 
+/**
+ * A PDF built from `kinds`: a `text` page draws one line of text, an `image` page is one
+ * full-page image with no text operators at all (a scan without OCR: no text layer, which
+ * is what `Position.imageOnly` reports).
+ */
+function scanPdf(kinds: ('text' | 'image')[]) {
+  const stream = (text: string) => `<< /Length ${Buffer.byteLength(text)} >>\nstream\n${text}\nendstream`;
+  const pixels = Buffer.alloc(4 * 4, 0x80).toString('latin1'); // One 4 x 4 opaque grey tile, reused by every image page.
+  const n = kinds.length, image = 3 + 2 * n, font = image + 1;
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    `<< /Type /Pages /Kids [${kinds.map((_, i) => `${3 + i} 0 R`).join(' ')}] /Count ${n} >>`,
+    ...kinds.map((_, i) => `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 600] /Resources << /XObject << /Im0 ${image} 0 R >> /Font << /F1 ${font} 0 R >> >> /Contents ${3 + n + i} 0 R >>`),
+    ...kinds.map((kind, i) => stream(kind === 'text' ? `BT /F1 24 Tf 25 550 Td (Text page ${i + 1}) Tj ET` : 'q 400 0 0 600 0 0 cm /Im0 Do Q')),
+    `<< /Type /XObject /Subtype /Image /Width 4 /Height 4 /ColorSpace /DeviceGray /BitsPerComponent 8 /Length ${pixels.length} >>\nstream\n${pixels}\nendstream`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ];
+  let out = '%PDF-1.7\n'; const offsets: number[] = [];
+  objects.forEach((object, i) => { offsets.push(Buffer.byteLength(out)); out += `${i + 1} 0 obj\n${object}\nendobj\n`; });
+  const xref = Buffer.byteLength(out);
+  out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n` + offsets.map(offset => `${String(offset).padStart(10, '0')} 00000 n \n`).join('');
+  out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return Buffer.from(out, 'latin1');
+}
+
 async function epubFixture(fixed = false) {
   const writer = new ZipWriter(new Uint8ArrayWriter(), { useWebWorkers: false });
   const files: Record<string, string> = {
@@ -779,6 +804,95 @@ test('PDF view controls zoom, pan 1:1 by hand tool and middle button, and keep l
   await page.locator('#file-input').setInputFiles({ name: 'notes.md', mimeType: 'text/markdown', buffer: Buffer.from('# Notes\n\nPlain reflowing text.') });
   await expect(page.locator('#filename')).toHaveText('notes.md');
   await expect(page.locator('#view-controls')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+test('image-only PDF pages carry no note, say so in the tooltip and explain a select-drag once', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+  await page.setViewportSize({ width: 1000, height: 700 });
+  await page.goto('/');
+  const buffer = scanPdf(['text', 'image', 'image', 'text']);
+  const file = { name: 'mixed-scan.pdf', mimeType: 'application/pdf', buffer };
+  await recordFixture('mixed-scan.pdf', buffer, { pages: 4, textLayer: 'pages 1 and 4 only' });
+  const open = () => page.locator('#file-input').setInputFiles(file);
+  const host = page.locator('.pdf-reader'), notice = page.locator('#notice'), title = page.locator('#filekind');
+  const tip = /^Image-only page: text can't be selected or searched$/m;
+  const noNote = async () => {
+    await expect(page.locator('.pdf-scan-note')).toHaveCount(0);
+    await expect(page.locator('.pdf-page', { hasText: 'Image-only' })).toHaveCount(0);
+  };
+  const turn = async (key: string, position: string) => { await host.focus(); await page.keyboard.press(key); await expect(page.locator('#position')).toContainText(position); };
+  const drag = async (button: 'left' | 'middle' = 'left', selector = '.pdf-page') => {
+    const box = (await page.locator(selector).first().boundingBox())!, x = box.x + box.width / 2, y = box.y + box.height / 2;
+    await page.mouse.move(x, y); await page.mouse.down({ button }); await page.mouse.move(x + 40, y + 20, { steps: 5 }); await page.mouse.up({ button });
+  };
+  const zoomTo = async (level: string, button: 'Zoom in' | 'Zoom out') => {
+    // One step at a time: a click is applied asynchronously, so wait for the label to move before the next.
+    for (let i = 0; i < 14; i++) {
+      const current = (await page.locator('#zoom-level').textContent())!;
+      if (current === level) break;
+      await page.getByRole('button', { name: button }).click();
+      await expect(page.locator('#zoom-level')).not.toHaveText(current);
+    }
+    await expect(page.locator('#zoom-level')).toHaveText(level); await expect(page.locator('.pdf-render-status')).toHaveCount(0);
+  };
+  const message = "This page is a scanned image, so its text can't be selected or searched.";
+
+  await open();
+  await expect(page.locator('.textLayer')).toContainText('Text page 1');
+  await expect(title).not.toHaveAttribute('title', /Image-only/); // The cover has text.
+  await noNote();
+  await drag(); await expect(notice).toBeHidden(); // A select-drag on a text page never explains anything.
+
+  // Tooltip: exactly while an image-only page is on screen, never duplicated.
+  await turn('PageDown', 'Page 2 of 4');
+  await expect(title).toHaveAttribute('title', tip);
+  expect((await title.getAttribute('title'))!.match(/Image-only page/g)).toHaveLength(1);
+  await noNote();
+  await turn('PageDown', 'Page 3 of 4'); await expect(title).toHaveAttribute('title', tip);
+  await turn('PageDown', 'Page 4 of 4'); await expect(title).not.toHaveAttribute('title', /Image-only/); await noNote();
+  await turn('PageUp', 'Page 3 of 4'); await expect(title).toHaveAttribute('title', tip);
+
+  // Single-page view at every zoom: Fit, Width, 70 % and 150 % draw nothing over the page.
+  await host.focus(); await page.keyboard.press('Control+2'); await expect(page.locator('#zoom-level')).toHaveText('Width'); await noNote();
+  await page.keyboard.press('Control+0'); await expect(page.locator('#zoom-level')).toHaveText('Fit');
+  await zoomTo('70%', 'Zoom out'); await noNote();
+  await page.keyboard.press('Control+0'); await expect(page.locator('#zoom-level')).toHaveText('Fit'); await noNote();
+
+  // Intent cue: not for clicks, middle drags or hand drags; yes for the first select-drag only.
+  { const box = (await page.locator('.pdf-page').first().boundingBox())!; await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2); } await expect(notice).toBeHidden();
+  await drag('middle'); await expect(notice).toBeHidden();
+  await zoomTo('150%', 'Zoom in');
+  await host.focus(); await page.keyboard.press('h');
+  await expect(page.getByRole('button', { name: 'Hand tool' })).toHaveAttribute('aria-pressed', 'true');
+  await drag(); await expect(notice).toBeHidden();
+  await page.keyboard.press('h');
+  await expect(page.getByRole('button', { name: 'Hand tool' })).toHaveAttribute('aria-pressed', 'false');
+  await noNote();
+  await drag(); await expect(notice).toBeVisible(); await expect(notice).toContainText(message);
+  await expect(page.locator('#retry-save')).toBeHidden();
+  await page.getByRole('button', { name: 'Dismiss message' }).click(); await expect(notice).toBeHidden();
+  await drag(); await expect(notice).toBeHidden(); // Once per opened document.
+
+  // Opening the document again re-arms it; two-page view and zoom levels never draw a note.
+  await open(); await expect(page.locator('#position')).toContainText('Page 3 of 4'); await expect(page.locator('.reader-host.staging')).toHaveCount(0); // The saved place is restored.
+  await page.locator('.reader-host').focus(); await page.keyboard.press('Control+3');
+  await expect(page.locator('.pdf-spread')).toHaveAttribute('data-side', 'both');
+  await expect(page.locator('#position')).toContainText('Pages 2–3 of 4');
+  await expect(page.locator('.pdf-spread .pdf-page')).toHaveCount(2);
+  await expect(title).toHaveAttribute('title', tip); await noNote();
+  await page.keyboard.press('Control+2'); await noNote();
+  await page.keyboard.press('Control+0'); await noNote();
+  await page.keyboard.press('Control+0'); await zoomTo('70%', 'Zoom out'); await noNote();
+  await zoomTo('150%', 'Zoom in'); await noNote();
+  await page.keyboard.press('Control+0'); await expect(page.locator('#zoom-level')).toHaveText('Fit');
+  await expect(page.locator('.pdf-render-status')).toHaveCount(0); await expect(title).toHaveAttribute('title', tip); // Text has been read, so the page is known to be image-only.
+  await drag('left', '.pdf-spread .pdf-page:nth-child(2)'); await expect(notice).toBeVisible(); await expect(notice).toContainText(message);
+
+  // A PDF with no text on any page is image-only on every page, and the find bar still answers.
+  await page.locator('#file-input').setInputFiles({ name: 'scan.pdf', mimeType: 'application/pdf', buffer: scanPdf(['image', 'image', 'image']) });
+  await expect(page.locator('#position')).toContainText('Page 1 of 3');
+  await expect(title).toHaveAttribute('title', tip); await noNote();
   expect(errors).toEqual([]);
 });
 

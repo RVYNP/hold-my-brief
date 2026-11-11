@@ -5,7 +5,6 @@
 .pdf-link { position: absolute; z-index: 4; cursor: pointer; }
 .pdf-link:hover, .pdf-link:focus-visible { outline: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .pdf-render-status { position: absolute; top: 8px; left: 8px; z-index: 10; padding: 8px 12px; color: var(--fg); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; box-shadow: var(--shadow-page); width: max-content; max-width: calc(100% - 16px); }
-.pdf-scan-note { position: absolute; bottom: 4px; left: 4px; margin: 0; padding: 3px 6px; background: color-mix(in srgb, var(--surface) 94%, transparent); color: var(--fg); font: 12px/1.4 system-ui; }
 /* Two-page spread: pages meet edge to edge, a lone cover keeps the right half and a lone last page the left. */
 .pdf-spread { display: flex; margin: 0 auto; flex-shrink: 0; }
 .pdf-spread[data-side=right] { justify-content: flex-end; }

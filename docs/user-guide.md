@@ -32,9 +32,10 @@ combined with the selected collection, search, availability, and colour. These a
 conversions: PDFs stay PDFs, EPUBs stay EPUBs, and TXT identifies an actual plain-text file.
 
 A scanned PDF with no text layer shows its pages as images: text on those pages can't be selected
-or searched, and each such page carries an "Image-only page" note. Hold My Brief doesn't run OCR in
-this build, so run the PDF through an OCR tool first if you need its text. This is a known limit
-([#16](https://github.com/RVYNP/hold-my-brief/issues/16)).
+or searched. Nothing is drawn over the page; the subtitle's tooltip says "Image-only page" while one
+is on screen, and the first time you drag to select on one, a notice explains why nothing is
+selected. Hold My Brief doesn't run OCR in
+this build, so run the PDF through an OCR tool first if you need its text. This is a known limit.
 
 ## The window
 

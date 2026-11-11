@@ -22,7 +22,7 @@ const URL = 'http://127.0.0.1:1420/';
 
 // Committed media uses only redistributable documents:
 //  - a public-domain scan with a text layer (e.g. Internet Archive "The Half-Tone Process") for PDF
-//    shots; pages without one show an "Image-only page" note in every shot,
+//    shots; pages without one are image-only (the tooltip says so, and a select-drag shows a notice),
 //  - a public-domain book (e.g. Pride and Prejudice) for EPUB shots.
 // In-copyright magazine scans are intentionally NOT committed.
 // Pass the two documents as arguments; the README documents the sources used.
