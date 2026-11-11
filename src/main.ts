@@ -133,8 +133,11 @@ function updateViewControls() {
   // The subtitle says where you are, compactly ("48 / 146", without a PDF's printed page number);
   // the full position and the kind of view are in its tooltip.
   const where = position?.label ?? '';
+  // An image-only document says so once, here, rather than annotating every page over its
+  // content. The find bar reports the same limit when a search is run.
+  const imageOnly = position?.imageOnly ? 'Image-only document: text cannot be selected or found' : '';
   $('filekind').textContent = where.replace(/^(?:Pages?|Line) ([\d–-]+) of (\d+)(?: · .*)?$/, '$1 / $2');
-  $('filekind').title = [where, `${active.format.toUpperCase()} · ${kind}${pan.hand ? ' · Hand' : ''}`, waiting].filter(Boolean).join('\n');
+  $('filekind').title = [where, `${active.format.toUpperCase()} · ${kind}${pan.hand ? ' · Hand' : ''}`, imageOnly, waiting].filter(Boolean).join('\n');
   const spreads = !!reader.spreads, spread = spreads && options.spread;
   const toggles = [$<HTMLButtonElement>('spread-toggle'), $<HTMLButtonElement>('view-spread')];
   for (const button of toggles) {

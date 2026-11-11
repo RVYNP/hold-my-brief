@@ -43,6 +43,12 @@ export class PdfAdapter implements ReaderAdapter {
   private textCache = new Map<number, string>();
   /** The hit currently marked per page, redrawn whenever the shown pages change. */
   private marks = new Map<number, SearchHit>();
+  /**
+   * Whether the document has a text layer at all. `undefined` until enough pages have been
+   * read to answer: one empty page is an image-only *page*, and only a document with no text
+   * on any page read so far is image-only. It is reported through `Position.imageOnly`.
+   */
+  private imageOnly?: boolean;
   private prefetchAbort?: AbortController;
   private prefetching = false;
   private explicitEnd = false;
@@ -186,10 +192,11 @@ export class PdfAdapter implements ReaderAdapter {
           }); surface.append(link);
         }
         if (generation !== this.generation || this.disposed) return;
-        if (!texts[index].items.length) {
-          const note = document.createElement('p'); note.className = 'pdf-scan-note'; note.textContent = 'Image-only page. Text selection is unavailable.'; surface.append(note);
-        }
       }
+      // An image-only page used to carry its own note pinned over the page. It repeated on
+      // every such page (twice in two-page view), covered content and collided with the view
+      // controls; the state is a property of the document, so it is reported once, there.
+      this.noteImageOnly(texts);
       this.prefetchNeighbours(numbers, spread);
     } catch (error) {
       if (generation !== this.generation || this.disposed || (error as Error).name === 'RenderingCancelledException') return;
@@ -282,6 +289,20 @@ export class PdfAdapter implements ReaderAdapter {
       } catch { /* Prefetch is an optimization; a failure must never surface to the reader. */ }
       finally { if (this.prefetchAbort === controller) this.prefetching = false; }
     })();
+  }
+
+  /**
+   * Records whether the document has any text layer, from the text already extracted for the
+   * pages just rendered.
+   *
+   * A document is only image-only while every page read has been empty, so a PDF whose first
+   * page is a scan but whose later pages carry text stops being reported as image-only as soon
+   * as such a page is shown. That direction is safe: it can correct itself from "no text" to
+   * "has text" as the reader turns, and never claims a text layer the document lacks.
+   */
+  private noteImageOnly(texts: Awaited<ReturnType<PDFPageProxy['getTextContent']>>[]) {
+    if (!texts.length || texts.some(text => text.items.length)) this.imageOnly = false;
+    else if (this.imageOnly === undefined) this.imageOnly = true;
   }
 
   private pushHistory() { this.history.push(this.getPosition().locator); if (this.history.length > 20) this.history.shift(); }
@@ -422,6 +443,7 @@ export class PdfAdapter implements ReaderAdapter {
       fraction: this.explicitEnd ? 1 : ((first - 1) + y * this.pages.length) / total,
       scrub: { current: first, total, unit: 'page', ...(spread ? { cover: this.options.cover !== false } : {}) },
       ...(this.shownSpread ? { spread: this.shownSpread } : {}),
+      ...(this.imageOnly ? { imageOnly: true } : {}),
       locator: { kind: 'pdf', page: first, x, y, fit: this.options?.fit, zoom: this.options?.zoom, rotation: this.options?.rotation, end: this.explicitEnd } };
   }
   async restore(locator: Locator) { if (locator.kind === 'pdf') await this.render(Number(locator.page) || 1, Number(locator.y) || 0, Number(locator.x) || 0, locator.end === true); }

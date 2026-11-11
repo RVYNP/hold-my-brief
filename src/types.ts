@@ -9,6 +9,12 @@ export type Position = {
   scrub: { current: number; total: number; unit: 'page' | 'line' | 'percent'; cover?: boolean };
   /** Two-page view state when it was requested: showing pairs, or single pages until the panel is wide enough. */
   spread?: 'active' | 'waiting';
+  /**
+   * True when the document has no usable text layer at all, so text cannot be selected or
+   * searched anywhere in it. A property of the whole document, not of the page on screen:
+   * it is what lets the reader say so once instead of annotating every page.
+   */
+  imageOnly?: boolean;
 };
 export type OutlineItem = { label: string; target: string };
 export type ReaderOptions = { fontSize: number; lineHeight: number; margin: number; wrap: boolean; fit: 'page' | 'width'; zoom: number; rotation: number; spread: boolean; cover: boolean };
