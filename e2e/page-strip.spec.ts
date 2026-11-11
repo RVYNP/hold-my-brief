@@ -417,3 +417,38 @@ test('a rotated document is previewed rotated, and the strip starts beside the l
   await expect.poll(async () => (await strip(page).boundingBox())!.x).toBeGreaterThanOrEqual(drawer.x + drawer.width - 1);
   expect((await strip(page).boundingBox())!.x).toBeGreaterThan(before.x);
 });
+
+test('with the strip on, the hand tool slides a fitting page above the strip, never into it', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+  await openPdf(page);
+  await page.keyboard.press('Control+4');
+  await expect(strip(page)).toBeVisible();
+  await expectPainted(page, [2, 3, 4]);
+  const size = await settledHeight(page), sheet = page.locator('.pdf-page');
+  await expect(page.locator('#zoom-level')).toHaveText('Fit');
+  await page.keyboard.press('h');
+  await expect(page.getByRole('button', { name: 'Hand tool' })).toHaveAttribute('aria-pressed', 'true');
+
+  // Drag from the panel's top-left to the window's bottom-right corner, further than the page can go: the slide must stop at its clamp.
+  const panel = (await host(page).boundingBox())!, band = (await strip(page).boundingBox())!;
+  expect(panel.y + panel.height).toBeLessThanOrEqual(band.y + .5); // The slide's panel is the page area alone.
+  await page.mouse.move(panel.x + 10, panel.y + 10); await page.mouse.down();
+  await page.mouse.move(1079, 699, { steps: 10 }); await page.mouse.up();
+  const slid = (await sheet.boundingBox())!;
+  // At least 64 px of the page stay inside that panel: so its top edge stops 64 px above the strip, and its bottom is clipped there.
+  expect(slid.y).toBeCloseTo(panel.y + panel.height - 64, 0);
+  expect(slid.y + 64).toBeLessThanOrEqual(band.y + .5);
+  // The strip is untouched and still on top: its first thumbnail is what is under the pointer, and it works.
+  const first = (await goButtons(page).first().boundingBox())!;
+  expect(await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('#page-strip') !== null, [first.x + first.width / 2, first.y + first.height / 2])).toBe(true);
+  expect((await strip(page).boundingBox())!).toEqual(band);
+  expect(await hostHeight(page)).toBe(size);
+  await goButtons(page).first().click();
+  await expect(page.locator('#position')).toContainText('Page 2 of 9');
+  await expect.poll(() => names(page)).toEqual(['Go to page 3', 'Go to page 4', 'Go to page 5']);
+  // Turning the strip off gives the host its height back.
+  await page.keyboard.press('Control+4');
+  await expect(strip(page)).toBeHidden();
+  await expect.poll(() => hostHeight(page)).toBe(size + Math.round(band.height));
+  expect(errors).toEqual([]);
+});

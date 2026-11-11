@@ -447,6 +447,10 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
 .page-strip-label { position: absolute; left: 4px; bottom: 4px; max-width: calc(100% - 8px); padding: 1px 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 3px; background: var(--card); color: var(--fg); font: 11px/1.3 var(--font-mono); font-variant-numeric: tabular-nums; box-shadow: 0 0 0 1px var(--border); }
 .page-strip-item:hover .page-strip-label { color: var(--accent-ink); }
 .page-strip-end { display: flex; align-items: center; height: 88px; margin: 0; color: var(--muted); font: 11px/1.3 var(--font-mono); letter-spacing: .2px; }
+/* A page that fits is slid by the hand tool (src/pan.ts) with `translate`: a paint-time move that never changes the host's size,
+   so nothing refits. The host stops scrolling meanwhile, because a translated page would grow its scrollable area and raise a scrollbar. */
+.reader-host.page-moved { overflow: hidden; }
+.reader-host.page-moved > .pdf-page, .reader-host.page-moved > .pdf-spread, .reader-host.page-moved .image-frame, .reader-host.page-moved > foliate-view { translate: var(--pan-x, 0) var(--pan-y, 0); }
 dialog { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--fg); padding: 18px; width: min(360px, calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow: auto; box-shadow: var(--shadow-popover); }
 dialog::backdrop { background: var(--scrim); }
 h2 { font: 400 17px/1.25 var(--font-read); margin: 0 0 16px; }

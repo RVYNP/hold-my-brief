@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import { ZipWriter, Uint8ArrayWriter, TextReader } from '@zip.js/zip.js';
 import { createHash } from 'node:crypto';
 import { crc32, deflateSync } from 'node:zlib';
@@ -748,10 +748,15 @@ test('PDF view controls zoom, pan 1:1 by hand tool and middle button, and keep l
   const scroll = () => host.evaluate(el => [el.scrollLeft, el.scrollTop]);
   await expect(page.locator('#view-controls')).toBeVisible();
   await expect(page.locator('#zoom-level')).toHaveText('Fit');
-  await expect(hand).toHaveAttribute('aria-disabled', 'true');
-  await expect(hand).toHaveAttribute('title', 'Zoom in to pan');
+  // The hand tool is available at Fit: its title never changes and it is never disabled.
+  await expect(hand).toHaveAttribute('aria-disabled', 'false');
+  await expect(hand).toHaveAttribute('title', 'Hand tool: drag to pan (H)');
   await host.focus(); await page.keyboard.press('h');
-  await expect(hand).toHaveAttribute('aria-pressed', 'false'); // Nothing overflows yet.
+  await expect(hand).toHaveAttribute('aria-pressed', 'true'); // On at Fit: a drag slides the page.
+  await expect(page.locator('#filekind')).toHaveAttribute('title', /^PDF · Page view · Hand$/m);
+  await expect(host).toHaveClass(/hand-tool/); // Grab cursor, because a drag now always does something.
+  await page.keyboard.press('h');
+  await expect(hand).toHaveAttribute('aria-pressed', 'false');
   for (let i = 0; i < 4; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
   await page.keyboard.press('Control+Equal'); // Shortcut and pill share one zoom state.
   await expect(page.locator('#zoom-level')).toHaveText('150%');
@@ -793,17 +798,278 @@ test('PDF view controls zoom, pan 1:1 by hand tool and middle button, and keep l
   await page.mouse.move(box.x + 170, box.y + 270, { steps: 4 }); await page.mouse.up({ button: 'middle' });
   expect(await scroll()).toEqual([30, 30]);
 
-  // Returning to fit makes the hand tool unavailable again; a new document resets it.
+  // Returning to fit keeps the tool on: the page slides there instead of scrolling. A new document resets it.
   await page.keyboard.press('h');
+  await expect(hand).toHaveAttribute('aria-pressed', 'true');
   await page.locator('#zoom-level').click();
   await expect(page.locator('#zoom-level')).toHaveText('Fit');
-  await expect(hand).toHaveAttribute('aria-disabled', 'true');
-  await expect(hand).toHaveAttribute('aria-pressed', 'false');
+  await expect(hand).toHaveAttribute('aria-pressed', 'true');
+  await expect(hand).toHaveAttribute('title', 'Hand tool: drag to pan (H)');
+  await expect(host).toHaveClass(/hand-tool/);
+  await page.getByRole('button', { name: 'Zoom in' }).click();
+  await expect(hand).toHaveAttribute('aria-pressed', 'true');
+  await expect(host).toHaveClass(/hand-tool/);
+  await page.locator('#zoom-level').click();
+  await expect(page.locator('#zoom-level')).toHaveText('Fit');
   await page.locator('#zoom-level').click();
   await expect(page.locator('#zoom-level')).toHaveText('Width');
   await page.locator('#file-input').setInputFiles({ name: 'notes.md', mimeType: 'text/markdown', buffer: Buffer.from('# Notes\n\nPlain reflowing text.') });
   await expect(page.locator('#filename')).toHaveText('notes.md');
   await expect(page.locator('#view-controls')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+/** Primary-button drag inside the reading panel from `from` (px inside its top-left corner) by (dx, dy). */
+async function dragPanel(page: Page, host: Locator, dx: number, dy: number, from = { x: 24, y: 24 }) {
+  const box = (await host.boundingBox())!;
+  await page.mouse.move(box.x + from.x, box.y + from.y); await page.mouse.down();
+  await page.mouse.move(box.x + from.x + dx, box.y + from.y + dy, { steps: 6 }); await page.mouse.up();
+}
+/** The panel's own size: it must not change while a page is slid (that is what would make the PDF adapter refit). */
+const panelSize = (host: Locator) => host.evaluate(el => [el.clientWidth, el.clientHeight]);
+/** Moves `host`'s page by `(dx, dy)` repeatedly, in 300 px strokes that stay inside a 420 px panel, until the clamp holds it. */
+async function pushToEdge(page: Page, host: Locator, direction: 1 | -1) {
+  const [width, height] = await panelSize(host);
+  const from = direction === 1 ? { x: 24, y: 24 } : { x: width - 24, y: height - 24 };
+  for (let i = 0; i < 4; i++) await dragPanel(page, host, 300 * direction, 300 * direction, from);
+}
+
+test('hand tool slides a PDF page that fits 1:1 at Fit and below 100%, never selecting or refitting', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles({ name: 'slide.pdf', mimeType: 'application/pdf', buffer: pdfFixture() });
+  await expect(page.locator('.textLayer')).toContainText('First page with selectable text');
+  const host = page.locator('.pdf-reader'), hand = page.getByRole('button', { name: 'Hand tool' }), sheet = page.locator('.pdf-page');
+  await host.focus(); await page.keyboard.press('h');
+  await expect(hand).toHaveAttribute('aria-pressed', 'true');
+  await expect(host).toHaveClass(/hand-tool/);
+
+  const slide = async (level: string) => {
+    await expect(page.locator('#zoom-level')).toHaveText(level);
+    await expect(page.locator('.pdf-render-status')).toHaveCount(0);
+    await expect(page.locator('.textLayer')).toContainText('First page with selectable text');
+    const size = await panelSize(host);
+    const fits = await host.evaluate(el => el.scrollWidth - el.clientWidth <= 1 && el.scrollHeight - el.clientHeight <= 1);
+    expect(fits, `${level}: the page must fit the panel for this to be the slide case`).toBe(true);
+    const canvas = await page.locator('.pdf-page canvas').elementHandle();
+    const natural = (await sheet.boundingBox())!;
+
+    // A drag of (30, 40) moves the page's box by exactly (30, 40), and selects nothing.
+    await dragPanel(page, host, 30, 40);
+    const moved = (await sheet.boundingBox())!;
+    expect(moved.x - natural.x, `${level}: x`).toBeCloseTo(30, 1); expect(moved.y - natural.y, `${level}: y`).toBeCloseTo(40, 1);
+    expect(moved.width).toBeCloseTo(natural.width, 1); expect(moved.height).toBeCloseTo(natural.height, 1);
+    expect(await page.evaluate(() => getSelection()?.toString())).toBe('');
+    // The same canvas stays on screen, in a panel of the same size, long after any refit debounce.
+    await page.waitForTimeout(450);
+    expect(await panelSize(host)).toEqual(size);
+    expect(await page.evaluate(canvas => document.querySelector('.pdf-page canvas') === canvas, canvas)).toBe(true);
+    await expect(sheet).toHaveCount(1);
+    await expect(page.locator('.pdf-render-status')).toHaveCount(0);
+
+    // A huge drag leaves exactly 64 px of the page inside the panel on that axis.
+    const panel = (await host.boundingBox())!;
+    await pushToEdge(page, host, 1);
+    let edge = (await sheet.boundingBox())!;
+    expect(edge.x, `${level}: right clamp`).toBeCloseTo(panel.x + size[0] - 64, 1); expect(edge.y, `${level}: bottom clamp`).toBeCloseTo(panel.y + size[1] - 64, 1);
+    await pushToEdge(page, host, -1);
+    edge = (await sheet.boundingBox())!;
+    expect(edge.x + edge.width, `${level}: left clamp`).toBeCloseTo(panel.x + 64, 1); expect(edge.y + edge.height, `${level}: top clamp`).toBeCloseTo(panel.y + 64, 1);
+    expect(await panelSize(host)).toEqual(size);
+    expect(await page.evaluate(canvas => document.querySelector('.pdf-page canvas') === canvas, canvas)).toBe(true);
+  };
+  await slide('Fit');
+  await page.keyboard.press('Control+0');
+  // Zoom out to the pill's floor (25%), then in by the 10% steps to 75%.
+  for (let i = 0; i < 12 && !(await page.getByRole('button', { name: 'Zoom out' }).isDisabled()); i++) await page.getByRole('button', { name: 'Zoom out' }).click();
+  for (let i = 0; i < 5; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
+  await slide('75%');
+  expect(errors).toEqual([]);
+});
+
+test('a slid page keeps its offset across page turns and goes back on zoom, fit, Ctrl 0 and overflow', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles({ name: 'offset.pdf', mimeType: 'application/pdf', buffer: pdfFixture() });
+  await expect(page.locator('.textLayer')).toContainText('First page with selectable text');
+  const host = page.locator('.pdf-reader'), sheet = page.locator('.pdf-page'), position = page.locator('#position');
+  await host.focus(); await page.keyboard.press('h');
+  const settle = async () => { await expect(page.locator('.pdf-render-status')).toHaveCount(0); await expect(sheet).toHaveCount(1); };
+  const panel = (await host.boundingBox())!;
+  const natural = (await sheet.boundingBox())!;
+  const near = (box: { x: number; y: number }, x: number, y: number, note: string) => { expect(box.x, `${note}: x`).toBeCloseTo(x, 1); expect(box.y, `${note}: y`).toBeCloseTo(y, 1); };
+
+  await dragPanel(page, host, 30, 40);
+  const moved = (await sheet.boundingBox())!;
+  near(moved, natural.x + 30, natural.y + 40, 'moved');
+  // Page 2 is landscape, so it is centred differently; it must still sit 30/40 px off where it would be.
+  await page.keyboard.press('PageDown');
+  await expect(position).toContainText('Page 2 of 3'); await expect(page.locator('.textLayer')).toContainText('Second page landscape'); await settle();
+  const second = (await sheet.boundingBox())!, [width] = await panelSize(host);
+  near(second, panel.x + (width - second.width) / 2 + 30, natural.y + 40, 'page 2');
+  await page.keyboard.press('PageUp');
+  await expect(position).toContainText('Page 1 of 3'); await expect(page.locator('.textLayer')).toContainText('First page with selectable text'); await settle();
+  near((await sheet.boundingBox())!, moved.x, moved.y, 'back on page 1');
+
+  // Ctrl 0 asks for a fresh fit, even though the zoom is already Fit.
+  await page.keyboard.press('Control+0'); await settle();
+  near((await sheet.boundingBox())!, natural.x, natural.y, 'Ctrl 0');
+
+  // Clicking the zoom level switches to fit width (the page overflows vertically): no leftover offset.
+  await dragPanel(page, host, 30, 40);
+  await page.locator('#zoom-level').click();
+  await expect(page.locator('#zoom-level')).toHaveText('Width'); await settle();
+  const wide = (await sheet.boundingBox())!, [wideWidth] = await panelSize(host);
+  near(wide, panel.x + (wideWidth - wide.width) / 2, panel.y + 16, 'fit width');
+  await page.locator('#zoom-level').click();
+  await expect(page.locator('#zoom-level')).toHaveText('Fit'); await settle();
+  near((await sheet.boundingBox())!, natural.x, natural.y, 'back to fit page');
+
+  // Zooming in past fit makes the page overflow: it is scrolled, not slid, so it sits at the top of the panel and centred.
+  await dragPanel(page, host, 30, 40);
+  await page.getByRole('button', { name: 'Zoom in' }).click();
+  await expect(page.locator('#zoom-level')).toHaveText('110%'); await settle();
+  expect(await host.evaluate(el => el.scrollHeight - el.clientHeight > 1)).toBe(true);
+  const grown = (await sheet.boundingBox())!, [grownWidth] = await panelSize(host);
+  near(grown, panel.x + Math.max(16, (grownWidth - grown.width) / 2), panel.y + 16, 'zoomed past fit');
+  expect(errors).toEqual([]);
+});
+
+test('a slid PDF page is re-clamped on resize, and text selection still lands on the right words', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles({ name: 'select.pdf', mimeType: 'application/pdf', buffer: pdfFixture() });
+  await expect(page.locator('.textLayer')).toContainText('First page with selectable text');
+  const host = page.locator('.pdf-reader'), sheet = page.locator('.pdf-page');
+  const word = () => page.evaluate(() => {
+    const node = [...document.querySelectorAll('.textLayer span')].map(span => span.firstChild).find(text => text?.textContent?.includes('selectable'))!;
+    const start = node.textContent!.indexOf('selectable'), range = document.createRange();
+    range.setStart(node, start); range.setEnd(node, start + 'selectable'.length);
+    const box = range.getBoundingClientRect(); return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  });
+  const before = await word();
+  await host.focus(); await page.keyboard.press('h');
+  await dragPanel(page, host, 30, 40);
+  const after = await word();
+  expect(after.x - before.x).toBeCloseTo(30, 1); expect(after.y - before.y).toBeCloseTo(40, 1);
+  // Hand off: a double-click where the word now is selects that word, not whatever sat there before the move.
+  await page.keyboard.press('h');
+  await page.mouse.dblclick(after.x, after.y);
+  expect((await page.evaluate(() => getSelection()?.toString()))!.trim()).toBe('selectable');
+
+  // Pushed to the bottom-right limit, the window narrows a little: the refit page is clamped again against the smaller panel.
+  await page.keyboard.press('h'); // Turn the tool back on for the push.
+  await expect(page.getByRole('button', { name: 'Hand tool' })).toHaveAttribute('aria-pressed', 'true');
+  await pushToEdge(page, host, 1);
+  await page.setViewportSize({ width: 400, height: 620 });
+  const atCorner = async () => {
+    const panel = (await host.boundingBox())!, [width, height] = await panelSize(host), box = await sheet.boundingBox();
+    return !!box && Math.abs(box.x - (panel.x + width - 64)) < 1 && Math.abs(box.y - (panel.y + height - 64)) < 1;
+  };
+  await expect.poll(atCorner).toBe(true);
+  await expect(page.locator('.pdf-render-status')).toHaveCount(0);
+  expect(await atCorner()).toBe(true);
+  // Narrower still: the old page is briefly too wide for the panel, but the refit page fits again, so the offset is kept
+  // and clamped to the corner of the smaller panel rather than dropped.
+  const wide = (await sheet.boundingBox())!;
+  await page.setViewportSize({ width: 340, height: 620 });
+  await expect.poll(async () => ((await sheet.boundingBox())?.width ?? Infinity) < wide.width - 1).toBe(true);
+  await expect(page.locator('.pdf-render-status')).toHaveCount(0);
+  await expect.poll(atCorner).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('hand tool moves a two-page PDF spread as one', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+  await openPdfForPill(page, { width: 1080, height: 700 });
+  await page.locator('#view-spread').click();
+  const host = page.locator('.pdf-reader'), spread = page.locator('.pdf-spread'), pages = page.locator('.pdf-spread .pdf-page');
+  await host.focus(); await page.keyboard.press('PageDown');
+  await expect(page.locator('#position')).toContainText('Pages 2–3 of 3');
+  await expect(pages).toHaveCount(2); await expect(page.locator('.pdf-render-status')).toHaveCount(0);
+  await expect(page.locator('.textLayer').nth(1)).toContainText('Third page tall');
+  await page.keyboard.press('h');
+  const boxes = () => Promise.all([spread.boundingBox(), pages.nth(0).boundingBox(), pages.nth(1).boundingBox()]).then(all => all.map(box => box!));
+  const size = await panelSize(host), canvas = await page.locator('.pdf-spread canvas').first().elementHandle();
+  const natural = await boxes();
+  await dragPanel(page, host, -45, 35, { x: 500, y: 300 });
+  for (const [index, box] of (await boxes()).entries()) {
+    expect(box.x - natural[index].x, `box ${index} x`).toBeCloseTo(-45, 1); expect(box.y - natural[index].y, `box ${index} y`).toBeCloseTo(35, 1);
+  }
+  await page.waitForTimeout(450);
+  expect(await panelSize(host)).toEqual(size);
+  expect(await page.evaluate(canvas => document.querySelector('.pdf-spread canvas') === canvas, canvas)).toBe(true);
+  // The whole spread is clamped as one: 64 px of it stay inside, measured on the spread's outer box.
+  const panel = (await host.boundingBox())!;
+  await pushToEdge(page, host, 1);
+  const edge = (await spread.boundingBox())!;
+  expect(edge.x).toBeCloseTo(panel.x + size[0] - 64, 1); expect(edge.y).toBeCloseTo(panel.y + size[1] - 64, 1);
+  expect(errors).toEqual([]);
+});
+
+test('hand tool moves an image that fits', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles({ name: 'photo.png', mimeType: 'image/png', buffer: pngFixture(300, 200, [200, 90, 60]) });
+  const host = page.locator('.image-reader'), image = page.locator('.image-frame img');
+  await expect(page.locator('#filename')).toHaveText('photo.png');
+  await expect(image).toBeVisible(); await expect(page.locator('#view-controls')).toBeVisible();
+  await host.focus(); await page.keyboard.press('h');
+  await expect(page.getByRole('button', { name: 'Hand tool' })).toHaveAttribute('aria-pressed', 'true');
+  expect(await host.evaluate(el => el.scrollWidth - el.clientWidth <= 1 && el.scrollHeight - el.clientHeight <= 1)).toBe(true);
+  const size = await panelSize(host), element = await image.elementHandle(), natural = (await image.boundingBox())!;
+  await dragPanel(page, host, -40, 30, { x: 200, y: 300 });
+  const moved = (await image.boundingBox())!;
+  expect(moved.x - natural.x).toBeCloseTo(-40, 1); expect(moved.y - natural.y).toBeCloseTo(30, 1);
+  expect(moved.width).toBeCloseTo(natural.width, 1);
+  expect(await page.evaluate(() => getSelection()?.toString())).toBe('');
+  await page.waitForTimeout(300);
+  expect(await panelSize(host)).toEqual(size);
+  expect(await page.evaluate(image => document.querySelector('.image-frame img') === image, element)).toBe(true);
+  const panel = (await host.boundingBox())!;
+  await pushToEdge(page, host, 1);
+  const edge = (await image.boundingBox())!;
+  expect(edge.x).toBeCloseTo(panel.x + size[0] - 64, 1); expect(edge.y).toBeCloseTo(panel.y + size[1] - 64, 1);
+  expect(errors).toEqual([]);
+});
+
+test('hand tool moves a fixed-layout EPUB page that fits', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles({ name: 'fixed-slide.epub', mimeType: 'application/epub+zip', buffer: await epubFixture(true) });
+  await expect(page.locator('#position')).toContainText('Page 1 of 2');
+  const host = page.locator('.reader-host'), hand = page.getByRole('button', { name: 'Hand tool' });
+  await expect(page.locator('#view-controls')).toBeVisible();
+  await hand.click();
+  await expect(hand).toHaveAttribute('aria-pressed', 'true');
+  const frame = page.frames().find(f => f.url().startsWith('blob:'))!;
+  await expect(frame.locator('h1')).toHaveText('Opening chapter');
+  const frameBox = async () => (await (await frame.frameElement()).boundingBox())!;
+  const natural = await frameBox(), panel = (await host.boundingBox())!;
+  // Raw CDP input, as in the zoomed-EPUB test: Playwright's page.mouse stalls over these sandboxed frames.
+  const cdp = await page.context().newCDPSession(page);
+  const stroke = async (from: { x: number; y: number }, dx: number, dy: number) => {
+    const mouse = (type: 'mouseMoved' | 'mousePressed' | 'mouseReleased', x: number, y: number) => cdp.send('Input.dispatchMouseEvent', { type, x: from.x + x, y: from.y + y, button: 'left', buttons: type === 'mouseReleased' ? 0 : 1, clickCount: 1 });
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: from.x, y: from.y });
+    await mouse('mousePressed', 0, 0);
+    for (let step = 1; step <= 6; step++) await mouse('mouseMoved', dx * step / 6, dy * step / 6);
+    await mouse('mouseReleased', dx, dy);
+  };
+  await stroke({ x: panel.x + 200, y: panel.y + 300 }, -30, 20);
+  const moved = await frameBox();
+  expect(moved.x - natural.x).toBeCloseTo(-30, 1); expect(moved.y - natural.y).toBeCloseTo(20, 1);
+  expect(moved.width).toBeCloseTo(natural.width, 1);
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => (document.querySelector('.reader-host') as HTMLElement).clientWidth)).toBe(Math.round(panel.width));
+  await expect(page.locator('#position')).toContainText('Page 1 of 2');
+  for (let i = 0; i < 3; i++) await stroke({ x: panel.x + 24, y: panel.y + 24 }, 300, 300);
+  const edge = await frameBox();
+  expect(edge.x).toBeCloseTo(panel.x + panel.width - 64, 1); expect(edge.y).toBeCloseTo(panel.y + panel.height - 64, 1);
+  // Ctrl 0 puts the page back, and a still click on a link in it still follows the link.
+  await page.keyboard.press('Control+0');
+  await expect.poll(async () => Math.abs((await frameBox()).x - natural.x) < 1 && Math.abs((await frameBox()).y - natural.y) < 1).toBe(true);
+  await frame.getByRole('link', { name: 'Jump to other chapter' }).click();
+  await expect(page.locator('#position')).toContainText('Page 2 of 2');
   expect(errors).toEqual([]);
 });
 
