@@ -855,9 +855,10 @@ test('hand tool slides a PDF page that fits 1:1 at Fit and below 100%, never sel
   };
   await slide('Fit');
   await page.keyboard.press('Control+0');
-  for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Zoom out' }).click();
-  // Zoom steps are 10%, so 70% is the nearest step to the 75% the ticket names.
-  await slide('70%');
+  // Zoom out to the pill's floor (25%), then in by the 10% steps to 75%.
+  for (let i = 0; i < 12 && !(await page.getByRole('button', { name: 'Zoom out' }).isDisabled()); i++) await page.getByRole('button', { name: 'Zoom out' }).click();
+  for (let i = 0; i < 5; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
+  await slide('75%');
   expect(errors).toEqual([]);
 });
 
@@ -937,8 +938,8 @@ test('a slid PDF page is re-clamped on resize, and text selection still lands on
   await pushToEdge(page, host, 1);
   await page.setViewportSize({ width: 400, height: 620 });
   const atCorner = async () => {
-    const panel = (await host.boundingBox())!, [width, height] = await panelSize(host), box = (await sheet.boundingBox())!;
-    return Math.abs(box.x - (panel.x + width - 64)) < 1 && Math.abs(box.y - (panel.y + height - 64)) < 1;
+    const panel = (await host.boundingBox())!, [width, height] = await panelSize(host), box = await sheet.boundingBox();
+    return !!box && Math.abs(box.x - (panel.x + width - 64)) < 1 && Math.abs(box.y - (panel.y + height - 64)) < 1;
   };
   await expect.poll(atCorner).toBe(true);
   await expect(page.locator('.pdf-render-status')).toHaveCount(0);
@@ -947,7 +948,7 @@ test('a slid PDF page is re-clamped on resize, and text selection still lands on
   // and clamped to the corner of the smaller panel rather than dropped.
   const wide = (await sheet.boundingBox())!;
   await page.setViewportSize({ width: 340, height: 620 });
-  await expect.poll(async () => (await sheet.boundingBox())!.width < wide.width - 1).toBe(true);
+  await expect.poll(async () => ((await sheet.boundingBox())?.width ?? Infinity) < wide.width - 1).toBe(true);
   await expect(page.locator('.pdf-render-status')).toHaveCount(0);
   await expect.poll(atCorner).toBe(true);
   expect(errors).toEqual([]);

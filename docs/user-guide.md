@@ -118,12 +118,15 @@ PDFs, images and fixed-layout EPUBs show a small floating view-controls pill at 
 reading panel (bottom-right once the panel is 720 pixels wide or more). It holds zoom out, the zoom
 level (**Fit**, **Width** or a percentage; click it to switch between fit page and fit width), zoom
 in, the **Hand** tool and, for PDF and fixed-layout EPUB, **Single page** / **Two pages** buttons, and
-stays in step with Ctrl+−/+ and Ctrl+0/2/3. When a zoomed page is larger
-than the panel, press **H** (or the Hand button) and drag to pan it 1:1; text selection pauses while
-the hand is on, and a click without movement still follows links. Middle-button drag pans in any
-mode. The Hand button reads "Zoom in to pan" while the page fits, and the hand turns off when a new
-document opens or the page fits again. Markdown, TXT and reflowable EPUB reflow instead of zooming,
-so they have no pill and no panning.
+stays in step with Ctrl+−/+ and Ctrl+0/2/3. The hand is available at every zoom: press **H** (or the
+Hand button) and drag. When a zoomed page is larger than the panel, the drag pans it 1:1. When the
+page or spread fits (**Fit**, or zoomed out below 100%), the drag slides the whole page, or both pages
+of a spread, around the panel 1:1, like a sheet across a desk; at least 64 pixels of it always stay
+inside. The page keeps its place when you turn pages and goes back to the middle when you change the
+zoom or fit (Ctrl+0 included), switch between one and two pages, or open another document. Text
+selection pauses while the hand is on, and a click without movement still follows links. Middle-button
+drag pans or slides in any mode. The hand turns off when a new document opens (and, in a fixed-layout EPUB, when switching between one and two pages rebuilds the view). Markdown, TXT and
+reflowable EPUB reflow instead of zooming, so they have no pill and no panning.
 
 If the pill covers something you are reading, drag the dotted grip at its left end to put it anywhere
 in the reading panel. It stays inside the panel and above the footer, keeps its proportional place
