@@ -89,8 +89,9 @@ test('the strip lists the next pages, follows page turns, navigates by click, an
   await expectPainted(page, [2, 3, 4]);
   // Every thumbnail wears the label the footer would show, and is the page's natural shape (300 x 400 = 3:4).
   await expect(goButtons(page)).toHaveText(['2', '3', '4']);
-  const shape = await strip(page).locator('canvas').first().evaluate((canvas: HTMLCanvasElement) => canvas.getBoundingClientRect().width / canvas.getBoundingClientRect().height);
-  expect(shape).toBeCloseTo(.75, 2);
+  // Polled: the strip lists again after the refit that follows turning it on, replacing its canvases.
+  const shape = () => strip(page).locator('canvas').first().evaluate((canvas: HTMLCanvasElement) => canvas.getBoundingClientRect().width / canvas.getBoundingClientRect().height);
+  await expect.poll(shape).toBeCloseTo(.75, 2);
 
   await page.keyboard.press('PageDown');
   await expect(page.locator('#position')).toContainText('Page 2 of');
@@ -405,7 +406,7 @@ test('a rotated document is previewed rotated, and the strip starts beside the l
   await expectPainted(page, [2, 3, 4]);
   const canvas = strip(page).locator('canvas').first();
   const ratio = () => canvas.evaluate((el: HTMLCanvasElement) => el.getBoundingClientRect().width / el.getBoundingClientRect().height);
-  expect(await ratio()).toBeCloseTo(.75, 2);
+  await expect.poll(ratio).toBeCloseTo(.75, 2);
   await runCommand(page, 'rotate page');
   await expect.poll(ratio).toBeCloseTo(4 / 3, 2);
   await expectPainted(page, [2, 3, 4]);
