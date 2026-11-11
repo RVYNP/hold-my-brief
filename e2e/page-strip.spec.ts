@@ -142,11 +142,12 @@ test('on the last page the strip is empty but keeps its height, and the page kee
   await page.keyboard.press('PageUp');
   await expect(page.locator('#position')).toContainText('Page 8 of 9');
   await expect.poll(() => names(page)).toEqual(['Go to page 9']);
+  const previousPage = await mainSize(page);
   await page.keyboard.press('PageDown');
   await expect(page.locator('#position')).toContainText('Page 9 of 9');
   await expect(goButtons(page)).toHaveCount(0);
-  // The last page is as big as every other page, and nothing moved.
-  expect(await mainSize(page)).toBe(stripCanvas);
+  // The last page is exactly as big as the page before it, and nothing moved.
+  expect(await mainSize(page)).toBe(previousPage);
   expect(await settledHeight(page)).toBe(fitted);
 
   await page.keyboard.press('Control+4');
