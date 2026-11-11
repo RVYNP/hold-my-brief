@@ -186,13 +186,15 @@ test('page turns with the strip on never refit the page or raise an error', asyn
 });
 
 test('holding PgDn renders thumbnails for the page it lands on, not for every page it passes', async ({ page }) => {
-  // pdf.js draws a thumbnail into a canvas that is never attached to the page and is far smaller than a full page
-  // (300 px wide is the default size of canvases pdf.js makes for its own scratch work).
+  // pdf.js draws a thumbnail into a canvas that is never attached to the page, is 88 px tall (the strip's thumbnail
+  // height, a page being 300 x 400 pt) and has no data-page. The strip's own canvases carry data-page, and the test
+  // reads them back while a page turn may have just replaced them; the library samples colours on 32 px canvases of
+  // its own at any moment after a document opens. None of those are renders.
   await page.addInitScript(() => {
     const original = HTMLCanvasElement.prototype.getContext;
     window.thumbnailRenders = 0;
     HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, ...args: Parameters<typeof original>) {
-      if (!this.isConnected && this.height > 0 && this.height <= 200 && this.width !== 300) window.thumbnailRenders++;
+      if (!this.isConnected && !this.dataset.page && this.height >= 80 && this.height <= 100) window.thumbnailRenders++;
       return original.apply(this, args) as never;
     } as typeof original;
   });
