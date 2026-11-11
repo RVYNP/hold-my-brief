@@ -240,7 +240,7 @@ lock.
 | Fit page / fit width | Ctrl+0 / Ctrl+2 |
 | Two-page spread | Ctrl+3 |
 | Zoom or text size | Ctrl++ / Ctrl+− |
-| Hand tool (pan a zoomed page) | H, or drag with the middle button |
+| Hand tool (pan a zoomed page, or move a page that fits) | H, or drag with the middle button |
 | Close a dialog | Escape |
 
 ## Saved reading data
