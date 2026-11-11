@@ -136,7 +136,7 @@ const MOVING_KEYS: readonly ShortcutRow[] = [
   { label: 'Turn the page in page mode', keys: ['→', '←'] },
   { label: 'Scroll', keys: ['↑', '↓'] },
   { label: 'First / last location', keys: ['Home', 'End'] },
-  { label: 'Pan a page (on at any zoom)', keys: ['H'], note: 'or middle-drag' },
+  { label: 'Pan or move the page', keys: ['H'], note: 'or middle-drag' },
 ];
 /** Keys of the interface itself, shown after the catalog. */
 const INTERFACE_KEYS: readonly ShortcutRow[] = [

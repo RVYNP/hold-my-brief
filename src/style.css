@@ -425,6 +425,10 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
 .reader-host.hand-tool, .reader-host.hand-tool * { cursor: grab; -webkit-user-select: none; user-select: none; }
 .reader-host.hand-tool .pdf-link { cursor: pointer; }
 .reader-host.panning, .reader-host.panning * { cursor: grabbing !important; }
+/* A page that fits is slid by the hand tool (src/pan.ts) with `translate`: a paint-time move that never changes the host's size,
+   so nothing refits. The host stops scrolling meanwhile, because a translated page would grow its scrollable area and raise a scrollbar. */
+.reader-host.page-moved { overflow: hidden; }
+.reader-host.page-moved > .pdf-page, .reader-host.page-moved > .pdf-spread, .reader-host.page-moved .image-frame, .reader-host.page-moved > foliate-view { translate: var(--pan-x, 0) var(--pan-y, 0); }
 dialog { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--fg); padding: 18px; width: min(360px, calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow: auto; box-shadow: var(--shadow-popover); }
 dialog::backdrop { background: var(--scrim); }
 h2 { font: 400 17px/1.25 var(--font-read); margin: 0 0 16px; }
