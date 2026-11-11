@@ -853,6 +853,12 @@ test('image-only PDF pages carry no note, say so in the tooltip and explain a se
   await turn('PageDown', 'Page 4 of 4'); await expect(title).not.toHaveAttribute('title', /Image-only/); await noNote();
   await turn('PageUp', 'Page 3 of 4'); await expect(title).toHaveAttribute('title', tip);
 
+  // Single-page view at every zoom: Fit, Width, 70 % and 150 % draw nothing over the page.
+  await host.focus(); await page.keyboard.press('Control+2'); await expect(page.locator('#zoom-level')).toHaveText('Width'); await noNote();
+  await page.keyboard.press('Control+0'); await expect(page.locator('#zoom-level')).toHaveText('Fit');
+  await zoomTo('70%', 'Zoom out'); await noNote();
+  await page.keyboard.press('Control+0'); await expect(page.locator('#zoom-level')).toHaveText('Fit'); await noNote();
+
   // Intent cue: not for clicks, middle drags or hand drags; yes for the first select-drag only.
   { const box = (await page.locator('.pdf-page').first().boundingBox())!; await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2); } await expect(notice).toBeHidden();
   await drag('middle'); await expect(notice).toBeHidden();
