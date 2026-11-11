@@ -260,9 +260,10 @@ workspace.append(pageStrip.element);
 function stripSpace(adapter: ReaderAdapter | undefined) {
   // Measured on the panel, which the strip never resizes, so showing the strip cannot hide it again.
   const shown = Boolean(adapter?.setPreviews) && stripWanted && workspace.clientHeight >= MIN_PANEL_HEIGHT;
-  const changed = workspace.classList.contains('has-page-strip') !== shown;
-  workspace.classList.toggle('has-page-strip', shown); pageStrip.element.hidden = !shown;
-  if (changed) placePill();
+  if (workspace.classList.contains('has-page-strip') !== shown) {
+    workspace.classList.toggle('has-page-strip', shown); pageStrip.element.hidden = !shown;
+    placePill();
+  }
   return shown;
 }
 /** Points the strip at the open document while it is shown, and away from it otherwise. */
