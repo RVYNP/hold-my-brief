@@ -723,10 +723,21 @@ test('PDF view controls zoom, pan 1:1 by hand tool and middle button, and keep l
   const scroll = () => host.evaluate(el => [el.scrollLeft, el.scrollTop]);
   await expect(page.locator('#view-controls')).toBeVisible();
   await expect(page.locator('#zoom-level')).toHaveText('Fit');
-  await expect(hand).toHaveAttribute('aria-disabled', 'true');
-  await expect(hand).toHaveAttribute('title', 'Zoom in to pan');
+  // The hand tool is available at any zoom: a page that fits is "on with nothing to move",
+  // not a refused tool. Nothing overflows here (the fixture's page 1 is 400x600 in a 420px
+  // window), which is exactly the below-100% state this contract is about.
+  const fit = await host.evaluate(el => ({ overflowX: el.scrollWidth - el.clientWidth, overflowY: el.scrollHeight - el.clientHeight }));
+  expect(fit.overflowX).toBeLessThanOrEqual(1);
+  expect(fit.overflowY).toBeLessThanOrEqual(1);
+  await expect(hand).toHaveAttribute('aria-disabled', 'false');
+  await expect(hand).toHaveAttribute('title', 'Hand tool on · nothing to pan at this zoom (H)');
   await host.focus(); await page.keyboard.press('h');
-  await expect(hand).toHaveAttribute('aria-pressed', 'false'); // Nothing overflows yet.
+  await expect(hand).toHaveAttribute('aria-pressed', 'true'); // On at Fit, with nothing to pan yet.
+  await expect(page.locator('#filekind')).toHaveAttribute('title', /^PDF · Page view · Hand$/m);
+  // The grab cursor stays honest: it is not claimed where a drag would move nothing.
+  await expect(host).not.toHaveClass(/hand-tool/);
+  await page.keyboard.press('h');
+  await expect(hand).toHaveAttribute('aria-pressed', 'false');
   for (let i = 0; i < 4; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
   await page.keyboard.press('Control+Equal'); // Shortcut and pill share one zoom state.
   await expect(page.locator('#zoom-level')).toHaveText('150%');
@@ -768,17 +779,92 @@ test('PDF view controls zoom, pan 1:1 by hand tool and middle button, and keep l
   await page.mouse.move(box.x + 170, box.y + 270, { steps: 4 }); await page.mouse.up({ button: 'middle' });
   expect(await scroll()).toEqual([30, 30]);
 
-  // Returning to fit makes the hand tool unavailable again; a new document resets it.
+  // Returning to fit no longer revokes the tool: it stays on with nothing to move, and the
+  // cursor is dropped until a zoom makes the page overflow again. A new document still resets it.
   await page.keyboard.press('h');
+  await expect(hand).toHaveAttribute('aria-pressed', 'true');
   await page.locator('#zoom-level').click();
   await expect(page.locator('#zoom-level')).toHaveText('Fit');
-  await expect(hand).toHaveAttribute('aria-disabled', 'true');
-  await expect(hand).toHaveAttribute('aria-pressed', 'false');
+  await expect(hand).toHaveAttribute('aria-disabled', 'false');
+  await expect(hand).toHaveAttribute('aria-pressed', 'true');
+  await expect(hand).toHaveAttribute('title', 'Hand tool on · nothing to pan at this zoom (H)');
+  await expect(host).not.toHaveClass(/hand-tool/);
+  // Zooming back up starts the pan working again without toggling the tool a second time.
+  await page.getByRole('button', { name: 'Zoom in' }).click();
+  await expect(hand).toHaveAttribute('aria-pressed', 'true');
+  await expect(hand).toHaveAttribute('title', 'Hand tool: drag to pan (H)');
+  await expect(host).toHaveClass(/hand-tool/);
+  await page.locator('#zoom-level').click();
+  await expect(page.locator('#zoom-level')).toHaveText('Fit');
   await page.locator('#zoom-level').click();
   await expect(page.locator('#zoom-level')).toHaveText('Width');
   await page.locator('#file-input').setInputFiles({ name: 'notes.md', mimeType: 'text/markdown', buffer: Buffer.from('# Notes\n\nPlain reflowing text.') });
   await expect(page.locator('#filename')).toHaveText('notes.md');
   await expect(page.locator('#view-controls')).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+test('hand tool turns on below 100% and starts panning once the page overflows', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles({ name: 'below-100.pdf', mimeType: 'application/pdf', buffer: pdfFixture() });
+  await expect(page.locator('.textLayer')).toContainText('First page with selectable text');
+  const host = page.locator('.pdf-reader'), hand = page.getByRole('button', { name: 'Hand tool' });
+  const scroll = () => host.evaluate(el => [el.scrollLeft, el.scrollTop]);
+  const overflow = () => host.evaluate(el => ({ x: el.scrollWidth - el.clientWidth, y: el.scrollHeight - el.clientHeight }));
+
+  // Zoom out to the pill's own floor: click until the control disables, so the test does not
+  // assume a step size. The floor is well below 100%, which is the state the old test never visited.
+  const zoomOut = page.getByRole('button', { name: 'Zoom out' });
+  for (let i = 0; i < 20 && !(await zoomOut.isDisabled()); i++) await zoomOut.click();
+  await expect(zoomOut).toBeDisabled();
+  const level = await page.locator('#zoom-level').textContent();
+  expect(Number(level!.replace('%', ''))).toBeLessThan(100); // Unambiguously below 100%.
+  const at25 = await overflow();
+  expect(at25.x).toBeLessThanOrEqual(1); expect(at25.y).toBeLessThanOrEqual(1); // Nothing overflows here.
+
+  await expect(hand).toHaveAttribute('aria-disabled', 'false');
+  await expect(hand).toHaveAttribute('aria-pressed', 'false');
+  await expect(hand).toHaveAttribute('title', 'Hand tool on · nothing to pan at this zoom (H)');
+
+  // The button alone turns it on below 100%, with no zoom change first.
+  await hand.click();
+  await expect(hand).toHaveAttribute('aria-pressed', 'true');
+  await expect(host).not.toHaveClass(/hand-tool/); // No grab cursor where a drag would move nothing.
+  // A primary-button drag with nothing overflowing moves nothing and selects nothing.
+  const box = (await host.boundingBox())!;
+  const before = await scroll();
+  await page.mouse.move(box.x + 200, box.y + 300); await page.mouse.down();
+  await page.mouse.move(box.x + 160, box.y + 240, { steps: 4 }); await page.mouse.up();
+  expect(await scroll()).toEqual(before);
+  expect(await page.evaluate(() => getSelection()?.toString())).toBe('');
+
+  // Zooming past fit starts the same tool working, without toggling it again. Zoom until 150%,
+  // where page 1 (400x600) has real room on both axes, so the 1:1 drag below is meaningful.
+  const zoomIn = page.getByRole('button', { name: 'Zoom in' });
+  for (let i = 0; i < 20; i++) {
+    if (Number((await page.locator('#zoom-level').textContent())!.replace('%', '')) >= 150) break;
+    await zoomIn.click();
+  }
+  // The tool was never toggled again: it rode the zoom from below 100% into overflow on its own.
+  const grown = await overflow();
+  expect(grown.x).toBeGreaterThan(1); expect(grown.y).toBeGreaterThan(1); // Room on both axes.
+  await expect(hand).toHaveAttribute('aria-pressed', 'true');
+  await expect(hand).toHaveAttribute('title', 'Hand tool: drag to pan (H)');
+  await expect(host).toHaveClass(/hand-tool/);
+  // Pin the scroll to a known place with room on both axes, then drag 1:1 as at any other zoom.
+  await host.evaluate(el => { el.scrollLeft = 40; el.scrollTop = 60; });
+  const [left, top] = await scroll();
+  expect([left, top]).toEqual([40, 60]);
+  await page.mouse.move(box.x + 200, box.y + 300); await page.mouse.down();
+  await page.mouse.move(box.x + 160, box.y + 240, { steps: 4 }); await page.mouse.up();
+  expect(await scroll()).toEqual([left + 40, top + 60]);
+
+  // And the `H` key is the same switch once a page overflows (it was the switch below 100% too).
+  await host.focus(); await page.keyboard.press('h');
+  await expect(hand).toHaveAttribute('aria-pressed', 'false');
+  await page.keyboard.press('h');
+  await expect(hand).toHaveAttribute('aria-pressed', 'true');
   expect(errors).toEqual([]);
 });
 

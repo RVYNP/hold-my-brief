@@ -6,6 +6,11 @@
  * that never travels past DRAG_SLOP stays an ordinary click, so links keep working; a real
  * drag swallows the click that would follow it.
  *
+ * The hand tool is a mode, not a capability: it turns on for any page-based document, even
+ * at a zoom where the page fits and there is nothing to move yet. `overflowing` stays a live
+ * geometry query so the UI can say whether a drag would do anything, but it never revokes
+ * the tool — that is what made the button dead at Fit and below 100%.
+ *
  * Fixed-layout EPUB pages live in same-origin iframes whose pointer input never reaches the
  * application document, so each frame document is watched directly (`watchFrame`).
  */
@@ -40,7 +45,7 @@ export class Panner {
   private release?: () => void;
   private on = false;
 
-  /** Hand tool state; only effective while the content overflows. */
+  /** Hand tool state; stays on across zoom and resize, even while nothing overflows. */
   get hand() { return this.on; }
   get pannable() { return !!this.scroller; }
   get overflowing() { return !!this.scroller && overflows(this.scroller); }
@@ -64,8 +69,12 @@ export class Panner {
     this.sync();
   }
 
-  /** Turns the hand tool on or off. Turning it on is refused while nothing overflows. */
-  setHand(on: boolean) { this.on = on && this.overflowing; this.sync(); return this.on; }
+  /**
+   * Turns the hand tool on or off. Any page-based document accepts it, whether or not the
+   * content overflows right now: a fully-fitting page is "on with nothing to move", and the
+   * tool starts moving the moment a zoom makes the content overflow.
+   */
+  setHand(on: boolean) { this.on = on && this.pannable; this.sync(); return this.on; }
 
   /** Listens inside one same-origin content frame; the frame only pans while it belongs to the bound scroller. */
   watchFrame(doc: Document) {
@@ -83,6 +92,7 @@ export class Panner {
     if (!frame) { this.frames.delete(doc); return false; }
     return !!this.scroller && composedContains(this.scroller, frame);
   }
+  /** Whether a primary-button press should start a pan: the tool is on and there is room to move. */
   private active() { return this.on && this.overflowing; }
   private onScrollbar(event: MouseEvent) {
     const scroller = this.scroller!, box = scroller.getBoundingClientRect();
@@ -161,11 +171,17 @@ export class Panner {
     for (const doc of this.frames) if (this.live(doc)) doc.documentElement.classList.toggle('float-panning', on);
   }
 
+  /**
+   * The grab cursor is an affordance, so it is only shown where a drag would move something:
+   * `active()` (tool on *and* overflowing), not the bare tool state. A page that fits gets no
+   * grab cursor, because grabbing it would do nothing — the pressed state of the button is
+   * what reports the tool itself.
+   */
   private sync() {
     const on = this.active();
     this.surface?.classList.toggle('hand-tool', on);
     for (const doc of [...this.frames]) doc.documentElement?.classList.toggle('float-hand', on && this.live(doc));
   }
-  /** Re-evaluates the hand tool after zoom, resize or page changes; it switches off when nothing overflows any more. */
-  refresh() { if (this.on && !this.overflowing) this.on = false; this.sync(); }
+  /** Re-evaluates the cursor after zoom, resize or page changes; the tool state itself is not touched. */
+  refresh() { this.sync(); }
 }

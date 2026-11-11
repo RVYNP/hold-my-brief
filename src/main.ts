@@ -163,9 +163,11 @@ function updateViewControls() {
   levelButton.title = `${fitted ? (width ? 'Fit width' : 'Fit page') : `Zoom ${level}`} · click for ${next === 'fit-width' ? 'fit width (Ctrl 2)' : 'fit page (Ctrl 0)'}`;
   $<HTMLButtonElement>('zoom-out').disabled = options.zoom <= .25;
   $<HTMLButtonElement>('zoom-in').disabled = options.zoom >= 4;
-  const hand = $('hand-tool'), available = pan.overflowing;
+  // The hand tool is available for any page-based document, not only while the page overflows:
+  // a fully-fitting page still accepts it, it simply has nothing to move until a zoom does.
+  const hand = $('hand-tool'), available = pan.pannable;
   hand.setAttribute('aria-pressed', String(pan.hand)); hand.setAttribute('aria-disabled', String(!available));
-  hand.title = available ? 'Hand tool: drag to pan (H)' : 'Zoom in to pan';
+  hand.title = pan.overflowing ? 'Hand tool: drag to pan (H)' : 'Hand tool on · nothing to pan at this zoom (H)';
 }
 function toggleHand() { pan.setHand(!pan.hand); updateViewControls(); }
 // Keep keyboard focus on the page: clicking a pill button must not strand arrow/PgDn keys on it.
