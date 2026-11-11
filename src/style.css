@@ -438,7 +438,8 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
   #reader-layout.library-open:not(.library-right) #page-strip { left: calc(var(--library-width, 270px) + 16px); }
   #reader-layout.library-open.library-right #page-strip { right: calc(var(--library-width, 270px) + 16px); }
 }
-.page-strip-item { position: relative; flex: 0 0 auto; padding: 0; border: 0; border-radius: 4px; overflow: hidden; background: var(--hover-subtle); box-shadow: 0 0 0 1px var(--border); }
+/* A very wide page makes a very thin thumbnail; the button keeps a target height of its own. */
+.page-strip-item { position: relative; flex: 0 0 auto; display: flex; align-items: center; min-height: 28px; padding: 0; border: 0; border-radius: 4px; overflow: hidden; background: var(--hover-subtle); box-shadow: 0 0 0 1px var(--border); }
 .page-strip-item:hover { background: var(--hover-subtle); box-shadow: 0 0 0 1px var(--accent-border); }
 .page-strip-pages { display: flex; }
 .page-strip-pages canvas { display: block; }

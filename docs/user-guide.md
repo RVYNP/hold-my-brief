@@ -117,8 +117,8 @@ saves the resulting reading position without modifying the source file.
 PDFs, images and fixed-layout EPUBs show a small floating view-controls pill at the bottom of the
 reading panel (bottom-right once the panel is 720 pixels wide or more). It holds zoom out, the zoom
 level (**Fit**, **Width** or a percentage; click it to switch between fit page and fit width), zoom
-in, the **Hand** tool and, for PDF and fixed-layout EPUB, **Single page** / **Two pages** buttons, and
-stays in step with Ctrl+−/+ and Ctrl+0/2/3. When a zoomed page is larger
+in, the **Hand** tool and, for PDF and fixed-layout EPUB, **Single page** / **Two pages** buttons (PDFs
+also get **Page previews**, below), and stays in step with Ctrl+−/+ and Ctrl+0/2/3/4. When a zoomed page is larger
 than the panel, press **H** (or the Hand button) and drag to pan it 1:1; text selection pauses while
 the hand is on, and a click without movement still follows links. Middle-button drag pans in any
 mode. The Hand button reads "Zoom in to pan" while the page fits, and the hand turns off when a new
@@ -146,6 +146,23 @@ is the first visible page, so switching views keeps it. When the reading panel i
 pixels (or, for reflowable EPUB, taller than wide), pages show one at a time; the Two pages button and
 the subtitle explain that two-page view is waiting for more width, and it returns as soon as the
 panel is wide enough.
+
+### Page previews
+
+For PDFs, **Page previews** (the pill's filmstrip button, **Ctrl+4**, or *Page previews* in the command
+palette) shows the next pages in a strip under the page: the next three in single-page view, the next
+two spreads in two-page view (paired the way the view pairs them, so the cover stands alone). Each
+thumbnail carries the page label the footer uses, Roman numerals included. Click one, or Tab to it and
+press Enter or Space, to go there as if you had turned the pages; PgDn, PgUp and the arrow keys keep
+turning pages from anywhere, and the strip follows. Near the end it lists what is left, and on the last
+page it says "End of document".
+
+The strip is a fixed band, so turning pages never refits the page; turning the strip on or off fits
+the page once to the room that remains, and the view-controls pill stays above it. It is one setting for
+every PDF (off until you turn it on) and is remembered between sessions. While the reading area is
+shorter than 360 px the strip is hidden and the page gets the whole height; it returns with the height,
+and the setting is kept. Markdown, TXT, EPUB and images have no previews. Thumbnails are drawn after the
+page itself, so they never delay it.
 
 ### Find in document
 
@@ -236,6 +253,7 @@ lock.
 | Pin / size lock | Ctrl+Shift+T / Ctrl+Shift+L |
 | Fit page / fit width | Ctrl+0 / Ctrl+2 |
 | Two-page spread | Ctrl+3 |
+| Page previews (PDF) | Ctrl+4 |
 | Zoom or text size | Ctrl++ / Ctrl+− |
 | Hand tool (pan a zoomed page) | H, or drag with the middle button |
 | Close a dialog | Escape |
