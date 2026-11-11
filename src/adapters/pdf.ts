@@ -43,6 +43,11 @@ export class PdfAdapter implements ReaderAdapter {
   private textCache = new Map<number, string>();
   /** The hit currently marked per page, redrawn whenever the shown pages change. */
   private marks = new Map<number, SearchHit>();
+  /**
+   * Whether a page on screen has no text layer. `undefined` until the shown pages' text has been
+   * read; reported through `Position.imageOnly` and re-reported once it is known.
+   */
+  private imageOnly?: boolean;
   private prefetchAbort?: AbortController;
   private prefetching = false;
   private explicitEnd = false;
@@ -162,6 +167,12 @@ export class PdfAdapter implements ReaderAdapter {
       this.commit(view, numbers, pages, size, y, x, atEnd, state);
       const texts = await Promise.all(pages.map(page => page.getTextContent()));
       if (generation !== this.generation || this.disposed) { for (const { task } of shown) task?.cancel(); return; }
+      // Text arrives after the pages are shown, so the state is reported again once it is known.
+      // No text is ever drawn over a page: a page without a text layer is only marked.
+      const empty = texts.map(text => !text.items.length);
+      for (const [index, { surface }] of shown.entries()) surface.toggleAttribute('data-image-only', empty[index]);
+      const imageOnly = empty.some(Boolean);
+      if (imageOnly !== !!this.imageOnly) { this.imageOnly = imageOnly; this.report(); } else this.imageOnly = imageOnly;
       for (const [index, { page, surface, canvas, viewport, key, task }] of shown.entries()) {
         if (task) await task.promise;
         if (generation !== this.generation || this.disposed) return;
@@ -186,9 +197,6 @@ export class PdfAdapter implements ReaderAdapter {
           }); surface.append(link);
         }
         if (generation !== this.generation || this.disposed) return;
-        if (!texts[index].items.length) {
-          const note = document.createElement('p'); note.className = 'pdf-scan-note'; note.textContent = 'Image-only page. Text selection is unavailable.'; surface.append(note);
-        }
       }
       this.prefetchNeighbours(numbers, spread);
     } catch (error) {
@@ -229,7 +237,7 @@ export class PdfAdapter implements ReaderAdapter {
     this.host.replaceChildren(view); this.host.removeAttribute('aria-busy');
     this.host.scrollTop = atEnd ? this.host.scrollHeight : clamp(y) * size.height;
     this.host.scrollLeft = clamp(x) * size.width;
-    this.explicitEnd = atEnd;
+    this.explicitEnd = atEnd; this.imageOnly = undefined; // Unknown until this screen's text is read.
     for (const page of previous) if (!pages.includes(page)) page.cleanup();
     this.paintMarks();
     this.report();
@@ -422,6 +430,7 @@ export class PdfAdapter implements ReaderAdapter {
       fraction: this.explicitEnd ? 1 : ((first - 1) + y * this.pages.length) / total,
       scrub: { current: first, total, unit: 'page', ...(spread ? { cover: this.options.cover !== false } : {}) },
       ...(this.shownSpread ? { spread: this.shownSpread } : {}),
+      ...(this.imageOnly ? { imageOnly: true } : {}),
       locator: { kind: 'pdf', page: first, x, y, fit: this.options?.fit, zoom: this.options?.zoom, rotation: this.options?.rotation, end: this.explicitEnd } };
   }
   async restore(locator: Locator) { if (locator.kind === 'pdf') await this.render(Number(locator.page) || 1, Number(locator.y) || 0, Number(locator.x) || 0, locator.end === true); }
