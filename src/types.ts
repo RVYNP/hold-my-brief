@@ -9,6 +9,8 @@ export type Position = {
   scrub: { current: number; total: number; unit: 'page' | 'line' | 'percent'; cover?: boolean };
   /** Two-page view state when it was requested: showing pairs, or single pages until the panel is wide enough. */
   spread?: 'active' | 'waiting';
+  /** True while a page on screen has no text layer, so its text cannot be selected or searched. */
+  imageOnly?: boolean;
 };
 export type OutlineItem = { label: string; target: string };
 export type ReaderOptions = { fontSize: number; lineHeight: number; margin: number; wrap: boolean; fit: 'page' | 'width'; zoom: number; rotation: number; spread: boolean; cover: boolean };
