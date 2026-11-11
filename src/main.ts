@@ -11,7 +11,7 @@ import { COMMANDS, shortcutFor, shortcutReference, unavailableReason } from './c
 import { appearance, initAppearance, onAppearanceChange, pageTones, palettes, saveAppearance, scheme, type AppearanceMode } from './theme';
 import { appearanceSummary, createAppearanceSheet, paletteIcon } from './appearance';
 import { createAssistantPanel } from './assistant-panel';
-import { Panner } from './pan';
+import { DRAG_SLOP, Panner } from './pan';
 import { MIN_SPREAD_WIDTH, pagesLabel, spreadPages } from './spread';
 import { assignShelfSlots, closeHome, fillHomePictures, homeRows, renderHome } from './home';
 import { repaintCovers } from './cards';
@@ -86,8 +86,25 @@ let activeHost: HTMLElement | undefined;
 let cancelPending: (() => void) | undefined;
 const pan = new Panner();
 let pannedScroller: HTMLElement | undefined;
+/** The scan notice is shown once per opened document; opening a document re-arms it. */
+let scanNoticeShown = false;
 
 function notify(message: string, retry = false) { $('notice').hidden = false; $('notice').querySelector('span')!.textContent = message; $('retry-save').hidden = !retry; }
+// A select-drag on a page without text selects nothing. Say why, once, when the user shows that intent:
+// primary button, hand tool off, past the same slop a pan uses, on a page marked image-only.
+document.addEventListener('pointerdown', down => {
+  const target = down.target;
+  if (scanNoticeShown || down.button !== 0 || !down.isPrimary || down.pointerType === 'touch' || pan.hand || !(target instanceof Element)
+    || !activeHost?.contains(target) || !target.closest('[data-image-only]') || !reader?.getPosition().imageOnly) return;
+  const move = (e: PointerEvent) => {
+    if (e.pointerId !== down.pointerId) return;
+    if (!(e.buttons & 1)) return end();
+    if (Math.hypot(e.clientX - down.clientX, e.clientY - down.clientY) < DRAG_SLOP) return;
+    end(); scanNoticeShown = true; notify("This page is a scanned image, so its text can't be selected or searched.");
+  };
+  const end = () => { for (const type of ['pointermove', 'pointerup', 'pointercancel']) window.removeEventListener(type, move as EventListener, true); };
+  window.addEventListener('pointermove', move, true); window.addEventListener('pointerup', end, true); window.addEventListener('pointercancel', end, true);
+}, true);
 function fail(error: unknown) { notify(error instanceof Error ? error.message : String(error)); }
 function updateWindow(next: WindowState) { windowState = next; $('pin').setAttribute('aria-pressed', String(next.pinned)); $('pin').title = next.pinned ? 'Pinned on top (Ctrl+Shift+T)' : 'Always on top (Ctrl+Shift+T)'; $('lock').setAttribute('aria-pressed', String(next.locked)); $('lock').title = next.locked ? 'Size locked (Ctrl+Shift+L)' : 'Lock dimensions (Ctrl+Shift+L)'; $<HTMLButtonElement>('caption-maximize').disabled = next.locked; }
 function showPosition(p: Position) {
@@ -133,9 +150,8 @@ function updateViewControls() {
   // The subtitle says where you are, compactly ("48 / 146", without a PDF's printed page number);
   // the full position and the kind of view are in its tooltip.
   const where = position?.label ?? '';
-  // An image-only document says so once, here, rather than annotating every page over its
-  // content. The find bar reports the same limit when a search is run.
-  const imageOnly = position?.imageOnly ? 'Image-only document: text cannot be selected or found' : '';
+  // An image-only page is announced here, never drawn over the page. Find reports the same limit.
+  const imageOnly = position?.imageOnly ? "Image-only page: text can't be selected or searched" : '';
   $('filekind').textContent = where.replace(/^(?:Pages?|Line) ([\d–-]+) of (\d+)(?: · .*)?$/, '$1 / $2');
   $('filekind').title = [where, `${active.format.toUpperCase()} · ${kind}${pan.hand ? ' · Hand' : ''}`, imageOnly, waiting].filter(Boolean).join('\n');
   const spreads = !!reader.spreads, spread = spreads && options.spread;
@@ -429,7 +445,7 @@ async function load(open: () => Promise<Opened | null>, label = 'document'): Pro
     reader?.destroy(); activeHost?.remove();
     doc.bytes = new Uint8Array();
     reader = candidate; active = doc; options = prefs; activeHost = staging; staging.classList.remove('staging'); $('empty').hidden = true;
-    pannedScroller = reader.scroller?.(); pan.attach(pannedScroller, staging);
+    pannedScroller = reader.scroller?.(); pan.attach(pannedScroller, staging); scanNoticeShown = false;
     ++scrubRequest; scrubbing = false;
     $('filename').textContent = doc.name; $('filename').title = doc.path;
     for (const id of ['previous', 'position', 'next']) $<HTMLButtonElement>(id).disabled = false;

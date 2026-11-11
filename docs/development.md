@@ -139,8 +139,8 @@ scope their tile selectors to `.library-documents`, rather than counting Home's 
 Every image in `docs/media/` is light mode, Brief theme, and comes from a script. Start the browser
 preview (`npm run dev`, port 1420), then pass a public-domain PDF and a public-domain EPUB book, and
 optionally some public-domain images to fill the library drawer's grid. Pick a PDF with a text layer:
-scanned pages without one carry an "Image-only page" note
-([#16](https://github.com/RVYNP/hold-my-brief/issues/16)) that would land in every shot.
+pages without one are image-only. They draw nothing over the page, but the toolbar subtitle's
+tooltip says so and a select-drag on one shows a notice, which would land in shots.
 
 ```bash
 node scripts/reshoot-media.mjs halftoneprocessp00verf_0.pdf "Pride and Prejudice.epub" great-wave.jpg haeckel-medusae.jpg

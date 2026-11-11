@@ -44,9 +44,8 @@ export class PdfAdapter implements ReaderAdapter {
   /** The hit currently marked per page, redrawn whenever the shown pages change. */
   private marks = new Map<number, SearchHit>();
   /**
-   * Whether the document has a text layer at all. `undefined` until enough pages have been
-   * read to answer: one empty page is an image-only *page*, and only a document with no text
-   * on any page read so far is image-only. It is reported through `Position.imageOnly`.
+   * Whether a page on screen has no text layer. `undefined` until the shown pages' text has been
+   * read; reported through `Position.imageOnly` and re-reported once it is known.
    */
   private imageOnly?: boolean;
   private prefetchAbort?: AbortController;
@@ -168,6 +167,12 @@ export class PdfAdapter implements ReaderAdapter {
       this.commit(view, numbers, pages, size, y, x, atEnd, state);
       const texts = await Promise.all(pages.map(page => page.getTextContent()));
       if (generation !== this.generation || this.disposed) { for (const { task } of shown) task?.cancel(); return; }
+      // Text arrives after the pages are shown, so the state is reported again once it is known.
+      // No text is ever drawn over a page: a page without a text layer is only marked.
+      const empty = texts.map(text => !text.items.length);
+      for (const [index, { surface }] of shown.entries()) surface.toggleAttribute('data-image-only', empty[index]);
+      const imageOnly = empty.some(Boolean);
+      if (imageOnly !== !!this.imageOnly) { this.imageOnly = imageOnly; this.report(); } else this.imageOnly = imageOnly;
       for (const [index, { page, surface, canvas, viewport, key, task }] of shown.entries()) {
         if (task) await task.promise;
         if (generation !== this.generation || this.disposed) return;
@@ -193,10 +198,6 @@ export class PdfAdapter implements ReaderAdapter {
         }
         if (generation !== this.generation || this.disposed) return;
       }
-      // An image-only page used to carry its own note pinned over the page. It repeated on
-      // every such page (twice in two-page view), covered content and collided with the view
-      // controls; the state is a property of the document, so it is reported once, there.
-      this.noteImageOnly(texts);
       this.prefetchNeighbours(numbers, spread);
     } catch (error) {
       if (generation !== this.generation || this.disposed || (error as Error).name === 'RenderingCancelledException') return;
@@ -236,7 +237,7 @@ export class PdfAdapter implements ReaderAdapter {
     this.host.replaceChildren(view); this.host.removeAttribute('aria-busy');
     this.host.scrollTop = atEnd ? this.host.scrollHeight : clamp(y) * size.height;
     this.host.scrollLeft = clamp(x) * size.width;
-    this.explicitEnd = atEnd;
+    this.explicitEnd = atEnd; this.imageOnly = undefined; // Unknown until this screen's text is read.
     for (const page of previous) if (!pages.includes(page)) page.cleanup();
     this.paintMarks();
     this.report();
@@ -289,20 +290,6 @@ export class PdfAdapter implements ReaderAdapter {
       } catch { /* Prefetch is an optimization; a failure must never surface to the reader. */ }
       finally { if (this.prefetchAbort === controller) this.prefetching = false; }
     })();
-  }
-
-  /**
-   * Records whether the document has any text layer, from the text already extracted for the
-   * pages just rendered.
-   *
-   * A document is only image-only while every page read has been empty, so a PDF whose first
-   * page is a scan but whose later pages carry text stops being reported as image-only as soon
-   * as such a page is shown. That direction is safe: it can correct itself from "no text" to
-   * "has text" as the reader turns, and never claims a text layer the document lacks.
-   */
-  private noteImageOnly(texts: Awaited<ReturnType<PDFPageProxy['getTextContent']>>[]) {
-    if (!texts.length || texts.some(text => text.items.length)) this.imageOnly = false;
-    else if (this.imageOnly === undefined) this.imageOnly = true;
   }
 
   private pushHistory() { this.history.push(this.getPosition().locator); if (this.history.length > 20) this.history.shift(); }
