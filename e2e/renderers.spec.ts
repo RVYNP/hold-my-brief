@@ -827,7 +827,13 @@ test('image-only PDF pages carry no note, say so in the tooltip and explain a se
     await page.mouse.move(x, y); await page.mouse.down({ button }); await page.mouse.move(x + 40, y + 20, { steps: 5 }); await page.mouse.up({ button });
   };
   const zoomTo = async (level: string, button: 'Zoom in' | 'Zoom out') => {
-    for (let i = 0; i < 14 && (await page.locator('#zoom-level').textContent()) !== level; i++) await page.getByRole('button', { name: button }).click();
+    // One step at a time: a click is applied asynchronously, so wait for the label to move before the next.
+    for (let i = 0; i < 14; i++) {
+      const current = (await page.locator('#zoom-level').textContent())!;
+      if (current === level) break;
+      await page.getByRole('button', { name: button }).click();
+      await expect(page.locator('#zoom-level')).not.toHaveText(current);
+    }
     await expect(page.locator('#zoom-level')).toHaveText(level); await expect(page.locator('.pdf-render-status')).toHaveCount(0);
   };
   const message = "This page is a scanned image, so its text can't be selected or searched.";
