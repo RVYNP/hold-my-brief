@@ -348,7 +348,7 @@
 /* Rail: the library's closed form from 720 px up. Covers are 40 x 54; the open reference wears the accent ring. */
 .library-rail { display: none; }
 @media (min-width: 720px) {
-  #reader-layout:not(.library-open) > .library-rail { position: absolute; z-index: 20; top: 6px; bottom: 6px; left: 6px; display: flex; flex-direction: column; align-items: center; gap: 10px; width: 60px; padding: 8px 0; overflow: hidden auto; border: 1px solid var(--border); border-radius: 9px; background: var(--raise); scrollbar-width: none; }
+  #reader-layout:not(.library-open) > .library-rail { position: absolute; z-index: 20; top: 0; bottom: 0; left: 6px; display: flex; flex-direction: column; align-items: center; gap: 10px; width: 60px; padding: 8px 0; overflow: hidden auto; border: 1px solid var(--border); border-radius: 9px; background: var(--raise); scrollbar-width: none; }
   #reader-layout.library-right:not(.library-open) > .library-rail { left: auto; right: 6px; }
   #reader-layout.library-right .library-rail-toggle svg { transform: scaleX(-1); }
   #reader-layout:not(.library-open):not(.library-right) #empty.is-home { padding-left: calc(var(--library-clear) + 4px); }
