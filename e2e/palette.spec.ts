@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { openSearch } from './library-controls';
 
 /**
  * The command palette is the keyboard route to the actions the ··· menu lists, so these tests
@@ -25,7 +26,7 @@ test('Ctrl+K opens the palette from a text field too (library search, find)', as
   await page.locator('#file-input').setInputFiles(textDocument);
   await expect(page.locator('#filename')).toHaveText('palette.txt');
   if (!(await page.locator('#library-root').isVisible())) await page.locator('#library-toggle').click();
-  await page.locator('.library-search').fill('beside');
+  await (await openSearch(page)).fill('beside');
   await page.keyboard.press('Control+k');
   await expect(page.locator('#palette-input')).toBeFocused();
   // The field keeps what was typed in it; the shortcut is not swallowed as text editing.

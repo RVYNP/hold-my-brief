@@ -66,19 +66,21 @@ export function showPicture(media: HTMLElement, thumbnail: Thumbnail) {
 
 export function markUnavailable(media: HTMLElement) { media.classList.add('is-unavailable'); media.title = 'Thumbnail unavailable. Use More actions to locate the original.'; }
 
-export type Placed = { node: HTMLElement; ratio: number; column: number };
+export type Placed = { node: HTMLElement; ratio: number; column: number; /** Fixed height of a title under this tile's picture; 0 or absent for a tile that is the picture alone. */ caption?: number };
 
 /**
  * Places `tiles` (in reading order, absolutely positioned) into `columns` masonry columns starting at `left`/`top`
  * and returns the height used. A tile's column is only reassigned when `reassign` is set, so a picture that arrives
- * and changes a ratio moves what is below it and never reshuffles the grid.
+ * and changes a ratio moves what is below it and never reshuffles the grid. A tile's `caption` (the library grid's title,
+ * under pictures only) is reserved whether or not it is drawn yet, so a tile that swaps its cover for a picture never
+ * overlaps its neighbours.
  */
 export function placeTiles(tiles: readonly Placed[], layout: { columns: number; tileWidth: number; gap: number; left: number; top: number; reassign: boolean }): number {
   const { columns, tileWidth, gap, left, top } = layout;
-  if (layout.reassign) assignMasonry(tiles.map(tile => 1 / tile.ratio), columns, gap / tileWidth).forEach((indices, column) => { for (const at of indices) tiles[at].column = column; });
+  if (layout.reassign) assignMasonry(tiles.map(tile => 1 / tile.ratio + (tile.caption ?? 0) / tileWidth), columns, gap / tileWidth).forEach((indices, column) => { for (const at of indices) tiles[at].column = column; });
   const bottoms = new Array<number>(columns).fill(0);
   for (const tile of tiles) {
-    const offset = bottoms[tile.column]; bottoms[tile.column] = offset + tileWidth / tile.ratio + gap;
+    const offset = bottoms[tile.column]; bottoms[tile.column] = offset + tileWidth / tile.ratio + (tile.caption ?? 0) + gap;
     tile.node.dataset.column = String(tile.column); tile.node.style.width = `${tileWidth}px`; tile.node.style.left = `${left + tile.column * (tileWidth + gap)}px`; tile.node.style.top = `${top + offset}px`;
   }
   return Math.max(...bottoms) - gap;

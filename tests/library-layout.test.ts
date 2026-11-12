@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assignMasonry, clampLibraryWidth, defaultLibraryView, libraryGrid, libraryGridColumns, libraryWidthBounds, parseLibraryView, parseLibraryWidth } from '../src/library-layout';
+import { assignMasonry, clampLibraryWidth, defaultLibraryView, gridDrawerWidth, libraryGrid, libraryGridColumns, libraryTileSize, libraryWidthBounds, parseLibraryView, parseLibraryWidth, parseTileSize } from '../src/library-layout';
 
 // Bounds for the floating drawer's width: the drawer overlays the page, but these limits still
 // guarantee the reading panel keeps a usable strip of page visible.
@@ -111,6 +111,26 @@ describe('library view mode', () => {
     expect(defaultLibraryView(4, 10)).toBe('list');
     expect(defaultLibraryView(1, 1)).toBe('grid');
     expect(defaultLibraryView(0, 0)).toBe('list');
+  });
+
+  it('opens a drawer narrower than 400 px on list, whatever the pictures, and leaves wider ones alone', () => {
+    expect(defaultLibraryView(10, 10, 270)).toBe('list');
+    expect(defaultLibraryView(10, 10, gridDrawerWidth - 1)).toBe('list');
+    expect(defaultLibraryView(10, 10, gridDrawerWidth)).toBe('grid');
+    expect(defaultLibraryView(10, 10, 0)).toBe('list');
+    expect(defaultLibraryView(2, 10, 800)).toBe('list');
+  });
+
+  it('reads a saved tile size within the slider\'s range and otherwise falls back to the surface default', () => {
+    expect(parseTileSize('150')).toBe(150);
+    expect(parseTileSize('149.6')).toBe(150);
+    expect(parseTileSize('10')).toBe(libraryTileSize.min);
+    expect(parseTileSize('999')).toBe(libraryTileSize.max);
+    for (const saved of [null, '', '  ', 'big', 'NaN']) expect(parseTileSize(saved)).toBeUndefined();
+  });
+
+  it('keeps the default tile widths inside the slider', () => {
+    for (const size of [libraryGrid.minTile, libraryGrid.boardMinTile]) expect(parseTileSize(String(size))).toBe(size);
   });
 
   it('accepts only the two saved values', () => {
