@@ -819,8 +819,10 @@ test('PDF view controls zoom, pan 1:1 by hand tool and middle button, and keep l
   expect(errors).toEqual([]);
 });
 
+/** The rail covers the panel's first 66 px from 720 px up; drags start beside it. */
+const railClear = (page: Page) => (page.viewportSize()!.width >= 720 ? 72 : 0);
 /** Primary-button drag inside the reading panel from `from` (px inside its top-left corner) by (dx, dy). */
-async function dragPanel(page: Page, host: Locator, dx: number, dy: number, from = { x: 24, y: 24 }) {
+async function dragPanel(page: Page, host: Locator, dx: number, dy: number, from = { x: 24 + railClear(page), y: 24 }) {
   const box = (await host.boundingBox())!;
   await page.mouse.move(box.x + from.x, box.y + from.y); await page.mouse.down();
   await page.mouse.move(box.x + from.x + dx, box.y + from.y + dy, { steps: 6 }); await page.mouse.up();
@@ -830,7 +832,7 @@ const panelSize = (host: Locator) => host.evaluate(el => [el.clientWidth, el.cli
 /** Moves `host`'s page by `(dx, dy)` repeatedly, in 300 px strokes that stay inside a 420 px panel, until the clamp holds it. */
 async function pushToEdge(page: Page, host: Locator, direction: 1 | -1) {
   const [width, height] = await panelSize(host);
-  const from = direction === 1 ? { x: 24, y: 24 } : { x: width - 24, y: height - 24 };
+  const from = direction === 1 ? { x: 24 + railClear(page), y: 24 } : { x: width - 24, y: height - 24 };
   for (let i = 0; i < 4; i++) await dragPanel(page, host, 300 * direction, 300 * direction, from);
 }
 
@@ -1062,7 +1064,7 @@ test('hand tool moves a fixed-layout EPUB page that fits', async ({ page }) => {
   await page.waitForTimeout(300);
   expect(await page.evaluate(() => (document.querySelector('.reader-host') as HTMLElement).clientWidth)).toBe(Math.round(panel.width));
   await expect(page.locator('#position')).toContainText('Page 1 of 2');
-  for (let i = 0; i < 3; i++) await stroke({ x: panel.x + 24, y: panel.y + 24 }, 300, 300);
+  for (let i = 0; i < 3; i++) await stroke({ x: panel.x + 24 + railClear(page), y: panel.y + 24 }, 300, 300);
   const edge = await frameBox();
   expect(edge.x).toBeCloseTo(panel.x + panel.width - 64, 1); expect(edge.y).toBeCloseTo(panel.y + panel.height - 64, 1);
   // Ctrl 0 puts the page back, and a still click on a link in it still follows the link.
@@ -1236,7 +1238,8 @@ test('view controls pill moves by its grip, stays inside the panel, persists, re
   await page.mouse.move(panel.x + 200, panel.y + 120, { steps: 6 });
   await page.mouse.move(panel.x + 1, panel.y + 1, { steps: 6 }); await page.mouse.up();
   const moved = await inside();
-  expect(moved.x).toBeCloseTo(panel.x + 8, 0); expect(moved.y).toBeCloseTo(panel.y + 1 + 8, 0);
+  // The rail stands at the panel's left edge, so the pill stops beside it (6 px margin + 60 px rail) rather than at the 8 px margin.
+  expect(moved.x).toBeCloseTo(panel.x + 66 + 8, 0); expect(moved.y).toBeCloseTo(panel.y + 1 + 8, 0);
   expect(await geometry()).toEqual(untouched);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('hold-my-brief:view-controls')!))).toEqual({ x: expect.any(Number), y: expect.any(Number) });
 
@@ -1293,7 +1296,7 @@ test('a moved view-controls pill steps out from under the library drawer and ret
   await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2); await page.mouse.down();
   await page.mouse.move(panel.x + 1, panel.y + 1, { steps: 8 }); await page.mouse.up();
   const corner = (await pill.boundingBox())!;
-  expect(corner.x).toBeCloseTo(panel.x + 8, 0);
+  expect(corner.x).toBeCloseTo(panel.x + 66 + 8, 0); // beside the rail
 
   await page.locator('#library-toggle').click();
   await expect(page.locator('#library-root')).toBeVisible();

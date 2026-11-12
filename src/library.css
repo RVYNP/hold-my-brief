@@ -14,15 +14,16 @@
 .library-right > .library-root { left: auto; right: 0; flex-direction: row-reverse; margin: 0 6px 0 0; }
 /* --shadow-drawer casts rightward; a right-docked drawer uses the symmetric popover shadow. */
 .library-right .library-panel { box-shadow: var(--shadow-popover); }
-/* The drawer floats over the page's bottom-right corner, where the reader's view controls sit.
-   A right-docked drawer shifts them out from under itself so zoom/fit/rotate stay reachable. The
-   position is fully specified here (left/right/translate): the workspace `@container` query in
-   style.css only starts matching at 734 px (workspace content width = viewport - 14), so between
-   720 and 733 px the base `left: 50%; translate: -50% 0` still applies and would over-constrain
-   the pill if this rule only set `right`. The applied width is exposed on #reader-layout by
+/* Everything that floats over the reading panel's edge starts beside what stands there: the drawer when the library is open,
+   else the 60 px rail (a 6 px margin before it, 6 px after). The right-docked view controls move out from under it too. The
+   position is fully specified (left/right/translate): the workspace `@container` query in style.css only starts matching at
+   734 px (workspace content width = viewport - 14), so between 720 and 733 px the base `left: 50%; translate: -50% 0` still
+   applies and would over-constrain the pill if this rule only set `right`. The applied width is exposed on #reader-layout by
    applyWidth in library.ts. */
 @media (min-width: 720px) {
-  #reader-layout.library-right.library-open #view-controls { left: auto; right: calc(var(--library-width, 270px) + 16px); translate: none; }
+  #reader-layout { --library-clear: 72px; }
+  #reader-layout.library-open { --library-clear: calc(var(--library-width, 270px) + 16px); }
+  #reader-layout.library-right #view-controls { left: auto; right: var(--library-clear); translate: none; }
 }
 .library-resize { position: relative; z-index: 2; flex: 0 0 10px; display: grid; place-items: center; cursor: col-resize; touch-action: none; outline: none; }
 .library-resize::before { content: ''; position: absolute; inset: 0 4px; border-radius: 1px; background: var(--accent-border); }
@@ -247,8 +248,8 @@
 .library-image-navigation button { display: grid; place-items: center; flex: none; width: 24px; height: 22px; padding: 0; border-radius: 999px; color: var(--fg); font-size: 12px; }
 .library-image-navigation span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 2px; font-variant-numeric: tabular-nums; }
 @media (min-width: 720px) {
-  #reader-layout.library-open:not(.library-right) .library-image-navigation { left: calc(var(--library-width, 270px) + 16px); }
-  #reader-layout.library-open.library-right .library-image-navigation { right: calc(var(--library-width, 270px) + 16px); }
+  #reader-layout:not(.library-right) .library-image-navigation { left: var(--library-clear); }
+  #reader-layout.library-right .library-image-navigation { right: var(--library-clear); }
 }
 .library-empty { padding: 16px 8px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .library-empty strong { color: var(--fg); font-weight: 600; }
@@ -344,17 +345,25 @@
   .library-documents { min-height: 56px; }
   .library-empty { padding-top: 8px; }
 }
-/* Undocked: the panel is the window. No drawer shadow, no divider, no scrim. */
-html.library-window, html.library-window body, html.library-window #app { height: 100%; }
-/* The native library minimum is 280 px; it must not inherit the reader's 300 px shell minimum. */
-html.library-window #app { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-html.library-window .library-window-toolbar { flex: none; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 8px 0 12px; }
-html.library-window .library-window-toolbar strong { font: 400 15px/1 var(--font-read); }
-html.mac-titlebar.library-window .library-window-toolbar { padding-left: 78px; }
-#library-window-status { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--error); font-size: 12px; white-space: nowrap; }
-#library-window-status:empty { display: none; }
-html.library-window .library-window-layout { position: relative; flex: 1 1 auto; min-height: 0; }
-html.library-window .library-root, html.library-window .library-right > .library-root { position: absolute; inset: 0; width: auto; margin: 0; }
-html.library-window .library-panel { width: auto; margin: 0; border: 0; border-radius: 0; box-shadow: none; }
-html.library-window .library-resize, html.library-window .library-backdrop { display: none; }
+/* Rail: the library's closed form from 720 px up. Covers are 40 x 54; the open reference wears the accent ring. */
+.library-rail { display: none; }
+@media (min-width: 720px) {
+  #reader-layout:not(.library-open) > .library-rail { position: absolute; z-index: 20; top: 0; bottom: 0; left: 6px; display: flex; flex-direction: column; align-items: center; gap: 10px; width: 60px; padding: 8px 0; overflow: hidden auto; border: 1px solid var(--border); border-radius: 9px; background: var(--raise); scrollbar-width: none; }
+  #reader-layout.library-right:not(.library-open) > .library-rail { left: auto; right: 6px; }
+  #reader-layout.library-right .library-rail-toggle svg { transform: scaleX(-1); }
+  #reader-layout:not(.library-open):not(.library-right) #empty.is-home { padding-left: calc(var(--library-clear) + 4px); }
+  #reader-layout.library-right:not(.library-open) #empty.is-home { padding-right: calc(var(--library-clear) + 4px); }
+}
+.library-rail-toggle { display: grid; place-items: center; flex: none; width: 32px; height: 32px; padding: 0; color: var(--muted); }
+.library-rail-toggle:hover { color: var(--fg); }
+.library-rail-list { display: flex; flex: none; flex-direction: column; align-items: center; gap: 8px; width: 100%; }
+.library-rail-item { position: relative; display: block; flex: none; width: 40px; height: 54px; }
+.library-rail-cover { display: block; width: 40px; height: 54px; padding: 0; border-radius: 4px; }
+.library-rail-cover:hover { background: transparent; }
+.library-rail-cover .library-tile-media { width: 100%; height: 100%; aspect-ratio: auto; }
+.library-rail-cover .library-tile-scrim, .library-rail-cover .library-cover-text, .library-rail-cover .library-tile-format { display: none; }
+.library-rail-cover .library-cover-art { height: 100%; }
+.library-rail-cover:focus-visible { outline: none; }
+.library-rail-cover:focus-visible .library-tile-media::after { box-shadow: inset 0 0 0 2px var(--accent); }
+.library-rail-cover.is-active { box-shadow: 0 0 0 2px var(--raise), 0 0 0 4px var(--accent); }
 

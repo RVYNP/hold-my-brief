@@ -1,14 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "Only the local reader and library shells may receive and send targeted events, close, minimize, maximize or drag their windows and match the window's theme and background to the reader's appearance. No general filesystem or shell access.",
-  "windows": ["main", "library"],
+  "description": "Only the local reader shell may receive events, close, minimize, maximize or drag its window and match the window's theme and background to the reader's appearance. No general filesystem or shell access.",
+  "windows": ["main"],
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
-    "core:event:allow-emit-to",
     "core:window:allow-close",
-    "core:window:allow-destroy",
     "core:window:allow-start-dragging",
     "core:window:allow-internal-toggle-maximize",
     "core:window:allow-minimize",

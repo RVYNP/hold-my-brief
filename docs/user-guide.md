@@ -15,8 +15,8 @@ on **Home**, a page of covers that wraps to the window's width, with tall and sh
 own proportions. **Recently opened** shows what you looked at last, most recent first. **Favorites** appears
 once you have starred something (it may repeat a recent). **Library** is a small selection of everything
 else, most recently opened first; **View all** opens the full Favorites or Library view, and
-**Browse library** in the header opens all references. These actions also work with the library undocked,
-and edits there refresh Home. A section with nothing in it is left out. Click a cover to open it.
+**Browse library** in the header opens all references; edits made in the library refresh Home. A section with
+nothing in it is left out. Click a cover to open it.
 A picture fills in when its thumbnail is ready, and tiles keep their columns as pictures arrive; a
 book without a picture keeps the generated cover it has on its shelf. An EPUB shows the title from its own
 metadata once it has been read, and its file name cleaned up until then. A cover looks the same here as in
@@ -284,19 +284,21 @@ drawer that floats over the reading panel at every width, so opening, closing, r
 never changes the page's size, zoom or place. Escape closes the drawer while focus is inside it. Wide
 and compact visibility preferences are remembered separately.
 
+Closed, in windows 720 pixels wide and up, the library is a thin rail on the side it is docked to: the
+library button at the top, then the covers of up to eight recently opened documents, most recent first
+(40 × 54 pixels, with the generated cover or picture Home shows). The document you are reading has an
+accent ring, hovering a cover names its document, and a click opens it. The rail floats over the
+reading panel like the drawer, so the page is never resized; the view controls, page previews, find bar and
+image navigation sit beside it. Opening the library swaps the rail for the drawer, and closing it brings
+the rail back. With nothing opened yet the rail is just the library button; compact windows have no rail.
+
 Drag the divider between the drawer and the page to resize the drawer (240–520 pixels, and never more
 than 55% of the window, which keeps at least 320 pixels of the reading panel clear beside it). Because
 the drawer floats over the page, a wider drawer covers more of the page. Double-click the divider to
 reset it to 270 pixels. The divider is also focusable: Left and Right resize by 16 pixels
 (Shift: 64), Home and End jump to the narrowest and widest sizes, and Enter resets. The header button
 beside **×** moves the drawer to the other side of the reading panel; compact windows follow the same
-side. **Undock library**, the button just before that one (or **Undock library** in the command
-palette), tears the drawer off into its own window beside the reader, on the side it was docked, so
-the page is no longer covered. The panel's **×** is then **Dock library** and puts the drawer back.
-Closing that window from its caption dismisses the library; **Ctrl+B** opens the drawer again,
-or focuses the library window while it is undocked. Pinning the reader pins the library window too.
-Width and side are remembered, and the width is re-fitted when the window shrinks. The undocked
-library can be narrowed to 280 pixels; its controls and thumbnail grid fit inside that width.
+side. Width and side are remembered, and the width is re-fitted when the window shrinks.
 
 In compact windows (below 720 pixels) the drawer covers the reading panel behind a scrim, cannot be
 resized, and closes on a click outside it or after you open a document from it. Escape closes it

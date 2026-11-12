@@ -86,7 +86,7 @@ where you stopped. PDF, EPUB, Markdown, text and images. Your files never leave 
 
 **Home** brings back recently opened documents, favorites and a selection from your library. Its
 grid wraps to the window, with the same stacked titles and covers as the library. **View all** opens
-the full collection, including when the library is undocked. Filter PDFs, EPUBs, Markdown, text and
+the full collection. Filter PDFs, EPUBs, Markdown, text and
 images separately; opening a reference keeps its original format.
 
 ## A closer look

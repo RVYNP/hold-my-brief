@@ -432,7 +432,7 @@ test('with the strip on, the hand tool slides a fitting page above the strip, ne
   // Drag from the panel's top-left to the window's bottom-right corner, further than the page can go: the slide must stop at its clamp.
   const panel = (await host(page).boundingBox())!, band = (await strip(page).boundingBox())!;
   expect(panel.y + panel.height).toBeLessThanOrEqual(band.y + .5); // The slide's panel is the page area alone.
-  await page.mouse.move(panel.x + 10, panel.y + 10); await page.mouse.down();
+  await page.mouse.move(panel.x + 82, panel.y + 10); await page.mouse.down(); // beside the library rail
   await page.mouse.move(1079, 699, { steps: 10 }); await page.mouse.up();
   const slid = (await sheet.boundingBox())!;
   // At least 64 px of the page stay inside that panel: so its top edge stops 64 px above the strip, and its bottom is clipped there.

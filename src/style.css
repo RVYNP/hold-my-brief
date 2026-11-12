@@ -381,11 +381,11 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
    panel's 1 px border, while the strip is positioned against the layout, so that border is added back;
    the reader host, which is positioned inside the panel, only needs the bar's own height. */
 #reader-layout:has(#find-bar:not([hidden])) #loading { top: calc(var(--find-bar-height) + var(--workspace-border)); }
-/* Beside the library the reading panel starts after the panel, a 10 px handle and a 6 px margin, so the
-   strip spans the panel rather than the whole layout (the width is published by applyWidth in library.ts). */
+/* Beside the library the reading panel starts after the panel, a 10 px handle and a 6 px margin (or after the rail), so the
+   strip spans the panel rather than the whole layout (--library-clear is set in library.css from the width applyWidth in library.ts publishes). */
 @media (min-width: 720px) {
-  #reader-layout.library-open:not(.library-right) #loading { left: calc(var(--library-width, 270px) + 16px); }
-  #reader-layout.library-open.library-right #loading { right: calc(var(--library-width, 270px) + 16px); }
+  #reader-layout:not(.library-right) #loading { left: var(--library-clear); }
+  #reader-layout.library-right #loading { right: var(--library-clear); }
 }
 #notice span, #loading span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 #notice button, #loading button { padding: 3px 8px; border: 0; color: inherit; font-size: 11px; font-weight: 600; }
@@ -433,10 +433,10 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
 #workspace.has-page-strip .reader-host { bottom: var(--page-strip-height); }
 #workspace.has-page-strip #view-controls { bottom: calc(var(--page-strip-height) + 8px); }
 #page-strip { position: absolute; z-index: 4; left: 0; right: 0; bottom: 0; height: var(--page-strip-height); display: flex; align-items: flex-start; gap: 10px; padding: 8px 12px 0; overflow: hidden; background: var(--raise); border-top: 1px solid var(--hairline); }
-/* The library drawer floats over the panel's edge, so the strip starts beside it, like the find bar. */
+/* The library drawer, or the rail, floats over the panel's edge, so the strip starts beside it, like the find bar. */
 @media (min-width: 720px) {
-  #reader-layout.library-open:not(.library-right) #page-strip { left: calc(var(--library-width, 270px) + 16px); }
-  #reader-layout.library-open.library-right #page-strip { right: calc(var(--library-width, 270px) + 16px); }
+  #reader-layout:not(.library-right) #page-strip { left: var(--library-clear); }
+  #reader-layout.library-right #page-strip { right: var(--library-clear); }
 }
 /* A very wide page makes a very thin thumbnail; the button keeps a target height of its own. */
 .page-strip-item { position: relative; flex: 0 0 auto; display: flex; align-items: center; min-height: 28px; padding: 0; border: 0; border-radius: 4px; overflow: hidden; background: var(--hover-subtle); box-shadow: 0 0 0 1px var(--border); }
@@ -624,8 +624,8 @@ dd { margin: 0; color: var(--muted); }
 #find-bar { position: absolute; top: 0; left: 0; right: 0; z-index: 5; height: var(--find-bar-height); display: flex; align-items: center; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--hairline); background: var(--raise); color: var(--muted); }
 #find-bar[hidden] { display: none; }
 @media (min-width: 720px) {
-  #reader-layout.library-open:not(.library-right) #find-bar { left: calc(var(--library-width, 270px) + 16px); }
-  #reader-layout.library-open.library-right #find-bar { right: calc(var(--library-width, 270px) + 16px); }
+  #reader-layout:not(.library-right) #find-bar { left: var(--library-clear); }
+  #reader-layout.library-right #find-bar { right: var(--library-clear); }
 }
 /* While the bar is open, shift the reading surface down so the first line is never hidden. */
 #workspace:has(#find-bar:not([hidden])) .reader-host { top: var(--find-bar-height); }
