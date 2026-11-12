@@ -241,7 +241,7 @@ select { appearance: none; color: var(--fg); background-color: var(--card); back
 select:hover { border-color: var(--accent-border); }
 /* clip, not hidden: the footer rests 27 px below the window edge, and a hidden-overflow box can still
    be scrolled by code (a find match's scrollIntoView did, pushing the toolbar off the top). */
-#app { position: relative; height: 100dvh; min-width: 300px; display: flex; flex-direction: column; overflow: clip; }
+#app { --footer-height: 30px; position: relative; height: 100dvh; min-width: 300px; display: flex; flex-direction: column; overflow: clip; }
 /* One 38 px row. Empty toolbar space drags the window (data-tauri-drag-region), so it never selects text. */
 .toolbar { display: flex; align-items: center; gap: 2px; height: 38px; padding: 0 6px; background: var(--chrome); flex-shrink: 0; -webkit-user-select: none; user-select: none; }
 /* macOS draws the traffic lights over the toolbar's left end (titleBarStyle Overlay). */
@@ -350,7 +350,7 @@ h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 1px 0 
    and the position up over the page. It is an overlay, so the page never resizes or refits. The band
    is the only page area the footer takes while closed, and it collapses once the footer is open so it
    never covers the page above the open footer. */
-footer { position: absolute; z-index: 15; left: 0; right: 0; bottom: 0; display: flex; gap: 2px; align-items: center; height: 30px; padding: 2px 6px 0; background: var(--chrome); translate: 0 calc(100% - 3px); transition: translate .16s ease, opacity .2s, box-shadow .16s; }
+footer { position: absolute; z-index: 15; left: 0; right: 0; bottom: 0; display: flex; gap: 2px; align-items: center; height: var(--footer-height); padding: 2px 6px 0; background: var(--chrome); translate: 0 calc(100% - 3px); transition: translate .16s ease, opacity .2s, box-shadow .16s; }
 footer::before { content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: 12px; }
 footer:hover, footer:focus-within, footer:has(#progress:active) { translate: 0 0; box-shadow: 0 -6px 20px light-dark(#25203514, transparent); }
 footer:hover::before, footer:focus-within::before { height: 0; }
@@ -427,12 +427,13 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
 .reader-host.panning, .reader-host.panning * { cursor: grabbing !important; }
 /* Page previews (PDF): a fixed band along the panel's bottom, outside the scroll container. The reading surface
    stops above it while it is shown (`has-page-strip`), so showing it refits the page once and a page turn never
-   does. Its bottom 15 px are padding on purpose: the footer's hover band lies there, and hovering the band must
-   not open the footer over a thumbnail's label. The pill's default spot rises with it (see clampPoint). */
-#reader-layout { --page-strip-height: 112px; }
-#workspace.has-page-strip .reader-host { bottom: var(--page-strip-height); }
-#workspace.has-page-strip #view-controls { bottom: calc(var(--page-strip-height) + 8px); }
-#page-strip { position: absolute; z-index: 4; left: 0; right: 0; bottom: 0; height: var(--page-strip-height); display: flex; align-items: flex-start; gap: 10px; padding: 8px 12px 0; overflow: hidden; background: var(--raise); border-top: 1px solid var(--hairline); }
+   does. The band ends above the footer's lane (--footer-height, the room the open footer takes), so neither the
+   open footer nor the hover band that opens it ever lies over a thumbnail; the lane under the strip is painted
+   in the strip's own colour (a shadow, so it takes no room). The pill's default spot rises with it (see clampPoint). */
+#reader-layout { --page-strip-height: 106px; --page-strip-room: calc(var(--page-strip-height) + var(--footer-height)); }
+#workspace.has-page-strip .reader-host { bottom: var(--page-strip-room); }
+#workspace.has-page-strip #view-controls { bottom: calc(var(--page-strip-room) + 8px); }
+#page-strip { position: absolute; z-index: 4; left: 0; right: 0; bottom: var(--footer-height); height: var(--page-strip-height); display: flex; align-items: flex-start; gap: 10px; padding: 8px 12px 0; overflow: hidden; background: var(--raise); border-top: 1px solid var(--hairline); box-shadow: 0 var(--footer-height) 0 var(--raise); }
 /* The library drawer, or the rail, floats over the panel's edge, so the strip starts beside it, like the find bar. */
 @media (min-width: 720px) {
   #reader-layout:not(.library-right) #page-strip { left: var(--library-clear); }

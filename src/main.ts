@@ -211,8 +211,8 @@ let pillPlacement: Placement | null = null;
 try { pillPlacement = parsePlacement(localStorage.getItem(pillKey)); } catch { /* Optional preference. */ }
 const pillPanel = () => ({ width: workspace.clientWidth, height: workspace.clientHeight });
 const pillBox = () => ({ width: pill.offsetWidth, height: pill.offsetHeight });
-/** Height of the page-preview strip while it is shown: the pill keeps above it. */
-const pillStrip = () => workspace.classList.contains('has-page-strip') ? pageStrip.element.offsetHeight : 0;
+/** How much of the panel's bottom the page-preview strip and the footer lane under it take while the strip is shown: the pill keeps above it. */
+const pillStrip = () => workspace.classList.contains('has-page-strip') ? Math.max(0, workspace.getBoundingClientRect().bottom - pageStrip.element.getBoundingClientRect().top) : 0;
 function drawerBand() {
   // The compact sheet covers the whole layout over a scrim; only the side-by-side drawer, or the rail that stands in for it, is steered around.
   if (matchMedia('(max-width: 719px)').matches) return null;
@@ -341,6 +341,7 @@ const library = createLibrary($('library-root'), {
   open: path => load(() => openLibraryDocument(path), path.split(/[\\/]/).pop()),
   error: fail,
   changed: next => { homeLibrary = next; if ($('empty').classList.contains('is-home')) paintHome(); paintRail(); },
+  sideChanged: side => rail.setSide(side),
 });
 $('library-toggle').onclick = () => library.toggle();
 // The library closed is a rail of the latest recents. It shares Home's picture store, so a cover made for one is there for the other.
@@ -352,7 +353,9 @@ const rail = createLibraryRail($('library-rail'), {
   epub: (path, alive) => homeThumbs.loadEpub(path, alive),
   title: path => homeThumbs.epub(path)?.title?.trim() || undefined,
   failed: path => homeThumbs.failed(path),
+  setSide: side => library.setSide(side),
 });
+rail.setSide(library.side());
 const knownTitle = (item: { path: string; format: string }) => item.format.toLowerCase() === 'epub' ? homeThumbs.epub(item.path)?.title?.trim() || undefined : undefined;
 function paintRail() { rail.paint(railItems(desktop ? homeRecents : openedOrder(homeLibrary.documents), homeLibrary.documents, knownTitle), active?.path, scheme()); }
 
@@ -445,6 +448,7 @@ async function command(id: string) {
   if (id === 'open') openFile();
   else if (id === 'library') library.toggle();
   else if (id === 'library-board') library.board();
+  else if (id === 'library-side') library.setSide(library.side() === 'left' ? 'right' : 'left');
   else if (id === 'find') findBar.open();
   else if (id === 'assistant') assistant.openSettings();
   else await action(id);

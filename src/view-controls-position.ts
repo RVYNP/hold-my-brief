@@ -20,8 +20,8 @@ export interface Band { left: number; right: number }
 
 /**
  * Clamps a top-left so the whole pill sits inside the panel with the margin, above the bottom clearance. With a
- * page-preview strip `strip` px tall along the panel's bottom the pill keeps the margin above the strip instead:
- * the footer then opens over the strip, not over the page.
+ * page-preview strip along the panel's bottom, `strip` is the height of the bottom of the panel it takes (the strip
+ * and the footer's lane under it): the pill keeps the margin above it instead of above the clearance.
  */
 export function clampPoint(point: Point, panel: Size, pill: Size, strip = 0): Point {
   // A panel too small for the pill pins it to the top-left margin rather than producing a negative range.

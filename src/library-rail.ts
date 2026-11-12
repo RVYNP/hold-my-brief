@@ -5,6 +5,7 @@
 import { homeRows, openedAt, type HomeDocument, type HomeRecent, type HomeTile } from './home';
 import { showPicture, markUnavailable, tileMedia, type Appearance } from './cards';
 import { canThumbnail, type Thumbnail } from './thumbnails';
+import type { LibrarySide } from './library-layout';
 
 /** Most covers the rail shows. */
 export const railLimit = 8;
@@ -31,17 +32,71 @@ export type RailHost = {
   epub: (path: string, alive: () => boolean) => Promise<unknown>;
   title: (path: string) => string | undefined;
   failed: (path: string) => boolean;
+  /** Keeps the library, rail and drawer both, on `side`: the same preference as the drawer's dock button. */
+  setSide: (side: LibrarySide) => void;
 };
 
 const toggleIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16m-3-12v8"/></svg>';
 
-export function createLibraryRail(root: HTMLElement, host: RailHost): { paint: (items: readonly HomeTile[], activePath: string | undefined, appearance: Appearance) => void } {
+/** The panel with its divider on `side`: the glyph of the button that moves the library there, as on the drawer's dock button. */
+const sideIcon = (side: LibrarySide) => `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="${side === 'left' ? 'M9 3v18' : 'M15 3v18'}"/></svg>`;
+
+export function createLibraryRail(root: HTMLElement, host: RailHost): { paint: (items: readonly HomeTile[], activePath: string | undefined, appearance: Appearance) => void; setSide: (side: LibrarySide) => void } {
   root.classList.add('library-rail'); root.setAttribute('aria-label', 'Library rail');
   const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'library-rail-toggle'; toggle.innerHTML = toggleIcon;
   toggle.setAttribute('aria-label', 'Open library'); toggle.setAttribute('aria-expanded', 'false'); toggle.setAttribute('aria-controls', 'library-root'); toggle.title = 'Document library (Ctrl+B)';
   toggle.onclick = () => host.toggle();
   const list = document.createElement('div'); list.className = 'library-rail-list'; list.setAttribute('role', 'list');
-  root.replaceChildren(toggle, list);
+  // The side control sits at the foot of the rail, below the scrolling covers, so it never scrolls away.
+  const move = document.createElement('button'); move.type = 'button'; move.className = 'library-rail-side';
+  const menu = document.createElement('div'); menu.className = 'library-rail-menu'; menu.setAttribute('role', 'menu'); menu.hidden = true;
+  let side: LibrarySide = 'left';
+  const choices = (['left', 'right'] as const).map(target => {
+    const item = document.createElement('button'); item.type = 'button'; item.setAttribute('role', 'menuitemradio'); item.textContent = `Keep library on the ${target}`;
+    item.onclick = () => { closeMenu(false); host.setSide(target); };
+    return { target, item };
+  });
+  menu.append(...choices.map(choice => choice.item));
+  const other = () => side === 'left' ? 'right' : 'left';
+  move.onclick = () => host.setSide(other());
+  function closeMenu(refocus = true) {
+    if (menu.hidden) return;
+    menu.hidden = true; document.removeEventListener('pointerdown', outside, true);
+    if (refocus && move.isConnected) move.focus();
+  }
+  function outside(event: Event) { if (!menu.contains(event.target as Node)) closeMenu(false); }
+  function openMenu(x: number, y: number) {
+    for (const { target, item } of choices) item.setAttribute('aria-checked', String(target === side));
+    menu.hidden = false;
+    // Fixed to the window, so the rail's own clipping never cuts it; kept inside the window.
+    menu.style.left = `${Math.max(4, Math.min(x, window.innerWidth - menu.offsetWidth - 4))}px`;
+    menu.style.top = `${Math.max(4, Math.min(y, window.innerHeight - menu.offsetHeight - 4))}px`;
+    document.addEventListener('pointerdown', outside, true);
+    menu.querySelector<HTMLElement>('[aria-checked=true]')?.focus();
+  }
+  root.addEventListener('contextmenu', event => {
+    if (menu.contains(event.target as Node)) return;
+    event.preventDefault();
+    // The menu key and Shift+F10 arrive with no pointer position: open beside the focused control instead.
+    const at = event.clientX || event.clientY ? { x: event.clientX, y: event.clientY } : (() => { const box = (event.target as HTMLElement).getBoundingClientRect(); return { x: box.left, y: box.bottom }; })();
+    closeMenu(false); openMenu(at.x, at.y);
+  });
+  menu.addEventListener('keydown', event => {
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeMenu(); }
+    else if (event.key === 'Tab') closeMenu(false);
+    else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const at = choices.findIndex(choice => choice.item === document.activeElement);
+      choices[(at + (event.key === 'ArrowDown' ? 1 : choices.length - 1)) % choices.length]!.item.focus();
+    }
+  });
+  function setSide(next: LibrarySide) {
+    side = next; root.dataset.librarySide = next;
+    move.innerHTML = sideIcon(other()); move.setAttribute('aria-label', `Move library to the ${other()}`); move.title = `Move library to the ${other()}`;
+    for (const { target, item } of choices) item.setAttribute('aria-checked', String(target === side));
+  }
+  setSide(side);
+  root.replaceChildren(toggle, list, move, menu);
   let generation = 0;
   // Pictures the store has not made yet (a PDF's first page, an EPUB's cover) are made after the paint and once the page is idle, never
   // while a document is opening or being read: rendering them is real work on the same thread. A repaint before then supersedes them.
@@ -73,5 +128,5 @@ export function createLibraryRail(root: HTMLElement, host: RailHost): { paint: (
     }));
     if (loads.length) whenIdle(() => { if (alive()) for (const load of loads) load(); });
   }
-  return { paint };
+  return { paint, setSide };
 }
