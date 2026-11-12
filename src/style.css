@@ -447,9 +447,9 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
 .page-strip-scroller::-webkit-scrollbar { display: none; }
 .page-strip-scroller.is-dragging { cursor: grabbing; }
 .page-strip-track { position: relative; height: 100%; }
-.page-strip-item { position: absolute; top: 9px; height: 88px; border-radius: 4px; background: var(--hover-subtle); box-shadow: 0 0 0 1px var(--border); cursor: pointer; overflow: hidden; opacity: .85; transition: opacity .15s; }
+.page-strip-item { position: absolute; top: 9px; height: 88px; border-radius: 4px; background: var(--hover-subtle); box-shadow: 0 0 0 1px var(--border); cursor: pointer; overflow: hidden; transition: opacity .15s; }
 /* Pages already read fade back; the page you are on is full strength and ringed with the accent. */
-.page-strip-item.is-before { opacity: .5; }
+.page-strip-item.is-before { opacity: .55; }
 .page-strip-item:hover { opacity: 1; box-shadow: 0 0 0 1px var(--accent-border); }
 .page-strip-item.is-current { opacity: 1; overflow: visible; box-shadow: 0 0 0 2px var(--accent); }
 .page-strip-pages { display: flex; height: 100%; border-radius: 4px; overflow: hidden; }
