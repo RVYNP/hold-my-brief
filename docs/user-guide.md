@@ -304,7 +304,19 @@ In compact windows (below 720 pixels) the drawer covers the reading panel behind
 resized, and closes on a click outside it or after you open a document from it. Escape closes it
 while focus is inside the drawer.
 
-- **Add files** selects several documents or images at once without opening them. Select a
+The drawer has three rows of controls above the documents. The **header** has the library name and, on
+the right, **+** (a menu with **Add files…** and **Sources…**), **→** (open the library board across the
+reading panel), the move-to-the-other-side button and **×**. Under it a row of chips: the first names the
+collection you are looking at (**All references**, **Favorites**, a collection or a source) and opens
+the list of them, with the colour filter; after it come one chip for each file type the library holds
+(PDF, EPUB, Markdown, Text, Images). Click a type to show only those, click it again to clear it. The row
+scrolls sideways when it is longer than the drawer. The last row is a search button that opens into the
+search field (Esc clears what you typed, and a second Esc, or leaving an empty field, folds it back),
+the number of references shown, and **Recent ☰**, one menu for **Sort by** (Recent, Name A–Z),
+**View as** (List, Grid), **Show** (any availability, ready, missing) and, with the grid on, a **Size**
+slider for the tiles. The board keeps the collection tree in its own left column.
+
+- **Add files** (in the **+** menu) selects several documents or images at once without opening them. Select a
   collection first to add new entries directly to it. New references with no picture of their own
   open the **intake** sheet (below).
 - **Index a folder** (desktop only) picks a folder and adds every PDF, EPUB, Markdown and text file
@@ -325,14 +337,15 @@ while focus is inside the drawer.
 
 ### Grid and list
 
-The row under the search field names the collection you are looking at; click it for the collection
-list and the format and availability filters. Beside it, the two glyphs switch between a **grid** of
-thumbnails and a **list** of names. The grid keeps each reference's real proportions, so tall
+The **Recent ☰** menu switches between a **grid** of thumbnails and a **list** of names. A list row has a
+small cover or thumbnail, the title and a line with its format; a grid tile has its title under it (two
+lines at most, then an ellipsis), so a scanned page is never anonymous. The **Size** slider sets how wide the
+tiles are at least, and is remembered with the choice of view per collection. A drawer narrower than 400
+pixels opens on the list until you choose; the grid keeps each reference's real proportions, so tall
 posters and wide spreads read as themselves; a reference with no picture shows a generated cover
-(below). The choice is remembered per collection, and a collection that is mostly images, PDFs or
-EPUBs opens as a grid.
-Hovering or focusing a tile shows its name, format, star and ··· menu; the document you are reading
-is marked **Reading**, and a missing original is dimmed.
+(below). A collection that is mostly images, PDFs or EPUBs opens as a grid where the drawer is at least
+400 pixels wide. Hovering or focusing a tile shows its star and ··· menu; the document you are
+reading is marked **Reading**, and a missing original is dimmed.
 
 Thumbnails are made on this computer: images are scaled down, and a PDF's first page is rendered
 with the reader's own PDF engine, reading only as much of the file as that page needs. They are kept

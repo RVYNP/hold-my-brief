@@ -71,14 +71,15 @@ export type Placed = { node: HTMLElement; ratio: number; column: number };
 /**
  * Places `tiles` (in reading order, absolutely positioned) into `columns` masonry columns starting at `left`/`top`
  * and returns the height used. A tile's column is only reassigned when `reassign` is set, so a picture that arrives
- * and changes a ratio moves what is below it and never reshuffles the grid.
+ * and changes a ratio moves what is below it and never reshuffles the grid. `caption` is a fixed height under every
+ * tile's picture (the library grid's title), 0 where tiles are the picture alone.
  */
-export function placeTiles(tiles: readonly Placed[], layout: { columns: number; tileWidth: number; gap: number; left: number; top: number; reassign: boolean }): number {
-  const { columns, tileWidth, gap, left, top } = layout;
-  if (layout.reassign) assignMasonry(tiles.map(tile => 1 / tile.ratio), columns, gap / tileWidth).forEach((indices, column) => { for (const at of indices) tiles[at].column = column; });
+export function placeTiles(tiles: readonly Placed[], layout: { columns: number; tileWidth: number; gap: number; left: number; top: number; reassign: boolean; caption?: number }): number {
+  const { columns, tileWidth, gap, left, top, caption = 0 } = layout;
+  if (layout.reassign) assignMasonry(tiles.map(tile => 1 / tile.ratio + caption / tileWidth), columns, gap / tileWidth).forEach((indices, column) => { for (const at of indices) tiles[at].column = column; });
   const bottoms = new Array<number>(columns).fill(0);
   for (const tile of tiles) {
-    const offset = bottoms[tile.column]; bottoms[tile.column] = offset + tileWidth / tile.ratio + gap;
+    const offset = bottoms[tile.column]; bottoms[tile.column] = offset + tileWidth / tile.ratio + caption + gap;
     tile.node.dataset.column = String(tile.column); tile.node.style.width = `${tileWidth}px`; tile.node.style.left = `${left + tile.column * (tileWidth + gap)}px`; tile.node.style.top = `${top + offset}px`;
   }
   return Math.max(...bottoms) - gap;

@@ -27,7 +27,11 @@ export function parseLibraryWidth(saved: string | null): number {
 
 // Thumbnail grid. Tiles keep their true proportions (masonry), so the only layout decisions are
 // how many columns fit and which column each tile joins. Both are pure so the edges stay testable.
-export const libraryGrid = { minTile: 120, boardMinTile: 150, gap: 4, defaultRatio: 4 / 5, minColumnWidth: 56 } as const;
+export const libraryGrid = { minTile: 120, boardMinTile: 150, gap: 4, defaultRatio: 4 / 5, minColumnWidth: 56, captionHeight: 34 } as const;
+/** The grid's minimum tile width the Size slider sets, in px. Smaller tiles mean more columns. */
+export const libraryTileSize = { min: 80, max: 240, step: 10 } as const;
+/** A drawer narrower than this opens on List unless the scope has a saved choice. */
+export const gridDrawerWidth = 400;
 export type LibraryView = 'grid' | 'list';
 
 /**
@@ -68,7 +72,13 @@ export function parseLibraryView(saved: string | null): LibraryView | undefined 
   return saved === 'grid' || saved === 'list' ? saved : undefined;
 }
 
-/** Grid when at least half of the matching references can show a thumbnail; otherwise list. */
-export function defaultLibraryView(withThumbnails: number, total: number): LibraryView {
-  return total > 0 && withThumbnails * 2 >= total ? 'grid' : 'list';
+/** The saved Size, kept within the slider's range; `undefined` (no saved or an unreadable value) means the default for the surface. */
+export function parseTileSize(saved: string | null): number | undefined {
+  const value = saved === null || saved.trim() === '' ? NaN : Number(saved);
+  return Number.isFinite(value) ? Math.round(Math.min(libraryTileSize.max, Math.max(libraryTileSize.min, value))) : undefined;
+}
+
+/** Grid when at least half of the matching references can show a thumbnail, otherwise list; a drawer narrower than `gridDrawerWidth` (`width` given) is always list. */
+export function defaultLibraryView(withThumbnails: number, total: number, width = Infinity): LibraryView {
+  return width >= gridDrawerWidth && total > 0 && withThumbnails * 2 >= total ? 'grid' : 'list';
 }

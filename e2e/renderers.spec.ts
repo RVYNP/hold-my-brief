@@ -1,4 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
+import { chooseFromViewMenu, openSearch, preferGrid } from './library-controls';
 import { ZipWriter, Uint8ArrayWriter, TextReader } from '@zip.js/zip.js';
 import { createHash } from 'node:crypto';
 import { crc32, deflateSync } from 'node:zlib';
@@ -340,6 +341,7 @@ test('library drawer floats over the page and never resizes it, while drag, keyb
   // scrolls sideways or lets a tile out of the drawer.
   const documents = page.locator('.library-documents');
   await page.locator('.library-panel input[type=file]').setInputFiles(pngFiles);
+  await chooseFromViewMenu(page, 'Grid'); // A drawer narrower than 400 px opens on list until the grid is asked for.
   await expect(page.locator('.library-tile')).toHaveCount(7);
   await expect(documents).toHaveClass(/library-grid/);
   const columns = () => tileColumns(page);
@@ -362,11 +364,11 @@ test('library drawer floats over the page and never resizes it, while drag, keyb
   await drag(146); await expect(handle).toHaveAttribute('aria-valuenow', '334');
   await expect.poll(columns).toBe(2);
   expect(await pageGeometry()).toEqual(untouched);
-  await page.getByRole('button', { name: 'List view' }).click();
+  await chooseFromViewMenu(page, 'List');
   await expect(documents).toHaveClass(/library-list/);
   await expect(page.locator('.library-document')).toHaveCount(7);
   expect(await pageGeometry()).toEqual(untouched);
-  await page.getByRole('button', { name: 'Grid view' }).click();
+  await chooseFromViewMenu(page, 'Grid');
   await expect(documents).toHaveClass(/library-grid/);
   expect(await pageGeometry()).toEqual(untouched);
 
@@ -418,16 +420,17 @@ test('library drawer floats over the page and never resizes it, while drag, keyb
   await handle.focus(); await page.keyboard.press('Home'); await expect(handle).toHaveAttribute('aria-valuenow', '240');
   await expect.poll(columns).toBe(2);
   expect(await contained()).toBe(true);
-  await page.getByRole('button', { name: 'List view' }).click();
+  await chooseFromViewMenu(page, 'List');
   await expect(documents).toHaveClass(/library-list/);
   await page.reload();
   await expect(documents).toHaveClass(/library-list/);
-  await page.getByRole('button', { name: 'Grid view' }).click();
+  await chooseFromViewMenu(page, 'Grid');
   await expect(documents).toHaveClass(/library-grid/);
 });
 
 test('library thumbnails are made once and survive searching, sorting and switching view', async ({ page }) => {
   // Every thumbnail is an object URL, so counting createObjectURL calls counts pictures made.
+  await preferGrid(page);
   await page.addInitScript(() => {
     const create = URL.createObjectURL.bind(URL); let count = 0;
     URL.createObjectURL = blob => { count++; return create(blob); };
@@ -444,7 +447,7 @@ test('library thumbnails are made once and survive searching, sorting and switch
   const before = { made: await made(), sources: await sources() };
   expect(before.made).toBe(6);
   // Typing re-renders the list on every keystroke; a match keeps its picture and nothing is fetched again.
-  const search = page.getByRole('searchbox');
+  const search = await openSearch(page);
   await search.pressSequentially('plate-');
   await expect(loaded).toHaveCount(6);
   await search.fill('plate-3');
@@ -452,9 +455,9 @@ test('library thumbnails are made once and survive searching, sorting and switch
   await expect(loaded).toHaveCount(1);
   expect(before.sources).toContain(await page.locator('.library-tile-media img').getAttribute('src'));
   await search.fill('');
-  await page.locator('.library-sort').selectOption('name');
-  await page.getByRole('button', { name: 'List view' }).click();
-  await page.getByRole('button', { name: 'Grid view' }).click();
+  await chooseFromViewMenu(page, 'Name A–Z');
+  await chooseFromViewMenu(page, 'List');
+  await chooseFromViewMenu(page, 'Grid');
   await expect(loaded).toHaveCount(6);
   expect(await made()).toBe(before.made);
   expect(new Set(await sources())).toEqual(new Set(before.sources));
@@ -492,10 +495,11 @@ test('a PDF whose page is one huge image gets a real thumbnail, not a blank page
 
 test('the grid keeps the sort order for Tab and screen readers even though tiles sit in masonry columns', async ({ page }) => {
   await page.setViewportSize({ width: 1080, height: 680 });
+  await preferGrid(page);
   await page.goto('/');
   await page.locator('.library-panel input[type=file]').setInputFiles([...pngFiles].reverse());
   await expect(page.locator('.library-tile')).toHaveCount(6);
-  await page.locator('.library-sort').selectOption('name');
+  await chooseFromViewMenu(page, 'Name A–Z');
   const order = () => page.locator('.library-tile-open').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label')));
   // DOM (and so Tab) order is the sorted list, not column by column.
   await expect.poll(order).toEqual([1, 2, 3, 4, 5, 6].map(n => `Open plate-${n}.png`));
@@ -508,6 +512,7 @@ test('the grid keeps the sort order for Tab and screen readers even though tiles
 
 test('in the board a tile is a toggle: pressing selects it, pressing the selected one opens it', async ({ page }) => {
   await page.setViewportSize({ width: 1080, height: 680 });
+  await preferGrid(page);
   await page.goto('/');
   await page.locator('.library-panel input[type=file]').setInputFiles(pngFiles);
   await expect(page.locator('.library-tile')).toHaveCount(6);
@@ -529,6 +534,7 @@ test('in the board a tile is a toggle: pressing selects it, pressing the selecte
 test('tiles built while the library is hidden still load their pictures once it opens', async ({ page }) => {
   // Compact window: the library is closed, so the grid is built with no width and its tiles are attached
   // only when the window grows and the drawer opens.
+  await preferGrid(page);
   await page.goto('/');
   await expect(page.locator('#library-root')).toBeHidden();
   await page.locator('.library-panel input[type=file]').setInputFiles(pngFiles);
@@ -542,6 +548,7 @@ test('tiles built while the library is hidden still load their pictures once it 
 });
 
 test('compact library sheet shows the grid in two columns without sideways overflow', async ({ page }) => {
+  await preferGrid(page);
   await page.goto('/');
   await page.locator('#library-toggle').click();
   await expect(page.locator('#library-root')).toBeVisible();
@@ -567,6 +574,7 @@ test('compact library sheet shows the grid in two columns without sideways overf
 test('the colour filter narrows the library to a named hue with a removable chip, on top of search, and swatches set it', async ({ page }) => {
   const solid = (name: string, colour: [number, number, number]) => ({ name: `${name}.png`, mimeType: 'image/png', buffer: pngFixture(90, 120, colour) });
   await page.setViewportSize({ width: 1440, height: 900 });
+  await preferGrid(page);
   await page.goto('/');
   await page.locator('.library-panel input[type=file]').setInputFiles([solid('green-one', [46, 139, 58]), solid('green-two', [60, 160, 70]), solid('red-one', [192, 48, 32]), solid('blue-one', [48, 80, 192]), solid('grey-one', [128, 128, 128])]);
   // A picture's colours are measured when its thumbnail is made.
@@ -579,11 +587,13 @@ test('the colour filter narrows the library to a named hue with a removable chip
   await expect(tiles).toHaveCount(2);
   await expect(page.locator('.library-result-count')).toHaveText('2 references');
   // It sits on top of the search: the same hue with a title that matches only one of them.
-  await page.getByRole('searchbox').fill('green-two');
+  await page.keyboard.press('Escape'); // The collection menu covers the search button until it is closed.
+  const search = await openSearch(page);
+  await search.fill('green-two');
   await expect(tiles).toHaveCount(1);
-  await page.getByRole('searchbox').fill('red-one');
+  await search.fill('red-one');
   await expect(tiles).toHaveCount(0);
-  await page.getByRole('searchbox').fill('');
+  await search.fill('');
   await expect(tiles).toHaveCount(2);
   // The chip removes it again, and the select follows.
   await page.getByRole('button', { name: 'Remove colour filter: green' }).click();
@@ -601,6 +611,7 @@ test('the colour filter narrows the library to a named hue with a removable chip
 
 test('the library board browses at full width and a detail strip joins from 1200 px', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
+  await preferGrid(page);
   await page.goto('/');
   await page.locator('.library-panel input[type=file]').setInputFiles(pngFiles);
   await expect(page.locator('.library-tile')).toHaveCount(6);

@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
+import { addMenuItem, chooseFromViewMenu } from './library-controls';
 
 /**
  * The reference shelf: EPUB titles and covers read from the files themselves, generated covers for what has no
@@ -16,7 +17,8 @@ const present = [...languages, ...creative, pride].every(path => existsSync(path
 test.skip(!present, 'needs ~/Books/reference-docs and /tmp/hmb-media/prideandprejudice.epub');
 
 async function addFiles(page: Page, files: string[]) {
-  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('button', { name: 'Add local documents or images' }).click()]);
+  const item = await addMenuItem(page, 'Add local documents or images');
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), item.click()]);
   await chooser.setFiles(files);
 }
 /** Files whose covers are generated open the intake sheet; keeping everything closes it. */
@@ -127,7 +129,7 @@ test('a collection with sub-collections shows its own documents first, then one 
   await expect(page.locator('.library-tile')).toHaveCount(3);
   // List view is unchanged: rows, no shelf headers, the title shown and the file name in the meta line.
   await page.locator('.library-filter', { hasText: /^Reference/ }).click();
-  await page.getByRole('button', { name: 'List view' }).click();
+  await chooseFromViewMenu(page, 'List');
   await expect(heads).toHaveCount(0);
   await expect(page.locator('.library-document')).toHaveCount(6);
   await expect(page.locator('.library-document-name', { hasText: 'The Rust Programming Language' })).toHaveCount(1);
@@ -187,7 +189,7 @@ test('every cover is its own pattern, a shelf shares one tint, and ↻ re-rolls 
 test('Index a folder explains what it takes', async ({ page }) => {
   await page.setViewportSize({ width: 1080, height: 700 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Index folders and manage source locations' }).click();
+  await (await addMenuItem(page, 'Index folders and manage source locations')).click();
   // Folder indexing is desktop-only; the browser preview says so rather than offering the button.
   await expect(page.locator('.library-dialog')).toContainText('require the desktop app');
 });
