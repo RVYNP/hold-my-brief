@@ -57,16 +57,22 @@ export function createZoomMenu(button: HTMLButtonElement, choose: (choice: ZoomC
     element.style.left = `${Math.round(Math.max(6, Math.min(anchor.left, innerWidth - width - 6)))}px`;
     element.style.top = `${Math.round(above >= 6 ? above : Math.min(anchor.bottom + 6, Math.max(6, innerHeight - height - 6)))}px`;
   }
-  function open() {
+  /** Where a choice, or a second press of the button, puts focus back: the page when the menu was opened with the pointer (pill presses never take focus from it), the button when opened from the keyboard. */
+  let origin: HTMLElement | undefined;
+  function open(byPointer: boolean) {
     if (isOpen()) return;
+    const was = document.activeElement;
+    origin = byPointer && was instanceof HTMLElement && was !== button && was !== document.body && was.isConnected ? was : undefined;
     element.hidden = false; place();
     button.setAttribute('aria-expanded', 'true');
     field.value = shown; field.focus(); field.select();
   }
-  function close(restoreFocus = false) {
+  /** `restoreFocus` returns focus to where the menu was opened from; `toButton` insists on the button (Escape and Tab). */
+  function close(restoreFocus = false, toButton = false) {
     if (!isOpen()) return;
     element.hidden = true; button.setAttribute('aria-expanded', 'false');
-    if (restoreFocus) button.focus();
+    if (restoreFocus) (toButton ? button : origin ?? button).focus();
+    origin = undefined;
   }
   /** Moves the focus ring along the entries, wrapping; `to` jumps to the first or last menu item. */
   function move(from: Element | null, delta: 1 | -1 | 'first' | 'last') {
@@ -81,14 +87,14 @@ export function createZoomMenu(button: HTMLButtonElement, choose: (choice: ZoomC
   }
 
   button.setAttribute('aria-haspopup', 'menu'); button.setAttribute('aria-expanded', 'false'); button.setAttribute('aria-controls', element.id);
-  button.addEventListener('click', () => isOpen() ? close(true) : open());
+  button.addEventListener('click', event => isOpen() ? close(true) : open(event.detail > 0));
   button.addEventListener('keydown', event => {
-    if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && !event.ctrlKey && !event.altKey && !event.metaKey) { event.preventDefault(); open(); }
+    if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && !event.ctrlKey && !event.altKey && !event.metaKey) { event.preventDefault(); open(false); }
   });
   element.addEventListener('keydown', event => {
     if (event.ctrlKey || event.altKey || event.metaKey) return; // Reading shortcuts keep working with the menu open.
     const target = event.target as HTMLElement;
-    if (event.key === 'Escape' || event.key === 'Tab') { event.preventDefault(); event.stopPropagation(); close(true); }
+    if (event.key === 'Escape' || event.key === 'Tab') { event.preventDefault(); event.stopPropagation(); close(true, true); }
     else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); move(target, event.key === 'ArrowDown' ? 1 : -1); }
     else if ((event.key === 'Home' || event.key === 'End') && target !== field) { event.preventDefault(); move(target, event.key === 'Home' ? 'first' : 'last'); }
     else if (event.key === 'Enter' && target === field) { event.preventDefault(); apply(); }

@@ -100,8 +100,9 @@ test('typing a percentage applies on Enter, reverts when invalid and clamps to t
   await openPdf(page);
   const typed = async (text: string) => { await field(page).fill(text); await page.keyboard.press('Enter'); };
 
+  await page.locator('.pdf-reader').focus();
   await openMenu(page); await typed('135');
-  await expect(menu(page)).toBeHidden(); await expect(level(page)).toHaveText('135%'); await expect(level(page)).toBeFocused();
+  await expect(menu(page)).toBeHidden(); await expect(level(page)).toHaveText('135%'); await expect(page.locator('.pdf-reader')).toBeFocused(); // Opened with the pointer: the page keeps focus.
   await settled(page);
   const natural = (await page.locator('.pdf-page').boundingBox())!;
 
@@ -351,5 +352,24 @@ test('Ctrl + wheel zooms an image too, and leaves no transform behind', async ({
   expect(await page.locator('.image-frame').evaluate(el => el.style.transform)).toBe('');
   const after = (await page.locator('.image-frame img').boundingBox())!;
   expect(after.width / before.width).toBeCloseTo(Number((await level(page).textContent())!.replace('%', '')) / 100, 1);
+  expect(errors).toEqual([]);
+});
+
+test('pointer use of the menu leaves keyboard focus on the page; the keyboard path returns it to the button', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+  await openPdf(page);
+  const host = page.locator('.pdf-reader'), position = page.locator('#position');
+  await host.focus();
+  // Mouse: a preset click, then a second press of the button, and a double-click, all leave the page focused and PageDown working.
+  await openMenu(page); await item(page, '50%').click();
+  await expect(level(page)).toHaveText('50%'); await expect(host).toBeFocused();
+  await page.keyboard.press('PageDown'); await expect(position).toContainText('Page 2 of 3'); await settled(page);
+  await openMenu(page); await level(page).click(); await expect(menu(page)).toBeHidden(); await expect(host).toBeFocused();
+  await level(page).dblclick(); await expect(level(page)).toHaveText('Fit'); await expect(host).toBeFocused();
+  await page.keyboard.press('PageUp'); await expect(position).toContainText('Page 1 of 3');
+  // Keyboard: opened from the button, a choice leaves focus on the button, as Escape and Tab do.
+  await level(page).focus(); await page.keyboard.press('Enter'); await expect(field(page)).toBeFocused();
+  await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
+  await expect(level(page)).toHaveText('110%'); await expect(level(page)).toBeFocused();
   expect(errors).toEqual([]);
 });

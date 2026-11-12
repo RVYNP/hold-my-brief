@@ -135,7 +135,8 @@ Anything it cannot read goes back to the current level, and a number outside 25�
 range. Below it are **Zoom in** (Ctrl +), **Zoom out** (Ctrl −), **Fit page** (Ctrl 0), **Fit width**
 (Ctrl 2) and the presets **50%**, **100%** and **200%**. Up and Down move through the field and the
 entries, Home and End jump to the first and last entry, and Escape, Tab, a click elsewhere or choosing
-an entry close it; Escape, Tab and a choice put focus back on the level.
+an entry close it. Escape and Tab put focus back on the level. A choice does too when the menu was opened
+from the keyboard; opened with the mouse, it leaves focus on the page, so PgDn and Space keep working.
 
 **Steps.** Zoom in and zoom out (the buttons, the menu and Ctrl +/−) move along a ladder: 25, 33, 50, 67,
 75, 90, 100, 110, 125, 150, 175, 200, 250, 300 and 400 %. From a level between two rungs they go to the

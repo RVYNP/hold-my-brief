@@ -606,7 +606,10 @@ claimZoomInput(document, (x, y) => ({ x, y }), target => target instanceof Node 
  * (the same reason the hand tool watches them, see pan.ts), so each frame claims them itself. The frame may be scaled by the
  * renderer, so a point is mapped through the frame's on-screen box.
  */
+const zoomFrames = new WeakSet<Document>();
 function watchFrameZoom(doc: Document) {
+  if (zoomFrames.has(doc)) return;
+  zoomFrames.add(doc);
   claimZoomInput(doc, (x, y) => {
     const frame = doc.defaultView?.frameElement, box = frame?.getBoundingClientRect();
     if (!frame || !box) return { x, y };
