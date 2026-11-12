@@ -20,6 +20,8 @@ type Callbacks = {
   error: (error: unknown) => void;
   /** The library changed (an edit, a refresh): the opening page shows part of it too. */
   changed?: (library: Library) => void;
+  /** The library moved to the other side, from the drawer's dock button or elsewhere; the rail follows. */
+  sideChanged?: (side: LibrarySide) => void;
 };
 type Filter = { kind: 'all' | 'favorites' | 'unfiled' } | { kind: 'collection' | 'source'; id: string };
 const pageSize = 40;
@@ -85,6 +87,8 @@ function orderedTree<T extends { id: string; name: string; parentId: string | nu
 
 export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   refresh: (activePath?: string) => Promise<void>; toggle: () => void; board: () => void;
+  /** The side the library, drawer and rail, is kept on (one saved preference), and the way to change it. */
+  side: () => LibrarySide; setSide: (side: LibrarySide) => void;
   /** Opens the library on all references or on favorites (the board where there is room). */
   browse: (scope: 'all' | 'favorites') => void;
   /** Sets the colour and/or search text of the library list (opening the drawer if needed) and reports what matches. `colour: null` clears it; omitted fields are left alone. */
@@ -215,12 +219,15 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     resizeHandle.setAttribute('aria-valuemin', String(bounds.min)); resizeHandle.setAttribute('aria-valuemax', String(bounds.max));
   }
   function setWidth(next: number) { applyWidth(next); preferredWidth = width; savePreference(widthKey, String(width)); }
-  function applySide() {
+  function applySide(notify = true) {
     const other = side === 'left' ? 'right' : 'left'; layout?.classList.toggle('library-right', side === 'right');
     toggleButton?.setAttribute('data-library-side', side);
     dock.innerHTML = panelIcon[other]; dock.setAttribute('aria-label', `Move library to the ${other}`); dock.title = `Move library to the ${other}`;
+    if (notify) callbacks.sideChanged?.(side);
   }
-  dock.onclick = () => { side = side === 'left' ? 'right' : 'left'; savePreference(sideKey, side); applySide(); };
+  /** One preference for the drawer and the rail: both stand on `next`. */
+  function setSide(next: LibrarySide) { if (next === side) return; side = next; savePreference(sideKey, side); applySide(); }
+  dock.onclick = () => setSide(side === 'left' ? 'right' : 'left');
   // While dragging, only the drawer follows the pointer; it is out of flow, so the reading panel,
   // the page box and the canvas bitmap keep their exact geometry and never refit.
   let drag: { pointer: number; x: number; start: number; next?: number } | undefined; let dragFrame = 0;
@@ -996,9 +1003,11 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     try { const next = await getLibrary(); if (token !== revision) return; library = next; loaded = true; loadError = false; rebuildIndex(); render(); callbacks.changed?.(library); }
     catch (error) { if (token !== revision) return; loadError = true; render(); callbacks.error(error); }
   }
-  toggleButton?.setAttribute('aria-controls', root.id); applySide(); applyWidth(preferredWidth); rebuildIndex(); applyVisibility(); render();
+  toggleButton?.setAttribute('aria-controls', root.id); applySide(false); applyWidth(preferredWidth); rebuildIndex(); applyVisibility(); render();
   return {
     refresh,
+    side: () => side,
+    setSide,
     toggle: () => { toggle(); if (visible && loadError) void refresh(); },
     // Library board (palette command): open the drawer if needed, then enter or leave the board. Below 720 px there is only the sheet.
     board: () => { if (!visible) setVisible(true, false); if (wide.matches) setBoard(!board, 'control'); else focusSearch(); if (visible && loadError) void refresh(); },

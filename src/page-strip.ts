@@ -12,7 +12,7 @@ import type { PagePreview, PreviewSink } from './types';
 /** Pages listed in single-page view, and spreads in two-page view. */
 export const PREVIEW_PAGES = 3;
 export const PREVIEW_SPREADS = 2;
-/** Thumbnail height in CSS px. The strip's own height (`--page-strip-height`) adds its padding and the footer's hover band. */
+/** Thumbnail height in CSS px. The strip's own height (`--page-strip-height`) adds its padding; the footer's lane lies below the strip, not in it. */
 export const THUMBNAIL_HEIGHT = 88;
 /** Bitmaps kept for thumbnails, a tenth of the page cache: a thumbnail is ~100 KB, so this holds dozens. */
 export const PREVIEW_CACHE_BYTES = 4 * 1024 * 1024;

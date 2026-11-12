@@ -371,15 +371,22 @@
 /* Rail: the library's closed form from 720 px up. Covers are 40 x 54; the open reference wears the accent ring. */
 .library-rail { display: none; }
 @media (min-width: 720px) {
-  #reader-layout:not(.library-open) > .library-rail { position: absolute; z-index: 20; top: 0; bottom: 0; left: 6px; display: flex; flex-direction: column; align-items: center; gap: 10px; width: 60px; padding: 8px 0; overflow: hidden auto; border: 1px solid var(--border); border-radius: 9px; background: var(--raise); scrollbar-width: none; }
+  #reader-layout:not(.library-open) > .library-rail { position: absolute; z-index: 20; top: 0; bottom: var(--footer-height); left: 6px; display: flex; flex-direction: column; align-items: center; gap: 10px; width: 60px; padding: 8px 0; overflow: hidden; border: 1px solid var(--border); border-radius: 9px; background: var(--raise); }
   #reader-layout.library-right:not(.library-open) > .library-rail { left: auto; right: 6px; }
   #reader-layout.library-right .library-rail-toggle svg { transform: scaleX(-1); }
+  /* The drawer ends where the rail does: above the footer's lane (see style.css), so the footer is never under it. */
+  .library-root { bottom: var(--footer-height); }
   #reader-layout:not(.library-open):not(.library-right) #empty.is-home { padding-left: calc(var(--library-clear) + 4px); }
   #reader-layout.library-right:not(.library-open) #empty.is-home { padding-right: calc(var(--library-clear) + 4px); }
 }
-.library-rail-toggle { display: grid; place-items: center; flex: none; width: 32px; height: 32px; padding: 0; color: var(--muted); }
-.library-rail-toggle:hover { color: var(--fg); }
-.library-rail-list { display: flex; flex: none; flex-direction: column; align-items: center; gap: 8px; width: 100%; }
+.library-rail-toggle, .library-rail-side { display: grid; place-items: center; flex: none; width: 32px; height: 32px; padding: 0; color: var(--muted); }
+.library-rail-toggle:hover, .library-rail-side:hover { color: var(--fg); }
+/* The covers scroll between the library button and the side button, which stay put at the rail's two ends. */
+.library-rail-list { display: flex; flex: 0 1 auto; flex-direction: column; align-items: center; gap: 8px; width: 100%; min-height: 0; padding: 5px 0; overflow: hidden auto; scrollbar-width: none; }
+.library-rail-side { margin-top: auto; }
+.library-rail-menu { position: fixed; z-index: 40; display: flex; flex-direction: column; min-width: 180px; padding: 4px; border: 1px solid var(--border); border-radius: 7px; background: var(--card); box-shadow: var(--shadow-popover); }
+.library-rail-menu button { padding: 6px 10px 6px 24px; text-align: left; font-size: 12px; }
+.library-rail-menu button[aria-checked=true] { background: var(--hover-subtle); background-image: radial-gradient(circle at 12px 50%, var(--accent) 0 2.5px, transparent 3px); }
 .library-rail-item { position: relative; display: block; flex: none; width: 40px; height: 54px; }
 .library-rail-cover { display: block; width: 40px; height: 54px; padding: 0; border-radius: 4px; }
 .library-rail-cover:hover { background: transparent; }

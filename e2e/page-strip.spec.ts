@@ -1,35 +1,9 @@
 import { test, expect, type Page } from '@playwright/test';
+import { pagedPdf, pageColour } from './paged-pdf';
 
 // Instrumentation the tests attach to the page.
 declare global { interface Window { thumbnailRenders: number; hostSizes: Set<string>; stripFlips: boolean[] } }
 
-/**
- * A raw PDF of `count` pages (300 x 400 pt). Page n is filled with its own colour, so a thumbnail can be told
- * from its neighbours by pixels, and carries its number as large text. `labels` is a /PageLabels /Nums body.
- */
-function pagedPdf(count: number, labels = '') {
-  const stream = (text: string) => `<< /Length ${Buffer.byteLength(text)} >>\nstream\n${text}\nendstream`;
-  const objects = [
-    `<< /Type /Catalog /Pages 2 0 R${labels ? ` /PageLabels << /Nums [${labels}] >>` : ''} >>`,
-    `<< /Type /Pages /Kids [${Array.from({ length: count }, (_, i) => `${4 + i * 2} 0 R`).join(' ')}] /Count ${count} >>`,
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
-  ];
-  for (let n = 1; n <= count; n++) {
-    const [r, g, b] = pageColour(n);
-    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Resources << /Font << /F1 3 0 R >> >> /Contents ${5 + (n - 1) * 2} 0 R >>`);
-    objects.push(stream(`${r / 255} ${g / 255} ${b / 255} rg 0 0 300 400 re f 1 1 1 rg BT /F1 120 Tf 90 150 Td (${n}) Tj ET`));
-  }
-  let out = '%PDF-1.7\n'; const offsets: number[] = [];
-  objects.forEach((object, i) => { offsets.push(Buffer.byteLength(out)); out += `${i + 1} 0 obj\n${object}\nendobj\n`; });
-  const xref = Buffer.byteLength(out);
-  out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map(offset => `${String(offset).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
-  return Buffer.from(out);
-}
-/** Saturated colours a long way apart from each other, one per page. */
-function pageColour(n: number): [number, number, number] {
-  const hue = (n * 47) % 360, f = (k: number) => { const t = (k + hue / 30) % 12; return .5 - .4 * Math.max(-1, Math.min(t - 3, Math.min(9 - t, 1))); };
-  return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)];
-}
 const markdown = () => ({ name: 'notes.md', mimeType: 'text/markdown', buffer: Buffer.from('# Notes\n\nA short document.\n'.repeat(40)) });
 
 const PAGES = 9;
@@ -44,6 +18,8 @@ async function openPdf(page: Page, { count = PAGES, labels = '', viewport = { wi
   await page.locator('.pdf-reader').focus();
 }
 
+/** The footer's lane: the room under the strip that the open footer takes, which the strip and the page area both leave free. */
+const footerLane = (page: Page) => page.locator('footer').evaluate(el => el.getBoundingClientRect().height);
 const strip = (page: Page) => page.getByRole('navigation', { name: 'Next pages' });
 const goButtons = (page: Page) => strip(page).getByRole('button');
 const names = (page: Page) => goButtons(page).evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label')));
@@ -131,7 +107,11 @@ test('on the last page the strip is empty but keeps its height, and the page kee
   const band = (await strip(page).boundingBox())!;
   expect(band.height).toBeGreaterThanOrEqual(100);
   const fitted = await settledHeight(page);
-  expect(fitted).toBe(full - Math.round(band.height)); // The page area gave up exactly the strip's height, once.
+  const lane = await footerLane(page);
+  expect(lane).toBe(30);
+  expect(fitted).toBe(full - Math.round(band.height) - lane); // The page area gave up exactly the strip's height and the footer's lane, once.
+  const panelBox = (await page.locator('#workspace').boundingBox())!;
+  expect(Math.round(band.y + band.height)).toBe(Math.round(panelBox.y + panelBox.height - lane)); // The strip ends where the footer's lane begins.
   const stripCanvas = await mainSize(page);
   expect(stripCanvas).not.toBe(fullCanvas);
 
@@ -449,6 +429,6 @@ test('with the strip on, the hand tool slides a fitting page above the strip, ne
   // Turning the strip off gives the host its height back.
   await page.keyboard.press('Control+4');
   await expect(strip(page)).toBeHidden();
-  await expect.poll(() => hostHeight(page)).toBe(size + Math.round(band.height));
+  await expect.poll(async () => hostHeight(page)).toBe(size + Math.round(band.height) + await footerLane(page));
   expect(errors).toEqual([]);
 });
