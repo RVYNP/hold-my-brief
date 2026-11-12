@@ -109,7 +109,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   const busyDisabled = new Map<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLButtonElement, boolean>();
   let view: LibraryView = 'list'; let scopeOpen = false; let menuAnchor: HTMLElement | undefined;
   // The sort, the availability and the file type are what the Recent menu and the chips set; the search field is a button until it is used.
-  let sortMode: 'recent' | 'name' = 'recent'; let availabilityFilter = ''; let fileType = ''; let searchOpen = false; let chromeMenu: { menu: HTMLElement; anchor: HTMLElement } | undefined;
+  let sortMode: 'recent' | 'name' = 'recent'; let availabilityFilter = ''; let fileType = ''; let searchOpen = false; let searchAuto = false; let chromeMenu: { menu: HTMLElement; anchor: HTMLElement } | undefined;
   // The board is the same drawer opened across the whole reading panel; it is never saved, so the drawer width is untouched.
   let board = false; let selectedPath: string | undefined;
   // Colour filter: a named hue applied on top of the collection and search. A picture counts once its colours are known.
@@ -265,15 +265,16 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   }
   function setVisible(next: boolean, focus = true, persist = true) {
     visible = next; if (persist) try { localStorage.setItem(preferenceKey(), next ? 'open' : 'closed'); } catch { /* Optional preference. */ }
-    applyVisibility(); if (focus) { if (next) focusSearch(); else toggleButton?.focus(); }
+    applyVisibility(); if (focus) { if (next) focusSearch(true); else toggleButton?.focus(); }
   }
   function toggle() { if (modal?.open) return; setVisible(!visible); }
   backdrop.onclick = close.onclick = () => { if (!busy) setVisible(false); };
   wide.addEventListener('change', () => { const hadFocus = root.contains(document.activeElement); if (!wide.matches) setBoard(false, 'none'); visible = modal?.open ? true : preference(); applyVisibility(); if (!visible && hadFocus) toggleButton?.focus(); });
   root.addEventListener('keydown', event => {
     if (event.key === 'Escape' && (!itemMenu.hidden || scopeOpen || chromeMenu)) { event.preventDefault(); event.stopPropagation(); if (!itemMenu.hidden) closeItemMenu(); else if (chromeMenu) closeChromeMenu(); else { setScope(false); scopeButton.focus(); } return; }
-    // In the search field Escape clears what was typed; with nothing typed it folds the field back into its button.
-    if (event.key === 'Escape' && event.target === search && !board && !modal?.open) { event.preventDefault(); event.stopPropagation(); if (search.value) { search.value = ''; page = 0; renderDocuments(); } else collapseSearch(true); return; }
+    // In the search field Escape clears what was typed; with nothing typed it folds the field back into its button. A field that only
+    // opened because the drawer did (Ctrl+B) is not the user's to fold: there Escape closes the drawer, as it always has.
+    if (event.key === 'Escape' && event.target === search && !board && !modal?.open && (search.value || !searchAuto)) { event.preventDefault(); event.stopPropagation(); if (search.value) { search.value = ''; page = 0; renderDocuments(); } else collapseSearch(true); return; }
     if (event.key === 'Escape' && board && !modal?.open) { event.preventDefault(); event.stopPropagation(); if (!busy) setBoard(false, 'control'); return; }
     if (event.key === 'Escape' && !modal?.open) { event.preventDefault(); event.stopPropagation(); if (!busy) setVisible(false); }
     if (event.key === 'Tab' && visible && !wide.matches && !modal?.open) {
@@ -825,8 +826,8 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     viewLabel.textContent = sortMode === 'name' ? 'Name A–Z' : 'Recent'; viewButton.setAttribute('aria-label', `Sort, view and filter options. Sorted by ${viewLabel.textContent}`);
     const open = board || searchOpen || search.value !== ''; searchField.hidden = !open; searchToggle.setAttribute('aria-expanded', String(open)); searchRow.classList.toggle('is-searching', open);
   }
-  /** The search field is a button until it is needed. Every shortcut that used to focus the field opens it. */
-  function focusSearch() { searchOpen = true; syncChrome(); search.focus(); }
+  /** The search field is a button until it is needed. Every shortcut that used to focus the field opens it; `auto` marks the one that comes with opening the drawer. */
+  function focusSearch(auto = false) { searchOpen = true; searchAuto = auto; syncChrome(); search.focus(); }
   /** Folds an empty field back into its button (the board always shows it). */
   function collapseSearch(focus = false) { if (board || search.value) return; searchOpen = false; syncChrome(); if (focus) searchToggle.focus(); }
   searchToggle.onclick = () => focusSearch();

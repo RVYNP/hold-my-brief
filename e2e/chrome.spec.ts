@@ -102,6 +102,9 @@ test('the search field is a button until used, Escape clears then folds it, and 
   await page.keyboard.press('Control+b'); await expect(page.locator('#library-root')).toBeHidden();
   await page.keyboard.press('Control+b');
   await expect(field).toBeFocused();
+  // Opened with the drawer, the field is not yet the user's: Escape closes the drawer as it always has.
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#library-root')).toBeHidden();
 });
 
 test('Recent ☰ is one menu for sort, view and availability, with a Size slider for the grid that is remembered per scope', async ({ page }) => {
@@ -163,7 +166,9 @@ test('list rows carry a 32 x 43 cover and grid tiles their title, two lines at m
   await expect(captions.filter({ hasText: 'gamma.png' })).toBeVisible();
   const long = captions.filter({ hasText: 'A very long title' });
   // Two lines then an ellipsis: the clamp and the clipped box are what cut it; the full title stays the accessible text.
-  expect(await long.evaluate(el => ({ clamp: getComputedStyle(el).webkitLineClamp, overflow: getComputedStyle(el).overflow, height: el.clientHeight, text: el.textContent }))).toEqual({ clamp: '2', overflow: 'hidden', height: 34, text: longName });
+  expect(await long.evaluate(el => ({ clamp: getComputedStyle(el).webkitLineClamp, overflow: getComputedStyle(el).overflow, whiteSpace: getComputedStyle(el).whiteSpace, height: el.clientHeight, text: el.textContent }))).toEqual({ clamp: '2', overflow: 'hidden', whiteSpace: 'normal', height: 34, text: longName });
+  // It wraps inside its tile instead of running past the edge on one line.
+  expect(await long.evaluate(el => { const tile = el.closest('.library-tile')!.getBoundingClientRect(), box = el.getBoundingClientRect(); return el.scrollWidth <= el.clientWidth && box.left >= tile.left - 1 && box.right <= tile.right + 1; })).toBe(true);
   // The caption sits under its picture, inside the tile, and the next tile in the column starts below it.
   const tile = (await page.locator('.library-tile').first().boundingBox())!, picture = (await page.locator('.library-tile-media').first().boundingBox())!, caption = (await captions.first().boundingBox())!;
   expect(caption.y).toBeGreaterThanOrEqual(picture.y + picture.height - 1);

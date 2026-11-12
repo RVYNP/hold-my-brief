@@ -311,7 +311,8 @@ collection you are looking at (**All references**, **Favorites**, a collection o
 the list of them, with the colour filter; after it come one chip for each file type the library holds
 (PDF, EPUB, Markdown, Text, Images). Click a type to show only those, click it again to clear it. The row
 scrolls sideways when it is longer than the drawer. The last row is a search button that opens into the
-search field (Esc clears what you typed, and a second Esc, or leaving an empty field, folds it back),
+search field (Esc clears what you typed, and a second Esc, or leaving an empty field, folds it back; a field
+that opened with the drawer is left alone, so Esc closes the drawer as before),
 the number of references shown, and **Recent ☰**, one menu for **Sort by** (Recent, Name A–Z),
 **View as** (List, Grid), **Show** (any availability, ready, missing) and, with the grid on, a **Size**
 slider for the tiles. The board keeps the collection tree in its own left column.
