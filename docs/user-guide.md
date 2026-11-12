@@ -145,7 +145,8 @@ next one in that direction. The percentage is relative to the page's current fit
 **Wheel and pinch.** Hold Ctrl (⌘ on a Mac) and turn the mouse wheel, or pinch on a trackpad, to zoom
 smoothly toward the pointer: the spot on the page under the pointer stays under it. The page is scaled
 while you gesture and drawn sharply once you pause. A page that is smaller than the panel on an axis cannot
-hold the spot on that axis, so it stays centred there.
+hold the spot on that axis, so it stays centred there. In a fixed-layout EPUB the wheel and pinch zoom too,
+but the page is resized once you pause rather than scaled while you gesture, and the spot is not held.
 
 If the pill covers something you are reading, drag the dotted grip at its left end to put it anywhere
 in the reading panel. It stays inside the panel and above the footer, keeps its proportional place

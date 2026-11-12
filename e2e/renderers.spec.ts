@@ -1204,6 +1204,43 @@ test('fixed-layout EPUB pans inside its zoomed page frame and keeps frame links 
   expect(errors).toEqual([]);
 });
 
+test('Ctrl + wheel and a pinch over a fixed-layout EPUB page zoom the document, not the webview', async ({ page }) => {
+  // The page lives in a same-origin iframe, so its wheel and gesture events never reach the application document: the frame claims them.
+  const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles({ name: 'fixed-zoom.epub', mimeType: 'application/epub+zip', buffer: await epubFixture(true) });
+  await expect(page.locator('#position')).toContainText('Page 1 of 2');
+  await expect(page.locator('#view-controls')).toBeVisible();
+  await expect(page.locator('#zoom-level')).toHaveText('Fit');
+  const frame = page.frames().find(f => f.url().startsWith('blob:'))!;
+  const prevented = await frame.evaluate(() => {
+    const results: boolean[] = [];
+    for (let i = 0; i < 3; i++) {
+      const event = new WheelEvent('wheel', { deltaY: -100, ctrlKey: true, clientX: 40, clientY: 40, bubbles: true, cancelable: true });
+      document.body.dispatchEvent(event); results.push(event.defaultPrevented);
+    }
+    return results;
+  });
+  expect(prevented).toEqual([true, true, true]);
+  await expect(page.locator('#zoom-level')).toHaveText(/^3[0-9]{2}%$/); // 1.49 ^ 3, committed once the input paused.
+  const level = (await page.locator('#zoom-level').textContent())!;
+  // A WebKit pinch inside the frame: claimed, and committed on gestureend.
+  const pinch = await frame.evaluate(() => {
+    const results: boolean[] = [];
+    for (const [type, scale] of [['gesturestart', 1], ['gesturechange', .5], ['gesturechange', .25], ['gestureend', .25]] as const) {
+      const event = Object.assign(new Event(type, { bubbles: true, cancelable: true }), { scale, clientX: 40, clientY: 40 });
+      document.body.dispatchEvent(event); results.push(event.defaultPrevented);
+    }
+    return results;
+  });
+  expect(pinch.every(Boolean)).toBe(true);
+  await expect(page.locator('#zoom-level')).not.toHaveText(level);
+  await expect(page.locator('#zoom-level')).toHaveText(/^(8|9)[0-9]%$|^[1-9][0-9]%$/);
+  // Without Ctrl the wheel is left alone.
+  expect(await frame.evaluate(() => { const event = new WheelEvent('wheel', { deltaY: -100, clientX: 40, clientY: 40, bubbles: true, cancelable: true }); document.body.dispatchEvent(event); return event.defaultPrevented; })).toBe(false);
+  expect(errors).toEqual([]);
+});
+
 /** Opens the fixture PDF at the given viewport with the library drawer closed, and waits for a settled page. */
 async function openPdfForPill(page: Page, viewport: { width: number; height: number }) {
   await page.setViewportSize(viewport);

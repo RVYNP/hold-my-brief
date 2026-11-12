@@ -18,7 +18,7 @@ import { assignShelfSlots, closeHome, fillHomePictures, homeRows, renderHome } f
 import { repaintCovers } from './cards';
 import { canThumbnail, createThumbnailStore } from './thumbnails';
 import { createPageStrip, MIN_PANEL_HEIGHT } from './page-strip';
-import { stepZoom, wheelFactor, ZOOM_MAX, ZOOM_MIN } from './zoom';
+import { stepZoom, wheelFactor, ZOOM_MAX, ZOOM_MIN, type Point as ZoomPoint } from './zoom';
 import { createZoomGesture } from './zoom-gesture';
 import { createZoomMenu } from './zoom-menu';
 initAppearance();
@@ -491,7 +491,7 @@ async function load(open: () => Promise<Opened | null>, label = 'document'): Pro
     const prefs = { ...defaultOptions, ...doc.previousState?.options };
     const current = candidate;
     await candidate.open({ ...doc, bytes: doc.bytes }, staging, {
-      onPosition: p => { if (reader === current) showPosition(p); }, onError: fail, openExternal, requestPassword: password, onFrame: doc => pan.watchFrame(doc),
+      onPosition: p => { if (reader === current) showPosition(p); }, onError: fail, openExternal, requestPassword: password, onFrame: doc => { pan.watchFrame(doc); watchFrameZoom(doc); },
       resolveImage: desktop ? async relative => { const result = await native<{bytes: number[]; mime: string}>('read_relative_image', { path: doc.path, relative }); const url = URL.createObjectURL(new Blob([new Uint8Array(result.bytes)], { type: result.mime })); urls.push(url); return url; } : undefined,
     }, prefs);
     if (doc.previousState?.locator) await candidate.restore(doc.previousState.locator);
@@ -578,24 +578,41 @@ const zoomGesture = createZoomGesture({
   zoom: () => options.zoom,
   commit: async zoom => { await changeOptions({ zoom }); return options.zoom; },
 });
-let pinching = false;
-const overReader = (target: EventTarget | null) => target instanceof Node && workspace.contains(target);
-document.addEventListener('wheel', event => {
-  if (!event.ctrlKey && !event.metaKey) return;
-  event.preventDefault();
-  if (!pinching && overReader(event.target)) zoomGesture.zoomBy(wheelFactor(event.deltaY, event.deltaMode), { x: event.clientX, y: event.clientY });
-}, { passive: false, capture: true });
+let pinching = false, pinchScale = 1;
 /** The WebKit-only gesture events: `scale` is cumulative from the start of the pinch. */
 type PinchEvent = Event & { scale: number; clientX: number; clientY: number };
-let pinchScale = 1;
-document.addEventListener('gesturestart', event => { event.preventDefault(); pinching = true; pinchScale = 1; }, { capture: true });
-document.addEventListener('gesturechange', event => {
-  event.preventDefault();
-  const { scale, clientX, clientY } = event as PinchEvent;
-  if (pinching && overReader(event.target)) zoomGesture.zoomBy(scale / pinchScale, { x: clientX, y: clientY });
-  pinchScale = scale;
-}, { capture: true });
-document.addEventListener('gestureend', event => { event.preventDefault(); pinching = false; zoomGesture.end(); }, { capture: true });
+/**
+ * Claims Ctrl/⌘ + wheel and pinch on `doc`. `toApp` maps a point of that document to the application window (identity for the
+ * application itself); `inside` says whether an event target is over the reading panel. A frame is always inside it.
+ */
+function claimZoomInput(doc: Document, toApp: (x: number, y: number) => ZoomPoint, inside: (target: EventTarget | null) => boolean) {
+  doc.addEventListener('wheel', event => {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    if (!pinching && inside(event.target)) zoomGesture.zoomBy(wheelFactor(event.deltaY, event.deltaMode), toApp(event.clientX, event.clientY));
+  }, { passive: false, capture: true });
+  doc.addEventListener('gesturestart', event => { event.preventDefault(); pinching = true; pinchScale = 1; }, { capture: true });
+  doc.addEventListener('gesturechange', event => {
+    event.preventDefault();
+    const { scale, clientX, clientY } = event as PinchEvent;
+    if (pinching && inside(event.target)) zoomGesture.zoomBy(scale / pinchScale, toApp(clientX, clientY));
+    pinchScale = scale;
+  }, { capture: true });
+  doc.addEventListener('gestureend', event => { event.preventDefault(); pinching = false; zoomGesture.end(); }, { capture: true });
+}
+claimZoomInput(document, (x, y) => ({ x, y }), target => target instanceof Node && workspace.contains(target));
+/**
+ * Fixed-layout EPUB pages live in same-origin iframes whose wheel and gesture events never reach the application document
+ * (the same reason the hand tool watches them, see pan.ts), so each frame claims them itself. The frame may be scaled by the
+ * renderer, so a point is mapped through the frame's on-screen box.
+ */
+function watchFrameZoom(doc: Document) {
+  claimZoomInput(doc, (x, y) => {
+    const frame = doc.defaultView?.frameElement, box = frame?.getBoundingClientRect();
+    if (!frame || !box) return { x, y };
+    return { x: box.left + x * box.width / (frame.clientWidth || box.width), y: box.top + y * box.height / (frame.clientHeight || box.height) };
+  }, () => true);
+}
 document.addEventListener('keydown', event => {
   if (document.querySelector('dialog[open]')) return;
   const target = event.composedPath()[0];
