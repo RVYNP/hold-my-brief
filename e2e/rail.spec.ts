@@ -238,3 +238,15 @@ test('the rail has a side button and a context menu; both move the one saved sid
   await expect(page.getByRole('button', { name: 'Move library to the left' })).toBeVisible();
   expect((await boxOf(page.locator('#library-root'))).x).toBeGreaterThan(1080 / 2);
 });
+
+test('in a compact window the page strip also ends above the footer, and the pill stays above the strip', async ({ page }) => {
+  await openReading(page, 'left');
+  await page.setViewportSize({ width: 600, height: 760 });
+  const strip = page.getByRole('navigation', { name: 'Next pages' }), footer = page.locator('footer'), pill = page.locator('#view-controls');
+  await expect(strip).toBeVisible();
+  await page.mouse.move(300, 757);
+  await expect.poll(async () => { const box = await boxOf(footer); return Math.round(box.y + box.height); }).toBe(760);
+  const [s, f, p] = [await boxOf(strip), await boxOf(footer), await boxOf(pill)];
+  expect(apart(s, f) && apart(p, s) && apart(p, f)).toBe(true);
+  expect(s.x).toBe(0); expect(s.width).toBe(600);
+});
