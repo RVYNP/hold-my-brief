@@ -117,7 +117,7 @@ saves the resulting reading position without modifying the source file.
 
 PDFs, images and fixed-layout EPUBs show a small floating view-controls pill at the bottom of the
 reading panel (bottom-right once the panel is 720 pixels wide or more). It holds zoom out, the zoom
-level (**Fit**, **Width** or a percentage; click it to switch between fit page and fit width), zoom
+level (**Fit**, **Width** or a percentage, with a small chevron: it opens the zoom menu, below; double-click it to switch between fit page and fit width), zoom
 in, the **Hand** tool and, for PDF and fixed-layout EPUB, **Single page** / **Two pages** buttons (PDFs
 also get **Page previews**, below), and stays in step with Ctrl+−/+ and Ctrl+0/2/3/4. The hand is available at every zoom: press **H** (or the
 Hand button) and drag. When a zoomed page is larger than the panel, the drag pans it 1:1. When the
@@ -128,6 +128,24 @@ zoom or fit (Ctrl+0 included), switch between one and two pages, or open another
 selection pauses while the hand is on, and a click without movement still follows links. Middle-button
 drag pans or slides in any mode. The hand turns off when a new document opens (and, in a fixed-layout EPUB, when switching between one and two pages rebuilds the view). Markdown, TXT and
 reflowable EPUB reflow instead of zooming, so they have no pill and no panning.
+
+**The zoom menu.** Click the zoom level (or press Enter, Space or an arrow key on it) for a popover
+above the pill. Its top is a field: type a percentage such as `135` and press Enter to apply it.
+Anything it cannot read goes back to the current level, and a number outside 25–400 is held to that
+range. Below it are **Zoom in** (Ctrl +), **Zoom out** (Ctrl −), **Fit page** (Ctrl 0), **Fit width**
+(Ctrl 2) and the presets **50%**, **100%** and **200%**. Up and Down move through the field and the
+entries, Home and End jump to the first and last entry, and Escape, Tab, a click elsewhere or choosing
+an entry close it; Escape, Tab and a choice put focus back on the level.
+
+**Steps.** Zoom in and zoom out (the buttons, the menu and Ctrl +/−) move along a ladder: 25, 33, 50, 67,
+75, 90, 100, 110, 125, 150, 175, 200, 250, 300 and 400 %. From a level between two rungs they go to the
+next one in that direction. The percentage is relative to the page's current fit: 100 % is the page as
+**Fit** or **Width** draws it, not the document's printed size.
+
+**Wheel and pinch.** Hold Ctrl (⌘ on a Mac) and turn the mouse wheel, or pinch on a trackpad, to zoom
+smoothly toward the pointer: the spot on the page under the pointer stays under it. The page is scaled
+while you gesture and drawn sharply once you pause. A page that is smaller than the panel on an axis cannot
+hold the spot on that axis, so it stays centred there.
 
 If the pill covers something you are reading, drag the dotted grip at its left end to put it anywhere
 in the reading panel. It stays inside the panel and above the footer, keeps its proportional place
@@ -259,7 +277,7 @@ lock.
 | Fit page / fit width | Ctrl+0 / Ctrl+2 |
 | Two-page spread | Ctrl+3 |
 | Page previews (PDF) | Ctrl+4 |
-| Zoom or text size | Ctrl++ / Ctrl+− |
+| Zoom or text size | Ctrl++ / Ctrl+− (pages step along the zoom ladder); Ctrl/⌘ + wheel or trackpad pinch zooms toward the pointer |
 | Hand tool (pan a zoomed page, or move a page that fits) | H, or drag with the middle button |
 | Close a dialog | Escape |
 

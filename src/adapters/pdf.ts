@@ -6,6 +6,7 @@ import type { Locator, OutlineItem, PagePreview, Position, PreviewSink, ReaderAd
 import { MIN_SPREAD_WIDTH, pagesLabel, spreadPages } from '../spread';
 import { searchUnits, type DocumentSearch, type SearchHit, type SearchOptions, type UnitText } from '../search';
 import { BitmapCache, nextPages, PREVIEW_CACHE_BYTES, THUMBNAIL_HEIGHT } from '../page-strip';
+import { PREVIEW_CLASS } from '../zoom-gesture';
 
 GlobalWorkerOptions.workerSrc = workerURL;
 /** Bound on decoded page bitmaps kept for instant page turns (bytes of canvas backing store). */
@@ -87,6 +88,8 @@ export class PdfAdapter implements ReaderAdapter {
     host.addEventListener('scroll', this.onScroll, { passive: true });
     let size = `${host.clientWidth}:${host.clientHeight}`;
     this.observer = new ResizeObserver(() => {
+      // A zoom gesture is scaling the page and hides the scrollbars meanwhile; the size it reports is not a resize, and the gesture commits its own render.
+      if (host.classList.contains(PREVIEW_CLASS)) return;
       const next = `${host.clientWidth}:${host.clientHeight}`;
       if (size === next || !host.clientWidth || !host.clientHeight) return;
       size = next;
@@ -94,7 +97,7 @@ export class PdfAdapter implements ReaderAdapter {
       // Read the current committed location when the resize settles. Capturing
       // it here can overwrite a newer page/link navigation during the delay.
       this.resizeTimer = setTimeout(() => {
-        if (!this.disposed && !host.hasAttribute('aria-busy'))
+        if (!this.disposed && !host.hasAttribute('aria-busy') && !host.classList.contains(PREVIEW_CLASS))
           void this.restore(this.getPosition().locator).catch(context.onError);
       }, 100);
     });

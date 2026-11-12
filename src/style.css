@@ -413,7 +413,9 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
 #view-controls button { display: grid; place-items: center; width: 28px; height: 26px; padding: 0; border-radius: 6px; color: var(--muted); }
 #view-controls button[aria-pressed=true] { color: var(--accent-ink); }
 #view-controls > button:disabled, #view-controls > button[aria-disabled=true] { opacity: calc(var(--idle) * .45); cursor: default; background: transparent; }
-#view-controls #zoom-level { width: 44px; color: var(--fg); font: 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+#view-controls #zoom-level { display: flex; align-items: center; justify-content: center; gap: 4px; width: 56px; color: var(--fg); font: 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+#view-controls #zoom-level svg { flex-shrink: 0; color: var(--muted); }
+#view-controls #zoom-level[aria-expanded=true] { background: var(--hover-subtle); }
 #view-controls .view-group { display: flex; align-items: center; gap: 2px; }
 #view-controls .view-sep { width: 1px; height: 16px; background: var(--hairline); }
 /* Move grip: six muted dots, no box. The default placement is CSS; dragging it (or the arrow keys) pins the pill with inline left/top. */
@@ -452,6 +454,21 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
    so nothing refits. The host stops scrolling meanwhile, because a translated page would grow its scrollable area and raise a scrollbar. */
 .reader-host.page-moved { overflow: hidden; }
 .reader-host.page-moved > .pdf-page, .reader-host.page-moved > .pdf-spread, .reader-host.page-moved .image-frame, .reader-host.page-moved > foliate-view { translate: var(--pan-x, 0) var(--pan-y, 0); }
+/* A zoom gesture (Ctrl + wheel, pinch) scales the committed page with a transform until the input pauses, then renders it crisply.
+   The host stops scrolling meanwhile for the same reason as above: a scaled page would grow the scrollable area and raise a scrollbar. */
+.reader-host.zoom-preview { overflow: hidden; }
+.reader-host.zoom-preview > .pdf-page, .reader-host.zoom-preview > .pdf-spread, .reader-host.zoom-preview > .image-frame { will-change: transform; }
+/* The zoom menu: a popover above the level button (left and top are set when it opens), laid out like the ··· menu. */
+.zoom-menu { position: fixed; z-index: 30; width: 200px; padding: 4px; border: 1px solid var(--border); border-radius: 9px; background: var(--card); box-shadow: var(--shadow-popover); }
+.zoom-menu input { display: block; width: 100%; margin: 2px 0 4px; padding: 6px 10px; background-color: var(--hover-subtle); border: 0; border-radius: 6px; color: var(--fg); font: 12px/1.3 var(--font-mono); font-variant-numeric: tabular-nums; }
+.zoom-menu input:focus-visible { outline: none; border-radius: 6px 6px 0 0; background-color: var(--hover); box-shadow: inset 0 -2px 0 var(--accent); }
+.zoom-menu [role=menu] { display: flex; flex-direction: column; }
+.zoom-menu [role=menuitem] { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; padding: 6px 10px; text-align: left; font-size: 12px; white-space: nowrap; }
+.zoom-menu [role=menuitem]:disabled { opacity: .45; cursor: default; background: transparent; }
+.zoom-menu kbd { padding: 0; border: 0; background: none; color: var(--muted); }
+.zoom-sep { height: 1px; margin: 3px 0; background: var(--hairline); }
+/* Arrow keys move focus through the entries, so it is always drawn (a mouse press never matches :focus-visible on a button). */
+.zoom-menu [role=menuitem]:focus-visible { outline: none; background: var(--hover); box-shadow: inset 0 0 0 1px var(--accent-border); }
 dialog { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--fg); padding: 18px; width: min(360px, calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow: auto; box-shadow: var(--shadow-popover); }
 dialog::backdrop { background: var(--scrim); }
 h2 { font: 400 17px/1.25 var(--font-read); margin: 0 0 16px; }

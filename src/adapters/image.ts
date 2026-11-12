@@ -1,4 +1,5 @@
 import type { Format, Locator, Position, ReaderAdapter, ReaderContext, ReaderOptions, ReaderSource } from '../types';
+import { PREVIEW_CLASS } from '../zoom-gesture';
 
 const mimeTypes: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', avif: 'image/avif', bmp: 'image/bmp' };
 const clamp = (value: number) => Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
@@ -30,7 +31,7 @@ export class ImageAdapter implements ReaderAdapter {
     if (this.destroyed) return;
     this.layout();
     this.observer = new ResizeObserver(() => {
-      if (this.destroyed) return;
+      if (this.destroyed || this.host.classList.contains(PREVIEW_CLASS)) return;
       const location = this.getPosition().locator;
       this.layout(); this.restoreScroll(location);
     });

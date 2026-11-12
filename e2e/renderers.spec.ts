@@ -768,7 +768,7 @@ test('PDF view controls zoom, pan 1:1 by hand tool and middle button, and keep l
   await expect(host).toHaveClass(/hand-tool/); // Grab cursor, because a drag now always does something.
   await page.keyboard.press('h');
   await expect(hand).toHaveAttribute('aria-pressed', 'false');
-  for (let i = 0; i < 4; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
+  for (let i = 0; i < 2; i++) await page.getByRole('button', { name: 'Zoom in' }).click(); // 110%, 125%
   await page.keyboard.press('Control+Equal'); // Shortcut and pill share one zoom state.
   await expect(page.locator('#zoom-level')).toHaveText('150%');
   await expect(page.locator('.pdf-render-status')).toHaveCount(0);
@@ -812,7 +812,7 @@ test('PDF view controls zoom, pan 1:1 by hand tool and middle button, and keep l
   // Returning to fit keeps the tool on: the page slides there instead of scrolling. A new document resets it.
   await page.keyboard.press('h');
   await expect(hand).toHaveAttribute('aria-pressed', 'true');
-  await page.locator('#zoom-level').click();
+  await page.locator('#zoom-level').dblclick(); // Double-clicking the level toggles the fit; a single click opens the zoom menu.
   await expect(page.locator('#zoom-level')).toHaveText('Fit');
   await expect(hand).toHaveAttribute('aria-pressed', 'true');
   await expect(hand).toHaveAttribute('title', 'Hand tool: drag to pan (H)');
@@ -820,9 +820,9 @@ test('PDF view controls zoom, pan 1:1 by hand tool and middle button, and keep l
   await page.getByRole('button', { name: 'Zoom in' }).click();
   await expect(hand).toHaveAttribute('aria-pressed', 'true');
   await expect(host).toHaveClass(/hand-tool/);
-  await page.locator('#zoom-level').click();
+  await page.locator('#zoom-level').dblclick();
   await expect(page.locator('#zoom-level')).toHaveText('Fit');
-  await page.locator('#zoom-level').click();
+  await page.locator('#zoom-level').dblclick();
   await expect(page.locator('#zoom-level')).toHaveText('Width');
   await page.locator('#file-input').setInputFiles({ name: 'notes.md', mimeType: 'text/markdown', buffer: Buffer.from('# Notes\n\nPlain reflowing text.') });
   await expect(page.locator('#filename')).toHaveText('notes.md');
@@ -893,9 +893,9 @@ test('hand tool slides a PDF page that fits 1:1 at Fit and below 100%, never sel
   };
   await slide('Fit');
   await page.keyboard.press('Control+0');
-  // Zoom out to the pill's floor (25%), then in by the 10% steps to 75%.
+  // Zoom out to the pill's floor (25%), then in along the ladder (33, 50, 67) to 75%.
   for (let i = 0; i < 12 && !(await page.getByRole('button', { name: 'Zoom out' }).isDisabled()); i++) await page.getByRole('button', { name: 'Zoom out' }).click();
-  for (let i = 0; i < 5; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
+  for (let i = 0; i < 4; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
   await slide('75%');
   expect(errors).toEqual([]);
 });
@@ -928,13 +928,13 @@ test('a slid page keeps its offset across page turns and goes back on zoom, fit,
   await page.keyboard.press('Control+0'); await settle();
   near((await sheet.boundingBox())!, natural.x, natural.y, 'Ctrl 0');
 
-  // Clicking the zoom level switches to fit width (the page overflows vertically): no leftover offset.
+  // Double-clicking the zoom level switches to fit width (the page overflows vertically): no leftover offset.
   await dragPanel(page, host, 30, 40);
-  await page.locator('#zoom-level').click();
+  await page.locator('#zoom-level').dblclick();
   await expect(page.locator('#zoom-level')).toHaveText('Width'); await settle();
   const wide = (await sheet.boundingBox())!, [wideWidth] = await panelSize(host);
   near(wide, panel.x + (wideWidth - wide.width) / 2, panel.y + 16, 'fit width');
-  await page.locator('#zoom-level').click();
+  await page.locator('#zoom-level').dblclick();
   await expect(page.locator('#zoom-level')).toHaveText('Fit'); await settle();
   near((await sheet.boundingBox())!, natural.x, natural.y, 'back to fit page');
 
@@ -1135,7 +1135,7 @@ test('image-only PDF pages carry no note, say so in the tooltip and explain a se
   // Single-page view at every zoom: Fit, Width, 70 % and 150 % draw nothing over the page.
   await host.focus(); await page.keyboard.press('Control+2'); await expect(page.locator('#zoom-level')).toHaveText('Width'); await noNote();
   await page.keyboard.press('Control+0'); await expect(page.locator('#zoom-level')).toHaveText('Fit');
-  await zoomTo('70%', 'Zoom out'); await noNote();
+  await zoomTo('67%', 'Zoom out'); await noNote();
   await page.keyboard.press('Control+0'); await expect(page.locator('#zoom-level')).toHaveText('Fit'); await noNote();
 
   // Intent cue: not for clicks, middle drags or hand drags; yes for the first select-drag only.
@@ -1162,7 +1162,7 @@ test('image-only PDF pages carry no note, say so in the tooltip and explain a se
   await expect(title).toHaveAttribute('title', tip); await noNote();
   await page.keyboard.press('Control+2'); await noNote();
   await page.keyboard.press('Control+0'); await noNote();
-  await page.keyboard.press('Control+0'); await zoomTo('70%', 'Zoom out'); await noNote();
+  await page.keyboard.press('Control+0'); await zoomTo('67%', 'Zoom out'); await noNote();
   await zoomTo('150%', 'Zoom in'); await noNote();
   await page.keyboard.press('Control+0'); await expect(page.locator('#zoom-level')).toHaveText('Fit');
   await expect(page.locator('.pdf-render-status')).toHaveCount(0); await expect(title).toHaveAttribute('title', tip); // Text has been read, so the page is known to be image-only.
@@ -1257,7 +1257,7 @@ test('view controls pill moves by its grip, stays inside the panel, persists, re
   // The buttons keep working where the pill now sits.
   await page.locator('#zoom-in').click();
   await expect(page.locator('#zoom-level')).not.toHaveText('Fit');
-  await page.locator('#zoom-level').click();
+  await page.locator('#zoom-level').dblclick();
   await expect(page.locator('#zoom-level')).toHaveText('Fit');
   await expect.poll(async () => JSON.stringify(await geometry()) === JSON.stringify(untouched)).toBe(true);
 
