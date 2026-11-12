@@ -133,18 +133,23 @@ test('Recent ☰ is one menu for sort, view and availability, with a Size slider
 
   // Grid: tiles with their titles under them, and the Size slider sets the minimum tile width.
   await chooseFromViewMenu(page, 'Grid');
+  // A 440 px drawer for the grid, so the column counts have margin on both sides whatever the scrollbar gutter or fonts of the machine:
+  // the content box is 385-415 px, which holds 3 tiles of 120 px (3.1-3.4 columns' worth) and 4 of 90 px (4.1-4.5).
+  await page.evaluate(() => localStorage.setItem('hold-my-brief:library-width', '440'));
+  await page.reload();
+  await expect(page.locator('#library-root')).toBeVisible();
   await expect(page.locator('.library-tile')).toHaveCount(4);
   const columns = () => page.evaluate(() => new Set(Array.from(document.querySelectorAll<HTMLElement>('.library-documents .library-tile')).map(tile => tile.dataset.column)).size);
-  expect(await columns()).toBe(2);
+  expect(await columns()).toBe(3);
   await button.click();
   const size = menu.getByLabel('Tile size');
   await expect(size).toBeVisible();
-  await size.fill('80');
-  await expect.poll(columns).toBe(3);
+  await size.fill('90');
+  await expect.poll(columns).toBe(4);
   await page.keyboard.press('Escape');
   await page.reload();
   await expect(page.locator('.library-documents .library-tile')).toHaveCount(4);
-  await expect.poll(columns).toBe(3);
+  await expect.poll(columns).toBe(4);
   // It is kept for this scope only: Favorites has no saved size and no saved view.
   expect(await page.evaluate(() => Object.keys(localStorage).filter(key => key.includes('library-tile-size')))).toEqual(['hold-my-brief:library-tile-size:all']);
 });
