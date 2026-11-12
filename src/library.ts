@@ -702,7 +702,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   // Tiles sit in the DOM in sorted order (so Tab and screen readers follow the sort, shelf by shelf) and are
   // positioned absolutely into masonry columns: each joins the shortest column of its shelf, and a tile's height
   // follows its ratio. A shelf header is placed the same way, above its tiles.
-  type Tile = { node: HTMLElement; path: string; ratio: number; column: number };
+  type Tile = { node: HTMLElement; path: string; ratio: number; column: number; caption: number };
   type Section = { shelf?: string; head?: HTMLElement; tiles: Tile[] };
   let tiles: Tile[] = []; let sections: Section[] = []; let columnCount = 0; const tileByPath = new Map<string, Tile>();
   // The shelf each tile's cover was made for (which tints and styles it), so the detail strip shows the very same cover.
@@ -722,7 +722,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
         if (index) y += shelfLayout.gap;
         section.head.style.left = `${left}px`; section.head.style.top = `${top + y}px`; section.head.style.width = `${width}px`; y += shelfLayout.head + shelfLayout.below;
       }
-      y += placeTiles(section.tiles, { columns, tileWidth, gap, left, top: top + y, reassign, caption: libraryGrid.captionHeight });
+      y += placeTiles(section.tiles, { columns, tileWidth, gap, left, top: top + y, reassign });
     });
     gridSizer.style.height = `${Math.max(0, y)}px`;
     // Tiles built while the drawer was hidden or had no width are only placed now; observing is idempotent.
@@ -793,11 +793,14 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     if (generated && !missing) coverShelf.set(doc.path, shelfId);
     if (!missing && thumbnailable(doc)) { const cached = thumbs.peek(doc.path); if (cached) showThumbnail(media, cached); else if (thumbs.failed(doc.path)) markUnavailable(media); }
     if (doc.path === activePath) media.append(element('span', 'library-tile-tag', 'Reading'));
-    // The title under the picture, two lines then an ellipsis: a scanned page is never anonymous. Its height is fixed so the masonry can place tiles before a picture arrives.
-    const caption = element('span', 'library-tile-caption', docLabel(doc)); caption.style.height = `${libraryGrid.captionHeight}px`;
-    open.append(media, caption);
+    // A title goes under every tile that shows (or can come to show) a picture: a PDF page, an image, an EPUB's cover image, a missing original.
+    // A generated cover prints its own title, so a tile that only ever has one (Markdown, text) has no caption. The height is fixed so the masonry
+    // can place the tile before its picture arrives; an EPUB's caption stays hidden (but reserved) until its picture replaces the cover.
+    const captioned = thumbnailable(doc) || missing; const caption = captioned ? element('span', 'library-tile-caption', docLabel(doc)) : undefined;
+    if (caption) caption.style.height = `${libraryGrid.captionHeight}px`;
+    open.append(...(caption ? [media, caption] : [media]));
     bindOpen(doc, open, node);
-    node.append(open, actionsFor(doc, generated)); return { node, path: doc.path, ratio, column: 0 };
+    node.append(open, actionsFor(doc, generated)); return { node, path: doc.path, ratio, column: 0, caption: caption ? libraryGrid.captionHeight : 0 };
   }
   function shelfHead(shelf: Shelf<LibraryDocument>) {
     const head = element('div', 'library-shelf-head'); head.setAttribute('role', 'listitem'); head.dataset.shelf = shelf.id;

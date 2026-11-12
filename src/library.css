@@ -107,6 +107,8 @@
 /* Grid tiles carry their title underneath (two lines, then an ellipsis); the height is reserved by placeTiles. */
 .library-tile-caption { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; box-sizing: border-box; overflow: hidden; padding: 3px 1px 0; color: var(--fg); font-size: 11px; line-height: 1.3; text-align: left; white-space: normal; overflow-wrap: anywhere; }
 .library-grid .library-tile-scrim { display: none; }
+/* An EPUB's generated cover prints its own title; its caption (space is reserved) appears only once the cover image has replaced it. */
+.library-tile.is-cover .library-tile-media:not(.is-loaded) ~ .library-tile-caption { visibility: hidden; }
 .library-scope-menu { position: absolute; z-index: 4; top: var(--scope-top, 100px); left: 8px; right: 8px; display: flex; flex-direction: column; max-height: calc(100% - var(--scope-top, 100px) - 12px); padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); box-shadow: var(--shadow-popover); }
 .library-scope-menu .library-facets { margin: 4px 0 0 2px; padding-top: 4px; border-top: 1px solid var(--hairline); }
 .library-item-menu { position: absolute; z-index: 5; display: flex; flex-direction: column; min-width: 150px; padding: 4px; border: 1px solid var(--border); border-radius: 7px; background: var(--card); box-shadow: var(--shadow-popover); }

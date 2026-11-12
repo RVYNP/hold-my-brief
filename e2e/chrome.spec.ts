@@ -3,12 +3,12 @@ import { addMenuItem, chooseFromViewMenu, openSearch, viewMenuButton } from './l
 
 // A 1 x 1 PNG: enough for a picture-type document.
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
-const longName = 'A very long title that runs on past two lines of a small tile so that it has to be cut with an ellipsis at the end of the second line.txt';
+const longName = 'A very long title that runs on past two lines of a small tile so that it has to be cut with an ellipsis at the end of the second line.png';
 const files = [
   { name: 'alpha.txt', mimeType: 'text/plain', buffer: Buffer.from('alpha') },
   { name: 'beta.md', mimeType: 'text/markdown', buffer: Buffer.from('# beta') },
   { name: 'gamma.png', mimeType: 'image/png', buffer: png },
-  { name: longName, mimeType: 'text/plain', buffer: Buffer.from('long') },
+  { name: longName, mimeType: 'image/png', buffer: png },
 ];
 
 async function addFiles(page: Page) {
@@ -62,10 +62,10 @@ test('the scope chip opens the collection menu and the file-type chips filter, o
   const count = page.locator('.library-result-count');
   await expect(count).toHaveText('4 references');
   await chips.filter({ hasText: 'Text' }).click();
-  await expect(count).toHaveText('2 references');
+  await expect(count).toHaveText('1 reference');
   await expect(chips.filter({ hasText: 'Text' })).toHaveAttribute('aria-pressed', 'true');
   await chips.filter({ hasText: 'Images' }).click(); // One at a time.
-  await expect(count).toHaveText('1 reference');
+  await expect(count).toHaveText('2 references');
   await expect(chips.filter({ hasText: 'Text' })).toHaveAttribute('aria-pressed', 'false');
   await chips.filter({ hasText: 'Images' }).click(); // Again to clear.
   await expect(count).toHaveText('4 references');
@@ -162,17 +162,21 @@ test('list rows carry a 32 x 43 cover and grid tiles their title, two lines at m
 
   await chooseFromViewMenu(page, 'Grid');
   const captions = page.locator('.library-tile-caption');
-  await expect(captions).toHaveCount(4);
+  // A title goes under pictures only. A generated cover (text, Markdown) prints its own, so its tile has no caption.
+  await expect(captions).toHaveCount(2);
+  await expect(page.locator('.library-tile[data-doc-name="alpha.txt"], .library-tile[data-doc-name="beta.md"]')).toHaveCount(2);
+  await expect(page.locator('.library-tile[data-doc-name="alpha.txt"] .library-tile-caption, .library-tile[data-doc-name="beta.md"] .library-tile-caption')).toHaveCount(0);
   await expect(captions.filter({ hasText: 'gamma.png' })).toBeVisible();
   const long = captions.filter({ hasText: 'A very long title' });
   // Two lines then an ellipsis: the clamp and the clipped box are what cut it; the full title stays the accessible text.
   expect(await long.evaluate(el => ({ clamp: getComputedStyle(el).webkitLineClamp, overflow: getComputedStyle(el).overflow, whiteSpace: getComputedStyle(el).whiteSpace, height: el.clientHeight, text: el.textContent }))).toEqual({ clamp: '2', overflow: 'hidden', whiteSpace: 'normal', height: 34, text: longName });
   // It wraps inside its tile instead of running past the edge on one line.
   expect(await long.evaluate(el => { const tile = el.closest('.library-tile')!.getBoundingClientRect(), box = el.getBoundingClientRect(); return el.scrollWidth <= el.clientWidth && box.left >= tile.left - 1 && box.right <= tile.right + 1; })).toBe(true);
-  // The caption sits under its picture, inside the tile, and the next tile in the column starts below it.
-  const tile = (await page.locator('.library-tile').first().boundingBox())!, picture = (await page.locator('.library-tile-media').first().boundingBox())!, caption = (await captions.first().boundingBox())!;
-  expect(caption.y).toBeGreaterThanOrEqual(picture.y + picture.height - 1);
-  expect(caption.y + caption.height).toBeLessThanOrEqual(tile.y + tile.height + 1);
+  // The caption sits under its picture, inside the tile.
+  const geometry = await long.evaluate(el => { const tile = el.closest('.library-tile')!.getBoundingClientRect(), picture = el.parentElement!.querySelector('.library-tile-media')!.getBoundingClientRect(), caption = el.getBoundingClientRect(); return { below: caption.top >= picture.bottom - 1, inside: caption.bottom <= tile.bottom + 1 }; });
+  expect(geometry).toEqual({ below: true, inside: true });
+  // Neighbouring tiles never overlap, whatever mix of captioned and plain tiles sits in a column.
+  expect(await page.evaluate(() => { const boxes = Array.from(document.querySelectorAll('.library-documents .library-tile')).map(tile => tile.getBoundingClientRect()); return boxes.every((a, i) => boxes.every((b, j) => i === j || a.right <= b.left + 1 || b.right <= a.left + 1 || a.bottom <= b.top + 1 || b.bottom <= a.top + 1)); })).toBe(true);
   await page.locator('.library-document-open').filter({ hasText: /gamma/ }).first().hover();
   await expect(page.locator('.library-tile-scrim').first()).toBeHidden();
 });
