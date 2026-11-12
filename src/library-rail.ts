@@ -43,8 +43,12 @@ export function createLibraryRail(root: HTMLElement, host: RailHost): { paint: (
   const list = document.createElement('div'); list.className = 'library-rail-list'; list.setAttribute('role', 'list');
   root.replaceChildren(toggle, list);
   let generation = 0;
+  // Pictures the store has not made yet (a PDF's first page, an EPUB's cover) are made after the paint and once the page is idle, never
+  // while a document is opening or being read: rendering them is real work on the same thread. A repaint before then supersedes them.
+  const settle = 600;
+  const whenIdle = (run: () => void) => window.setTimeout(() => (window.requestIdleCallback ? window.requestIdleCallback(run, { timeout: 3000 }) : run()), settle);
   function paint(items: readonly HomeTile[], activePath: string | undefined, appearance: Appearance) {
-    const current = ++generation, alive = () => current === generation;
+    const current = ++generation, alive = () => current === generation, loads: (() => void)[] = [];
     list.replaceChildren(...items.map(item => {
       const thumbnailable = canThumbnail(item.format), generated = !item.missing && (!thumbnailable || item.format.toLowerCase() === 'epub');
       const cell = document.createElement('div'); cell.setAttribute('role', 'listitem'); cell.className = 'library-rail-item'; cell.classList.toggle('is-missing', item.missing); cell.classList.toggle('is-cover', generated);
@@ -56,17 +60,18 @@ export function createLibraryRail(root: HTMLElement, host: RailHost): { paint: (
       if (cached) showPicture(media, cached);
       open.append(media); open.onclick = () => host.open(item.path, item.name); cell.append(open);
       if (thumbnailable && !item.missing) {
-        if (!cached) void host.picture(item.path, item.format, alive).then(picture => {
+        if (!cached) loads.push(() => void host.picture(item.path, item.format, alive).then(picture => {
           if (!alive() || !media.isConnected) return;
           if (picture) showPicture(media, picture); else if (host.failed(item.path)) markUnavailable(media);
-        });
-        if (item.format.toLowerCase() === 'epub') void host.epub(item.path, alive).then(() => {
+        }));
+        if (item.format.toLowerCase() === 'epub') loads.push(() => void host.epub(item.path, alive).then(() => {
           const known = host.title(item.path); if (!alive() || !known) return;
           open.setAttribute('aria-label', known); open.title = known;
-        });
+        }));
       }
       return cell;
     }));
+    if (loads.length) whenIdle(() => { if (alive()) for (const load of loads) load(); });
   }
   return { paint };
 }
