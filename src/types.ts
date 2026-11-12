@@ -31,20 +31,37 @@ export type ReaderContext = {
   /** A same-origin content frame finished loading. Pointer input inside it never reaches the host, so the hand tool listens there directly. */
   onFrame?: (doc: Document) => void;
 };
-/** One button of the page-preview strip: the pages it stands for, drawn side by side at the CSS size given for each. */
-export type PagePreview = {
-  pages: { number: number; width: number; height: number }[];
-  /** What the footer calls these pages: the printed label, "iv–v" for a spread. */
-  label: string;
-  /** Turns to these pages the way a page turn does. */
-  open: () => Promise<void>;
+/** Page thumbnails for the strip and the progress-bar preview: one bounded cache, rendered one at a time once the page itself is on screen. */
+export interface PageThumbnails {
+  /** A thumbnail already rendered, 88 CSS px tall, or `undefined`. */
+  cached(page: number): HTMLCanvasElement | undefined;
+  /**
+   * Renders a thumbnail, or finds it in the cache. Aborting `signal` drops the request (and stops the render if it
+   * is the one running); a dropped or failed request resolves to `undefined`. `urgent` goes before queued requests.
+   */
+  render(page: number, signal: AbortSignal, urgent?: boolean): Promise<HTMLCanvasElement | undefined>;
+  /** Turns to the page, or the spread that holds it, the way a page turn does. */
+  open(page: number): Promise<void>;
+}
+/** What the strip needs to know about the committed view. */
+export type PreviewView = {
+  source: PageThumbnails;
+  /** Pages in the document. */
+  count: number;
+  /** The pages on screen: one, or a two-page spread. */
+  pages: number[];
+  /** Two-page view is showing. */
+  spread: boolean;
+  /** Whether page 1 stands alone in two-page view. */
+  cover: boolean;
+  /** Width over height of the current page as it is drawn (rotation included). */
+  aspect: number;
+  /** Changes when thumbnails drawn so far no longer match (rotation). */
+  revision: string;
 };
-/** Where an adapter shows page previews: the strip below the reading surface, which lives outside the adapter's host. */
+/** Where an adapter reports the committed view: the strip below the reading surface, which lives outside the adapter's host. */
 export interface PreviewSink {
-  /** Replaces what the strip lists; empty at the end of the document. */
-  show(previews: PagePreview[]): void;
-  /** Pixels for a page of the current list; a page no longer listed is ignored. */
-  paint(page: number, bitmap: HTMLCanvasElement): void;
+  show(view: PreviewView): void;
 }
 export interface ReaderAdapter {
   readonly mode: 'fixed' | 'paginated' | 'scroll';
@@ -91,9 +108,11 @@ export interface ReaderAdapter {
   /** The element that scrolls page-based content, for the view controls and hand tool; absent when content reflows instead of zooming. */
   scroller?(): HTMLElement | undefined;
   /**
-   * Reports the pages after those on screen, with thumbnails, to `sink` until it is replaced or `undefined` is
+   * Reports the committed view to `sink` after every page turn until it is replaced or `undefined` is
    * passed. Absent when the format has no pages to preview (only PDF has).
    */
   setPreviews?(sink: PreviewSink | undefined): void;
+  /** Thumbnails of any page, for the strip and the progress-bar preview; present with `setPreviews`. */
+  readonly thumbnails?: PageThumbnails;
   destroy(): void;
 }

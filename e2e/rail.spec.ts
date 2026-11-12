@@ -93,13 +93,13 @@ async function openReading(page: Page, side: 'left' | 'right') {
   for (let step = 0; step < 3; step++) await page.keyboard.press('Control+-');
   await page.getByRole('button', { name: 'Hand tool' }).click();
   await page.keyboard.press('Control+4');
-  await expect(page.getByRole('navigation', { name: 'Next pages' })).toBeVisible();
+  await expect(page.locator('#page-strip')).toBeVisible();
 }
 
 for (const side of ['right', 'left'] as const) {
   test(`with the rail on the ${side}, the rail, the page strip, the footer and the view controls never overlap, and the footer stays whole and clickable`, async ({ page }) => {
     await openReading(page, side);
-    const rail = page.locator('#library-rail'), strip = page.getByRole('navigation', { name: 'Next pages' }), pill = page.locator('#view-controls'), footer = page.locator('footer');
+    const rail = page.locator('#library-rail'), strip = page.locator('#page-strip'), pill = page.locator('#view-controls'), footer = page.locator('footer');
     await expect(rail).toHaveAttribute('data-library-side', side);
 
     // The footer opens over the bottom edge when the pointer rests there; measure it open, as the reader sees it.
@@ -148,7 +148,7 @@ for (const side of ['left', 'right'] as const) {
   test(`the open drawer docked ${side}, with the page strip, ends above the footer and the strip starts beside it`, async ({ page }) => {
     await openReading(page, side);
     await page.locator('#library-toggle').click();
-    const drawer = page.locator('#library-root'), strip = page.getByRole('navigation', { name: 'Next pages' }), footer = page.locator('footer');
+    const drawer = page.locator('#library-root'), strip = page.locator('#page-strip'), footer = page.locator('footer');
     await expect(drawer).toBeVisible();
     await page.mouse.move(486, 855);
     await expect.poll(async () => { const box = await boxOf(footer); return Math.round(box.y + box.height); }).toBe(858);
@@ -242,7 +242,7 @@ test('the rail has a side button and a context menu; both move the one saved sid
 test('in a compact window the page strip also ends above the footer, and the pill stays above the strip', async ({ page }) => {
   await openReading(page, 'left');
   await page.setViewportSize({ width: 600, height: 760 });
-  const strip = page.getByRole('navigation', { name: 'Next pages' }), footer = page.locator('footer'), pill = page.locator('#view-controls');
+  const strip = page.locator('#page-strip'), footer = page.locator('footer'), pill = page.locator('#view-controls');
   await expect(strip).toBeVisible();
   await page.mouse.move(300, 757);
   await expect.poll(async () => { const box = await boxOf(footer); return Math.round(box.y + box.height); }).toBe(760);
