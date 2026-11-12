@@ -600,9 +600,7 @@ fn main() {
             assistant::assistant_send,
             windows::set_pin,
             windows::set_lock,
-            windows::set_preset,
-            windows::set_library_window,
-            windows::open_from_library
+            windows::set_preset
         ])
         .setup(|app| {
             let directory = app.path().app_local_data_dir()?;
@@ -656,7 +654,6 @@ fn main() {
         })
         .on_window_event(|window, event| {
             windows::handle_event(window, event);
-            windows::note_library_closed(window, event);
         })
         .build(tauri::generate_context!())
         .expect("Could not start Hold My Brief")

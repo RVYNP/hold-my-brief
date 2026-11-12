@@ -31,10 +31,8 @@ npm run dev            # browser preview at http://127.0.0.1:1420
 a library backed by IndexedDB copies of selected files. Pinning, size lock, native recent files, and
 authorized relative images require the desktop app.
 
-The reader (`index.html`) and undocked library (`library.html`) use separate static module entries.
-Vite builds both pages. Keeping reader startup synchronous avoids a gap where the page has loaded but
-keyboard shortcuts are not registered. Native library-window creation runs in an async Tauri command,
-as required by WebView2 to avoid synchronous window-creation deadlocks.
+The reader is a single static module entry (`index.html`). Keeping reader startup synchronous avoids a
+gap where the page has loaded but keyboard shortcuts are not registered.
 
 ## Build a distributable
 
@@ -117,8 +115,8 @@ codesign --verify --deep --strict "src-tauri/target/release/bundle/macos/Hold My
 
 Launch the resulting bundle by its explicit path, not `open -a`, which may select another installed copy.
 With no saved data it must show **Hand it over.** Add only disposable documents, reopen without a file,
-and verify Home, title wrapping, recent removal and Favorites. Undock the library and check that
-**View all** changes its scope without turning a narrow library into the full-width board.
+and verify Home, title wrapping, recent removal and Favorites. Close the library and check that its
+rail shows the recent covers, and that **View all** opens the library at the scope you chose.
 Edits there must refresh Home. Quit and remove only the disposable profile when finished.
 
 This checks empty app data and the native bundle, not Gatekeeper approval under a new macOS account.

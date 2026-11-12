@@ -4,6 +4,7 @@ import { nudgeFor, parsePlacement, placementOf, resolvePlacement, serialisePlace
 import { desktop, native, state, browserFile, persist, openExternal, confirmDocument, openLibraryDocument, chooseDocument, getLibrary, imageFormats, type Opened, type Recent, type WindowState } from './bridge';
 import { emptyLibrary, type Library } from './catalog-types';
 import { createLibrary } from './library';
+import { createLibraryRail, openedOrder, railItems } from './library-rail';
 import { ImageAdapter } from './adapters/image';
 import { createPalette } from './palette';
 import { createFindBar } from './find-bar';
@@ -22,7 +23,7 @@ initAppearance();
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <header class="toolbar" data-tauri-drag-region><button id="library-toggle" class="icon-button" aria-label="Document library" aria-controls="library-root" aria-expanded="false" title="Document library (Ctrl+B)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16m-3-12v8"/></svg></button><button id="ask" class="title" aria-haspopup="dialog" aria-keyshortcuts="Control+K" title="Go to, find or run a command (Ctrl+K)"><svg class="ask-mark" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M9.94 15.5a2 2 0 0 0-1.44-1.44l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0l1.58 6.13a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96l-6.13 1.58a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"/></svg><strong id="filename">Hold My Brief</strong><span id="filekind">A reader that holds.</span><span class="visually-hidden">. Go to, find or run a command</span><kbd class="ask-key" aria-hidden="true">Ctrl K</kbd></button><button id="pin" class="icon-button" aria-label="Pin" aria-pressed="false" title="Always on top (Ctrl+Shift+T)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg></button><button id="lock" class="icon-button" aria-label="Lock" aria-pressed="false" title="Lock dimensions (Ctrl+Shift+L)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></button><button id="menu-toggle" class="icon-button" aria-label="Reader menu" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button><div class="caption" role="group" aria-label="Window"><button id="caption-minimize" aria-label="Minimize" title="Minimize"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5.5h10" stroke="currentColor"/></svg></button><button id="caption-maximize" aria-label="Maximize" title="Maximize"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" aria-hidden="true"><rect class="caption-max" x=".5" y=".5" width="9" height="9"/><path class="caption-restore" d="M2.5 2.5V.5h7v7h-2M.5 2.5h7v7h-7z"/></svg></button><button id="caption-close" aria-label="Close" title="Close"><svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" aria-hidden="true"><path d="M.5.5l9 9m0-9l-9 9"/></svg></button></div></header>
   <aside id="notice" role="status" hidden><span></span><button id="retry-save" hidden>Retry save</button><button id="dismiss-notice" aria-label="Dismiss message">×</button></aside>
-  <div id="reader-layout"><div id="loading" role="status" hidden><span></span><button id="cancel">Cancel</button></div><div id="library-root"></div>
+  <div id="reader-layout"><div id="loading" role="status" hidden><span></span><button id="cancel">Cancel</button></div><div id="library-root"></div><nav id="library-rail"></nav>
   <main id="workspace"><section id="empty"><div class="book-mark" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M9 3v18m4-13h3m-3 4h3"/></svg></div><p class="eyebrow">KEEP YOUR PLACE</p><h1>Hand it over.</h1><p>Drop a brief and it stays pinned<br>exactly where you leave it.</p><button id="empty-open" class="primary">Hold a brief <span>↗</span></button><p class="formats">PDF · EPUB · MARKDOWN · TEXT</p><div id="recents"></div><p id="preview-note" hidden>Browser preview · Pin and size lock are available in the desktop app.</p></section>
   <div id="view-controls" role="group" aria-label="View controls" hidden><button id="view-grip" type="button" aria-label="Move view controls" title="Drag to move · double-click to reset"><svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" aria-hidden="true"><circle cx="2" cy="3" r="1"/><circle cx="6" cy="3" r="1"/><circle cx="2" cy="7" r="1"/><circle cx="6" cy="7" r="1"/><circle cx="2" cy="11" r="1"/><circle cx="6" cy="11" r="1"/></svg></button><button id="zoom-out" aria-label="Zoom out" title="Zoom out (Ctrl −)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button><button id="zoom-level">Fit</button><button id="zoom-in" aria-label="Zoom in" title="Zoom in (Ctrl +)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button><span class="view-sep" aria-hidden="true"></span><button id="hand-tool" aria-label="Hand tool" aria-pressed="false" aria-disabled="false" title="Hand tool: drag to pan (H)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg></button><span id="view-layout" class="view-group" role="group" aria-label="Page layout" hidden><span class="view-sep" aria-hidden="true"></span><button id="view-single" aria-label="Single page" aria-pressed="true" title="Single page"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg></button><button id="view-spread" aria-label="Two pages" aria-pressed="false" title="Two-page spread (Ctrl 3)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></button></span><span id="view-previews" class="view-group" hidden><span class="view-sep" aria-hidden="true"></span><button id="page-strip-toggle" aria-label="Page previews" aria-pressed="false" title="Page previews (Ctrl 4)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="10" rx="2"/><rect x="3" y="17" width="4.5" height="4" rx="1"/><rect x="9.75" y="17" width="4.5" height="4" rx="1"/><rect x="16.5" y="17" width="4.5" height="4" rx="1"/></svg></button></span></div></main>
   </div>
@@ -74,7 +75,6 @@ let active: Opened | undefined;
 let options: ReaderOptions = { ...defaultOptions };
 let position: Position | undefined;
 let windowState: WindowState = { width: 420, height: 620, pinned: false, locked: false };
-let libraryFloating = false;
 let homeRecents: Recent[] = [];
 let homeLibrary: Library = emptyLibrary();
 let homeFormat = '';
@@ -214,9 +214,9 @@ const pillBox = () => ({ width: pill.offsetWidth, height: pill.offsetHeight });
 /** Height of the page-preview strip while it is shown: the pill keeps above it. */
 const pillStrip = () => workspace.classList.contains('has-page-strip') ? pageStrip.element.offsetHeight : 0;
 function drawerBand() {
-  // The compact sheet covers the whole layout over a scrim; only the side-by-side drawer is steered around.
-  if (!$('reader-layout').classList.contains('library-open') || matchMedia('(max-width: 719px)').matches) return null;
-  const drawer = $('library-root').getBoundingClientRect(), panel = workspace.getBoundingClientRect();
+  // The compact sheet covers the whole layout over a scrim; only the side-by-side drawer, or the rail that stands in for it, is steered around.
+  if (matchMedia('(max-width: 719px)').matches) return null;
+  const drawer = $($('reader-layout').classList.contains('library-open') ? 'library-root' : 'library-rail').getBoundingClientRect(), panel = workspace.getBoundingClientRect();
   return { left: drawer.left - panel.left - workspace.clientLeft, right: drawer.right - panel.left - workspace.clientLeft };
 }
 function showPill(point: Point | null) {
@@ -340,10 +340,21 @@ document.querySelectorAll<HTMLDialogElement>('dialog.drop').forEach(dialog => di
 const library = createLibrary($('library-root'), {
   open: path => load(() => openLibraryDocument(path), path.split(/[\\/]/).pop()),
   error: fail,
-  changed: next => { homeLibrary = next; if ($('empty').classList.contains('is-home')) paintHome(); },
-  undock: desktop ? () => { void undockLibrary().catch(fail); } : undefined,
+  changed: next => { homeLibrary = next; if ($('empty').classList.contains('is-home')) paintHome(); paintRail(); },
 });
-$('library-toggle').onclick = () => { if (libraryFloating) void native('set_library_window', { undocked: true, restore: false, width: 0, side: 'left' }).catch(fail); else library.toggle(); };
+$('library-toggle').onclick = () => library.toggle();
+// The library closed is a rail of the latest recents. It shares Home's picture store, so a cover made for one is there for the other.
+const rail = createLibraryRail($('library-rail'), {
+  toggle: () => library.toggle(),
+  open: (path, name) => { void load(() => openLibraryDocument(path), name); },
+  picture: (path, format, alive) => homeThumbs.request(path, format, alive),
+  peek: path => homeThumbs.peek(path),
+  epub: (path, alive) => homeThumbs.loadEpub(path, alive),
+  title: path => homeThumbs.epub(path)?.title?.trim() || undefined,
+  failed: path => homeThumbs.failed(path),
+});
+const knownTitle = (item: { path: string; format: string }) => item.format.toLowerCase() === 'epub' ? homeThumbs.epub(item.path)?.title?.trim() || undefined : undefined;
+function paintRail() { rail.paint(railItems(desktop ? homeRecents : openedOrder(homeLibrary.documents), homeLibrary.documents, knownTitle), active?.path, scheme()); }
 
 /**
  * The palette is mounted after the actions it dispatches, since `run` closes over `action`
@@ -432,9 +443,8 @@ async function command(id: string) {
   const reason = entry && unavailableReason(entry, { hasDocument: Boolean(reader), desktop, format: active?.format });
   if (reason) { notify(reason); return; }
   if (id === 'open') openFile();
-  else if (id === 'library') { if (libraryFloating) void native('set_library_window', { undocked: true, restore: false, width: 0, side: 'left' }).catch(fail); else library.toggle(); }
+  else if (id === 'library') library.toggle();
   else if (id === 'library-board') library.board();
-  else if (id === 'library-undock') await undockLibrary();
   else if (id === 'find') findBar.open();
   else if (id === 'assistant') assistant.openSettings();
   else await action(id);
@@ -489,6 +499,7 @@ async function load(open: () => Promise<Opened | null>, label = 'document'): Pro
     // Marks belong to the adapter that produced them, so a new document starts with none.
     findBar.close();
     if (doc.warning) notify(doc.warning);
+    if (desktop) homeRecents = (await state()).recents; // The store moves the opened document to the front.
     await library.refresh(doc.path).catch(fail);
     return true;
   } catch (error) { if (token === request) fail(error); return false; }
@@ -539,7 +550,7 @@ async function action(name: string) {
   else if (name === 'outline') { const list = $('outline-list'); list.replaceChildren(); const entries = reader?.outline() ?? []; if (!entries.length) list.textContent = 'No contents outline in this document.'; for (const item of entries) { const button = document.createElement('button'); button.textContent = item.label; button.onclick = () => { void reader?.goTo(item.target).then(() => closeDialog($<HTMLDialogElement>('contents'))).catch(fail); }; list.append(button); } showDialog('contents'); }
   else if (name === 'shortcuts') showDialog('shortcuts');
   else if (name === 'clear-data') showDialog('delete-data');
-  else if (name === 'clear-recents') { if (desktop) await native('clear_recents'); homeRecents = []; paintHome(); notify('Recent-file list cleared. Documents and saved positions are unchanged.'); }
+  else if (name === 'clear-recents') { if (desktop) await native('clear_recents'); homeRecents = []; paintHome(); paintRail(); notify('Recent-file list cleared. Documents and saved positions are unchanged.'); }
   else if (['back', 'start', 'end', 'screen-next', 'screen-previous'].includes(name)) await navigate(name as Parameters<ReaderAdapter['navigate']>[0]);
 }
 document.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(button => button.onclick = () => { closeDialog($<HTMLDialogElement>('menu')); void command(button.dataset.action!).catch(fail); });
@@ -579,27 +590,11 @@ document.addEventListener('keydown', event => {
   if (operation) { event.preventDefault(); operation(); }
 });
 if (!desktop) { $('preview-note').hidden = false; document.addEventListener('dragover', event => event.preventDefault()); document.addEventListener('drop', event => { event.preventDefault(); if (event.dataTransfer?.files.length !== 1) return notify('Drop one document at a time.'); const file = event.dataTransfer.files[0]; void load(() => browserFile(file), file.name); }); }
-async function undockLibrary() {
-  if (!desktop) return notify('Undocking the library is available in the desktop app.');
-  if (libraryFloating) { await native('set_library_window', { undocked: true, restore: false, width: 0, side: 'left' }); return; }
-  const saved = Number(localStorage.getItem('hold-my-brief:library-width'));
-  const width = Number.isFinite(saved) && saved > 0 ? saved : 270;
-  const docked = localStorage.getItem('hold-my-brief:library-side') === 'right' ? 'right' : 'left';
-  await native('set_library_window', { undocked: true, restore: false, width, side: docked });
-  applyLibraryWindow(true, false);
-}
-function applyLibraryWindow(undocked: boolean, restore: boolean) {
-  libraryFloating = undocked;
-  document.documentElement.classList.toggle('library-floating', undocked);
-  if (undocked) library.suspend(true);
-  else if (restore) { library.suspend(false); void library.refresh(); }
-  else library.suspend(true);
-}
 function paintHome() {
   const empty = $('empty');
   splashHtml ??= empty.innerHTML;
   assignShelfSlots(homeLibrary.collections);
-  const rows = homeRows(homeRecents, homeLibrary.documents, homeFormat, item => item.format.toLowerCase() === 'epub' ? homeThumbs.epub(item.path)?.title?.trim() || undefined : undefined);
+  const rows = homeRows(homeRecents, homeLibrary.documents, homeFormat, knownTitle);
   if (!homeRecents.length && !homeLibrary.documents.length) {
     if (empty.classList.contains('is-home')) { closeHome(); empty.classList.remove('is-home'); empty.innerHTML = splashHtml; $('empty-open').onclick = () => openFile(); }
     return;
@@ -608,18 +603,11 @@ function paintHome() {
   renderHome(empty, rows, {
     open: (path, name) => { void load(() => openLibraryDocument(path), name); },
     openFile: () => openFile(),
-    viewAll: scope => {
-      if (!libraryFloating) { library.browse(scope); return; }
-      void (async () => {
-        await native('set_library_window', { undocked: true, restore: false, width: 0, side: 'left' });
-        const { emitTo } = await import('@tauri-apps/api/event');
-        await emitTo('library', 'library-browse', scope);
-      })().catch(fail);
-    },
+    viewAll: scope => library.browse(scope),
     picture: { can: canThumbnail, ratio: path => homeThumbs.ratio(path), peek: path => homeThumbs.peek(path) },
     format: homeFormat,
     selectFormat: value => { homeFormat = value; paintHome(); $('home-format').focus(); },
-    remove: path => { void native('remove_recent', { path }).then(() => { homeRecents = homeRecents.filter(item => item.path !== path); paintHome(); }).catch(fail); },
+    remove: path => { void native('remove_recent', { path }).then(() => { homeRecents = homeRecents.filter(item => item.path !== path); paintHome(); paintRail(); }).catch(fail); },
   }, scheme());
   fillHomePictures(empty, {
     picture: (path, format) => homeThumbs.request(path, format, () => generation === homePicture && empty.classList.contains('is-home')),
@@ -633,19 +621,17 @@ function paintHome() {
 onAppearanceChange(() => {
   const home = $('empty');
   if (home.classList.contains('is-home')) repaintCovers(home, scheme());
+  paintRail();
 });
 async function initialize() {
   const saved = await state(); updateWindow(saved.window); if (saved.warning) notify(saved.warning);
   homeRecents = saved.recents;
   await library.refresh().catch(fail);
   homeLibrary = await getLibrary().catch(() => emptyLibrary());
-  paintHome();
+  paintHome(); paintRail();
   if (desktop) {
     const { listen } = await import('@tauri-apps/api/event');
     await listen<string>('open-request', event => openFile(event.payload));
-    await listen<{ undocked: boolean; restore: boolean }>('library-window', event => applyLibraryWindow(event.payload.undocked, event.payload.restore));
-    await listen('library-updated', () => { void library.refresh().catch(fail); });
-    await listen<string>('library-open', event => { void load(() => openLibraryDocument(event.payload), event.payload.split(/[\\/]/).pop()); });
     await listen<WindowState>('window-state', event => updateWindow(event.payload));
     await listen<string | null>('reader-warning', event => { if (event.payload) notify(event.payload); });
     const { getCurrentWindow } = await import('@tauri-apps/api/window');
