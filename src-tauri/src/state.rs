@@ -420,7 +420,8 @@ pub struct Store {
     pub authorized: HashSet<PathBuf>,
     pub opened: HashMap<String, Recent>,
     pub opened_aliases: HashMap<(String, String), Recent>,
-    pub pending: Option<String>,
+    /// Files the OS asked to open before the page was listening, in order.
+    pub pending: Vec<String>,
     pub catalog: Option<crate::catalog::Catalog>,
     pub catalog_error: Option<String>,
 }
@@ -492,7 +493,7 @@ impl Store {
             authorized,
             opened: HashMap::new(),
             opened_aliases: HashMap::new(),
-            pending: None,
+            pending: Vec::new(),
             catalog,
             catalog_error,
         }

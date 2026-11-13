@@ -735,14 +735,24 @@ async function openTab(path: string | undefined, open: () => Promise<Opened | nu
 }
 /** Something to open: `path` is its identity when that is known before it is read. */
 type Opener = { path?: string; open: () => Promise<Opened | null>; label: string };
-/** Opens each in turn (an open is single-flight), the first at tab index `at`, and each new tab after the one before it. */
-async function openMany(items: readonly Opener[], at: number) {
-  let next = at;
-  for (const item of items) {
-    const before = tabs.size;
-    await openTab(item.path, item.open, item.label, next);
-    if (tabs.size > before && shown) next = tabs.indexOf(shown.path) + 1;
-  }
+/** What is being opened now: an open is single-flight (a new one cancels the one in progress), so batches wait for each other. */
+let openBatches: Promise<unknown> = Promise.resolve();
+/** Opens each in turn, the first at tab index `at` (after the active tab when not given), and each new tab after the one before it. */
+function openMany(items: readonly Opener[], at?: number): Promise<void> {
+  const run = openBatches.then(async () => {
+    let next = at ?? insertionIndex(undefined, tabs.activeIndex, tabs.size);
+    for (const item of items) {
+      const before = tabs.size;
+      await openTab(item.path, item.open, item.label, next);
+      if (tabs.size > before && shown) next = tabs.indexOf(shown.path) + 1;
+    }
+  });
+  openBatches = run.catch(() => undefined);
+  return run;
+}
+/** Files the OS asked to open (a second instance, the command line, macOS open events): each in a new tab, in order. */
+function openRequested(paths: readonly string[]) {
+  void openMany(paths.map(path => ({ path, open: () => chooseDocument(path), label: baseName(path) })));
 }
 
 /** Where a drag at `point` would land: over the tab strip a marked slot, else the reading area. An app-internal drag lands only on those two. */
@@ -788,7 +798,7 @@ async function touch(tab: Tab) {
     await library.refresh(tab.path);
   } catch (error) { fail(error); }
 }
-function openFile(path?: string) { if (desktop) void openTab(path, () => chooseDocument(path), path?.split(/[\\/]/).pop()); else $<HTMLInputElement>('file-input').click(); }
+function openFile() { if (desktop) void openTab(undefined, () => chooseDocument(), undefined); else $<HTMLInputElement>('file-input').click(); }
 $('empty-open').onclick = () => openFile();
 $<HTMLInputElement>('file-input').onchange = event => { const input = event.target as HTMLInputElement; if (input.files?.[0]) { const file = input.files[0]; void openTab(undefined, () => browserFile(file), file.name); } input.value = ''; };
 /** Gives up the pending open; every tab stays as it was. */
@@ -995,7 +1005,7 @@ async function initialize() {
   if (desktop) {
     const { listen } = await import('@tauri-apps/api/event');
     const { getCurrentWindow } = await import('@tauri-apps/api/window');
-    await listen<string>('open-request', event => openFile(event.payload));
+    await listen<string[]>('open-request', event => openRequested(event.payload));
     await listen<WindowState>('window-state', event => updateWindow(event.payload));
     // macOS routes ⌘W through its menu (see install_menu in main.rs). With no tab to close, it closes the window as it always did.
     await listen('close-tab-request', () => { if (shown) closeTab(shown.path); else void getCurrentWindow().close(); });
@@ -1032,7 +1042,7 @@ async function initialize() {
       await appWindow.onResized(() => void syncFullscreen());
       await syncFullscreen();
     }
-    const pending = await native<string | null>('pending_open'); if (pending) openFile(pending);
+    const pending = await native<string[]>('pending_open'); if (pending.length) openRequested(pending);
   }
 }
 void initialize().catch(fail);

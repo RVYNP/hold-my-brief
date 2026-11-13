@@ -6,9 +6,10 @@ Everything Hold My Brief does, in detail. For a quick tour, see the [README](../
 
 Open a PDF, DRM-free EPUB, Markdown, TXT or image file (PNG, JPEG, WebP, GIF, AVIF, BMP) with
 Ctrl+O, **Open file…** in the command palette, a file drop or a command-line file argument; each opens in a new tab. The Windows installer adds
-Hold My Brief to Explorer's **Open with** list for the document formats without changing the default
-app; clean-account installer behavior has not yet been verified. A second instance routes its file
-request to the running app.
+Hold My Brief to Explorer's **Open with** list for the document and image formats without changing the default
+app; clean-account installer behavior has not yet been verified. On macOS the app is offered in Finder's **Open With** for the
+same formats. A second instance routes its file request to the running app, and on macOS so do `open -a "Hold My Brief" file.pdf`,
+Finder's Open With and files dropped on the Dock icon (several files open as several tabs, in order).
 
 ## Tabs
 

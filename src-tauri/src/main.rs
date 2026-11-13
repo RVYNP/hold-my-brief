@@ -370,13 +370,10 @@ async fn add_documents(app: AppHandle, collection_id: Option<String>) -> Result<
     }).await.map_err(|e| e.to_string())?
 }
 
+/// Files that arrived before the page was listening (a launch with a file, or an Apple Event while the webview loads), in order.
 #[tauri::command]
-fn pending_open(state: State<'_, Shared>) -> Result<Option<String>, String> {
-    Ok(state
-        .lock()
-        .map_err(|_| "Reading state is unavailable")?
-        .pending
-        .take())
+fn pending_open(state: State<'_, Shared>) -> Result<Vec<String>, String> {
+    Ok(std::mem::take(&mut state.lock().map_err(|_| "Reading state is unavailable")?.pending))
 }
 
 #[tauri::command]
@@ -543,33 +540,47 @@ fn open_external(url: String) -> Result<(), String> {
     webbrowser::open(parsed.as_str()).map_err(|e| e.to_string())
 }
 
-fn route_open(app: &AppHandle, path: PathBuf) {
-    if document_format(&path).is_err() {
-        let _ = app.emit(
-            "reader-warning",
-            "Unsupported file type. Choose a document or supported image.",
-        );
-        return;
-    }
-    // The native OS event is the authorization boundary, before frontend sees the request.
-    let canonical = fs::canonicalize(&path).unwrap_or(path);
-    let value = canonical.to_string_lossy().into_owned();
-    let shared = app.state::<Shared>();
-    if let Ok(mut store) = shared.lock() {
-        store.authorized.insert(canonical);
-        store.pending = Some(value.clone());
-    }
-    let _ = app.emit("open-request", value);
+/// The files a list of URLs names. macOS delivers `open -a`, Finder's Open With and a drop on the Dock icon as `file://` URLs.
+fn paths_from_urls(urls: &[tauri::Url]) -> Vec<PathBuf> {
+    urls.iter()
+        .filter(|url| url.scheme() == "file")
+        .filter_map(|url| url.to_file_path().ok())
+        .collect()
 }
 
-/// Authorizes the supported documents among `paths`, which the user just dropped on the window; anything else is left alone.
-fn authorize_dropped(store: &mut Store, paths: &[PathBuf]) {
+/// Authorizes the supported documents among `paths` (the OS named them, so this is the authorization boundary) and returns
+/// their canonical paths in order, with the names of those that cannot be opened.
+fn authorize_paths(store: &mut Store, paths: Vec<PathBuf>) -> (Vec<String>, Vec<String>) {
+    let (mut opened, mut unsupported) = (Vec::new(), Vec::new());
     for path in paths {
-        if document_format(path).is_ok() {
-            if let Ok(canonical) = fs::canonicalize(path) {
-                store.authorized.insert(canonical);
-            }
+        if document_format(&path).is_err() {
+            unsupported.push(path.file_name().unwrap_or_default().to_string_lossy().into_owned());
+            continue;
         }
+        let canonical = fs::canonicalize(&path).unwrap_or(path);
+        opened.push(canonical.to_string_lossy().into_owned());
+        store.authorized.insert(canonical);
+    }
+    (opened, unsupported)
+}
+
+/// Asks the page to open `paths`, each in a new tab, in this order: the command line, a second instance and the macOS open events
+/// all come here. The paths are also queued for a page that is not listening yet (see `pending_open`).
+fn route_open(app: &AppHandle, paths: Vec<PathBuf>) {
+    let shared = app.state::<Shared>();
+    let (opened, unsupported) = match shared.lock() {
+        Ok(mut store) => {
+            let (opened, unsupported) = authorize_paths(&mut store, paths);
+            store.pending.extend(opened.iter().cloned());
+            (opened, unsupported)
+        }
+        Err(_) => return,
+    };
+    if !unsupported.is_empty() {
+        let _ = app.emit("reader-warning", "Unsupported file type. Choose a document or supported image.");
+    }
+    if !opened.is_empty() {
+        let _ = app.emit("open-request", opened);
     }
 }
 
@@ -603,7 +614,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
             if let Some(path) = argument_file(args, Path::new(&cwd)) {
-                route_open(app, path);
+                route_open(app, vec![path]);
             }
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
@@ -670,7 +681,7 @@ fn main() {
                 std::env::args(),
                 &std::env::current_dir().unwrap_or_default(),
             ) {
-                route_open(app.handle(), path);
+                route_open(app.handle(), vec![path]);
             }
             // A single writer serializes geometry with reading-position saves.
             let handle = app.handle().clone();
@@ -693,7 +704,7 @@ fn main() {
             // The native event stays the authorization boundary: only files the user actually dropped become openable without a dialog.
             if let tauri::WebviewEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
                 if let Ok(mut store) = webview.app_handle().state::<Shared>().lock() {
-                    authorize_dropped(&mut store, paths);
+                    authorize_paths(&mut store, paths.clone());
                 }
             }
         })
@@ -708,6 +719,12 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("Could not start Hold My Brief")
         .run(|app, event| {
+            // Finder's Open With, `open -a "Hold My Brief" file.pdf` and files dropped on the Dock icon reach a running app as an
+            // Apple Event, not as a command line, so the single-instance plugin never sees them.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = &event {
+                route_open(app, paths_from_urls(urls));
+            }
             if matches!(event, tauri::RunEvent::Exit) {
                 if let Some(shared) = app.try_state::<Shared>() {
                     if let Ok(mut store) = shared.lock() {
@@ -738,7 +755,7 @@ mod tests {
         assert!(image_path(&document, "https://example.com/x.png").is_err());
     }
     #[test]
-    fn a_drop_authorizes_supported_files_only() {
+    fn authorizing_keeps_supported_files_in_order_and_names_the_rest() {
         let dir = tempfile::tempdir().unwrap();
         let book = dir.path().join("book.epub");
         let note = dir.path().join("note.txt");
@@ -747,14 +764,32 @@ mod tests {
             fs::write(path, b"x").unwrap();
         }
         let mut store = Store::load(dir.path().join("state.json"));
-        authorize_dropped(&mut store, &[book.clone(), archive.clone(), dir.path().join("gone.pdf"), note.clone()]);
+        let (opened, unsupported) = authorize_paths(&mut store, vec![note.clone(), archive.clone(), book.clone()]);
+        let text = |path: &PathBuf| fs::canonicalize(path).unwrap().to_string_lossy().into_owned();
+        assert_eq!(opened, vec![text(&note), text(&book)]);
+        assert_eq!(unsupported, vec!["archive.zip"]);
         assert!(store.authorized.contains(&fs::canonicalize(&book).unwrap()));
         assert!(store.authorized.contains(&fs::canonicalize(&note).unwrap()));
         assert!(!store.authorized.contains(&fs::canonicalize(&archive).unwrap()));
         assert_eq!(store.authorized.len(), 2);
-        // A drop does not queue an open: the page decides.
-        assert!(store.pending.is_none());
+        // Authorizing queues nothing: only `route_open` does.
+        assert!(store.pending.is_empty());
     }
+
+    #[test]
+    fn macos_open_events_become_paths_in_order() {
+        let urls: Vec<tauri::Url> = ["file:///Users/me/Books/Dune.epub", "file:///Users/me/My%20Docs/a%20b.pdf", "https://example.com/x.pdf", "file:///tmp/c.txt"]
+            .iter()
+            .map(|url| tauri::Url::parse(url).unwrap())
+            .collect();
+        let paths = paths_from_urls(&urls);
+        // Only file URLs are files; spaces and other escapes are decoded.
+        #[cfg(unix)]
+        assert_eq!(paths, vec![PathBuf::from("/Users/me/Books/Dune.epub"), PathBuf::from("/Users/me/My Docs/a b.pdf"), PathBuf::from("/tmp/c.txt")]);
+        assert_eq!(paths.len(), 3);
+        assert!(paths_from_urls(&[]).is_empty());
+    }
+
     #[test]
     fn file_reads_are_bounded() {
         let dir = tempfile::tempdir().unwrap();
