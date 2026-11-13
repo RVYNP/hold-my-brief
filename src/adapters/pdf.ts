@@ -6,10 +6,18 @@ import type { Locator, OutlineItem, PagePreview, Position, PreviewSink, ReaderAd
 import { MIN_SPREAD_WIDTH, pagesLabel, spreadPages } from '../spread';
 import { searchUnits, type DocumentSearch, type SearchHit, type SearchOptions, type UnitText } from '../search';
 import { BitmapCache, nextPages, PREVIEW_CACHE_BYTES, THUMBNAIL_HEIGHT } from '../page-strip';
+import { PREVIEW_CLASS } from '../zoom-gesture';
+import { clampZoom, DEFAULT_LIMITS, type ZoomLimits } from '../zoom';
 
 GlobalWorkerOptions.workerSrc = workerURL;
 /** Bound on decoded page bitmaps kept for instant page turns (bytes of canvas backing store). */
 const PAGE_CACHE_BYTES = 32 * 1024 * 1024;
+/** pdf.js's CSS_UNITS: a PDF point is 1/72 in and a CSS pixel 1/96 in, so a page at 100 % is 96/72 CSS px per point. */
+const CSS_UNITS = 96 / 72;
+/** The longest a page may be drawn along either side, in CSS px. Browsers lay out and tile far more, but stop short of their ~33 M px layout ceiling with room to spare. */
+const MAX_PAGE_EXTENT = 24_000;
+/** The most pixels along one side of a canvas backing store (Chromium, WebView2 and WebKit all stop at 16 384). */
+const MAX_CANVAS_SIDE = 16_384;
 type PreviewJob = { number: number; page: PDFPageProxy; viewport: PageViewport; dpr: number; pixelsWidth: number; pixelsHeight: number; key: string };
 const clamp = (value: number, min = 0, max = 1) => Math.max(min, Math.min(max, Number.isFinite(value) ? value : min));
 
@@ -37,6 +45,9 @@ export class PdfAdapter implements ReaderAdapter {
   private layers: TextLayer[] = [];
   private currentPages: PDFPageProxy[] = [];
   private surface?: HTMLElement;
+  /** The level the pages on screen are drawn at, and the one the page being laid out will have once it is shown. */
+  private level?: number;
+  private nextLevel?: number;
   private status?: HTMLElement;
   private observer?: ResizeObserver;
   private resizeTimer?: ReturnType<typeof setTimeout>;
@@ -87,6 +98,8 @@ export class PdfAdapter implements ReaderAdapter {
     host.addEventListener('scroll', this.onScroll, { passive: true });
     let size = `${host.clientWidth}:${host.clientHeight}`;
     this.observer = new ResizeObserver(() => {
+      // A zoom gesture is scaling the page and hides the scrollbars meanwhile; the size it reports is not a resize, and the gesture commits its own render.
+      if (host.classList.contains(PREVIEW_CLASS)) return;
       const next = `${host.clientWidth}:${host.clientHeight}`;
       if (size === next || !host.clientWidth || !host.clientHeight) return;
       size = next;
@@ -94,7 +107,7 @@ export class PdfAdapter implements ReaderAdapter {
       // Read the current committed location when the resize settles. Capturing
       // it here can overwrite a newer page/link navigation during the delay.
       this.resizeTimer = setTimeout(() => {
-        if (!this.disposed && !host.hasAttribute('aria-busy'))
+        if (!this.disposed && !host.hasAttribute('aria-busy') && !host.classList.contains(PREVIEW_CLASS))
           void this.restore(this.getPosition().locator).catch(context.onError);
       }, 100);
     });
@@ -133,7 +146,8 @@ export class PdfAdapter implements ReaderAdapter {
     try {
       const pages = await Promise.all(numbers.map(number => doc.getPage(number)));
       if (generation !== this.generation || this.disposed) return;
-      const shown = this.layout(pages, numbers, spread).map(({ viewport, scale, dpr, pixelsWidth, pixelsHeight, key }, index) => {
+      const laid = this.layout(pages, numbers, spread); this.nextLevel = laid.level;
+      const shown = laid.items.map(({ viewport, scale, dpr, pixelsWidth, pixelsHeight, key }, index) => {
         const surface = document.createElement('div'); surface.className = 'pdf-page';
         surface.style.width = `${viewport.width}px`; surface.style.height = `${viewport.height}px`;
         surface.style.setProperty('--scale-factor', String(scale));
@@ -216,33 +230,45 @@ export class PdfAdapter implements ReaderAdapter {
       throw error;
     }
   }
+  /** The height the pages shown together take to fit the panel (fit page: the whole spread; fit width: its width), in CSS px. */
+  private fitHeight(bases: PageViewport[], spread: boolean, fit: ReaderOptions['fit']) {
+    const width = Math.max(100, this.host.clientWidth - 32), height = Math.max(100, this.host.clientHeight - 32);
+    const aspect = bases.reduce((sum, base) => sum + base.width / base.height, 0) * (spread && bases.length === 1 ? 2 : 1);
+    return fit === 'width' ? width / aspect : Math.min(height, width / aspect);
+  }
+  private basesOf(pages: PDFPageProxy[]) { return pages.map(page => page.getViewport({ scale: 1, rotation: this.rotationOf(page) })); }
+  /** Pages of a spread share one height, so a level is that of the tallest: 100 % draws it at its physical size. */
+  private referenceOf(bases: PageViewport[]) { return Math.max(...bases.map(base => base.height)); }
+  /** What a page can be zoomed to before it is too long to lay out: very large sheets stop short of the global limit. */
+  private limitsOf(bases: PageViewport[]): ZoomLimits {
+    const extent = Math.max(...bases.map(base => Math.max(base.width, base.height)));
+    return extent > 0 ? { min: DEFAULT_LIMITS.min, max: Math.max(DEFAULT_LIMITS.min, Math.min(DEFAULT_LIMITS.max, MAX_PAGE_EXTENT / (CSS_UNITS * extent))) } : DEFAULT_LIMITS;
+  }
   /**
-   * Geometry and cache identity for the pages shown together at the current options and host size.
-   * Pages of a spread share one height, so mixed sizes line up; fit page fits the whole spread and
-   * fit width its width. A page alone in two-page view keeps the size of half a spread.
+   * Geometry and cache identity for the pages shown together at the current options and host size, and the level they are
+   * drawn at. A fit follows the panel: fit page fits the whole spread and fit width its width, and a page alone in two-page view
+   * keeps the size of half a spread. Otherwise the level is the zoom itself, 1 being the tallest page at its physical size.
    */
   private layout(pages: PDFPageProxy[], numbers: number[], spread: boolean) {
     const rotation = (page: PDFPageProxy) => this.rotationOf(page);
-    const bases = pages.map(page => page.getViewport({ scale: 1, rotation: rotation(page) }));
-    const width = Math.max(100, this.host.clientWidth - 32), height = Math.max(100, this.host.clientHeight - 32);
-    const aspect = bases.reduce((sum, base) => sum + base.width / base.height, 0) * (spread && pages.length === 1 ? 2 : 1);
-    const fitted = this.options.fit === 'width' ? width / aspect : Math.min(height, width / aspect);
-    const common = fitted * clamp(this.options.zoom, .25, 5);
-    return pages.map((page, index) => {
+    const bases = this.basesOf(pages), reference = this.referenceOf(bases);
+    const common = this.options.fitted ? this.fitHeight(bases, spread, this.options.fit) : clampZoom(this.options.zoom, this.limitsOf(bases)) * CSS_UNITS * reference;
+    const items = pages.map((page, index) => {
       const scale = common / bases[index].height;
       const viewport = page.getViewport({ scale, rotation: rotation(page) });
-      // Cap the backing store by device pixels actually displayed, not by a flat 2x.
-      const dpr = Math.min(devicePixelRatio || 1, 2, Math.sqrt(16_000_000 / (viewport.width * viewport.height)));
+      // Cap the backing store by device pixels actually displayed, not by a flat 2x; a very large page is drawn at fewer pixels than it is shown at.
+      const dpr = Math.min(devicePixelRatio || 1, 2, Math.sqrt(16_000_000 / (viewport.width * viewport.height)), MAX_CANVAS_SIDE / Math.max(viewport.width, viewport.height));
       const pixelsWidth = Math.ceil(viewport.width * dpr), pixelsHeight = Math.ceil(viewport.height * dpr);
       // Rotation is part of the identity: 0° and 180° share pixel dimensions but not pixels.
       return { viewport, scale, dpr, pixelsWidth, pixelsHeight, key: `${numbers[index]}:${rotation(page)}:${pixelsWidth}x${pixelsHeight}` };
     });
+    return { items, level: common / (CSS_UNITS * reference) };
   }
 
   /** Puts rendered pages on screen and records the position they represent. */
   private commit(view: HTMLElement, numbers: number[], pages: PDFPageProxy[], size: { width: number; height: number }, y: number, x: number, atEnd: boolean, state: Position['spread']) {
     const previous = this.currentPages;
-    this.currentPages = pages; this.pages = numbers; this.surface = view; this.shownSpread = state;
+    this.currentPages = pages; this.pages = numbers; this.surface = view; this.shownSpread = state; this.level = this.nextLevel;
     this.host.replaceChildren(view); this.host.removeAttribute('aria-busy');
     this.host.scrollTop = atEnd ? this.host.scrollHeight : clamp(y) * size.height;
     this.host.scrollLeft = clamp(x) * size.width;
@@ -287,8 +313,9 @@ export class PdfAdapter implements ReaderAdapter {
           const numbers = this.pagesAt(start, spread);
           const pages = await Promise.all(numbers.map(number => doc.getPage(number)));
           if (controller.signal.aborted || this.disposed) return;
-          for (const [index, { viewport, dpr, pixelsWidth, pixelsHeight, key }] of this.layout(pages, numbers, spread).entries()) {
-            if (this.pageCache.has(key)) continue;
+          for (const [index, { viewport, dpr, pixelsWidth, pixelsHeight, key }] of this.layout(pages, numbers, spread).items.entries()) {
+            // A page too big for the cache would be drawn only to be thrown away.
+            if (this.pageCache.has(key) || pixelsWidth * pixelsHeight * 4 > PAGE_CACHE_BYTES) continue;
             const canvas = document.createElement('canvas');
             canvas.width = pixelsWidth; canvas.height = pixelsHeight;
             await pages[index].render({ canvas, viewport, transform: dpr === 1 ? undefined : [dpr, 0, 0, dpr, 0, 0] }).promise;
@@ -515,6 +542,13 @@ export class PdfAdapter implements ReaderAdapter {
   async setOptions(options: ReaderOptions) { const old = this.getPosition().locator; this.options = { ...options }; await this.restore(old); }
   outline() { return this.items; }
   scroller() { return this.host; }
+  zoomLevel() { return this.level; }
+  zoomLimits() { return this.currentPages.length ? this.limitsOf(this.basesOf(this.currentPages)) : DEFAULT_LIMITS; }
+  legacyZoomBase(fit: ReaderOptions['fit']) {
+    if (!this.currentPages.length) return undefined;
+    const bases = this.basesOf(this.currentPages);
+    return this.fitHeight(bases, this.shownSpread === 'active', fit) / (CSS_UNITS * this.referenceOf(bases));
+  }
   destroy() {
     this.disposed = true; ++this.generation; for (const task of this.tasks) task.cancel(); this.cancelPreviews(); for (const layer of this.layers) layer.cancel(); this.observer?.disconnect(); clearTimeout(this.resizeTimer);
     this.host?.removeEventListener('scroll', this.onScroll); this.host?.classList.remove('pdf-reader');

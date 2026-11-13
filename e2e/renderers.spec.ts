@@ -758,7 +758,7 @@ test('PDF view controls zoom, pan 1:1 by hand tool and middle button, and keep l
   const host = page.locator('.pdf-reader'), hand = page.getByRole('button', { name: 'Hand tool' });
   const scroll = () => host.evaluate(el => [el.scrollLeft, el.scrollTop]);
   await expect(page.locator('#view-controls')).toBeVisible();
-  await expect(page.locator('#zoom-level')).toHaveText('Fit');
+  await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', 'page'); // A fit is a mode: the level shows the scale it comes to.
   // The hand tool is available at Fit: its title never changes and it is never disabled.
   await expect(hand).toHaveAttribute('aria-disabled', 'false');
   await expect(hand).toHaveAttribute('title', 'Hand tool: drag to pan (H)');
@@ -768,7 +768,9 @@ test('PDF view controls zoom, pan 1:1 by hand tool and middle button, and keep l
   await expect(host).toHaveClass(/hand-tool/); // Grab cursor, because a drag now always does something.
   await page.keyboard.press('h');
   await expect(hand).toHaveAttribute('aria-pressed', 'false');
-  for (let i = 0; i < 4; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
+  await page.keyboard.press('Control+1'); // Actual size.
+  await expect(page.locator('#zoom-level')).toHaveText('100%'); await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', '');
+  for (let i = 0; i < 2; i++) await page.getByRole('button', { name: 'Zoom in' }).click(); // 110%, 125%
   await page.keyboard.press('Control+Equal'); // Shortcut and pill share one zoom state.
   await expect(page.locator('#zoom-level')).toHaveText('150%');
   await expect(page.locator('.pdf-render-status')).toHaveCount(0);
@@ -812,18 +814,18 @@ test('PDF view controls zoom, pan 1:1 by hand tool and middle button, and keep l
   // Returning to fit keeps the tool on: the page slides there instead of scrolling. A new document resets it.
   await page.keyboard.press('h');
   await expect(hand).toHaveAttribute('aria-pressed', 'true');
-  await page.locator('#zoom-level').click();
-  await expect(page.locator('#zoom-level')).toHaveText('Fit');
+  await page.locator('#zoom-level').dblclick(); // Double-clicking the level toggles the fit; a single click opens the zoom menu.
+  await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', 'page');
   await expect(hand).toHaveAttribute('aria-pressed', 'true');
   await expect(hand).toHaveAttribute('title', 'Hand tool: drag to pan (H)');
   await expect(host).toHaveClass(/hand-tool/);
   await page.getByRole('button', { name: 'Zoom in' }).click();
   await expect(hand).toHaveAttribute('aria-pressed', 'true');
   await expect(host).toHaveClass(/hand-tool/);
-  await page.locator('#zoom-level').click();
-  await expect(page.locator('#zoom-level')).toHaveText('Fit');
-  await page.locator('#zoom-level').click();
-  await expect(page.locator('#zoom-level')).toHaveText('Width');
+  await page.locator('#zoom-level').dblclick();
+  await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', 'page');
+  await page.locator('#zoom-level').dblclick();
+  await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', 'width');
   await page.locator('#file-input').setInputFiles({ name: 'notes.md', mimeType: 'text/markdown', buffer: Buffer.from('# Notes\n\nPlain reflowing text.') });
   await expect(page.locator('#filename')).toHaveText('notes.md');
   await expect(page.locator('#view-controls')).toBeHidden();
@@ -847,7 +849,7 @@ async function pushToEdge(page: Page, host: Locator, direction: 1 | -1) {
   for (let i = 0; i < 4; i++) await dragPanel(page, host, 300 * direction, 300 * direction, from);
 }
 
-test('hand tool slides a PDF page that fits 1:1 at Fit and below 100%, never selecting or refitting', async ({ page }) => {
+test('hand tool slides a PDF page that fits 1:1 at Fit and when zoomed out, never selecting or refitting', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto('/');
   await page.locator('#file-input').setInputFiles({ name: 'slide.pdf', mimeType: 'application/pdf', buffer: pdfFixture() });
@@ -858,7 +860,7 @@ test('hand tool slides a PDF page that fits 1:1 at Fit and below 100%, never sel
   await expect(host).toHaveClass(/hand-tool/);
 
   const slide = async (level: string) => {
-    await expect(page.locator('#zoom-level')).toHaveText(level);
+    if (level === 'Fit') await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', 'page'); else await expect(page.locator('#zoom-level')).toHaveText(level);
     await expect(page.locator('.pdf-render-status')).toHaveCount(0);
     await expect(page.locator('.textLayer')).toContainText('First page with selectable text');
     const size = await panelSize(host);
@@ -893,10 +895,11 @@ test('hand tool slides a PDF page that fits 1:1 at Fit and below 100%, never sel
   };
   await slide('Fit');
   await page.keyboard.press('Control+0');
-  // Zoom out to the pill's floor (25%), then in by the 10% steps to 75%.
+  // Zoom out to the pill's floor (10%), then in along the ladder (25, 33, 50) to 50%: a page of 267 x 400 px fits the panel.
   for (let i = 0; i < 12 && !(await page.getByRole('button', { name: 'Zoom out' }).isDisabled()); i++) await page.getByRole('button', { name: 'Zoom out' }).click();
-  for (let i = 0; i < 5; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
-  await slide('75%');
+  await expect(page.locator('#zoom-level')).toHaveText('10%');
+  for (let i = 0; i < 3; i++) await page.getByRole('button', { name: 'Zoom in' }).click();
+  await slide('50%');
   expect(errors).toEqual([]);
 });
 
@@ -928,20 +931,20 @@ test('a slid page keeps its offset across page turns and goes back on zoom, fit,
   await page.keyboard.press('Control+0'); await settle();
   near((await sheet.boundingBox())!, natural.x, natural.y, 'Ctrl 0');
 
-  // Clicking the zoom level switches to fit width (the page overflows vertically): no leftover offset.
+  // Double-clicking the zoom level switches to fit width (the page overflows vertically): no leftover offset.
   await dragPanel(page, host, 30, 40);
-  await page.locator('#zoom-level').click();
-  await expect(page.locator('#zoom-level')).toHaveText('Width'); await settle();
+  await page.locator('#zoom-level').dblclick();
+  await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', 'width'); await settle();
   const wide = (await sheet.boundingBox())!, [wideWidth] = await panelSize(host);
   near(wide, panel.x + (wideWidth - wide.width) / 2, panel.y + 16, 'fit width');
-  await page.locator('#zoom-level').click();
-  await expect(page.locator('#zoom-level')).toHaveText('Fit'); await settle();
+  await page.locator('#zoom-level').dblclick();
+  await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', 'page'); await settle();
   near((await sheet.boundingBox())!, natural.x, natural.y, 'back to fit page');
 
-  // Zooming in past fit makes the page overflow: it is scrolled, not slid, so it sits at the top of the panel and centred.
+  // Zooming past fit (here to actual size) makes the page overflow: it is scrolled, not slid, so it sits at the top of the panel and centred.
   await dragPanel(page, host, 30, 40);
-  await page.getByRole('button', { name: 'Zoom in' }).click();
-  await expect(page.locator('#zoom-level')).toHaveText('110%'); await settle();
+  await page.keyboard.press('Control+1'); // Actual size: a 533 x 800 px page overflows the panel.
+  await expect(page.locator('#zoom-level')).toHaveText('100%'); await settle();
   expect(await host.evaluate(el => el.scrollHeight - el.clientHeight > 1)).toBe(true);
   const grown = (await sheet.boundingBox())!, [grownWidth] = await panelSize(host);
   near(grown, panel.x + Math.max(16, (grownWidth - grown.width) / 2), panel.y + 16, 'zoomed past fit');
@@ -975,6 +978,8 @@ test('a slid PDF page is re-clamped on resize, and text selection still lands on
   await expect(page.getByRole('button', { name: 'Hand tool' })).toHaveAttribute('aria-pressed', 'true');
   await pushToEdge(page, host, 1);
   await page.setViewportSize({ width: 400, height: 620 });
+  // The panel has to be the new size before the corner means anything: until then the old page, still clamped to the old panel, can satisfy it.
+  await expect.poll(async () => (await panelSize(host))[0]).toBe(400);
   const atCorner = async () => {
     const panel = (await host.boundingBox())!, [width, height] = await panelSize(host), box = await sheet.boundingBox();
     return !!box && Math.abs(box.x - (panel.x + width - 64)) < 1 && Math.abs(box.y - (panel.y + height - 64)) < 1;
@@ -1106,6 +1111,8 @@ test('image-only PDF pages carry no note, say so in the tooltip and explain a se
     await page.mouse.move(x, y); await page.mouse.down({ button }); await page.mouse.move(x + 40, y + 20, { steps: 5 }); await page.mouse.up({ button });
   };
   const zoomTo = async (level: string, button: 'Zoom in' | 'Zoom out') => {
+    // Levels are true scales, so the walk starts from actual size, which is on the ladder.
+    await page.locator('.pdf-reader:not(.staging)').focus(); await page.keyboard.press('Control+1'); await expect(page.locator('#zoom-level')).toHaveText('100%'); await expect(page.locator('.pdf-render-status')).toHaveCount(0);
     // One step at a time: a click is applied asynchronously, so wait for the label to move before the next.
     for (let i = 0; i < 14; i++) {
       const current = (await page.locator('#zoom-level').textContent())!;
@@ -1133,10 +1140,10 @@ test('image-only PDF pages carry no note, say so in the tooltip and explain a se
   await turn('PageUp', 'Page 3 of 4'); await expect(title).toHaveAttribute('title', tip);
 
   // Single-page view at every zoom: Fit, Width, 70 % and 150 % draw nothing over the page.
-  await host.focus(); await page.keyboard.press('Control+2'); await expect(page.locator('#zoom-level')).toHaveText('Width'); await noNote();
-  await page.keyboard.press('Control+0'); await expect(page.locator('#zoom-level')).toHaveText('Fit');
-  await zoomTo('70%', 'Zoom out'); await noNote();
-  await page.keyboard.press('Control+0'); await expect(page.locator('#zoom-level')).toHaveText('Fit'); await noNote();
+  await host.focus(); await page.keyboard.press('Control+2'); await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', 'width'); await noNote();
+  await page.keyboard.press('Control+0'); await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', 'page');
+  await zoomTo('67%', 'Zoom out'); await noNote();
+  await page.keyboard.press('Control+0'); await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', 'page'); await noNote();
 
   // Intent cue: not for clicks, middle drags or hand drags; yes for the first select-drag only.
   { const box = (await page.locator('.pdf-page').first().boundingBox())!; await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2); } await expect(notice).toBeHidden();
@@ -1162,9 +1169,9 @@ test('image-only PDF pages carry no note, say so in the tooltip and explain a se
   await expect(title).toHaveAttribute('title', tip); await noNote();
   await page.keyboard.press('Control+2'); await noNote();
   await page.keyboard.press('Control+0'); await noNote();
-  await page.keyboard.press('Control+0'); await zoomTo('70%', 'Zoom out'); await noNote();
+  await page.keyboard.press('Control+0'); await zoomTo('67%', 'Zoom out'); await noNote();
   await zoomTo('150%', 'Zoom in'); await noNote();
-  await page.keyboard.press('Control+0'); await expect(page.locator('#zoom-level')).toHaveText('Fit');
+  await page.keyboard.press('Control+0'); await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', 'page');
   await expect(page.locator('.pdf-render-status')).toHaveCount(0); await expect(title).toHaveAttribute('title', tip); // Text has been read, so the page is known to be image-only.
   await drag('left', '.pdf-spread .pdf-page:nth-child(2)'); await expect(notice).toBeVisible(); await expect(notice).toContainText(message);
 
@@ -1201,6 +1208,49 @@ test('fixed-layout EPUB pans inside its zoomed page frame and keeps frame links 
   const frame = page.frames().find(f => f.url().startsWith('blob:'))!;
   await frame.getByRole('link', { name: 'Jump to other chapter' }).click();
   await expect(page.locator('#position')).toContainText('Page 2 of 2');
+  expect(errors).toEqual([]);
+});
+
+test('Ctrl + wheel and a pinch over a fixed-layout EPUB page zoom the document, not the webview', async ({ page }) => {
+  // The page lives in a same-origin iframe, so its wheel and gesture events never reach the application document: the frame claims them.
+  const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles({ name: 'fixed-zoom.epub', mimeType: 'application/epub+zip', buffer: await epubFixture(true) });
+  await expect(page.locator('#position')).toContainText('Page 1 of 2');
+  await expect(page.locator('#view-controls')).toBeVisible();
+  await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', 'page');
+  const frame = page.frames().find(f => f.url().startsWith('blob:'))!;
+  // 100 % is the book's declared viewport (800 px wide), and a fit shows the scale Foliate fits the page at, measured on the page.
+  const framePx = async () => (await (await frame.frameElement()).boundingBox())!.width;
+  await expect.poll(async () => Math.abs(Number((await page.locator('#zoom-level').textContent())!.replace('%', '')) - (await framePx()) / 8)).toBeLessThanOrEqual(1);
+  await page.locator('.reader-host').focus(); await page.keyboard.press('Control+1');
+  await expect(page.locator('#zoom-level')).toHaveText('100%');
+  await expect.poll(framePx).toBeCloseTo(800, 0);
+  const prevented = await frame.evaluate(() => {
+    const results: boolean[] = [];
+    for (let i = 0; i < 3; i++) {
+      const event = new WheelEvent('wheel', { deltaY: -100, ctrlKey: true, clientX: 40, clientY: 40, bubbles: true, cancelable: true });
+      document.body.dispatchEvent(event); results.push(event.defaultPrevented);
+    }
+    return results;
+  });
+  expect(prevented).toEqual([true, true, true]);
+  await expect(page.locator('#zoom-level')).toHaveText(/^3[0-9]{2}%$/); // 1.49 ^ 3, committed once the input paused.
+  const level = (await page.locator('#zoom-level').textContent())!;
+  // A WebKit pinch inside the frame: claimed, and committed on gestureend.
+  const pinch = await frame.evaluate(() => {
+    const results: boolean[] = [];
+    for (const [type, scale] of [['gesturestart', 1], ['gesturechange', .5], ['gesturechange', .25], ['gestureend', .25]] as const) {
+      const event = Object.assign(new Event(type, { bubbles: true, cancelable: true }), { scale, clientX: 40, clientY: 40 });
+      document.body.dispatchEvent(event); results.push(event.defaultPrevented);
+    }
+    return results;
+  });
+  expect(pinch.every(Boolean)).toBe(true);
+  await expect(page.locator('#zoom-level')).not.toHaveText(level);
+  await expect(page.locator('#zoom-level')).toHaveText(/^(8|9)[0-9]%$|^[1-9][0-9]%$/);
+  // Without Ctrl the wheel is left alone.
+  expect(await frame.evaluate(() => { const event = new WheelEvent('wheel', { deltaY: -100, clientX: 40, clientY: 40, bubbles: true, cancelable: true }); document.body.dispatchEvent(event); return event.defaultPrevented; })).toBe(false);
   expect(errors).toEqual([]);
 });
 
@@ -1256,9 +1306,9 @@ test('view controls pill moves by its grip, stays inside the panel, persists, re
 
   // The buttons keep working where the pill now sits.
   await page.locator('#zoom-in').click();
-  await expect(page.locator('#zoom-level')).not.toHaveText('Fit');
-  await page.locator('#zoom-level').click();
-  await expect(page.locator('#zoom-level')).toHaveText('Fit');
+  await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', '');
+  await page.locator('#zoom-level').dblclick();
+  await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', 'page');
   await expect.poll(async () => JSON.stringify(await geometry()) === JSON.stringify(untouched)).toBe(true);
 
   // A reload keeps the position.

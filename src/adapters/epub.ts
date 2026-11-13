@@ -4,6 +4,7 @@ import 'foliate-js/view.js';
 import type { Locator, OutlineItem, Position, ReaderAdapter, ReaderContext, ReaderOptions, ReaderSource } from '../types';
 import { isDark, liftInk, onAppearanceChange, parseRgb, readingColors, rgbToHex, type Rgb } from '../theme';
 import { MIN_SPREAD_WIDTH, pagesLabel, pairedSides } from '../spread';
+import { clampZoom } from '../zoom';
 import { excerpt, findMatches, type DocumentSearch, type SearchHit, type SearchOptions, type UnitText } from '../search';
 
 const RESOURCE_LIMIT = 64 * 1024 * 1024;
@@ -109,6 +110,8 @@ export class EpubAdapter implements ReaderAdapter {
   private activeIndex = 0;
   /** Fixed-layout sections on screen in reading order: one page, or both pages of a spread. */
   private visible: number[] = [0];
+  /** The iframes Foliate has drawn fixed-layout pages in; the one on screen tells the scale it fits the page at. */
+  private frames = new Set<Element>();
   /** Two-page layout and cover pairing currently applied to Foliate. */
   private layoutSpread = false;
   private layoutCover = true;
@@ -221,7 +224,7 @@ export class EpubAdapter implements ReaderAdapter {
       // The postinstall patch applies this before src is assigned; assert defense too.
       const frame = doc.defaultView?.frameElement;
       if (!frame || frame.getAttribute('sandbox') !== 'allow-same-origin') throw new Error('Unsafe EPUB frame sandbox. Reinstall the application.');
-      if (this.mode === 'fixed') { context.onFrame?.(doc); this.shadeGutter(doc, (event as CustomEvent).detail.index); }
+      if (this.mode === 'fixed') { this.frames.add(frame); context.onFrame?.(doc); this.shadeGutter(doc, (event as CustomEvent).detail.index); }
       doc.addEventListener('keydown', event => {
         const target = event.target as Element;
         if (target.closest('input,textarea,select,[contenteditable="true"]')) return;
@@ -247,9 +250,11 @@ export class EpubAdapter implements ReaderAdapter {
       clearTimeout(this.resizeTimer);
       // Foliate refits pages and columns itself; only a change of two-page layout needs this adapter.
       this.resizeTimer = setTimeout(() => {
-        if (this.disposed || !this.options.spread) return;
-        if ((this.spreadState() === 'active') !== this.layoutSpread) void this.enqueue(() => this.relayout()).catch(context.onError);
-        else if (this.layoutSpread && this.mode === 'paginated') this.applyMeasure();
+        if (this.disposed) return;
+        if (this.options.spread && (this.spreadState() === 'active') !== this.layoutSpread) void this.enqueue(() => this.relayout()).catch(context.onError);
+        else if (this.options.spread && this.layoutSpread && this.mode === 'paginated') this.applyMeasure();
+        // Foliate refits a fixed-layout page by itself; the level it comes to is reported once it has.
+        else if (this.mode === 'fixed' && this.options.fitted) this.updatePosition(0);
       }, 150);
     });
     this.observer.observe(host);
@@ -507,7 +512,8 @@ export class EpubAdapter implements ReaderAdapter {
   private applyOptions() {
     if (!this.view) return;
     const renderer = this.view.renderer, options = this.options;
-    if (this.mode === 'fixed') renderer.setAttribute('zoom', options.zoom === 1 ? `fit-${options.fit}` : String(options.zoom));
+    // Foliate's numeric zoom is a scale of the book's declared viewport, which is what 100 % means for it.
+    if (this.mode === 'fixed') renderer.setAttribute('zoom', options.fitted ? `fit-${options.fit}` : String(clampZoom(options.zoom)));
     else {
       renderer.setAttribute('flow', 'paginated'); renderer.setAttribute('max-column-count', this.layoutSpread ? '2' : '1');
       this.applyMeasure();
@@ -552,6 +558,18 @@ export class EpubAdapter implements ReaderAdapter {
   outline() { return this.items; }
   /** Fixed-layout pages scroll inside Foliate's renderer when zoomed; reflowable chapters paginate and never pan. */
   scroller() { return this.mode === 'fixed' ? this.view?.renderer : undefined; }
+  /** Foliate does not report the scale it drew at, so it is measured on the page frame on screen: its painted width over its declared width. */
+  zoomLevel() {
+    if (this.mode !== 'fixed') return undefined;
+    for (const frame of this.frames) {
+      if (!frame.isConnected) { this.frames.delete(frame); continue; }
+      const declared = (frame as HTMLElement).offsetWidth, painted = frame.getBoundingClientRect().width;
+      if (declared > 0 && painted > 0) return painted / declared;
+    }
+    return undefined;
+  }
+  /** Fixed-layout zoom was never relative to the fit here: Foliate took the number as a scale of the declared viewport, so a saved value already is a true scale. */
+  legacyZoomBase() { return this.mode === 'fixed' ? 1 : undefined; }
   destroy() {
     this.disposed = true; this.abort.abort(); this.unsubscribe?.(); this.observer?.disconnect(); clearTimeout(this.resizeTimer);
     try { this.view?.close(); } catch { /* An opening cancellation may precede Foliate's first page. */ }

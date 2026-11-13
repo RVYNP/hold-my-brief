@@ -109,7 +109,7 @@ export const ASSISTANT_COMMANDS: Readonly<Record<string, string>> = {
   library: 'show or hide the document library',
   back: 'return to where the reader was before the last jump',
   start: 'go to the first location', end: 'go to the last location',
-  'fit-page': 'fit the whole page (PDF)', 'fit-width': 'fit the page width (PDF)', rotate: 'rotate the page 90 degrees',
+  'fit-page': 'fit the whole page (PDF)', 'fit-width': 'fit the page width (PDF)', 'actual-size': 'show the page at actual size (100%)', rotate: 'rotate the page 90 degrees',
   spread: 'toggle the two-page spread', cover: 'toggle whether the cover page stands alone in a spread',
   smaller: 'smaller text or zoom out', larger: 'larger text or zoom in',
   pin: 'toggle keeping the window above other apps', lock: 'toggle locking the window size',

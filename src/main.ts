@@ -18,6 +18,9 @@ import { assignShelfSlots, closeHome, fillHomePictures, homeRows, renderHome } f
 import { repaintCovers } from './cards';
 import { canThumbnail, createThumbnailStore } from './thumbnails';
 import { createPageStrip, MIN_PANEL_HEIGHT } from './page-strip';
+import { DEFAULT_LIMITS, migrateLegacyZoom, stepZoom, wheelFactor, ZOOM_MODEL, zoomPercent, type Point as ZoomPoint } from './zoom';
+import { createZoomGesture } from './zoom-gesture';
+import { createZoomMenu } from './zoom-menu';
 initAppearance();
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
@@ -25,7 +28,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <aside id="notice" role="status" hidden><span></span><button id="retry-save" hidden>Retry save</button><button id="dismiss-notice" aria-label="Dismiss message">×</button></aside>
   <div id="reader-layout"><div id="loading" role="status" hidden><span></span><button id="cancel">Cancel</button></div><div id="library-root"></div><nav id="library-rail"></nav>
   <main id="workspace"><section id="empty"><div class="book-mark" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M9 3v18m4-13h3m-3 4h3"/></svg></div><p class="eyebrow">KEEP YOUR PLACE</p><h1>Hand it over.</h1><p>Drop a brief and it stays pinned<br>exactly where you leave it.</p><button id="empty-open" class="primary">Hold a brief <span>↗</span></button><p class="formats">PDF · EPUB · MARKDOWN · TEXT</p><div id="recents"></div><p id="preview-note" hidden>Browser preview · Pin and size lock are available in the desktop app.</p></section>
-  <div id="view-controls" role="group" aria-label="View controls" hidden><button id="view-grip" type="button" aria-label="Move view controls" title="Drag to move · double-click to reset"><svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" aria-hidden="true"><circle cx="2" cy="3" r="1"/><circle cx="6" cy="3" r="1"/><circle cx="2" cy="7" r="1"/><circle cx="6" cy="7" r="1"/><circle cx="2" cy="11" r="1"/><circle cx="6" cy="11" r="1"/></svg></button><button id="zoom-out" aria-label="Zoom out" title="Zoom out (Ctrl −)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button><button id="zoom-level">Fit</button><button id="zoom-in" aria-label="Zoom in" title="Zoom in (Ctrl +)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button><span class="view-sep" aria-hidden="true"></span><button id="hand-tool" aria-label="Hand tool" aria-pressed="false" aria-disabled="false" title="Hand tool: drag to pan (H)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg></button><span id="view-layout" class="view-group" role="group" aria-label="Page layout" hidden><span class="view-sep" aria-hidden="true"></span><button id="view-single" aria-label="Single page" aria-pressed="true" title="Single page"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg></button><button id="view-spread" aria-label="Two pages" aria-pressed="false" title="Two-page spread (Ctrl 3)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></button></span><span id="view-previews" class="view-group" hidden><span class="view-sep" aria-hidden="true"></span><button id="page-strip-toggle" aria-label="Page previews" aria-pressed="false" title="Page previews (Ctrl 4)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="10" rx="2"/><rect x="3" y="17" width="4.5" height="4" rx="1"/><rect x="9.75" y="17" width="4.5" height="4" rx="1"/><rect x="16.5" y="17" width="4.5" height="4" rx="1"/></svg></button></span></div></main>
+  <div id="view-controls" role="group" aria-label="View controls" hidden><button id="view-grip" type="button" aria-label="Move view controls" title="Drag to move · double-click to reset"><svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" aria-hidden="true"><circle cx="2" cy="3" r="1"/><circle cx="6" cy="3" r="1"/><circle cx="2" cy="7" r="1"/><circle cx="6" cy="7" r="1"/><circle cx="2" cy="11" r="1"/><circle cx="6" cy="11" r="1"/></svg></button><button id="zoom-out" aria-label="Zoom out" title="Zoom out (Ctrl −)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button><button id="zoom-level" type="button"><span>Fit</span><svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 3l2.5 2.5L6.5 3"/></svg></button><button id="zoom-in" aria-label="Zoom in" title="Zoom in (Ctrl +)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button><span class="view-sep" aria-hidden="true"></span><button id="hand-tool" aria-label="Hand tool" aria-pressed="false" aria-disabled="false" title="Hand tool: drag to pan (H)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg></button><span id="view-layout" class="view-group" role="group" aria-label="Page layout" hidden><span class="view-sep" aria-hidden="true"></span><button id="view-single" aria-label="Single page" aria-pressed="true" title="Single page"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg></button><button id="view-spread" aria-label="Two pages" aria-pressed="false" title="Two-page spread (Ctrl 3)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></button></span><span id="view-previews" class="view-group" hidden><span class="view-sep" aria-hidden="true"></span><button id="page-strip-toggle" aria-label="Page previews" aria-pressed="false" title="Page previews (Ctrl 4)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="10" rx="2"/><rect x="3" y="17" width="4.5" height="4" rx="1"/><rect x="9.75" y="17" width="4.5" height="4" rx="1"/><rect x="16.5" y="17" width="4.5" height="4" rx="1"/></svg></button></span></div></main>
   </div>
   <footer><button id="previous" aria-label="Previous page" title="Previous page (PgUp)" disabled>←</button><button id="position" title="Go to location (Ctrl+G)" disabled>Ready when you are</button><button id="next" aria-label="Next page" title="Next page (PgDn)" disabled>→</button><input id="progress" type="range" aria-label="Document position" title="Click or drag to jump through the document" min="0" max="100" step="1" value="0" disabled></footer>
   <dialog id="menu" aria-label="Reader menu"><div class="menu-grid">
@@ -136,6 +139,9 @@ function updateScrubValue(preview = false) {
   scrubber.setAttribute('aria-valuetext', label);
   if (preview) $('position').textContent = `${label} · release to jump`;
 }
+/** The level the open document is drawn at; before it is drawn, 100 %. */
+const zoomLevel = () => reader?.zoomLevel?.() ?? (options.fitted ? 1 : options.zoom);
+const zoomLimits = () => reader?.zoomLimits?.() ?? DEFAULT_LIMITS;
 /** Syncs the view-controls pill, page-layout toggles and the title subtitle with the current position, zoom, layout and hand-tool state. */
 function updateViewControls() {
   if (!reader || !active) return;
@@ -144,8 +150,9 @@ function updateViewControls() {
   const scroller = reader.scroller?.();
   if (scroller !== pannedScroller) { pannedScroller = scroller; pan.attach(scroller, activeHost); }
   pan.refresh(position?.spread);
-  const fitted = Math.abs(options.zoom - 1) < .005, width = options.fit === 'width';
-  const level = fitted ? (width ? 'Width' : 'Fit') : `${Math.round(options.zoom * 100)}%`;
+  // The level is always the real scale; a fit is a mode that follows the window, and the adapter says what scale it came to.
+  const fitted = options.fitted, width = options.fit === 'width', current = zoomLevel();
+  const level = `${zoomPercent(current)}%`;
   const layout = position?.spread, waiting = layout === 'waiting' ? `Two pages appear when the reading area is at least ${MIN_SPREAD_WIDTH} px wide` : '';
   const kind = reader.mode === 'fixed' && fitted && !width && layout === 'active' ? 'Two-page view'
     : `${reader.mode !== 'fixed' ? (reader.mode === 'paginated' ? 'Reading view' : 'Scroll view') : fitted ? (width ? 'Fit width' : 'Page view') : level}${layout === 'active' ? ' · Two pages' : ''}`;
@@ -181,15 +188,17 @@ function updateViewControls() {
   $('page-strip-toggle').title = hidden ? `Page previews (Ctrl 4) · ${hidden}` : 'Page previews (Ctrl 4)';
   if (hidden) $('page-strip-toggle').setAttribute('aria-description', hidden); else $('page-strip-toggle').removeAttribute('aria-description');
   $('view-controls').hidden = !pan.pannable;
-  if (!pan.pannable) return;
-  // Clicking the level toggles fit page/fit width; while zoomed it first returns to the current fit.
+  if (!pan.pannable) { zoomMenu.close(); return; }
+  // The level opens the zoom menu; double-clicking it still toggles fit page/fit width (while zoomed it first returns to the current fit).
   const next = fitted && !width ? 'fit-width' : fitted ? 'fit-page' : `fit-${options.fit}`;
   const levelButton = $('zoom-level');
-  levelButton.textContent = level; levelButton.dataset.next = next;
-  levelButton.setAttribute('aria-label', `${level} zoom, switch to ${next === 'fit-width' ? 'fit width' : 'fit page'}`);
-  levelButton.title = `${fitted ? (width ? 'Fit width' : 'Fit page') : `Zoom ${level}`} · click for ${next === 'fit-width' ? 'fit width (Ctrl 2)' : 'fit page (Ctrl 0)'}`;
-  $<HTMLButtonElement>('zoom-out').disabled = options.zoom <= .25;
-  $<HTMLButtonElement>('zoom-in').disabled = options.zoom >= 4;
+  levelButton.querySelector('span')!.textContent = level; levelButton.dataset.next = next; levelButton.dataset.fit = fitted ? options.fit : '';
+  levelButton.setAttribute('aria-label', `Zoom menu, ${level}${fitted ? `, ${width ? 'fit width' : 'fit page'}` : ''}`);
+  levelButton.title = `${fitted ? `${width ? 'Fit width' : 'Fit page'} · ${level}` : `Zoom ${level}`} · click for zoom options · double-click for ${next === 'fit-width' ? 'fit width (Ctrl 2)' : 'fit page (Ctrl 0)'}`;
+  const limits = zoomLimits(), canZoomOut = stepZoom(current, -1, limits) < current - .004, canZoomIn = stepZoom(current, 1, limits) > current + .004;
+  $<HTMLButtonElement>('zoom-out').disabled = !canZoomOut;
+  $<HTMLButtonElement>('zoom-in').disabled = !canZoomIn;
+  zoomMenu.update({ level: current, fit: fitted ? options.fit : undefined, limits, canZoomIn, canZoomOut });
   // The hand tool is always available while the pill is shown: it scrolls an overflowing page and slides a fitting one.
   $('hand-tool').setAttribute('aria-pressed', String(pan.hand));
 }
@@ -198,7 +207,9 @@ function toggleHand() { pan.setHand(!pan.hand); updateViewControls(); }
 $('view-controls').addEventListener('mousedown', event => event.preventDefault());
 $('zoom-out').onclick = () => void action('smaller').catch(fail);
 $('zoom-in').onclick = () => void action('larger').catch(fail);
-$('zoom-level').onclick = () => void action($('zoom-level').dataset.next ?? 'fit-page').catch(fail);
+$('zoom-level').ondblclick = () => void action($('zoom-level').dataset.next ?? 'fit-page').catch(fail);
+// The level is a menu button: it offers the zoom commands, a field to type a percentage into, and presets.
+const zoomMenu = createZoomMenu($<HTMLButtonElement>('zoom-level'), choice => void (choice.kind === 'command' ? action(choice.id) : changeOptions({ fitted: false, zoom: choice.zoom })).catch(fail));
 $('hand-tool').onclick = toggleHand;
 $('view-single').onclick = () => void changeOptions({ spread: false });
 $('view-spread').onclick = () => void changeOptions({ spread: true });
@@ -481,18 +492,24 @@ async function load(open: () => Promise<Opened | null>, label = 'document'): Pro
     candidate = await adapter(doc.format); if (token !== request) return false;
     stripSpace(candidate); // A page-preview strip's room is there before the document is fitted, so opening never refits it.
     staging = document.createElement('section'); staging.className = 'reader-host staging'; staging.tabIndex = 0; staging.setAttribute('aria-label', 'Reading surface'); $('view-controls').before(staging);
-    const prefs = { ...defaultOptions, ...doc.previousState?.options };
+    // Options saved before zoom was a true scale hold a multiplier of the fit. They open fitted and are converted below, once the document is drawn, so the page keeps its size; saving then writes the new form.
+    const saved = doc.previousState?.options, legacy = Boolean(saved) && saved!.zoomModel !== ZOOM_MODEL, legacyZoom = Number(saved?.zoom);
+    const prefs: ReaderOptions = { ...defaultOptions, ...saved, zoomModel: ZOOM_MODEL, ...(legacy ? { fitted: true, zoom: 1 } : {}) };
     const current = candidate;
     await candidate.open({ ...doc, bytes: doc.bytes }, staging, {
-      onPosition: p => { if (reader === current) showPosition(p); }, onError: fail, openExternal, requestPassword: password, onFrame: doc => pan.watchFrame(doc),
+      onPosition: p => { if (reader === current) showPosition(p); }, onError: fail, openExternal, requestPassword: password, onFrame: doc => { pan.watchFrame(doc); watchFrameZoom(doc); },
       resolveImage: desktop ? async relative => { const result = await native<{bytes: number[]; mime: string}>('read_relative_image', { path: doc.path, relative }); const url = URL.createObjectURL(new Blob([new Uint8Array(result.bytes)], { type: result.mime })); urls.push(url); return url; } : undefined,
     }, prefs);
     if (doc.previousState?.locator) await candidate.restore(doc.previousState.locator);
+    if (legacy && candidate.mode === 'fixed') {
+      const converted = migrateLegacyZoom({ fit: prefs.fit, zoom: legacyZoom }, candidate.legacyZoomBase?.(prefs.fit), candidate.zoomLimits?.());
+      if (!converted.fitted) { Object.assign(prefs, converted); await candidate.setOptions(prefs); }
+    }
     if (token !== request) return false;
     await confirmDocument(doc).catch(error => notify(`Your library could not be saved. Reading is still available. ${error instanceof Error ? error.message : String(error)}`));
     await flush();
     if (token !== request) return false;
-    reader?.destroy(); activeHost?.remove();
+    zoomGesture.cancel(); reader?.destroy(); activeHost?.remove();
     doc.bytes = new Uint8Array();
     reader = candidate; active = doc; options = prefs; activeHost = staging; staging.classList.remove('staging'); $('empty').hidden = true;
     pannedScroller = reader.scroller?.(); pan.attach(pannedScroller, staging); scanNoticeShown = false;
@@ -534,13 +551,14 @@ $('menu-toggle').onclick = () => {
 $('menu').addEventListener('click', event => { const box = $('menu').getBoundingClientRect(); if (event.target === $('menu') && (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom)) closeDialog($<HTMLDialogElement>('menu')); });
 $('menu-palette').onclick = () => { closeDialog($<HTMLDialogElement>('menu')); openPalette(); };
 if (desktop) document.querySelectorAll<HTMLElement>('#menu [data-desktop]').forEach(item => { item.hidden = false; });
-async function changeOptions(next: Partial<ReaderOptions>) { if (!reader) return; if ('zoom' in next || 'fit' in next) pan.recenter(); const previous = options; options = { ...options, ...next }; try { await reader.setOptions(options); showPosition(reader.getPosition()); } catch (error) { options = previous; fail(error); } }
+async function changeOptions(next: Partial<ReaderOptions>) { if (!reader) return; if ('zoom' in next || 'fit' in next || 'fitted' in next) pan.recenter(); const previous = options; options = { ...options, ...next }; try { await reader.setOptions(options); showPosition(reader.getPosition()); } catch (error) { options = previous; fail(error); } }
 async function action(name: string) {
   if (name === 'goto') jump();
   else if (name === 'appearance') appearanceSheet.open();
   else if (name === 'pin' || name === 'lock') await toggle(name);
   else if (name === 'compact' || name === 'reading') { if (!desktop) return notify('Window presets are available in the desktop app.'); updateWindow(await native('set_preset', { preset: name })); }
-  else if (name === 'fit-page' || name === 'fit-width') await changeOptions({ fit: name === 'fit-page' ? 'page' : 'width', zoom: 1 });
+  else if (name === 'fit-page' || name === 'fit-width') await changeOptions({ fit: name === 'fit-page' ? 'page' : 'width', fitted: true });
+  else if (name === 'actual-size') await changeOptions({ fitted: false, zoom: 1 });
   else if (name === 'rotate') await changeOptions({ rotation: (options.rotation + 90) % 360 });
   else if (name === 'spread') { if (reader?.spreads) await changeOptions({ spread: !options.spread }); }
   else if (name === 'cover') await changeOptions({ cover: !options.cover });
@@ -549,7 +567,7 @@ async function action(name: string) {
     try { localStorage.setItem(stripKey, stripWanted ? 'on' : 'off'); } catch { /* Optional preference. */ }
     updateViewControls();
   }
-  else if (name === 'smaller' || name === 'larger') { const delta = name === 'larger' ? 1 : -1; await changeOptions(reader?.mode === 'fixed' ? { zoom: Math.round(Math.max(.25, Math.min(4, options.zoom + delta * .1)) * 100) / 100 } : { fontSize: Math.max(12, Math.min(40, options.fontSize + delta * 2)) }); }
+  else if (name === 'smaller' || name === 'larger') { const direction = name === 'larger' ? 1 : -1; await changeOptions(reader?.mode === 'fixed' ? { fitted: false, zoom: stepZoom(zoomLevel(), direction, zoomLimits()) } : { fontSize: Math.max(12, Math.min(40, options.fontSize + direction * 2)) }); }
   else if (name === 'type') appearanceSheet.open('text');
   else if (name === 'outline') { const list = $('outline-list'); list.replaceChildren(); const entries = reader?.outline() ?? []; if (!entries.length) list.textContent = 'No contents outline in this document.'; for (const item of entries) { const button = document.createElement('button'); button.textContent = item.label; button.onclick = () => { void reader?.goTo(item.target).then(() => closeDialog($<HTMLDialogElement>('contents'))).catch(fail); }; list.append(button); } showDialog('contents'); }
   else if (name === 'shortcuts') showDialog('shortcuts');
@@ -563,6 +581,53 @@ $('confirm-delete').onclick = () => { void (async () => { await flush(); if (des
 // Tab marks keyboard navigation (the page's focus ring returns); a pointer press clears it.
 document.addEventListener('keydown', event => { if (event.key === 'Tab') document.documentElement.classList.add('keyboard-focus'); }, true);
 document.addEventListener('pointerdown', () => document.documentElement.classList.remove('keyboard-focus'), true);
+// Ctrl/⌘ + wheel and a trackpad pinch zoom toward the pointer. Chromium and WebView2 report a pinch as ctrl+wheel; macOS's
+// WKWebView reports it as gesture events. Both are claimed everywhere (the webview would otherwise zoom the whole interface),
+// but only a page-based document moves; the zoom commits once the input pauses (see zoom-gesture.ts).
+const zoomGesture = createZoomGesture({
+  scroller: () => reader?.mode === 'fixed' ? reader.scroller?.() : undefined,
+  zoom: zoomLevel,
+  limits: zoomLimits,
+  commit: zoom => changeOptions({ fitted: false, zoom }),
+});
+let pinching = false, pinchScale = 1;
+/** The WebKit-only gesture events: `scale` is cumulative from the start of the pinch. */
+type PinchEvent = Event & { scale: number; clientX: number; clientY: number };
+/**
+ * Claims Ctrl/⌘ + wheel and pinch on `doc`. `toApp` maps a point of that document to the application window (identity for the
+ * application itself); `inside` says whether an event target is over the reading panel. A frame is always inside it.
+ */
+function claimZoomInput(doc: Document, toApp: (x: number, y: number) => ZoomPoint, inside: (target: EventTarget | null) => boolean) {
+  doc.addEventListener('wheel', event => {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    if (!pinching && inside(event.target)) zoomGesture.zoomBy(wheelFactor(event.deltaY, event.deltaMode), toApp(event.clientX, event.clientY));
+  }, { passive: false, capture: true });
+  doc.addEventListener('gesturestart', event => { event.preventDefault(); pinching = true; pinchScale = 1; }, { capture: true });
+  doc.addEventListener('gesturechange', event => {
+    event.preventDefault();
+    const { scale, clientX, clientY } = event as PinchEvent;
+    if (pinching && inside(event.target)) zoomGesture.zoomBy(scale / pinchScale, toApp(clientX, clientY));
+    pinchScale = scale;
+  }, { capture: true });
+  doc.addEventListener('gestureend', event => { event.preventDefault(); pinching = false; zoomGesture.end(); }, { capture: true });
+}
+claimZoomInput(document, (x, y) => ({ x, y }), target => target instanceof Node && workspace.contains(target));
+/**
+ * Fixed-layout EPUB pages live in same-origin iframes whose wheel and gesture events never reach the application document
+ * (the same reason the hand tool watches them, see pan.ts), so each frame claims them itself. The frame may be scaled by the
+ * renderer, so a point is mapped through the frame's on-screen box.
+ */
+const zoomFrames = new WeakSet<Document>();
+function watchFrameZoom(doc: Document) {
+  if (zoomFrames.has(doc)) return;
+  zoomFrames.add(doc);
+  claimZoomInput(doc, (x, y) => {
+    const frame = doc.defaultView?.frameElement, box = frame?.getBoundingClientRect();
+    if (!frame || !box) return { x, y };
+    return { x: box.left + x * box.width / (frame.clientWidth || box.width), y: box.top + y * box.height / (frame.clientHeight || box.height) };
+  }, () => true);
+}
 document.addEventListener('keydown', event => {
   if (document.querySelector('dialog[open]')) return;
   const target = event.composedPath()[0];

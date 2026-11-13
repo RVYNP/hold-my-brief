@@ -1,4 +1,5 @@
 import type { DocumentSearch, SearchHit, SearchOptions } from './search';
+import { ZOOM_MODEL, type ZoomLimits } from './zoom';
 
 export type ImageFormat = 'png' | 'jpg' | 'jpeg' | 'webp' | 'gif' | 'avif' | 'bmp';
 export type Format = 'pdf' | 'epub' | 'md' | 'txt' | ImageFormat;
@@ -13,8 +14,13 @@ export type Position = {
   imageOnly?: boolean;
 };
 export type OutlineItem = { label: string; target: string };
-export type ReaderOptions = { fontSize: number; lineHeight: number; margin: number; wrap: boolean; fit: 'page' | 'width'; zoom: number; rotation: number; spread: boolean; cover: boolean };
-export const defaultOptions: ReaderOptions = { fontSize: 18, lineHeight: 1.65, margin: 24, wrap: true, fit: 'page', zoom: 1, rotation: 0, spread: false, cover: true };
+/**
+ * `fit` is the fit mode in force while `fitted`, and the one the level returns to otherwise. While not `fitted`, `zoom` is a true
+ * scale (1 = actual size, see zoom.ts); while fitted the page follows the window and `zoom` is not used. `zoomModel` says which meaning
+ * of `zoom` a saved value carries: options saved before it existed held a multiplier of the fit and are converted on open.
+ */
+export type ReaderOptions = { fontSize: number; lineHeight: number; margin: number; wrap: boolean; fit: 'page' | 'width'; fitted: boolean; zoom: number; zoomModel: number; rotation: number; spread: boolean; cover: boolean };
+export const defaultOptions: ReaderOptions = { fontSize: 18, lineHeight: 1.65, margin: 24, wrap: true, fit: 'page', fitted: true, zoom: 1, zoomModel: ZOOM_MODEL, rotation: 0, spread: false, cover: true };
 export type ReaderSource = { name: string; bytes: Uint8Array; format: Format; path?: string };
 export type ReaderContext = {
   onPosition: (position: Position) => void;
@@ -73,6 +79,15 @@ export interface ReaderAdapter {
    * At most `limit` characters. Absent when the format has no text at all (images).
    */
   readText?(limit: number): Promise<{ label: string; text: string }>;
+  /**
+   * The zoom being drawn now, as the level the interface shows (1 = actual size), also while a fit is in force and the window
+   * decides it. Absent when the format does not zoom, or nothing is drawn yet.
+   */
+  zoomLevel?(): number | undefined;
+  /** The zoom range the page on screen can be drawn at, narrower than zoom.ts's for a very large page. */
+  zoomLimits?(): ZoomLimits;
+  /** What an old saved zoom, a multiplier of the fit, multiplies to give a true scale for the pages now drawn (see `migrateLegacyZoom`). */
+  legacyZoomBase?(fit: 'page' | 'width'): number | undefined;
   /** The element that scrolls page-based content, for the view controls and hand tool; absent when content reflows instead of zooming. */
   scroller?(): HTMLElement | undefined;
   /**
