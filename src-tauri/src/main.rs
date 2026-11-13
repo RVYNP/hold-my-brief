@@ -608,18 +608,37 @@ fn argument_file(args: impl IntoIterator<Item = String>, cwd: &Path) -> Option<P
         .map(|p| if p.is_absolute() { p } else { cwd.join(p) })
 }
 
-/// macOS ships "Close Window" on ⌘W in its default menu, and a menu accelerator is taken before the page sees the key. ⌘W closes
-/// a tab here, so that item becomes "Close Tab" and tells the page; the page closes the window itself when no tab is open.
+/// The tab a native menu item stands for: "select-tab-1" … "select-tab-9", where 9 is the last tab (as in browsers).
+fn tab_number_from_menu_id(id: &str) -> Option<u8> {
+    id.strip_prefix("select-tab-")?.parse::<u8>().ok().filter(|number| (1..=9).contains(number))
+}
+
+/// Title of the native item for tab `number`, as the Window menu shows it.
+fn tab_menu_title(number: u8) -> String {
+    if number == 9 { "Show Last Tab".into() } else { format!("Show Tab {number}") }
+}
+
+/// macOS takes a menu accelerator before the webview sees the key, so ⌘W and ⌘1…⌘9 never reach the page's key handler while the
+/// default menu owns them. ⌘W: the default "Close Window" item becomes "Close Tab" and tells the page, which closes the window
+/// itself when no tab is open. ⌘1…⌘9: "Show Tab 1" … "Show Last Tab" are added to the Window menu and tell the page the number.
+/// (Windows and Linux have no such menu; Alt+digit reaches the page directly there.)
 #[cfg(target_os = "macos")]
 fn install_menu(app: &tauri::App) -> tauri::Result<()> {
-    use tauri::menu::{Menu, MenuItem, MenuItemKind};
+    use tauri::menu::{Menu, MenuItem, MenuItemKind, PredefinedMenuItem};
     let menu = Menu::default(app.handle())?;
     for item in menu.items()? {
         let MenuItemKind::Submenu(submenu) = item else { continue };
         let entries = submenu.items()?;
-        let Some(index) = entries.iter().position(|entry| matches!(entry, MenuItemKind::Predefined(predefined) if predefined.text().is_ok_and(|text| text.starts_with("Close")))) else { continue };
-        submenu.remove(&entries[index])?;
-        submenu.insert(&MenuItem::with_id(app, "close-tab", "Close Tab", true, Some("CmdOrCtrl+W"))?, index)?;
+        if let Some(index) = entries.iter().position(|entry| matches!(entry, MenuItemKind::Predefined(predefined) if predefined.text().is_ok_and(|text| text.starts_with("Close")))) {
+            submenu.remove(&entries[index])?;
+            submenu.insert(&MenuItem::with_id(app, "close-tab", "Close Tab", true, Some("CmdOrCtrl+W"))?, index)?;
+        }
+        if submenu.text()? == "Window" {
+            submenu.append(&PredefinedMenuItem::separator(app)?)?;
+            for number in 1..=9u8 {
+                submenu.append(&MenuItem::with_id(app, format!("select-tab-{number}"), tab_menu_title(number), true, Some(format!("CmdOrCtrl+{number}")))?)?;
+            }
+        }
     }
     app.set_menu(menu)?;
     Ok(())
@@ -732,6 +751,8 @@ fn main() {
         .on_menu_event(|app, event| {
             if event.id() == "close-tab" {
                 let _ = app.emit("close-tab-request", ());
+            } else if let Some(number) = tab_number_from_menu_id(&event.id().0) {
+                let _ = app.emit("select-tab-request", number);
             }
         })
         .on_window_event(|window, event| {
@@ -761,6 +782,19 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn tab_menu_ids_name_the_tab_they_select() {
+        assert_eq!(tab_number_from_menu_id("select-tab-1"), Some(1));
+        assert_eq!(tab_number_from_menu_id("select-tab-8"), Some(8));
+        assert_eq!(tab_number_from_menu_id("select-tab-9"), Some(9));
+        for id in ["select-tab-0", "select-tab-10", "select-tab-", "select-tab-x", "select-tab--1", "close-tab", "tab-1"] {
+            assert_eq!(tab_number_from_menu_id(id), None, "{id}");
+        }
+        assert_eq!(tab_menu_title(1), "Show Tab 1");
+        assert_eq!(tab_menu_title(8), "Show Tab 8");
+        assert_eq!(tab_menu_title(9), "Show Last Tab");
+    }
+
     #[test]
     fn images_cannot_escape_document_directory() {
         let dir = tempfile::tempdir().unwrap();
