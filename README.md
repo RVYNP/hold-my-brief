@@ -84,10 +84,10 @@ where you stopped. PDF, EPUB, Markdown, text and images. Your files never leave 
   </tr>
 </table>
 
-**Home** brings back recently opened documents, favorites and a selection from your library. Its
-grid wraps to the window, with the same stacked titles and covers as the library. **View all** opens
-the full collection. Filter PDFs, EPUBs, Markdown, text and
-images separately; opening a reference keeps its original format.
+**Home** is laid out like a media player's front page: **Jump back in** (your eight latest documents),
+then shelves that scroll sideways: **Continue reading**, **Favorites** and **Collections**. **Show all**
+opens the library on that selection. Chips filter PDFs, EPUBs, Markdown, text and images separately;
+opening a reference keeps its original format.
 
 ## A closer look
 

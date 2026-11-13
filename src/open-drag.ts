@@ -64,6 +64,8 @@ export function attachOpenDrag(handlers: OpenDragHandlers) {
     if (!(event.buttons & 1)) { handlers.cancel(); finish(); return; }
     if (!ghost) {
       if (Math.hypot(event.clientX - press.x, event.clientY - press.y) < OPEN_DRAG_SLOP) return;
+      // Sideways on a horizontally scrolling shelf is the shelf's drag, not a document's.
+      if (press.node.closest('[data-scroll-x]') && Math.abs(event.clientX - press.x) > Math.abs(event.clientY - press.y)) { finish(); return; }
       ghost = ghostOf(press.node); document.body.append(ghost); root.classList.add('is-open-dragging');
       // Capturing at the root keeps the move events coming over an EPUB's frame and anything else that would take them.
       try { root.setPointerCapture(event.pointerId); } catch { /* The pointer may already be gone. */ }

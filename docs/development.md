@@ -115,8 +115,8 @@ codesign --verify --deep --strict "src-tauri/target/release/bundle/macos/Hold My
 
 Launch the resulting bundle by its explicit path, not `open -a`, which may select another installed copy.
 With no saved data it must show **Hand it over.** Add only disposable documents, reopen without a file,
-and verify Home, title wrapping, recent removal and Favorites. Close the library and check that its
-rail shows the recent covers, and that **View all** opens the library at the scope you chose.
+and verify Home (Jump back in, the shelves, recent removal) and Favorites. Close the library and check that its
+rail shows the recent covers, and that **Show all** on each Home shelf opens the library at the scope you chose.
 Edits there must refresh Home. Quit and remove only the disposable profile when finished.
 
 This checks empty app data and the native bundle, not Gatekeeper approval under a new macOS account.

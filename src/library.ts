@@ -6,7 +6,7 @@ import { clampLibraryWidth, defaultLibraryView, libraryGrid, libraryGridColumns,
 import { canThumbnail, createThumbnailStore, type Thumbnail } from './thumbnails';
 import { colourHex, colourMatches, colourNames, colourSwatches, nameColour, parseColourName, type ColourName } from './colour';
 import { shortcutFor } from './commands';
-import { formatProgress, type Progress } from './progress';
+import { formatProgress, inProgress, type Progress } from './progress';
 import { coverNode as cardCover, markUnavailable, placeTiles, repaintCovers, showPicture, tileMedia } from './cards';
 import { createIntake, intakeSource, intakeTitle, newArrivals, movedCollectionIds, type IntakeHost } from './intake';
 import { assignCoverSlots, collectionDisplayName, compareCollections, coverRatio, coverSeedOf, fileTitle, groupIntoShelves, shelfLayout, type Shelf } from './shelf';
@@ -28,7 +28,9 @@ type Callbacks = {
   /** The library moved to the other side, from the drawer's dock button or elsewhere; the rail follows. */
   sideChanged?: (side: LibrarySide) => void;
 };
-type Filter = { kind: 'all' | 'favorites' | 'unfiled' } | { kind: 'collection' | 'source'; id: string };
+/** What Home's "Show all" opens the library on. */
+export type LibraryScope = 'all' | 'favorites' | 'reading' | { collection: string };
+type Filter = { kind: 'all' | 'favorites' | 'reading' | 'unfiled' } | { kind: 'collection' | 'source'; id: string };
 const pageSize = 40;
 
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text?: string): HTMLElementTagNameMap[K] {
@@ -94,8 +96,8 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   refresh: (activePath?: string) => Promise<void>; toggle: () => void; board: () => void;
   /** The side the library, drawer and rail, is kept on (one saved preference), and the way to change it. */
   side: () => LibrarySide; setSide: (side: LibrarySide) => void;
-  /** Opens the library on all references or on favorites (the board where there is room). */
-  browse: (scope: 'all' | 'favorites') => void;
+  /** Opens the library on all references, on favorites, on the documents still being read, or on one collection (the board where there is room). */
+  browse: (scope: LibraryScope) => void;
   /** Sets the colour and/or search text of the library list (opening the drawer if needed) and reports what matches. `colour: null` clears it; omitted fields are left alone. */
   filter: (change: { colour?: string | null; query?: string }) => Promise<LibraryFilterResult>;
   colourNames: readonly string[];
@@ -497,7 +499,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
       control.setAttribute('aria-pressed', String(filter.kind === next.kind && (!('id' in next) || 'id' in filter && filter.id === next.id)));
       control.onclick = () => { filter = next; page = 0; if (!board) { setScope(false); scopeButton.focus(); } render(); }; return control;
     }
-    navigation.append(filterButton('All references', library.documents.length, { kind: 'all' }, 'all'), filterButton('Favorites', library.documents.filter(doc => doc.favorite).length, { kind: 'favorites' }, 'favorites'), filterButton('Unfiled', library.documents.filter(doc => !doc.collectionIds.length).length, { kind: 'unfiled' }, 'unfiled'));
+    navigation.append(filterButton('All references', library.documents.length, { kind: 'all' }, 'all'), filterButton('Favorites', library.documents.filter(doc => doc.favorite).length, { kind: 'favorites' }, 'favorites'), filterButton('Continue reading', library.documents.filter(doc => inProgress(progress[doc.path])).length, { kind: 'reading' }, 'reading'), filterButton('Unfiled', library.documents.filter(doc => !doc.collectionIds.length).length, { kind: 'unfiled' }, 'unfiled'));
     const heading = element('div', 'library-collections-heading'); const create = button('+ New', 'New personal collection', 'new-collection'); create.onclick = () => { setScope(false); collectionForm(scopeButton); }; heading.append(element('h3', '', 'Collections'), create); navigation.append(heading);
     const parents = new Set(library.collections.map(item => item.parentId)); const byId = new Map(library.collections.map(item => [item.id, item]));
     for (const { item, depth } of orderedTree(library.collections)) {
@@ -627,7 +629,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   // Scope popover: the collection tree and the two filters, opened from the scope row.
   function scopeName() {
     const selected = filter;
-    if (!('id' in selected)) return selected.kind === 'all' ? 'All references' : selected.kind === 'favorites' ? 'Favorites' : 'Unfiled';
+    if (!('id' in selected)) return selected.kind === 'all' ? 'All references' : selected.kind === 'favorites' ? 'Favorites' : selected.kind === 'reading' ? 'Continue reading' : 'Unfiled';
     if (selected.kind === 'source') return selected.id;
     const named = library.collections.find(item => item.id === selected.id); return named ? collectionDisplayName(named.name) : 'Collection';
   }
@@ -697,7 +699,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   const thumbnailable = (doc: LibraryDocument) => canThumbnail(doc.format);
   function inScope(doc: LibraryDocument) {
     const selected = filter;
-    if (selected.kind === 'favorites') return doc.favorite; if (selected.kind === 'unfiled') return !doc.collectionIds.length;
+    if (selected.kind === 'favorites') return doc.favorite; if (selected.kind === 'reading') return inProgress(progress[doc.path]); if (selected.kind === 'unfiled') return !doc.collectionIds.length;
     if (selected.kind === 'collection') return Boolean(collectionMatches.get(selected.id)?.has(doc.path));
     if (selected.kind === 'source') return doc.source?.repository === selected.id;
     return true;
@@ -1013,6 +1015,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     const next = await loadProgress(library.documents); if (token !== revision || !loaded) return;
     if (JSON.stringify(next) === JSON.stringify(progress)) return;
     progress = next;
+    if (filter.kind === 'reading') render(); // Its members are the progress.
     for (const node of documents.querySelectorAll<HTMLElement>('[data-doc-path]')) {
       const doc = library.documents.find(item => item.path === node.dataset.docPath); const meta = node.querySelector<HTMLElement>('.library-row-meta');
       if (doc && meta) meta.textContent = rowMeta(doc);
@@ -1033,8 +1036,8 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     toggle: () => { toggle(); if (visible && loadError) void refresh(); },
     // Library board (palette command): open the drawer if needed, then enter or leave the board. Below 720 px there is only the sheet.
     board: () => { if (!visible) setVisible(true, false); if (wide.matches) setBoard(!board, 'control'); else focusSearch(); if (visible && loadError) void refresh(); },
-    /** Home's "View all": the drawer opened on the whole library (or its favorites), as the board where there is room. */
-    browse: (scope: 'all' | 'favorites') => { filter = { kind: scope }; page = 0; search.value = ''; fileType = ''; availabilityFilter = ''; colourFilter = null; colourRequested.clear(); colourSelect.value = ''; if (!visible) setVisible(true, false); if (wide.matches) setBoard(true, 'control'); else focusSearch(); render(); if (visible && loadError) void refresh(); },
+    /** Home's "Show all" and collection cards: the drawer opened on a scope of the library, as the board where there is room. */
+    browse: (scope: LibraryScope) => { filter = typeof scope === 'string' ? { kind: scope } : { kind: 'collection', id: scope.collection }; page = 0; search.value = ''; fileType = ''; availabilityFilter = ''; colourFilter = null; colourRequested.clear(); colourSelect.value = ''; if (!visible) setVisible(true, false); if (wide.matches) setBoard(true, 'control'); else focusSearch(); render(); if (visible && loadError) void refresh(); },
     filter: filterBy,
     colourNames,
   };

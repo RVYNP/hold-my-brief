@@ -15,7 +15,7 @@ import { appearanceSummary, createAppearanceSheet, paletteIcon } from './appeara
 import { createAssistantPanel } from './assistant-panel';
 import { DRAG_SLOP, Panner } from './pan';
 import { MIN_SPREAD_WIDTH, pagesLabel, spreadPages } from './spread';
-import { assignShelfSlots, closeHome, fillHomePictures, homeRows, renderHome } from './home';
+import { assignShelfSlots, closeHome, fillHomePictures, homeSections, homeTypes, renderHome } from './home';
 import { repaintCovers } from './cards';
 import { canThumbnail, createThumbnailStore } from './thumbnails';
 import { createPageStrip, MIN_PANEL_HEIGHT } from './page-strip';
@@ -961,24 +961,31 @@ if (!desktop) {
     if (files.length) dropped(files, file => file.name, file => ({ open: () => browserFile(file), label: file.name }), dropPlace({ x: event.clientX, y: event.clientY }, false).at);
   });
 }
+/** What was opened last: the store's recents, or in the browser build the library's opened documents. */
+const lastOpened = () => desktop ? homeRecents : openedOrder(homeLibrary.documents);
 function paintHome() {
   const empty = $('empty');
   splashHtml ??= empty.innerHTML;
   assignShelfSlots(homeLibrary.collections);
-  const rows = homeRows(homeRecents, homeLibrary.documents, homeFormat, knownTitle, homeProgress);
-  if (!homeRecents.length && !homeLibrary.documents.length) {
+  const recents = lastOpened();
+  if (!recents.length && !homeLibrary.documents.length) {
     if (empty.classList.contains('is-home')) { closeHome(); empty.classList.remove('is-home'); empty.innerHTML = splashHtml; $('empty-open').onclick = () => openFile(); }
     return;
   }
+  const types = homeTypes(recents, homeLibrary.documents);
+  if (!types.some(([value]) => value === homeFormat)) homeFormat = '';
+  const sections = homeSections({ recents, documents: homeLibrary.documents, collections: homeLibrary.collections, format: homeFormat, titleOf: knownTitle, progress: homeProgress });
   const generation = ++homePicture;
-  renderHome(empty, rows, {
+  renderHome(empty, sections, {
     open: (path, name) => { void openPath(path, name); },
     openFile: () => openFile(),
     viewAll: scope => library.browse(scope),
+    viewCollection: id => library.browse({ collection: id }),
     picture: { can: canThumbnail, ratio: path => homeThumbs.ratio(path), peek: path => homeThumbs.peek(path) },
+    types,
     format: homeFormat,
-    selectFormat: value => { homeFormat = value; paintHome(); $('home-format').focus(); },
-    remove: path => { void native('remove_recent', { path }).then(() => { homeRecents = homeRecents.filter(item => item.path !== path); paintHome(); paintRail(); }).catch(fail); },
+    selectFormat: value => { homeFormat = value; paintHome(); empty.querySelector<HTMLElement>(`.home-chip[data-type="${value}"]`)?.focus(); },
+    ...(desktop ? { remove: (path: string) => { void native('remove_recent', { path }).then(() => { homeRecents = homeRecents.filter(item => item.path !== path); paintHome(); paintRail(); }).catch(fail); } } : {}),
   }, scheme());
   fillHomePictures(empty, {
     picture: (path, format) => homeThumbs.request(path, format, () => generation === homePicture && empty.classList.contains('is-home')),

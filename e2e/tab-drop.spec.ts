@@ -172,13 +172,13 @@ test('a plain click on a library row, a rail cover or a Home tile still opens it
   await page.locator('#library-rail .library-rail-cover[aria-label="lib1.txt"]').click();
   await shown(page, 'lib1.txt');
   await expect(titles(page)).toHaveText(['a.txt', 'lib1.txt']);
-  // Home: its tiles are the library's documents.
+  // Home: its cards are what was opened last.
   await tab(page, 'a.txt').hover(); await tab(page, 'a.txt').locator('.tab-close').click(); // The × of a tab that is not showing appears on hover.
   await tab(page, 'lib1.txt').locator('.tab-close').click();
   await expect(page.locator('#empty')).toBeVisible();
-  await page.locator('.home-open[aria-label="Open lib2.txt"]').click();
-  await shown(page, 'lib2.txt');
-  await expect(titles(page)).toHaveText(['lib2.txt']);
+  await page.locator('.home-open[aria-label="Open lib1.txt"]').click();
+  await shown(page, 'lib1.txt');
+  await expect(titles(page)).toHaveText(['lib1.txt']);
 });
 
 test('a rail cover dragged onto the strip, and a Home tile dragged to the reading area, open in new tabs', async ({ page }) => {
@@ -188,6 +188,10 @@ test('a rail cover dragged onto the strip, and a Home tile dragged to the readin
   await page.locator('.library-document', { hasText: 'lib1.txt' }).locator('.library-document-open').click();
   await shown(page, 'lib1.txt');
   await tab(page, 'lib1.txt').locator('.tab-close').click(); await shown(page, 'b.txt');
+  // lib2 is opened and closed too, so that Home has a card for it (Home shows what was opened).
+  await page.locator('.library-document', { hasText: 'lib2.txt' }).locator('.library-document-open').click();
+  await shown(page, 'lib2.txt');
+  await tab(page, 'lib2.txt').locator('.tab-close').click(); await shown(page, 'b.txt');
   await page.locator('#library-toggle').click();
   await expect(page.locator('#library-root')).toBeHidden();
   const cover = page.locator('#library-rail .library-rail-cover[aria-label="lib1.txt"]');

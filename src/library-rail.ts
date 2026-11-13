@@ -2,7 +2,7 @@
 // latest recents under it, drawn with the same covers and pictures as Home (src/cards.ts). Opening the
 // library replaces the rail with the drawer; the rail is a window-level overlay like the drawer, so it
 // never changes the page's box. The rail is only shown from 720 px up (see library.css).
-import { homeRows, openedAt, type HomeDocument, type HomeRecent, type HomeTile } from './home';
+import { recentTiles, openedAt, type HomeDocument, type HomeRecent, type HomeTile } from './home';
 import { showPicture, markUnavailable, tileMedia, type Appearance } from './cards';
 import { canThumbnail, type Thumbnail } from './thumbnails';
 import type { LibrarySide } from './library-layout';
@@ -15,7 +15,7 @@ export const railCover = { width: 40, height: 54 } as const;
 
 /** The covers for the rail: the recents, most recent first, each with the library entry's own cover where it has one. `titleOf` is an EPUB's own title once read. */
 export function railItems(recents: readonly HomeRecent[], documents: readonly HomeDocument[], titleOf?: (item: HomeDocument) => string | undefined, progress?: Readonly<Record<string, Progress>>): HomeTile[] {
-  return homeRows(recents, documents, '', titleOf, progress).find(row => row.id === 'recent')?.items.slice(0, railLimit) ?? [];
+  return recentTiles(recents, documents, { titleOf, progress, limit: railLimit });
 }
 
 /** What the browser build has for recents (no store keeps a list there): the library's documents that were opened, latest first. */

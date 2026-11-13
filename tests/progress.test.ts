@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { formatProgress, isFinished, progressOf } from '../src/progress';
-import { homeRows } from '../src/home';
+import { formatProgress, inProgress, isFinished, progressOf } from '../src/progress';
+import { recentTiles } from '../src/home';
 import { railItems } from '../src/library-rail';
 
 describe('formatProgress', () => {
@@ -65,9 +65,22 @@ describe('progress on Home and the rail', () => {
   const recents = [{ path: 'a', name: 'a.pdf', format: 'pdf', lastOpened: 2 }, { path: 'b', name: 'b.epub', format: 'epub', lastOpened: 1 }];
   const progress = { a: { fraction: .125, page: 12, pages: 96 } };
   it('carries a document\'s progress onto its tile, and none where it has none', () => {
-    const [first, second] = homeRows(recents, [], '', undefined, progress).find(row => row.id === 'recent')!.items;
+    const [first, second] = recentTiles(recents, [], { progress });
     expect(first!.progress).toEqual(progress.a);
     expect(second).not.toHaveProperty('progress');
     expect(railItems(recents, [], undefined, progress)[0]!.progress).toEqual(progress.a);
+  });
+});
+
+describe('inProgress', () => {
+  it('is past the start and short of Finished', () => {
+    expect(inProgress({ fraction: .125, page: 12, pages: 96 })).toBe(true);
+    expect(inProgress({ fraction: .4 })).toBe(true);
+    expect(inProgress(undefined)).toBe(false);
+    expect(inProgress({ fraction: 0, page: 1, pages: 96 })).toBe(false);
+    expect(inProgress({ fraction: .001 })).toBe(false); // Rounds to 0 %: nothing to say.
+    expect(inProgress({ fraction: 1, page: 96, pages: 96 })).toBe(false);
+    expect(inProgress({ fraction: .997 })).toBe(false);
+    expect(inProgress({ fraction: Number.NaN })).toBe(false);
   });
 });
