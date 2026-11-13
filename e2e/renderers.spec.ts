@@ -941,13 +941,16 @@ test('a slid page keeps its offset across page turns and goes back on zoom, fit,
   await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', 'page'); await settle();
   near((await sheet.boundingBox())!, natural.x, natural.y, 'back to fit page');
 
-  // Zooming past fit (here to actual size) makes the page overflow: it is scrolled, not slid, so it sits at the top of the panel and centred.
+  // Zooming past fit (here to actual size) makes the page overflow: it is scrolled, not slid, and the point that was at the middle of the panel (the
+  // page's own middle, at a fit) stays there instead of the page snapping to its top (see zoom-anchor.spec.ts).
   await dragPanel(page, host, 30, 40);
   await page.keyboard.press('Control+1'); // Actual size: a 533 x 800 px page overflows the panel.
   await expect(page.locator('#zoom-level')).toHaveText('100%'); await settle();
   expect(await host.evaluate(el => el.scrollHeight - el.clientHeight > 1)).toBe(true);
-  const grown = (await sheet.boundingBox())!, [grownWidth] = await panelSize(host);
-  near(grown, panel.x + Math.max(16, (grownWidth - grown.width) / 2), panel.y + 16, 'zoomed past fit');
+  expect(await host.evaluate(el => el.classList.contains('page-moved') || el.style.getPropertyValue('--pan-x') !== ''), 'no slide is left over').toBe(false);
+  const grown = (await sheet.boundingBox())!, [grownWidth, grownHeight] = await panelSize(host);
+  expect(Math.abs(grown.x + grown.width / 2 - (panel.x + grownWidth / 2)), 'zoomed past fit: x').toBeLessThanOrEqual(2);
+  expect(Math.abs(grown.y + grown.height / 2 - (panel.y + grownHeight / 2)), 'zoomed past fit: y').toBeLessThanOrEqual(2);
   expect(errors).toEqual([]);
 });
 

@@ -140,6 +140,14 @@ window might read 68%). The zoom menu puts a check by the fit in force. Any zoom
 buttons, a rung, a typed percentage, a preset, Ctrl/⌘ + wheel or a pinch) leaves the fit and holds that
 scale whatever the window does; the next double-click or Ctrl+0 / Ctrl+2 returns to a fit.
 
+**Where a zoom stays.** A zoom does not snap the view to the page's centre or top. Zooming with the buttons, Ctrl +/−,
+a rung, a typed percentage, a preset, or Actual size (Ctrl 1) holds the spot at the centre of the reading panel, as in
+a design tool: scroll to a corner, zoom, and you are still at that corner. From a fit, the page's middle stays in the
+middle. The scroll limits still apply: a page stays against an edge it was against, and a page that becomes smaller than
+the panel on an axis is centred on it. **Fit width** keeps the line at the top of the panel, so you stay where you were
+reading instead of going back to the top of the page; **Fit page** shows the whole page, centred. Page turns and
+switching between one and two pages work as before. This applies to PDFs and images; a fixed-layout EPUB zooms inside its own viewer and is unchanged.
+
 **The zoom menu.** Click the zoom level (or press Enter, Space or an arrow key on it) for a popover
 above the pill. Its top is a field: type a percentage such as `135` and press Enter to apply it.
 Anything it cannot read goes back to the current level, and a number outside 10–800 is held to that

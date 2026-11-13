@@ -1,5 +1,6 @@
 import type { Format, Locator, Position, ReaderAdapter, ReaderContext, ReaderOptions, ReaderSource } from '../types';
 import { PREVIEW_CLASS } from '../zoom-gesture';
+import { restoreView, type Anchor } from '../zoom-anchor';
 import { clampZoom, DEFAULT_LIMITS, type ZoomLimits } from '../zoom';
 
 /** The longest an image may be drawn along either side, in CSS px, short of the browsers' ~33 M px layout ceiling. */
@@ -108,9 +109,10 @@ export class ImageAdapter implements ReaderAdapter {
     if (target.trim() !== '1') throw Error('This file contains one image. Use collection navigation to change images.');
     this.host.scrollTo(0, 0); this.context.onPosition(this.getPosition());
   }
-  async setOptions(options: ReaderOptions) {
+  async setOptions(options: ReaderOptions, hold?: Anchor) {
     const location = this.getPosition().locator;
     this.options = { ...options }; this.layout(); this.restoreScroll(location);
+    if (hold) restoreView(hold);
     this.context.onPosition(this.getPosition());
   }
   outline() { return []; }

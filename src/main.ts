@@ -20,6 +20,7 @@ import { canThumbnail, createThumbnailStore } from './thumbnails';
 import { createPageStrip, MIN_PANEL_HEIGHT } from './page-strip';
 import { DEFAULT_LIMITS, migrateLegacyZoom, stepZoom, wheelFactor, ZOOM_MODEL, zoomPercent, type Point as ZoomPoint } from './zoom';
 import { createZoomGesture } from './zoom-gesture';
+import { holdView, type Hold } from './zoom-anchor';
 import { createZoomMenu } from './zoom-menu';
 import { createProgressPreview } from './progress-preview';
 initAppearance();
@@ -555,7 +556,22 @@ $('menu-toggle').onclick = () => {
 $('menu').addEventListener('click', event => { const box = $('menu').getBoundingClientRect(); if (event.target === $('menu') && (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom)) closeDialog($<HTMLDialogElement>('menu')); });
 $('menu-palette').onclick = () => { closeDialog($<HTMLDialogElement>('menu')); openPalette(); };
 if (desktop) document.querySelectorAll<HTMLElement>('#menu [data-desktop]').forEach(item => { item.hidden = false; });
-async function changeOptions(next: Partial<ReaderOptions>) { if (!reader) return; if ('zoom' in next || 'fit' in next || 'fitted' in next) pan.recenter(); const previous = options; options = { ...options, ...next }; try { await reader.setOptions(options); showPosition(reader.getPosition()); } catch (error) { options = previous; fail(error); } }
+/**
+ * What a zoom or fit change holds still (see zoom-anchor.ts): a zoom, the centre of the view; fit width, the line at its top, so the reading
+ * position survives; fit page shows the whole page and centres it. A wheel or pinch gesture holds the point under the pointer itself.
+ */
+const holdFor = (next: Partial<ReaderOptions>): Hold | false => next.fitted === false ? 'centre' : next.fitted && next.fit === 'width' ? 'top' : false;
+async function changeOptions(next: Partial<ReaderOptions>, hold: Hold | false = holdFor(next)) {
+  if (!reader) return;
+  const zooms = 'zoom' in next || 'fit' in next || 'fitted' in next;
+  if (zooms) pan.recenter(); // A slid page goes back first, so the point held is measured where the page lies.
+  const open = reader, held = zooms && hold ? holdView(open.scroller?.(), hold) : undefined;
+  const previous = options; options = { ...options, ...next };
+  try {
+    await open.setOptions(options, held);
+    showPosition(open.getPosition());
+  } catch (error) { options = previous; fail(error); }
+}
 async function action(name: string) {
   if (name === 'goto') jump();
   else if (name === 'appearance') appearanceSheet.open();
@@ -592,7 +608,7 @@ const zoomGesture = createZoomGesture({
   scroller: () => reader?.mode === 'fixed' ? reader.scroller?.() : undefined,
   zoom: zoomLevel,
   limits: zoomLimits,
-  commit: zoom => changeOptions({ fitted: false, zoom }),
+  commit: zoom => changeOptions({ fitted: false, zoom }, false), // The gesture puts the point under the pointer back itself.
 });
 let pinching = false, pinchScale = 1;
 /** The WebKit-only gesture events: `scale` is cumulative from the start of the pinch. */
