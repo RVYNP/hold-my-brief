@@ -13,9 +13,13 @@ export function progressOf(position: Pick<Position, 'fraction' | 'scrub'>): Prog
   return { fraction: clamped };
 }
 
-/** A page of a fixed-layout document is "finished" on its last page; reflowable text once the rounded percentage reaches 100. */
+/**
+ * A paged document is "finished" on its last page, or at its very end: in two-page view the saved page is the first of the pair, so
+ * the final spread (95-96 of 96) saves page 95 and only its fraction, which an explicit jump to the end makes 1, says it is the end.
+ * Reflowable text is finished once the rounded percentage reaches 100.
+ */
 export function isFinished(progress: Progress): boolean {
-  return progress.page !== undefined && progress.pages !== undefined ? progress.page >= progress.pages : progress.fraction >= .995;
+  return progress.page !== undefined && progress.pages !== undefined ? progress.page >= progress.pages || progress.fraction >= .999 : progress.fraction >= .995;
 }
 
 /**

@@ -18,6 +18,9 @@ describe('formatProgress', () => {
   it('says Finished at the last page or the end of the text', () => {
     expect(formatProgress({ fraction: 1, page: 96, pages: 96 })).toBe('Finished');
     expect(formatProgress({ fraction: .95, page: 96, pages: 96 })).toBe('Finished');
+    // Two-page view saves the first page of the final spread; the end of the document is then told by the fraction.
+    expect(formatProgress({ fraction: 1, page: 95, pages: 96 })).toBe('Finished');
+    expect(formatProgress({ fraction: 94 / 96, page: 95, pages: 96 })).toBe('p. 95 / 96');
     expect(formatProgress({ fraction: .995 })).toBe('Finished');
     expect(formatProgress({ fraction: 1 })).toBe('Finished');
     expect(isFinished({ fraction: .5, page: 48, pages: 96 })).toBe(false);

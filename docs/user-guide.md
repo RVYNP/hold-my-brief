@@ -101,7 +101,8 @@ uses Tern's default palette. See [Credits](../README.md#credits).
 PgDn/PgUp change pages. Space/Shift+Space traverse one screen, scrolling a tall PDF page before
 advancing. Ctrl+G jumps to a physical page, EPUB chapter/percentage or source line. The position
 (page, chapter or line) is shown next to the document's name in the toolbar; hover the name to see
-the kind of view. It reports **position**, never completion or material actually read.
+the kind of view. It reports **position**, never material actually read: the library's **Finished** means the saved position reached
+the last page or the end of the text, not that it was read.
 
 While you read, the footer is just the progress line along the window's bottom edge. Move the
 pointer to the bottom of the page, or Tab to it, and the previous/next arrows and the full position
