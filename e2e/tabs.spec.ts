@@ -129,14 +129,16 @@ test('Actual size is Shift+0, Ctrl+1 no longer is, and typing in a field ignores
   await shown(page, 'plates.pdf');
   await page.locator('.pdf-reader').focus();
   await page.keyboard.press('Control+0');
-  const fit = await page.locator('#zoom-level').textContent();
-  expect(fit).not.toBe('100%');
+  // A fit follows the panel, so its % can still move while the layout settles: what must not change is that a fit is in force.
+  const level = page.locator('#zoom-level');
+  const stillFitted = async () => { await expect(level).toHaveAttribute('data-fit', 'page'); await expect(level).not.toHaveText('100%'); };
+  await stillFitted();
   await page.keyboard.press('Control+1');
-  await expect(page.locator('#zoom-level')).toHaveText(fit!);
+  await stillFitted();
   await page.keyboard.press('Control+f');
   await page.keyboard.press('Shift+Digit0');
   await expect(page.locator('#find-query')).toHaveValue(')');
-  await expect(page.locator('#zoom-level')).toHaveText(fit!);
+  await stillFitted();
   await page.keyboard.press('Escape');
   await page.locator('.pdf-reader').focus();
   await page.keyboard.press('Shift+Digit0');
