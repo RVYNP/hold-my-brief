@@ -182,6 +182,11 @@ test('holding PgDn renders thumbnails for the page it lands on, not for every pa
   await openPdf(page, { count: 20 });
   await page.keyboard.press('Control+4');
   await expectPainted(page, [2, 3, 4]);
+  // Turning the strip on refits the page once, after a debounce; a render it supersedes can leave a started thumbnail behind, which is a
+  // refit's doing and not a turn's. Wait for the refit to land (and for it to finish drawing) before counting.
+  await settledHeight(page);
+  await expect(page.locator('.pdf-render-status')).toHaveCount(0);
+  await expectPainted(page, [2, 3, 4]);
   const rendered = () => page.evaluate(() => window.thumbnailRenders);
   const before = await rendered();
   expect(before).toBeGreaterThanOrEqual(3);
