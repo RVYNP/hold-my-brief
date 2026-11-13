@@ -230,10 +230,12 @@ export function createPageStrip(onError: (error: unknown) => void): PageStrip {
   }
 
   // Gestures: the wheel (a mouse's vertical wheel scrolls it sideways) and dragging scroll the strip alone.
+  // Both axes are driven here: left to the engine, a sideways wheel can go to the window's swipe-to-navigate instead and not scroll the strip.
   scroller.addEventListener('wheel', event => {
     if (event.ctrlKey) return;
-    centred = false; cancelAnimationFrame(glide);
-    if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) { event.preventDefault(); scroller.scrollLeft += event.deltaY * (event.deltaMode === 1 ? 16 : 1); }
+    centred = false; cancelAnimationFrame(glide); event.preventDefault();
+    const delta = Math.abs(event.deltaY) > Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+    scroller.scrollLeft += delta * (event.deltaMode === 1 ? 16 : 1);
   }, { passive: false });
   let drag: { id: number; x: number; left: number; moved: boolean } | undefined;
   // The strip never takes focus from the page by a click; Tab reaches it.
