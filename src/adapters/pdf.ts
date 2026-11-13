@@ -7,6 +7,7 @@ import { MIN_SPREAD_WIDTH, pagesLabel, spreadPages } from '../spread';
 import { searchUnits, type DocumentSearch, type SearchHit, type SearchOptions, type UnitText } from '../search';
 import { BitmapCache, PREVIEW_CACHE_BYTES, THUMBNAIL_HEIGHT } from '../page-strip';
 import { PREVIEW_CLASS } from '../zoom-gesture';
+import { restoreView, type Anchor } from '../zoom-anchor';
 import { clampZoom, DEFAULT_LIMITS, type ZoomLimits } from '../zoom';
 
 GlobalWorkerOptions.workerSrc = workerURL;
@@ -130,7 +131,7 @@ export class PdfAdapter implements ReaderAdapter {
   }
 
   /** `anchored` means `x` is a fraction of page `pageNumber` itself (a link target) rather than of the whole view. */
-  private async render(pageNumber: number, y = 0, x = 0, atEnd = false, anchored = false) {
+  private async render(pageNumber: number, y = 0, x = 0, atEnd = false, anchored = false, hold?: Anchor) {
     const doc = this.doc;
     if (!doc || this.disposed) return;
     const generation = ++this.generation;
@@ -191,7 +192,7 @@ export class PdfAdapter implements ReaderAdapter {
       }
       // Show the pages as soon as they have pixels. The text layer and links are layered on
       // afterwards: waiting for them would delay first content by a full frame budget.
-      this.commit(view, numbers, pages, size, y, x, atEnd, state);
+      this.commit(view, numbers, pages, size, y, x, atEnd, state, hold);
       this.showPreviews();
       const texts = await Promise.all(pages.map(page => page.getTextContent()));
       if (generation !== this.generation || this.disposed) { for (const { task } of shown) task?.cancel(); return; }
@@ -274,12 +275,13 @@ export class PdfAdapter implements ReaderAdapter {
   }
 
   /** Puts rendered pages on screen and records the position they represent. */
-  private commit(view: HTMLElement, numbers: number[], pages: PDFPageProxy[], size: { width: number; height: number }, y: number, x: number, atEnd: boolean, state: Position['spread']) {
+  private commit(view: HTMLElement, numbers: number[], pages: PDFPageProxy[], size: { width: number; height: number }, y: number, x: number, atEnd: boolean, state: Position['spread'], hold?: Anchor) {
     const previous = this.currentPages;
     this.currentPages = pages; this.pages = numbers; this.surface = view; this.shownSpread = state; this.level = this.nextLevel;
     this.host.replaceChildren(view); this.host.removeAttribute('aria-busy');
     this.host.scrollTop = atEnd ? this.host.scrollHeight : clamp(y) * size.height;
     this.host.scrollLeft = clamp(x) * size.width;
+    if (hold) restoreView(hold); // A zoom holds the point it was asked to, instead of the page corner the saved fraction names.
     this.explicitEnd = atEnd; this.imageOnly = undefined; // Unknown until this screen's text is read.
     for (const page of previous) if (!pages.includes(page)) page.cleanup();
     this.paintMarks();
@@ -565,7 +567,10 @@ export class PdfAdapter implements ReaderAdapter {
       locator: { kind: 'pdf', page: first, x, y, fit: this.options?.fit, zoom: this.options?.zoom, rotation: this.options?.rotation, end: this.explicitEnd } };
   }
   async restore(locator: Locator) { if (locator.kind === 'pdf') await this.render(Number(locator.page) || 1, Number(locator.y) || 0, Number(locator.x) || 0, locator.end === true); }
-  async setOptions(options: ReaderOptions) { const old = this.getPosition().locator; this.options = { ...options }; await this.restore(old); }
+  async setOptions(options: ReaderOptions, hold?: Anchor) {
+    const old = this.getPosition().locator; this.options = { ...options };
+    await this.render(Number(old.page) || 1, Number(old.y) || 0, Number(old.x) || 0, old.end === true, false, hold);
+  }
   outline() { return this.items; }
   scroller() { return this.host; }
   zoomLevel() { return this.level; }

@@ -1,5 +1,6 @@
 import type { DocumentSearch, SearchHit, SearchOptions } from './search';
 import { ZOOM_MODEL, type ZoomLimits } from './zoom';
+import type { Anchor } from './zoom-anchor';
 
 export type ImageFormat = 'png' | 'jpg' | 'jpeg' | 'webp' | 'gif' | 'avif' | 'bmp';
 export type Format = 'pdf' | 'epub' | 'md' | 'txt' | ImageFormat;
@@ -72,7 +73,11 @@ export interface ReaderAdapter {
   goTo(target: string): Promise<void>;
   getPosition(): Position;
   restore(locator: Locator): Promise<void>;
-  setOptions(options: ReaderOptions): Promise<void>;
+  /**
+   * Applies new options. `hold` is a point of the page on screen to put back where it was once the page is redrawn at its new
+   * size (see zoom-anchor.ts); only page-based adapters that draw a page box take it, and they apply it as the new page appears.
+   */
+  setOptions(options: ReaderOptions, hold?: Anchor): Promise<void>;
   outline(): OutlineItem[];
   /**
    * Finds `query` in the document's text. Absent when the format cannot expose text at all,

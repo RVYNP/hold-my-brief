@@ -3,7 +3,7 @@ import { pageFraction, roundZoom, scrollToHold, zoomAbout, type Point, type Pose
 /** Marks a scroller whose page is being scaled by a gesture; adapters must not refit it meanwhile (see the PDF and image resize handlers). */
 export const PREVIEW_CLASS = 'zoom-preview';
 /** The page, spread or image frame a gesture scales: the same box the hand tool moves. */
-const SURFACE = ':scope > .pdf-page, :scope > .pdf-spread, :scope > .image-frame';
+export const SURFACE = ':scope > .pdf-page, :scope > .pdf-spread, :scope > .image-frame';
 /** Quiet time that ends a wheel gesture; a pinch on macOS also ends it explicitly. */
 const SETTLE_MS = 160;
 
