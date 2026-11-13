@@ -161,7 +161,7 @@ describe('the glow', () => {
   });
   it('is painted as the page colour under Tracks\' two radial glows, fixed to the window', () => {
     expect(css).toContain('--glow-image: radial-gradient(ellipse 70% 55% at 62% -8%, var(--grad-a), transparent), radial-gradient(ellipse 65% 60% at 95% 100%, var(--grad-b), transparent);');
-    const root = /\n  background-color: var\(--chrome\);\n  background-image: var\(--glow-paint\);\n  background-attachment: var\(--glow-attach\);/;
+    const root = /\r?\n  background-color: var\(--chrome\);\r?\n  background-image: var\(--glow-paint\);\r?\n  background-attachment: var\(--glow-attach\);/;
     expect(css).toMatch(root);
   });
   it('is fixed to the window in every glow family and in no other', () => {
