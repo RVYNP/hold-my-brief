@@ -1,5 +1,6 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { Format, Locator, ReaderOptions } from './types';
+import type { Progress } from './progress';
 import { getBrowserFile, getBrowserLibrary, mutateBrowserLibrary } from './library-store';
 import type { Library, LibraryChange, LibraryDocument } from './catalog-types';
 import { applyLibraryChange, localDocument, requireCollection } from './library-model';
@@ -7,7 +8,7 @@ export type { Library, LibraryChange, LibraryDocument, Collection } from './cata
 export const desktop = isTauri();
 export type WindowState = { width: number; height: number; pinned: boolean; locked: boolean };
 export type Recent = { path: string; name: string; format: Format; lastOpened: number | string };
-export type Saved = { locator: Locator; options: ReaderOptions };
+export type Saved = { locator: Locator; options: ReaderOptions; progress?: Progress };
 export type Opened = { id: string; path: string; name: string; format: Format; bytes: Uint8Array; previousState?: Saved; warning?: string };
 export type OpenedMeta = Omit<Opened, 'bytes'>;
 export type State = { recents: Recent[]; window: WindowState; warning?: string };
@@ -130,9 +131,23 @@ export async function confirmDocument(doc: Opened): Promise<void> {
   confirmed.add(doc);
   pendingFiles.delete(doc);
 }
-export async function persist(doc: Opened, locator: Locator, options: ReaderOptions) {
-  if (desktop) await native('save_position', { id: doc.id, path: doc.path, name: doc.name, format: doc.format, locator, options });
-  else localStorage.setItem(`hold-my-brief:${doc.id}`, JSON.stringify({ locator, options }));
+export async function persist(doc: Opened, locator: Locator, options: ReaderOptions, progress?: Progress) {
+  if (desktop) await native('save_position', { id: doc.id, path: doc.path, name: doc.name, format: doc.format, locator, options, progress: progress ?? null });
+  else localStorage.setItem(`hold-my-brief:${doc.id}`, JSON.stringify({ locator, options, ...(progress ? { progress } : {}) }));
+}
+/**
+ * How far into each document the saved position is, keyed by library path, for the whole library at once. Documents never opened
+ * (or saved before progress was kept) are absent. The browser build reads the positions it keeps in localStorage, where a library
+ * path is `<content id>/<name>` and the id names the saved entry.
+ */
+export async function readingProgress(paths: readonly string[]): Promise<Record<string, Progress>> {
+  if (desktop) return native('reading_progress');
+  const found: Record<string, Progress> = {};
+  for (const path of paths) {
+    const saved = localStorage.getItem(`hold-my-brief:${path.split('/')[0]}`); if (!saved) continue;
+    try { const progress = (JSON.parse(saved) as Saved).progress; if (progress && Number.isFinite(progress.fraction)) found[path] = progress; } catch { /* An unreadable entry has no progress to show. */ }
+  }
+  return found;
 }
 export async function openExternal(url: string) {
   if (!/^https?:\/\//i.test(url)) throw Error('Only web links can be opened externally.');

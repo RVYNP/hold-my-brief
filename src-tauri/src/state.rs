@@ -257,10 +257,25 @@ impl Library {
     }
 }
 
+/// How far into a document the saved position is, kept beside the position so the library can show it without opening anything.
+/// `page`/`pages` are present for fixed-layout documents; reflowable ones have only the fraction.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Progress {
+    pub fraction: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pages: Option<u32>,
+}
+
+/// Entries saved before progress existed have none; they simply show nothing until the document is read again.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReadingState {
     pub locator: Value,
     pub options: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub progress: Option<Progress>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -524,10 +539,19 @@ impl Store {
         self.commit_library(library, None)
     }
 
-    pub fn save_position(&mut self, id: String, path: String, reading: ReadingState) -> Result<(), String> {
+    pub fn save_position(&mut self, id: String, path: String, mut reading: ReadingState) -> Result<(), String> {
+        // Only a usable fraction is kept; anything else means "unknown", not a bad save.
+        reading.progress = reading.progress.filter(|progress| progress.fraction.is_finite()).map(|progress| Progress { fraction: progress.fraction.clamp(0.0, 1.0), ..progress });
         self.saved.documents.insert(id.clone(), reading);
         self.saved.path_ids.insert(path, id);
         self.persist()
+    }
+
+    /// Saved progress for every document that has some, keyed by the path the library knows it by.
+    pub fn progress_by_path(&self) -> HashMap<String, Progress> {
+        self.saved.path_ids.iter()
+            .filter_map(|(path, id)| Some((path.clone(), self.saved.documents.get(id)?.progress?)))
+            .collect()
     }
 
     pub fn promote(&mut self, id: &str) -> Result<(), String> {
@@ -602,6 +626,7 @@ mod tests {
                 ReadingState {
                     locator: serde_json::json!({ "line": i }),
                     options: Value::Null,
+                    progress: None,
                 },
             );
             store.promote(&id).unwrap();
@@ -641,7 +666,7 @@ mod tests {
         let file = dir.path().join("state.json");
         let mut saved = SavedState::default();
         saved.recents.push(recent("book.txt"));
-        saved.documents.insert("digest".into(), ReadingState { locator: serde_json::json!({"line": 9}), options: Value::Null });
+        saved.documents.insert("digest".into(), ReadingState { locator: serde_json::json!({"line": 9}), options: Value::Null, progress: None });
         saved.path_ids.insert("book.txt".into(), "digest".into());
         let mut legacy = serde_json::to_value(&saved).unwrap();
         legacy.as_object_mut().unwrap().remove("library");
@@ -674,7 +699,7 @@ mod tests {
         store.promote("digest").unwrap();
         store.edit_library(LibraryChange::RemoveDocument { path: path.clone() }).unwrap();
         store.save_position("digest".into(), path.clone(), ReadingState {
-            locator: serde_json::json!({"line": 17}), options: Value::Null,
+            locator: serde_json::json!({"line": 17}), options: Value::Null, progress: None,
         }).unwrap();
         let loaded = Store::load(file);
         assert!(loaded.saved.library.documents.is_empty());
@@ -693,13 +718,45 @@ mod tests {
         let legacy = serde_json::json!({ "fit": "width", "zoom": 1.35, "rotation": 90, "spread": false });
         let current = serde_json::json!({ "fit": "page", "fitted": false, "zoom": 8.0, "zoomModel": 2, "rotation": 0, "spread": true });
         let mut store = Store::load(file.clone());
-        store.save_position("old".into(), "/a.pdf".into(), ReadingState { locator: serde_json::json!({"page": 3}), options: legacy.clone() }).unwrap();
-        store.save_position("new".into(), "/b.pdf".into(), ReadingState { locator: serde_json::json!({"page": 4}), options: current.clone() }).unwrap();
+        store.save_position("old".into(), "/a.pdf".into(), ReadingState { locator: serde_json::json!({"page": 3}), options: legacy.clone(), progress: None }).unwrap();
+        store.save_position("new".into(), "/b.pdf".into(), ReadingState { locator: serde_json::json!({"page": 4}), options: current.clone(), progress: None }).unwrap();
         let loaded = Store::load(file);
         assert_eq!(loaded.saved.documents["old"].options, legacy);
         assert!(loaded.saved.documents["old"].options.get("zoomModel").is_none());
         assert_eq!(loaded.saved.documents["new"].options, current);
         assert_eq!(loaded.saved.documents["new"].options["zoomModel"], 2);
+    }
+
+    #[test]
+    fn reading_progress_round_trips_and_old_entries_have_none() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("state.json");
+        let mut store = Store::load(file.clone());
+        let reading = |progress| ReadingState { locator: serde_json::json!({"page": 12}), options: Value::Null, progress };
+        store.save_position("pdf".into(), "/a.pdf".into(), reading(Some(Progress { fraction: 0.125, page: Some(12), pages: Some(96) }))).unwrap();
+        store.save_position("epub".into(), "/b.epub".into(), reading(Some(Progress { fraction: 0.38, page: None, pages: None }))).unwrap();
+        store.save_position("bad".into(), "/c.txt".into(), reading(Some(Progress { fraction: f64::NAN, page: None, pages: None }))).unwrap();
+        store.save_position("over".into(), "/d.txt".into(), reading(Some(Progress { fraction: 1.4, page: None, pages: None }))).unwrap();
+        store.save_position("plain".into(), "/e.png".into(), reading(None)).unwrap();
+        let loaded = Store::load(file.clone());
+        let by_path = loaded.progress_by_path();
+        assert_eq!(by_path["/a.pdf"], Progress { fraction: 0.125, page: Some(12), pages: Some(96) });
+        assert_eq!(by_path["/b.epub"], Progress { fraction: 0.38, page: None, pages: None });
+        assert_eq!(by_path["/d.txt"].fraction, 1.0);
+        assert!(!by_path.contains_key("/c.txt") && !by_path.contains_key("/e.png"));
+        // Reflowable progress has no page keys on the wire, and the wire form is camelCase.
+        let wire = serde_json::to_value(by_path["/b.epub"]).unwrap();
+        assert_eq!(wire, serde_json::json!({ "fraction": 0.38 }));
+        assert_eq!(serde_json::to_value(by_path["/a.pdf"]).unwrap(), serde_json::json!({ "fraction": 0.125, "page": 12, "pages": 96 }));
+
+        // A state file written before progress existed still loads, with the position intact and no progress.
+        let mut raw: Value = serde_json::from_slice(&fs::read(&file).unwrap()).unwrap();
+        for entry in raw["documents"].as_object_mut().unwrap().values_mut() { entry.as_object_mut().unwrap().remove("progress"); }
+        fs::write(&file, serde_json::to_vec(&raw).unwrap()).unwrap();
+        let old = Store::load(file);
+        assert_eq!(old.saved.documents["pdf"].locator["page"], 12);
+        assert!(old.saved.documents["pdf"].progress.is_none());
+        assert!(old.progress_by_path().is_empty());
     }
 
     #[test]

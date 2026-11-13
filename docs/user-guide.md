@@ -16,7 +16,8 @@ own proportions. **Recently opened** shows what you looked at last, most recent 
 once you have starred something (it may repeat a recent). **Library** is a small selection of everything
 else, most recently opened first; **View all** opens the full Favorites or Library view, and
 **Browse library** in the header opens all references; edits made in the library refresh Home. A section with
-nothing in it is left out. Click a cover to open it.
+nothing in it is left out. Click a cover to open it. A thin bar along the foot of a cover in **Recently opened**
+shows how far you got.
 A picture fills in when its thumbnail is ready, and tiles keep their columns as pictures arrive; a
 book without a picture keeps the generated cover it has on its shelf. An EPUB shows the title from its own
 metadata once it has been read, and its file name cleaned up until then. A cover looks the same here as in
@@ -328,7 +329,9 @@ Saved reading data lives in the native per-user local application-data directory
 `xyz.rpayton.holdmybrief` (on macOS, `~/Library/Application Support/xyz.rpayton.holdmybrief`),
 not beside the source documents. Identical file bytes share resume state even after a rename.
 Changed revisions keep the previous revision's state and show a best-effort restoration message. The
-menu separately clears recents and saved reading data; neither deletes documents.
+menu separately clears recents and saved reading data; neither deletes documents. Each saved position also
+keeps how far into the document it was (a fraction, and the page and page count for paged documents) so the library
+can show it; positions saved before this version have none until you read the document again.
 
 > **Renamed from Float Reader.** Before the rename the bundle identifier was
 > `io.github.rvynp.floatreader`, so Float Reader builds kept their data in a folder of that name.
@@ -347,7 +350,7 @@ and compact visibility preferences are remembered separately.
 Closed, in windows 720 pixels wide and up, the library is a thin rail on the side it is docked to: the
 library button at the top, then the covers of up to eight recently opened documents, most recent first
 (40 × 54 pixels, with the generated cover or picture Home shows). The document you are reading has an
-accent ring, hovering a cover names its document, and a click opens it. The rail floats over the
+accent ring, hovering a cover names its document (with how far you got, for example `Moby-Dick.epub · 38 %`), and a click opens it. The rail floats over the
 reading panel like the drawer, so the page is never resized; the view controls, page previews, find bar and
 image navigation sit beside it. The rail and the drawer end above the footer's strip along the bottom edge,
 so the footer is never under them. Opening the library swaps the rail for the drawer, and closing it brings
@@ -411,7 +414,10 @@ slider for the tiles. The board keeps the collection tree in its own left column
 ### Grid and list
 
 The **Recent ☰** menu switches between a **grid** of thumbnails and a **list** of names. A list row has a
-small cover or thumbnail, the title and a line with its format; a grid tile has its title under it (two
+small cover or thumbnail, the title and a line with its format and how far you got: `PDF · p. 12 / 96` for pages,
+`EPUB · 38 %` for text that reflows (Markdown and text files too), `Finished` at the last page or the end, and nothing
+for a document you have not opened yet. The same line is in the board's detail strip. Progress is the saved reading
+position, read again when the library opens; the browser build uses the positions it keeps itself. A grid tile has its title under it (two
 lines at most, then an ellipsis), so a scanned page is never anonymous. The **Size** slider sets how wide the
 tiles are at least, and is remembered with the choice of view per collection. A drawer narrower than 400
 pixels opens on the list until you choose; the grid keeps each reference's real proportions, so tall

@@ -9,8 +9,9 @@ mod thumbnails;
 
 use serde::Serialize;
 use serde_json::Value;
-use crate::state::{Library, LibraryChange, LibraryDocument, ReadingState, Recent, Store, WindowState};
+use crate::state::{Library, LibraryChange, LibraryDocument, Progress, ReadingState, Recent, Store, WindowState};
 use std::{
+    collections::HashMap,
     fs,
     io::Read,
     path::{Path, PathBuf},
@@ -303,6 +304,12 @@ fn get_library(state: State<'_, Shared>) -> Result<Library, String> {
     state.lock().map_err(|_| "Reading state is unavailable")?.library()
 }
 
+/// How far into each document the saved position is, keyed by library path; one call for the whole library.
+#[tauri::command]
+fn reading_progress(state: State<'_, Shared>) -> Result<HashMap<String, Progress>, String> {
+    Ok(state.lock().map_err(|_| "Reading state is unavailable")?.progress_by_path())
+}
+
 #[tauri::command]
 fn edit_library(change: LibraryChange, state: State<'_, Shared>) -> Result<Library, String> {
     state.lock().map_err(|_| "Reading state is unavailable")?.edit_library(change)
@@ -387,6 +394,7 @@ fn save_position(
     format: String,
     locator: Value,
     options: Value,
+    progress: Option<Progress>,
     state: State<'_, Shared>,
 ) -> Result<(), String> {
     if serde_json::to_vec(&locator)
@@ -407,7 +415,7 @@ fn save_position(
     if opened.path != path || opened.name != name || opened.format != format {
         return Err("Document identity does not match the opened file.".into());
     }
-    store.save_position(id, path, ReadingState { locator, options })
+    store.save_position(id, path, ReadingState { locator, options, progress })
 }
 
 #[tauri::command]
@@ -572,6 +580,7 @@ fn main() {
             open_file,
             get_state,
             get_library,
+            reading_progress,
             edit_library,
             add_documents,
             choose_source_root,

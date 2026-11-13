@@ -4,6 +4,7 @@ import { nudgeFor, parsePlacement, placementOf, resolvePlacement, serialisePlace
 import { desktop, native, state, browserFile, persist, openExternal, confirmDocument, openLibraryDocument, chooseDocument, getLibrary, imageFormats, type Opened, type Recent, type WindowState } from './bridge';
 import { emptyLibrary, type Library } from './catalog-types';
 import { createLibrary } from './library';
+import { progressOf, type Progress } from './progress';
 import { createLibraryRail, openedOrder, railItems } from './library-rail';
 import { ImageAdapter } from './adapters/image';
 import { createPalette } from './palette';
@@ -82,6 +83,7 @@ let position: Position | undefined;
 let windowState: WindowState = { width: 420, height: 620, pinned: false, locked: false };
 let homeRecents: Recent[] = [];
 let homeLibrary: Library = emptyLibrary();
+let homeProgress: Record<string, Progress> = {};
 let homeFormat = '';
 let splashHtml: string | undefined;
 let homePicture = 0;
@@ -334,8 +336,8 @@ scrubber.onpointercancel = () => {
 };
 function flush(): Promise<void> {
   if (!active || !position || !dirty) return saveQueue;
-  const doc = active, loc = structuredClone(position.locator), prefs = { ...options }; dirty = false;
-  saveQueue = saveQueue.then(() => persist(doc, loc, prefs)).catch(() => { if (active?.id === doc.id) dirty = true; notify('Progress could not be saved. Reading is still available.', true); });
+  const doc = active, loc = structuredClone(position.locator), prefs = { ...options }, progress = progressOf(position); dirty = false;
+  saveQueue = saveQueue.then(() => persist(doc, loc, prefs, progress)).catch(() => { if (active?.id === doc.id) dirty = true; notify('Progress could not be saved. Reading is still available.', true); });
   return saveQueue;
 }
 setInterval(() => { if (dirty) void flush(); }, 1500);
@@ -364,7 +366,9 @@ document.querySelectorAll<HTMLDialogElement>('dialog.drop').forEach(dialog => di
 const library = createLibrary($('library-root'), {
   open: path => load(() => openLibraryDocument(path), path.split(/[\\/]/).pop()),
   error: fail,
-  changed: next => { homeLibrary = next; if ($('empty').classList.contains('is-home')) paintHome(); paintRail(); },
+  changed: (next, progress) => { homeLibrary = next; homeProgress = { ...progress }; if ($('empty').classList.contains('is-home')) paintHome(); paintRail(); },
+  progressChanged: progress => { homeProgress = { ...progress }; if ($('empty').classList.contains('is-home')) paintHome(); paintRail(); },
+  settle: () => flush(),
   sideChanged: side => rail.setSide(side),
 });
 $('library-toggle').onclick = () => library.toggle();
@@ -381,7 +385,7 @@ const rail = createLibraryRail($('library-rail'), {
 });
 rail.setSide(library.side());
 const knownTitle = (item: { path: string; format: string }) => item.format.toLowerCase() === 'epub' ? homeThumbs.epub(item.path)?.title?.trim() || undefined : undefined;
-function paintRail() { rail.paint(railItems(desktop ? homeRecents : openedOrder(homeLibrary.documents), homeLibrary.documents, knownTitle), active?.path, scheme()); }
+function paintRail() { rail.paint(railItems(desktop ? homeRecents : openedOrder(homeLibrary.documents), homeLibrary.documents, knownTitle, homeProgress), active?.path, scheme()); }
 
 /**
  * The palette is mounted after the actions it dispatches, since `run` closes over `action`
@@ -691,7 +695,7 @@ function paintHome() {
   const empty = $('empty');
   splashHtml ??= empty.innerHTML;
   assignShelfSlots(homeLibrary.collections);
-  const rows = homeRows(homeRecents, homeLibrary.documents, homeFormat, knownTitle);
+  const rows = homeRows(homeRecents, homeLibrary.documents, homeFormat, knownTitle, homeProgress);
   if (!homeRecents.length && !homeLibrary.documents.length) {
     if (empty.classList.contains('is-home')) { closeHome(); empty.classList.remove('is-home'); empty.innerHTML = splashHtml; $('empty-open').onclick = () => openFile(); }
     return;
