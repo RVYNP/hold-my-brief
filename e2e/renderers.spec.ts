@@ -1025,6 +1025,71 @@ test('hand tool moves a two-page PDF spread as one', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+/**
+ * Regression guard for a reported capture (1080 x 680, library closed, Fit, hand tool) in which the page seemed to jump to the left
+ * edge on the first mouse move instead of following the pointer. It did not reproduce on the true-scale zoom; the first move of a
+ * drag must carry the page by exactly the pointer's travel, whichever way the library rail sits, whether the page is single or a
+ * spread, fresh from opening or back at Fit after zooming in, and from a press on the page or in the margin around it.
+ */
+for (const side of ['left', 'right'] as const) for (const layout of ['single', 'spread'] as const) {
+  test(`the hand tool carries a fitted ${layout} PDF page with the pointer from the first move, rail on the ${side}`, async ({ page }) => {
+    const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+    await openPdfForPill(page, { width: 1080, height: 680 });
+    if (side === 'right') {
+      await page.keyboard.press('Control+b');
+      await page.getByRole('button', { name: 'Move library to the right' }).click();
+      await page.getByRole('button', { name: 'Close library', exact: true }).first().click();
+      await expect(page.locator('#library-rail')).toHaveAttribute('data-library-side', 'right');
+    }
+    const host = page.locator('.pdf-reader'), sheet = page.locator(layout === 'spread' ? '.pdf-spread' : '.pdf-page').first();
+    if (layout === 'spread') {
+      await page.locator('#view-spread').click(); await host.focus(); await page.keyboard.press('PageDown'); // The cover is alone; pages 2 and 3 are the first pair.
+      await expect(page.locator('#position')).toContainText('Pages 2–3 of 3'); await expect(page.locator('.pdf-spread .pdf-page')).toHaveCount(2);
+    }
+    await page.getByRole('button', { name: 'Hand tool' }).click();
+    await expect(page.getByRole('button', { name: 'Hand tool' })).toHaveAttribute('aria-pressed', 'true');
+
+    const fitted = async () => {
+      await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', 'page');
+      await expect(page.locator('.pdf-render-status')).toHaveCount(0);
+      await expect(sheet).toHaveCount(1);
+      expect(await host.evaluate(el => el.scrollWidth - el.clientWidth <= 1 && el.scrollHeight - el.clientHeight <= 1), 'Fit page must fit the panel').toBe(true);
+    };
+    const drag = async (note: string, press: (page: { x: number; y: number; width: number; height: number }, panel: { x: number; y: number; width: number; height: number }) => { x: number; y: number }) => {
+      const natural = (await sheet.boundingBox())!, panel = (await host.boundingBox())!, from = press(natural, panel);
+      await page.mouse.move(from.x, from.y); await page.mouse.down();
+      // One move of exactly 10 px: the page may not have moved anywhere else, in particular not to the panel's left edge.
+      await page.mouse.move(from.x + 10, from.y + 6);
+      const first = (await sheet.boundingBox())!;
+      expect(first.x - natural.x, `${note}: first move x`).toBeCloseTo(10, 1); expect(first.y - natural.y, `${note}: first move y`).toBeCloseTo(6, 1);
+      // And it keeps following, step by step, to the end.
+      for (let i = 2; i <= 8; i++) {
+        await page.mouse.move(from.x + 10 * i, from.y + 6 * i);
+        const box = (await sheet.boundingBox())!;
+        expect(box.x - natural.x, `${note}: step ${i} x`).toBeCloseTo(10 * i, 1); expect(box.y - natural.y, `${note}: step ${i} y`).toBeCloseTo(6 * i, 1);
+      }
+      await page.mouse.up();
+      expect((await sheet.boundingBox())!.x - natural.x, `${note}: after release`).toBeCloseTo(80, 1);
+    };
+    const onPage = (box: { x: number; y: number; width: number; height: number }) => ({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
+    // Beside the page, clear of a rail on either side.
+    const inMargin = (_box: { x: number; y: number; width: number; height: number }, panel: { x: number; y: number; width: number; height: number }) => ({ x: panel.x + panel.width - 110, y: panel.y + 40 });
+
+    await fitted();
+    await drag('fresh, on the page', onPage);
+    await page.keyboard.press('Control+0'); await fitted(); // A fresh fit puts the page back.
+    await drag('fresh, in the margin', inMargin);
+    // Zoom in past fit (so the page scrolls), then back to Fit: a slide again, from the natural place.
+    await page.keyboard.press('Control+1');
+    await expect(page.locator('#zoom-level')).toHaveText('100%'); await expect(page.locator('.pdf-render-status')).toHaveCount(0);
+    await page.keyboard.press('Control+0'); await fitted();
+    await drag('back at Fit, on the page', onPage);
+    await page.keyboard.press('Control+0'); await fitted();
+    await drag('back at Fit, in the margin', inMargin);
+    expect(errors).toEqual([]);
+  });
+}
+
 test('hand tool moves an image that fits', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto('/');
