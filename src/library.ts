@@ -1,11 +1,12 @@
 import './library.css';
-import { addDocuments, desktop, editLibrary, getLibrary, chooseSourceRoot, locateLibraryDocument, indexFolder } from './bridge';
+import { addDocuments, desktop, editLibrary, getLibrary, readingProgress, chooseSourceRoot, locateLibraryDocument, indexFolder } from './bridge';
 import { emptyLibrary, type Collection, type Library, type LibraryDocument } from './catalog-types';
 import { fileTypeChoices, isImage, matchesFileType, searchText } from './library-query';
 import { clampLibraryWidth, defaultLibraryView, libraryGrid, libraryGridColumns, libraryTileSize, libraryWidth, libraryWidthBounds, parseLibraryView, parseLibraryWidth, parseTileSize, type LibrarySide, type LibraryView } from './library-layout';
 import { canThumbnail, createThumbnailStore, type Thumbnail } from './thumbnails';
 import { colourHex, colourMatches, colourNames, colourSwatches, nameColour, parseColourName, type ColourName } from './colour';
 import { shortcutFor } from './commands';
+import { formatProgress, type Progress } from './progress';
 import { coverNode as cardCover, markUnavailable, placeTiles, repaintCovers, showPicture, tileMedia } from './cards';
 import { createIntake, intakeSource, intakeTitle, newArrivals, movedCollectionIds, type IntakeHost } from './intake';
 import { assignCoverSlots, collectionDisplayName, compareCollections, coverRatio, coverSeedOf, fileTitle, groupIntoShelves, shelfLayout, type Shelf } from './shelf';
@@ -19,7 +20,11 @@ type Callbacks = {
   open: (path: string) => Promise<boolean>;
   error: (error: unknown) => void;
   /** The library changed (an edit, a refresh): the opening page shows part of it too. */
-  changed?: (library: Library) => void;
+  changed?: (library: Library, progress: Readonly<Record<string, Progress>>) => void;
+  /** Reading progress changed since it was last shown (the drawer was opened after some reading): Home and the rail show it too. */
+  progressChanged?: (progress: Readonly<Record<string, Progress>>) => void;
+  /** Saves the position being read, so the progress the library reads next includes it. */
+  settle?: () => Promise<void>;
   /** The library moved to the other side, from the drawer's dock button or elsewhere; the rail follows. */
   sideChanged?: (side: LibrarySide) => void;
 };
@@ -104,7 +109,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   const preferenceKey = () => `hold-my-brief:library-${wide.matches ? 'wide' : 'narrow'}`;
   function preference() { try { const saved = localStorage.getItem(preferenceKey()); return saved === null ? wide.matches : saved === 'open'; } catch { return wide.matches; } }
   let visible = preference(); let library: Library = emptyLibrary(); let filter: Filter = { kind: 'all' };
-  let activePath: string | undefined; let busy = false, loaded = false, revision = 0, page = 0;
+  let activePath: string | undefined; let progress: Record<string, Progress> = {}; let busy = false, loaded = false, revision = 0, page = 0;
   let loadError = false; let modal: HTMLDialogElement | undefined; let modalError: HTMLElement | undefined;
   let matches: LibraryDocument[] = []; let imageSequence: string[] = [];
   const expanded = new Set<string>(); const knownCollections = new Set<string>();
@@ -268,6 +273,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   function applyVisibility() {
     root.hidden = !visible; layout?.classList.toggle('library-open', visible); toggleButton?.setAttribute('aria-expanded', String(visible));
     if (workspace) workspace.inert = visible && (!wide.matches || board);
+    if (visible && loaded) void refreshProgress();
     if (visible) { thumbs.retryFailed(); for (const media of documents.querySelectorAll('.is-unavailable')) media.classList.remove('is-unavailable'); observeThumbnails(); } else { setBoard(false, 'none'); setScope(false); closeItemMenu(false); closeChromeMenu(false); clearThumbnails(); }
   }
   function setVisible(next: boolean, focus = true, persist = true) {
@@ -314,7 +320,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   async function mutate(operation: () => Promise<Library>, after?: () => void) {
     if (busy) return; const key = focusKey(), hadDialog = Boolean(modal?.open), scrolled = documents.scrollTop; if (modalError) modalError.textContent = '';
     ++revision; setBusy(true);
-    try { library = await operation(); ++revision; loaded = true; loadError = false; rebuildIndex(); render(); callbacks.changed?.(library); documents.scrollTop = scrolled; after?.(); }
+    try { library = await operation(); ++revision; loaded = true; loadError = false; rebuildIndex(); render(); callbacks.changed?.(library, progress); documents.scrollTop = scrolled; after?.(); }
     catch (error) { report(error); }
     finally { setBusy(false); if (!hadDialog && !modal?.open) restoreFocus(key); }
   }
@@ -753,8 +759,8 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     }
     if (board && selectedPath === path) renderDetail();
   }
-  /** Format, then only what is worth saying: a missing or removed original, the open reference, and the file name when the title is the book's own. A reference that is simply there says nothing about it. */
-  const rowMeta = (doc: LibraryDocument, full = true) => [doc.format.toUpperCase(), doc.source?.removed ? 'no longer in folder' : (doc.availability ?? 'ready') === 'ready' ? undefined : doc.availability, full && doc.path === activePath ? 'Reading' : undefined, full && epubTitle(doc) ? doc.name : undefined].filter(Boolean).join(' · ');
+  /** Format, how far the reader got, then only what is worth saying: a missing or removed original, the open reference, and the file name when the title is the book's own. A reference that is simply there says nothing about it. */
+  const rowMeta = (doc: LibraryDocument, full = true) => [doc.format.toUpperCase(), formatProgress(progress[doc.path]), doc.source?.removed ? 'no longer in folder' : (doc.availability ?? 'ready') === 'ready' ? undefined : doc.availability, full && doc.path === activePath ? 'Reading' : undefined, full && epubTitle(doc) ? doc.name : undefined].filter(Boolean).join(' · ');
   /** A generated cover for a document with no picture: dithered art of its shelf in the top half, the title and the format (with the version in the file name) below. */
   const coverNode = (doc: LibraryDocument, shelfId: string | undefined) => cardCover({ name: doc.name, format: doc.format, title: epubTitle(doc) ?? fileTitle(doc.name), seed: coverSeedOf(doc), shelfId }, scheme());
   const hasCover = (doc: LibraryDocument) => (doc.availability ?? 'ready') !== 'missing' && (!thumbnailable(doc) || doc.format === 'epub');
@@ -998,9 +1004,25 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     for (const doc of arrived) if (doc.format === 'epub' && !thumbs.epub(doc.path)) void thumbs.loadEpub(doc.path, () => view.dialog.open).then(info => { if (info && view.dialog.isConnected) sheet.retitle(doc.path); });
   }
   sourcesButton.onclick = () => { closeChromeMenu(false); sourceManager(plus); };
+  /** Progress is optional decoration: a failed read leaves what was shown. */
+  const loadProgress = (documentsNow: readonly LibraryDocument[]) => readingProgress(documentsNow.map(doc => doc.path)).catch(() => progress);
+  /** Re-reads reading progress (one call for the whole library) and updates the rows already on screen in place. */
+  async function refreshProgress() {
+    const token = revision;
+    await callbacks.settle?.().catch(() => undefined);
+    const next = await loadProgress(library.documents); if (token !== revision || !loaded) return;
+    if (JSON.stringify(next) === JSON.stringify(progress)) return;
+    progress = next;
+    for (const node of documents.querySelectorAll<HTMLElement>('[data-doc-path]')) {
+      const doc = library.documents.find(item => item.path === node.dataset.docPath); const meta = node.querySelector<HTMLElement>('.library-row-meta');
+      if (doc && meta) meta.textContent = rowMeta(doc);
+    }
+    if (board && selectedPath) renderDetail();
+    callbacks.progressChanged?.(progress);
+  }
   async function refresh(path?: string) {
     if (path !== undefined) activePath = path; const token = ++revision;
-    try { const next = await getLibrary(); if (token !== revision) return; library = next; loaded = true; loadError = false; rebuildIndex(); render(); callbacks.changed?.(library); }
+    try { const next = await getLibrary(); const reached = await loadProgress(next.documents); if (token !== revision) return; library = next; progress = reached; loaded = true; loadError = false; rebuildIndex(); render(); callbacks.changed?.(library, progress); }
     catch (error) { if (token !== revision) return; loadError = true; render(); callbacks.error(error); }
   }
   toggleButton?.setAttribute('aria-controls', root.id); applySide(false); applyWidth(preferredWidth); rebuildIndex(); applyVisibility(); render();

@@ -7,6 +7,7 @@ import { libraryGrid, libraryGridColumns } from './library-layout';
 import { fileTypeChoices, matchesFileType } from './library-query';
 import { markUnavailable, placeTiles, showPicture, tileMedia, type Appearance, type Placed } from './cards';
 import type { Thumbnail } from './thumbnails';
+import { formatProgress, type Progress } from './progress';
 
 export const homeRowLimit = 12;
 
@@ -25,6 +26,8 @@ export type HomeTile = {
   seed: number;
   shelfId: string | undefined;
   missing: boolean;
+  /** How far into it the reader got, when it has been opened. */
+  progress?: Progress;
 };
 export type HomeRow = { id: 'recent' | 'favorites' | 'library'; title: string; items: HomeTile[] };
 
@@ -40,7 +43,7 @@ export function openedAt(value: number | string | undefined): number {
   return 0;
 }
 
-function tileOf(item: HomeDocument, known: string | undefined): HomeTile {
+function tileOf(item: HomeDocument, known: string | undefined, progress: Progress | undefined): HomeTile {
   return {
     path: item.path,
     name: item.name,
@@ -50,6 +53,7 @@ function tileOf(item: HomeDocument, known: string | undefined): HomeTile {
     seed: coverSeedOf(item),
     shelfId: item.collectionIds?.[0],
     missing: item.availability === 'missing',
+    ...(progress ? { progress } : {}),
   };
 }
 
@@ -59,9 +63,9 @@ function tileOf(item: HomeDocument, known: string | undefined): HomeTile {
  * most recently opened first, and never repeats what the sections above show. `titleOf` is the book's own
  * title where one has been read (an EPUB's metadata); the file name stands in until then.
  */
-export function homeRows(recents: readonly HomeRecent[], documents: readonly HomeDocument[], selectedFormat = '', titleOf: (item: HomeDocument) => string | undefined = () => undefined): HomeRow[] {
+export function homeRows(recents: readonly HomeRecent[], documents: readonly HomeDocument[], selectedFormat = '', titleOf: (item: HomeDocument) => string | undefined = () => undefined, progress: Readonly<Record<string, Progress>> = {}): HomeRow[] {
   const byPath = new Map(documents.map(doc => [doc.path, doc]));
-  const tile = (item: HomeDocument) => tileOf(item, titleOf(item));
+  const tile = (item: HomeDocument) => tileOf(item, titleOf(item), progress[item.path]);
   const recentTiles = recents.map(recent => byPath.get(recent.path) ?? recent)
     .filter(item => matchesFileType(item, selectedFormat)).slice(0, homeRowLimit).map(tile);
   const byRecency = (a: { opened: number; doc: HomeDocument }, b: { opened: number; doc: HomeDocument }) => b.opened - a.opened || a.doc.name.localeCompare(b.doc.name);
@@ -201,6 +205,14 @@ export function renderHome(root: HTMLElement, rows: readonly HomeRow[], actions:
         if (cached) showPicture(media, cached);
       }
       open.append(media);
+      // A thin bar along the foot of a recently opened tile shows how far the reader got; Home's other sections stay clean.
+      const reached = row.id === 'recent' ? formatProgress(item.progress) : undefined;
+      if (reached && item.progress && item.progress.fraction > 0) {
+        const bar = element('span', 'home-progress'), fill = element('i');
+        fill.style.width = `${Math.round(item.progress.fraction * 1000) / 10}%`;
+        bar.append(fill); bar.dataset.progress = reached; open.append(bar);
+        open.title = `${item.name} · ${reached}`;
+      }
       open.onclick = () => actions.open(item.path, item.name);
       cell.append(open);
       if (row.id === 'recent' && actions.remove) {

@@ -6,6 +6,7 @@ import { homeRows, openedAt, type HomeDocument, type HomeRecent, type HomeTile }
 import { showPicture, markUnavailable, tileMedia, type Appearance } from './cards';
 import { canThumbnail, type Thumbnail } from './thumbnails';
 import type { LibrarySide } from './library-layout';
+import { formatProgress, type Progress } from './progress';
 
 /** Most covers the rail shows. */
 export const railLimit = 8;
@@ -13,8 +14,8 @@ export const railLimit = 8;
 export const railCover = { width: 40, height: 54 } as const;
 
 /** The covers for the rail: the recents, most recent first, each with the library entry's own cover where it has one. `titleOf` is an EPUB's own title once read. */
-export function railItems(recents: readonly HomeRecent[], documents: readonly HomeDocument[], titleOf?: (item: HomeDocument) => string | undefined): HomeTile[] {
-  return homeRows(recents, documents, '', titleOf).find(row => row.id === 'recent')?.items.slice(0, railLimit) ?? [];
+export function railItems(recents: readonly HomeRecent[], documents: readonly HomeDocument[], titleOf?: (item: HomeDocument) => string | undefined, progress?: Readonly<Record<string, Progress>>): HomeTile[] {
+  return homeRows(recents, documents, '', titleOf, progress).find(row => row.id === 'recent')?.items.slice(0, railLimit) ?? [];
 }
 
 /** What the browser build has for recents (no store keeps a list there): the library's documents that were opened, latest first. */
@@ -108,7 +109,8 @@ export function createLibraryRail(root: HTMLElement, host: RailHost): { paint: (
       const thumbnailable = canThumbnail(item.format), generated = !item.missing && (!thumbnailable || item.format.toLowerCase() === 'epub');
       const cell = document.createElement('div'); cell.setAttribute('role', 'listitem'); cell.className = 'library-rail-item'; cell.classList.toggle('is-missing', item.missing); cell.classList.toggle('is-cover', generated);
       const open = document.createElement('button'); open.type = 'button'; open.className = 'library-rail-cover'; open.dataset.railPath = item.path;
-      open.setAttribute('aria-label', item.label); open.title = item.label;
+      const reached = formatProgress(item.progress);
+      open.setAttribute('aria-label', reached ? `${item.label}, ${reached}` : item.label); open.title = reached ? `${item.label} · ${reached}` : item.label;
       if (item.path === activePath) { open.classList.add('is-active'); open.setAttribute('aria-current', 'true'); }
       const media = tileMedia({ ...item, ratio: railCover.width / railCover.height, generated, thumbnailable }, appearance);
       const cached = thumbnailable && !item.missing ? host.peek(item.path) : undefined;
@@ -121,7 +123,7 @@ export function createLibraryRail(root: HTMLElement, host: RailHost): { paint: (
         }));
         if (item.format.toLowerCase() === 'epub') loads.push(() => void host.epub(item.path, alive).then(() => {
           const known = host.title(item.path); if (!alive() || !known) return;
-          open.setAttribute('aria-label', known); open.title = known;
+          open.setAttribute('aria-label', reached ? `${known}, ${reached}` : known); open.title = reached ? `${known} · ${reached}` : known;
         }));
       }
       return cell;

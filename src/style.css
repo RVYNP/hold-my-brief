@@ -822,7 +822,10 @@ h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 1px 0 
 .home-all:hover { color: var(--fg); background: var(--hover-subtle); }
 /* Tiles are the library grid's (.library-tile, absolutely placed by src/cards.ts); the section only reserves their height and never scrolls sideways. */
 .home-grid { position: relative; min-width: 0; }
-.home-open { display: block; width: 100%; padding: 0; border-radius: 4px; }
+.home-open { position: relative; display: block; width: 100%; padding: 0; border-radius: 4px; }
+/* How far the reader got: a 3 px bar along the foot of a recently opened tile. */
+.home-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; overflow: hidden; border-radius: 0 0 4px 4px; background: #00000059; pointer-events: none; }
+.home-progress > i { display: block; height: 100%; background: var(--accent); }
 .home-open:hover { background: transparent; }
 .home-tile.is-missing { opacity: .55; }
 .home-remove { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; padding: 0; border-radius: 999px; background: var(--card); color: var(--muted); opacity: 0; }
