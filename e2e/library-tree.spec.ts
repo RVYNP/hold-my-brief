@@ -185,6 +185,13 @@ test('the tree has an ARIA tree\'s keyboard: arrows, Home/End, Enter, left to th
   await page.keyboard.press('ArrowDown');
   await page.keyboard.type('09_');
   expect(await focused(page)).toBe(folder('refs', '09_motorcycle_catalogues'));
+  // A Shift pressed on its own (as for '_' or a capital) keeps the letters typed so far.
+  await page.keyboard.press('Home'); // a navigation key starts the next search afresh
+  await page.keyboard.type('re');
+  expect(await focused(page)).toBe(root('reference-docs')); // 'reference-docs' sorts before 'refs'
+  await page.keyboard.down('Shift'); await page.keyboard.up('Shift');
+  await page.keyboard.type('fs');
+  expect(await focused(page)).toBe(root('refs')); // 'refs', not a fresh search for 'f' or 's'
 });
 
 test('the filter narrows the tree as you type, highlights the matches, opens the folders above them, and clears with Escape', async ({ page }) => {
