@@ -978,6 +978,8 @@ test('a slid PDF page is re-clamped on resize, and text selection still lands on
   await expect(page.getByRole('button', { name: 'Hand tool' })).toHaveAttribute('aria-pressed', 'true');
   await pushToEdge(page, host, 1);
   await page.setViewportSize({ width: 400, height: 620 });
+  // The panel has to be the new size before the corner means anything: until then the old page, still clamped to the old panel, can satisfy it.
+  await expect.poll(async () => (await panelSize(host))[0]).toBe(400);
   const atCorner = async () => {
     const panel = (await host.boundingBox())!, [width, height] = await panelSize(host), box = await sheet.boundingBox();
     return !!box && Math.abs(box.x - (panel.x + width - 64)) < 1 && Math.abs(box.y - (panel.y + height - 64)) < 1;
@@ -1110,7 +1112,7 @@ test('image-only PDF pages carry no note, say so in the tooltip and explain a se
   };
   const zoomTo = async (level: string, button: 'Zoom in' | 'Zoom out') => {
     // Levels are true scales, so the walk starts from actual size, which is on the ladder.
-    await host.focus(); await page.keyboard.press('Control+1'); await expect(page.locator('#zoom-level')).toHaveText('100%'); await expect(page.locator('.pdf-render-status')).toHaveCount(0);
+    await page.locator('.pdf-reader:not(.staging)').focus(); await page.keyboard.press('Control+1'); await expect(page.locator('#zoom-level')).toHaveText('100%'); await expect(page.locator('.pdf-render-status')).toHaveCount(0);
     // One step at a time: a click is applied asynchronously, so wait for the label to move before the next.
     for (let i = 0; i < 14; i++) {
       const current = (await page.locator('#zoom-level').textContent())!;
