@@ -22,6 +22,33 @@ export function fileTitle(name: string): string {
   return spaced(bare.replace(trailingVersion, '')) || spaced(bare) || name;
 }
 
+// A file stem that says nothing about the document: the folder it sits in is its real name.
+const genericStem = /^(?:source|document|doc|scan|file|untitled)(?:[-_ ]?\d+)?$|^\d+$/i;
+/** A browser-build library path is `<64-hex content id>/<file name>`: that id is not a folder name. */
+const contentId = /^[0-9a-f]{64}$/;
+
+/** True for a file stem that names nothing (`source`, `document`, `scan`, `file`, `untitled`, optionally numbered, or digits only). */
+export function isGenericName(name: string): boolean { return genericStem.test(withoutExtension(name).trim()); }
+
+/** The folder a file sits in, from its path (either separator); none for a bare name or a browser-build content id. */
+export function parentFolder(path: string): string | undefined {
+  const parts = path.split(/[\\/]/).filter(Boolean);
+  const folder = parts.length > 1 ? parts[parts.length - 2] : undefined;
+  return folder && !contentId.test(folder) ? folder : undefined;
+}
+
+/**
+ * The one title a document goes by outside the folder tree (Home cards, tab titles, library rows and the board): an EPUB's own
+ * title once read, else the folder's name when the file's name is generic (`03_wwe_mag/source.pdf` is "03_wwe_mag"), else
+ * the cleaned file name (`cleaned`) or the file name itself.
+ */
+export function displayTitle(item: { name: string; path: string }, known?: string, cleaned = false): string {
+  const own = known?.trim();
+  if (own) return own;
+  if (isGenericName(item.name)) { const folder = parentFolder(item.path); if (folder) return folder; }
+  return cleaned ? fileTitle(item.name) : item.name;
+}
+
 /** A collection's name as shown: ordering prefix dropped (`2-creative-apps` -> `Creative apps`), separators as spaces, first letter upper. Stored names never change. */
 export function collectionDisplayName(name: string): string {
   const shown = name.replace(/^\d+[-_. ]+/, '').replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();

@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
+import { libraryToggle, openBoard } from './library-controls';
 
 /**
  * Intake: the sheet that opens when files arrive in the library, with each book's generated cover, a ↻ to re-roll it,
@@ -18,7 +19,7 @@ test.skip(!present, 'needs ~/Books/reference-docs and /tmp/hmb-media/prideandpre
 async function open(page: Page) {
   await page.setViewportSize({ width: 1080, height: 700 });
   await page.goto('/');
-  if (!(await page.locator('#library-root').isVisible())) await page.locator('#library-toggle').click();
+  if (!(await page.locator('#library-root').isVisible())) await libraryToggle(page).click();
 }
 const dialog = (page: Page) => page.locator('.library-dialog.library-intake');
 // Only covers that are showing: one under a loaded picture (Pride and Prejudice) is hidden.
@@ -67,19 +68,20 @@ test('↻ re-rolls one cover and no other, with the keyboard too; New patterns r
   // The books were already in the library: Keep all only closes, and so does Escape.
   await dialog(page).getByRole('button', { name: 'Keep all' }).click();
   await expect(page.locator('.library-dialog')).toHaveCount(0);
-  await expect(page.locator('.library-result-count')).toHaveText('5 references');
+  await expect(page.locator('.library-title-count')).toHaveText('5');
   await page.locator('.library-panel input[type=file]').setInputFiles([creative[2]]);
   await expect(dialog(page)).toBeVisible();
   await expect(dialog(page).getByRole('heading')).toHaveText('1 new reference');
   await page.keyboard.press('Escape');
   await expect(page.locator('.library-dialog')).toHaveCount(0);
-  await expect(page.locator('.library-result-count')).toHaveText('6 references');
+  await expect(page.locator('.library-title-count')).toHaveText('6');
 });
 
 test('a lone file with a real cover is simply added, with no sheet', async ({ page }) => {
   await open(page);
   await page.locator('.library-panel input[type=file]').setInputFiles([pride]);
-  await expect(page.locator('.library-result-count')).toHaveText('1 reference');
+  await expect(page.locator('.library-title-count')).toHaveText('1');
+  await openBoard(page);
   await expect(page.locator('.library-tile-media.is-loaded')).toHaveCount(1);
   await page.waitForTimeout(600);
   await expect(page.locator('.library-dialog')).toHaveCount(0);
