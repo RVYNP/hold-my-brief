@@ -15,8 +15,13 @@
  *   PDF adapter refit (PR #12).
  *
  * The offset survives page turns (the next page appears where the last one was) and is cleared
- * by `recenter` (zoom or fit change), a change of page layout, content that starts to overflow,
- * and a new document. A window resize re-clamps it.
+ * by `recenter` (a fit command, or a zoom, which then places the point it holds), a change of page layout,
+ * content that starts to overflow, and a new document. A window resize re-clamps it.
+ *
+ * A zoom holds a point of the page still (zoom-anchor.ts). On an axis the page now fits the layout centres it, so `slideTo` puts
+ * the move in the offset: the page stays where the point needs it, never further than KEEP px from leaving the panel. Each axis is
+ * locked while it is slid (`page-moved-x`, `page-moved-y`): the other still scrolls, so a page that fits sideways but not
+ * vertically is slid sideways and scrolled up and down. An axis that overflows is only ever scrolled.
  *
  * The primary button pans only while the hand tool is on; the middle button pans whenever the
  * content can pan. A press that never travels past DRAG_SLOP stays an ordinary click, so links
@@ -28,7 +33,7 @@
 export const DRAG_SLOP = 3;
 /** How much of a moved page must stay inside the panel on each axis, in px. */
 export const KEEP = 64;
-const MOVED = 'page-moved';
+const MOVED = 'page-moved', MOVED_X = 'page-moved-x', MOVED_Y = 'page-moved-y';
 /** The committed PDF page or spread, or the image, that a move shifts: its box is the page. */
 const PAGE = ':scope > .pdf-page, :scope > .pdf-spread, :scope .image-frame img';
 const XHTML = 'http://www.w3.org/1999/xhtml';
@@ -38,8 +43,9 @@ html.float-panning, html.float-panning * { cursor: grabbing !important; }`;
 
 export type Box = { left: number; top: number; right: number; bottom: number };
 export type Offset = { x: number; y: number };
-/** The page's untransformed box and the panel it moves in, with the content known to fit. */
-type Room = { page: Box; panel: Box };
+type Axes<T> = { x: T; y: T };
+/** The page's untransformed box and the panel it moves in, and on which axes the content fits the panel. */
+type Room = { page: Box; panel: Box; fits: Axes<boolean> };
 type Drag = { id: number; x: number; y: number; sx: number; sy: number; left: number; top: number; slide?: Room & Offset; moved: boolean; frame: boolean; capture: Element; wins: Set<Window>; stop: () => void };
 
 /** True when `node` is `ancestor` or sits below it, crossing shadow roots. */
@@ -52,9 +58,14 @@ function composedContains(ancestor: Node, node: Node | null): boolean {
   return false;
 }
 
+type Scrollable = { scrollWidth: number; clientWidth: number; scrollHeight: number; clientHeight: number };
 /** Whether a scroll container has content beyond its visible box on either axis. */
-export function overflows(scroller: { scrollWidth: number; clientWidth: number; scrollHeight: number; clientHeight: number }) {
+export function overflows(scroller: Scrollable) {
   return scroller.scrollWidth - scroller.clientWidth > 1 || scroller.scrollHeight - scroller.clientHeight > 1;
+}
+/** Which axes of a scroll container have content beyond its visible box. */
+export function overflowAxes(scroller: Scrollable): Axes<boolean> {
+  return { x: scroller.scrollWidth - scroller.clientWidth > 1, y: scroller.scrollHeight - scroller.clientHeight > 1 };
 }
 
 /**
@@ -118,6 +129,19 @@ export class Panner {
     this.apply();
   }
 
+  /**
+   * Slides the page by `offset` from where the layout puts it, held within KEEP px of the panel, on the axes where it fits (the layout
+   * centres it there; an axis that overflows scrolls instead). A zoom that holds a point calls this once the page is redrawn.
+   */
+  slideTo(offset: Offset) {
+    const room = this.room();
+    if (!room) return;
+    const slid = clampOffset({ x: room.fits.x ? offset.x : 0, y: room.fits.y ? offset.y : 0 }, room.page, room.panel);
+    this.offset = { x: room.fits.x ? slid.x : 0, y: room.fits.y ? slid.y : 0 };
+    this.sized = this.size();
+    this.apply();
+  }
+
   /** Listens inside one same-origin content frame; the frame only pans while it belongs to the bound scroller. */
   watchFrame(doc: Document) {
     if (this.frames.has(doc)) return;
@@ -139,49 +163,59 @@ export class Panner {
   private apply() {
     const surface = this.surface, { x, y } = this.offset, moved = x !== 0 || y !== 0;
     if (!surface) return;
-    surface.classList.toggle(MOVED, moved);
+    surface.classList.toggle(MOVED, moved); surface.classList.toggle(MOVED_X, x !== 0); surface.classList.toggle(MOVED_Y, y !== 0);
     if (moved) { surface.style.setProperty('--pan-x', `${x}px`); surface.style.setProperty('--pan-y', `${y}px`); }
     else { surface.style.removeProperty('--pan-x'); surface.style.removeProperty('--pan-y'); }
   }
 
   /**
-   * Whether the content fits the panel and, if so, the geometry a slide is clamped by. Measured
-   * with the offset lifted: a translated page would otherwise count as overflow, and its box
-   * would already include the move. Everything happens in one task, so nothing is painted.
+   * The geometry a slide is clamped by, and on which axes the content fits the panel. Measured with the offset lifted: a
+   * translated page would otherwise count as overflow, and its box would already include the move. Everything happens in
+   * one task, so nothing is painted.
    */
   private room(): Room | undefined {
     const scroller = this.scroller, surface = this.surface;
     if (!scroller || !surface) return undefined;
-    const moved = surface.classList.contains(MOVED);
-    if (moved) surface.classList.remove(MOVED);
+    const lifted = [MOVED, MOVED_X, MOVED_Y].filter(name => surface.classList.contains(name));
+    for (const name of lifted) surface.classList.remove(name);
     try {
-      if (overflows(scroller)) return undefined;
+      const over = overflowAxes(scroller);
       const rects = [...this.frames].filter(doc => this.live(doc)).map(doc => doc.defaultView!.frameElement!.getBoundingClientRect());
       if (!rects.length) { const page = surface.querySelector(PAGE); if (page) rects.push(page.getBoundingClientRect()); }
       const shown = rects.filter(rect => rect.width > 0 && rect.height > 0);
       if (!shown.length) return undefined;
       const panel = surface.getBoundingClientRect();
       return {
+        fits: { x: !over.x, y: !over.y },
         page: { left: Math.min(...shown.map(r => r.left)), top: Math.min(...shown.map(r => r.top)), right: Math.max(...shown.map(r => r.right)), bottom: Math.max(...shown.map(r => r.bottom)) },
         panel: { left: panel.left + surface.clientLeft, top: panel.top + surface.clientTop, right: panel.left + surface.clientLeft + surface.clientWidth, bottom: panel.top + surface.clientTop + surface.clientHeight },
       };
-    } finally { if (moved) surface.classList.add(MOVED); }
+    } finally { for (const name of lifted) surface.classList.add(name); }
   }
 
   /**
-   * Keeps a moved page valid: re-clamped while it fits. When it does not fit there are two cases.
-   * If the panel changed size since the offset was last valid, the adapter has not refitted yet
-   * and this is the stale page, so the offset waits for the refit. Otherwise the content really
-   * grew past the panel, and `drop` (a refresh after a zoom or page turn) puts the page back so
-   * the host can scroll it again.
+   * Keeps a moved page valid: re-clamped on each axis where it fits. An axis that does not fit has two cases. If the panel changed
+   * size since the offset was last valid, the adapter has not refitted yet and this is the stale page, so the offset waits for the
+   * refit. Otherwise the content really grew past the panel, and `drop` (a refresh after a zoom or page turn) puts the page back
+   * so the host can scroll it again.
    */
   private settle(drop: boolean) {
     if (!this.offset.x && !this.offset.y) return;
-    const room = this.room();
-    if (room) this.offset = clampOffset(this.offset, room.page, room.panel);
-    else if (!drop || this.size() !== this.sized) return;
-    else this.offset = { x: 0, y: 0 };
-    this.sized = this.size();
+    const room = this.room(), stale = !drop || this.size() !== this.sized;
+    let waiting = false;
+    if (!room || (!room.fits.x && !room.fits.y)) {
+      if (stale) return;
+      this.offset = { x: 0, y: 0 };
+    } else {
+      const next = clampOffset(this.offset, room.page, room.panel), offset = { ...this.offset };
+      for (const axis of ['x', 'y'] as const) {
+        if (room.fits[axis]) offset[axis] = next[axis];
+        else if (!stale) offset[axis] = 0;
+        else waiting = true;
+      }
+      this.offset = offset;
+    }
+    if (!waiting) this.sized = this.size(); // An axis still waiting for the refit must keep seeing the old size, or the next refresh would take it for grown content.
     this.apply();
   }
   private size() { return `${this.surface?.clientWidth}:${this.surface?.clientHeight}`; }
@@ -218,7 +252,7 @@ export class Panner {
     const room = this.room();
     this.sized = this.size();
     this.drag = { id: event.pointerId, x: event.clientX, y: event.clientY, sx: event.screenX, sy: event.screenY,
-      left: scroller.scrollLeft, top: scroller.scrollTop, slide: room && { ...room, ...this.offset }, moved: false, frame, wins,
+      left: scroller.scrollLeft, top: scroller.scrollTop, slide: room && room.fits.x && room.fits.y ? { ...room, ...this.offset } : undefined, moved: false, frame, wins,
       capture: frame ? doc.documentElement : this.surface!,
       stop: () => { for (const win of wins) { win.removeEventListener('pointermove', move, true); win.removeEventListener('pointerup', up, true); win.removeEventListener('pointercancel', up, true); } } };
   }

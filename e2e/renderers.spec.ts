@@ -895,7 +895,7 @@ test('hand tool slides a PDF page that fits 1:1 at Fit and when zoomed out, neve
   expect(errors).toEqual([]);
 });
 
-test('a slid page keeps its offset across page turns and goes back on zoom, fit, Ctrl 0 and overflow', async ({ page }) => {
+test('a slid page keeps its offset across page turns, goes back on fit and Ctrl 0, and a zoom holds the point at the middle of the panel', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await page.goto('/');
   await page.locator('#file-input').setInputFiles({ name: 'offset.pdf', mimeType: 'application/pdf', buffer: pdfFixture() });
@@ -933,16 +933,18 @@ test('a slid page keeps its offset across page turns and goes back on zoom, fit,
   await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', 'page'); await settle();
   near((await sheet.boundingBox())!, natural.x, natural.y, 'back to fit page');
 
-  // Zooming past fit (here to actual size) makes the page overflow: it is scrolled, not slid, and the point that was at the middle of the panel (the
-  // page's own middle, at a fit) stays there instead of the page snapping to its top (see zoom-anchor.spec.ts).
+  // Zooming past fit (here to actual size) holds the point at the middle of the panel, the slide included: the page is not sent back to the middle,
+  // and does not snap to its top. It overflows, so it is scrolled, not slid (see zoom-anchor.spec.ts).
   await dragPanel(page, host, 30, 40);
+  const slid = (await sheet.boundingBox())!, [slidWidth, slidHeight] = await panelSize(host);
+  const held = { x: (panel.x + slidWidth / 2 - slid.x) / slid.width, y: (panel.y + slidHeight / 2 - slid.y) / slid.height };
   await page.keyboard.press('Shift+Digit0'); // Actual size: a 533 x 800 px page overflows the panel.
   await expect(page.locator('#zoom-level')).toHaveText('100%'); await settle();
   expect(await host.evaluate(el => el.scrollHeight - el.clientHeight > 1)).toBe(true);
-  expect(await host.evaluate(el => el.classList.contains('page-moved') || el.style.getPropertyValue('--pan-x') !== ''), 'no slide is left over').toBe(false);
+  expect(await host.evaluate(el => el.classList.contains('page-moved') || el.style.getPropertyValue('--pan-x') !== ''), 'no slide is left on a page that overflows').toBe(false);
   const grown = (await sheet.boundingBox())!, [grownWidth, grownHeight] = await panelSize(host);
-  expect(Math.abs(grown.x + grown.width / 2 - (panel.x + grownWidth / 2)), 'zoomed past fit: x').toBeLessThanOrEqual(2);
-  expect(Math.abs(grown.y + grown.height / 2 - (panel.y + grownHeight / 2)), 'zoomed past fit: y').toBeLessThanOrEqual(2);
+  expect(Math.abs(grown.x + held.x * grown.width - (panel.x + grownWidth / 2)), 'zoomed past fit: x').toBeLessThanOrEqual(2);
+  expect(Math.abs(grown.y + held.y * grown.height - (panel.y + grownHeight / 2)), 'zoomed past fit: y').toBeLessThanOrEqual(2);
   expect(errors).toEqual([]);
 });
 

@@ -1,4 +1,6 @@
-import { pageFraction, roundZoom, scrollToHold, zoomAbout, type Point, type Pose, type ZoomLimits } from './zoom';
+import { pageFraction, roundZoom, zoomAbout, type Point, type Pose, type ZoomLimits } from './zoom';
+import { KEEP } from './pan';
+import type { Spot } from './zoom-anchor';
 
 /** Marks a scroller whose page is being scaled by a gesture; adapters must not refit it meanwhile (see the PDF and image resize handlers). */
 export const PREVIEW_CLASS = 'zoom-preview';
@@ -14,11 +16,14 @@ export type ZoomGestureTarget = {
   zoom(): number;
   /** The range the page on screen can be zoomed within. */
   limits(): ZoomLimits;
-  /** Applies a true zoom (leaving any fit) and resolves once the document is drawn at it. */
-  commit(zoom: number): Promise<void>;
+  /**
+   * Applies a true zoom (leaving any fit) and resolves once the document is drawn at it. `spot` is the document point that was under
+   * the pointer; the target puts it back there as the page is drawn (scrolling, or sliding the page where the page fits or the scroll range ends).
+   */
+  commit(zoom: number, spot: Spot | undefined): Promise<void>;
 };
 
-type Gesture = { host: HTMLElement; surface: HTMLElement | null; base: number; pose: Pose; origin: Point; pointer: Point };
+type Gesture = { host: HTMLElement; surface: HTMLElement | null; base: number; pose: Pose; origin: Point; pointer: Point; pad: Point };
 
 /**
  * Continuous zoom toward the pointer for Ctrl/⌘ + wheel and trackpad pinch.
@@ -26,8 +31,8 @@ type Gesture = { host: HTMLElement; surface: HTMLElement | null; base: number; p
  * While the gesture runs the page is only scaled and moved with a CSS transform, one write per animation
  * frame: nothing is re-laid-out or re-rendered, so the page stays blurry but follows the fingers at full
  * rate, and the document point under the pointer stays under it. When the input pauses the zoom is committed
- * once (a crisp render through the adapter) and the scroll offset is set so that same point is still under the
- * pointer. Input that arrives while a commit is drawing is kept and starts the next gesture.
+ * once (a crisp render through the adapter), with that point to hold: the adapter places it as part of drawing the page, so the
+ * crisp page appears exactly where the scaled one was. Input that arrives while a commit is drawing is kept and starts the next gesture.
  */
 export function createZoomGesture(target: ZoomGestureTarget) {
   let gesture: Gesture | undefined, timer: ReturnType<typeof setTimeout> | undefined, frame = 0, committing = false;
@@ -36,7 +41,7 @@ export function createZoomGesture(target: ZoomGestureTarget) {
   const paint = () => {
     frame = 0;
     if (!gesture?.surface) return;
-    const { pose, surface } = gesture;
+    const { surface } = gesture, pose = reachable(gesture, gesture.pose);
     surface.style.transformOrigin = '0 0';
     surface.style.transform = `translate(${pose.x}px, ${pose.y}px) scale(${pose.scale})`;
   };
@@ -45,33 +50,55 @@ export function createZoomGesture(target: ZoomGestureTarget) {
     const host = target.scroller();
     if (!host) return undefined;
     const surface = host.querySelector<HTMLElement>(SURFACE), box = surface?.getBoundingClientRect();
+    const style = getComputedStyle(host);
     host.classList.add(PREVIEW_CLASS);
-    return { host, surface, base: target.zoom(), pose: { scale: 1, x: 0, y: 0 }, origin: { x: box?.left ?? 0, y: box?.top ?? 0 }, pointer: at };
+    return { host, surface, base: target.zoom(), pose: { scale: 1, x: 0, y: 0 }, origin: { x: box?.left ?? 0, y: box?.top ?? 0 }, pointer: at, pad: { x: parseFloat(style.paddingLeft) || 0, y: parseFloat(style.paddingTop) || 0 } };
+  }
+
+  /**
+   * What is drawn for `pose`, the zoom the input asked for. The pose keeps the pointer's point still whatever the path to it, so a page
+   * that cannot show it there is only drawn where it can: on an axis it will overflow, within its scroll range (zooming cannot drag a page
+   * past its own end; it rests against it, as the document itself will), and on an axis it fits, with KEEP px of it in the panel. The crisp
+   * page then replaces the scaled one exactly where it was drawn, so nothing moves when the gesture settles.
+   */
+  function reachable(current: Gesture, pose: Pose): Pose {
+    const { host, surface, origin, pad } = current;
+    if (!surface || surface.classList.contains('image-frame')) return pose;
+    const edge = host.getBoundingClientRect();
+    const axis = (shift: number, start: number, extent: number, panel: number, edgeAt: number, inset: number) => {
+      const size = extent * pose.scale, rest = start - edgeAt + shift; // The page's start in the panel, from its inner edge.
+      const [low, high] = size + 2 * inset - panel > 1 ? [panel - inset - size, inset] : [Math.min(KEEP, size, panel) - size, panel - Math.min(KEEP, size, panel)];
+      return Math.max(low, Math.min(high, rest)) - start + edgeAt;
+    };
+    return { scale: pose.scale,
+      x: axis(pose.x, origin.x, surface.offsetWidth, host.clientWidth, edge.left + host.clientLeft, pad.x),
+      y: axis(pose.y, origin.y, surface.offsetHeight, host.clientHeight, edge.top + host.clientTop, pad.y) };
   }
 
   async function settle() {
     clearTimeout(timer); timer = undefined;
     const current = gesture;
     if (!current || committing) return;
-    cancelAnimationFrame(frame); paint();
-    const { host, surface, pointer, pose } = current;
-    const limits = target.limits(), zoom = roundZoom(Math.max(limits.min, Math.min(limits.max, current.base * pose.scale)), limits);
-    const changed = pose.scale !== 1;
+    cancelAnimationFrame(frame);
+    const { host, surface, pointer } = current;
+    const limits = target.limits(), zoom = roundZoom(Math.max(limits.min, Math.min(limits.max, current.base * current.pose.scale)), limits);
+    const changed = current.pose.scale !== 1;
+    // The crisp page is drawn at a whole percent: scale the preview to exactly that first, so the two agree to the pixel.
+    if (changed && zoom !== current.base) current.pose = zoomAbout(current.pose, zoom / current.base / current.pose.scale, { x: pointer.x - current.origin.x, y: pointer.y - current.origin.y }, 0, Infinity);
+    paint();
+    const pose = reachable(current, current.pose);
     const size = surface ? { width: surface.offsetWidth, height: surface.offsetHeight } : undefined;
     const held = size ? pageFraction(pose, { x: pointer.x - current.origin.x, y: pointer.y - current.origin.y }, size) : undefined;
+    // Where the pointer is in the panel, from its inner edge: the point to hold stays there.
+    const edge = host.getBoundingClientRect();
+    const spot: Spot | undefined = held && { x: { f: held.x, at: pointer.x - edge.left - host.clientLeft }, y: { f: held.y, at: pointer.y - edge.top - host.clientTop } };
     committing = true;
-    try { if (changed) await target.commit(zoom); }
+    try { if (changed) await target.commit(zoom, spot); }
     finally {
       // The scaled page is replaced by the crisp one (or, for an image, resized in place) in the same task.
       if (surface) { surface.style.transform = ''; surface.style.transformOrigin = ''; }
       host.classList.remove(PREVIEW_CLASS);
       gesture = undefined; committing = false;
-    }
-    const fresh = held && changed ? host.querySelector<HTMLElement>(SURFACE) : null;
-    if (fresh && held) {
-      const box = fresh.getBoundingClientRect(), edge = host.getBoundingClientRect();
-      host.scrollLeft = scrollToHold(box.left - edge.left + host.scrollLeft, held.x, box.width, pointer.x - edge.left);
-      host.scrollTop = scrollToHold(box.top - edge.top + host.scrollTop, held.y, box.height, pointer.y - edge.top);
     }
     // Wheel events that came in while the page was being drawn start the next gesture.
     const next = queued; queued = undefined;
