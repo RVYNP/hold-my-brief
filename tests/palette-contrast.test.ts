@@ -160,9 +160,13 @@ describe('the glow', () => {
     expect(contrast(asRgb(get('fg')), asRgb(washed))).toBeLessThan(4.5);
   });
   it('is painted as the page colour under Tracks\' two radial glows, fixed to the window', () => {
-    expect(css).toContain('--glow-paint: radial-gradient(ellipse 70% 55% at 62% -8%, var(--grad-a), transparent), radial-gradient(ellipse 65% 60% at 95% 100%, var(--grad-b), transparent);');
-    const root = /\n  background-color: var\(--chrome\);\n  background-image: var\(--glow-paint\);\n  background-attachment: fixed;/;
+    expect(css).toContain('--glow-image: radial-gradient(ellipse 70% 55% at 62% -8%, var(--grad-a), transparent), radial-gradient(ellipse 65% 60% at 95% 100%, var(--grad-b), transparent);');
+    const root = /\n  background-color: var\(--chrome\);\n  background-image: var\(--glow-paint\);\n  background-attachment: var\(--glow-attach\);/;
     expect(css).toMatch(root);
+  });
+  it('is fixed to the window in every glow family and in no other', () => {
+    for (const { raw } of glowCases) { expect(raw['glow-attach']).toBe('fixed'); expect(raw['glow-paint']).toBe('var(--glow-image)'); }
+    expect(/:root, \[data-palette\] \{[^}]*--glow-paint: none;\s*--glow-attach: scroll;/.test(css)).toBe(true);
   });
   it('is transparent in every other family, so they paint exactly their own chrome', () => {
     expect(/:root, \[data-palette\] \{\s*--grad-a: transparent;\s*--grad-b: transparent;/.test(css)).toBe(true);
@@ -173,7 +177,7 @@ describe('the glow', () => {
     const query = /@media \(prefers-reduced-transparency: reduce\), \(prefers-contrast: more\), \(forced-colors: active\) \{\s*:is\(([^)]*(?:\)[^)]*)*?)\) \{([^}]*)\}/.exec(css);
     expect(query, 'the accessibility block').not.toBeNull();
     for (const name of glows) expect(query![1]).toContain(`[data-palette='${name}']`);
-    expect(query![2].replace(/\s+/g, ' ').trim()).toBe('--grad-a: transparent; --grad-b: transparent; --glass-chrome: var(--chrome); --glass-surface: var(--surface); --glass-host: var(--surface); --glass-stage: var(--stage); --glass-raise: var(--card);');
+    expect(query![2].replace(/\s+/g, ' ').trim()).toBe('--grad-a: transparent; --grad-b: transparent; --glass-chrome: var(--chrome); --glass-surface: var(--surface); --glass-host: var(--surface); --glass-stage: var(--stage); --glass-raise-base: var(--card); --glass-raise-paint: none; --glass-raise-attach: scroll;');
   });
   it('is applied before first paint from the same scheme table', () => {
     const table = /const glows = \{([^}]*)\};/.exec(themeBoot)![1];

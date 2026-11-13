@@ -207,10 +207,10 @@
   --shadow-drawer: 8px 0 30px light-dark(#25203524, transparent);
   --shadow-page: 0 2px 12px light-dark(#25203518, transparent);
   color: var(--fg);
-  /* The window: --chrome under the two glows (transparent outside the glow families), fixed to the window. */
+  /* The window: --chrome under the two glows (transparent outside the glow families), fixed to the window in a glow family. */
   background-color: var(--chrome);
   background-image: var(--glow-paint);
-  background-attachment: fixed;
+  background-attachment: var(--glow-attach);
   accent-color: var(--accent);
 }
 :root[data-theme='dark'] { color-scheme: dark; }
@@ -258,15 +258,19 @@
 :root, [data-palette] {
   --grad-a: transparent;
   --grad-b: transparent;
-  --glow-paint: radial-gradient(ellipse 70% 55% at 62% -8%, var(--grad-a), transparent), radial-gradient(ellipse 65% 60% at 95% 100%, var(--grad-b), transparent);
+  --glow-image: radial-gradient(ellipse 70% 55% at 62% -8%, var(--grad-a), transparent), radial-gradient(ellipse 65% 60% at 95% 100%, var(--grad-b), transparent);
+  --glow-paint: none;
+  --glow-attach: scroll;
   --glass-chrome: var(--chrome);
   --glass-surface: var(--surface);
   --glass-host: var(--surface);
   --glass-stage: var(--stage);
-  --glass-raise: var(--raise);
-  /* The rail and the drawer float over the document, so they must not show it through: their glass is the
-     window's own glow, fixed to the window beneath a wash of --glass-raise (three layers: wash, glow, glow). */
-  --glass-raise-paint: linear-gradient(var(--glass-raise), var(--glass-raise)), var(--glow-paint);
+  /* The rail and the drawer float over the document, so they must not show it through: in a glow family their
+     glass is the window's own glow, fixed to the window, beneath a wash of --glass-raise (three image layers:
+     wash, glow, glow) on the page colour. Elsewhere it is the plain --raise and no image, so nothing changes. */
+  --glass-raise-base: var(--raise);
+  --glass-raise-paint: none;
+  --glass-raise-attach: scroll;
 }
 [data-palette='aurora'] {
   color-scheme: dark;
@@ -299,11 +303,16 @@
   --search-hit: #6b5620;
   --grad-a: #2bd9a349;
   --grad-b: #8b5cf659;
+  --glow-paint: var(--glow-image);
+  --glow-attach: fixed;
   --glass-chrome: transparent;
   --glass-surface: #0b1a17b3;
   --glass-host: transparent;
   --glass-stage: transparent;
   --glass-raise: #10221ec7;
+  --glass-raise-base: var(--chrome);
+  --glass-raise-paint: linear-gradient(var(--glass-raise), var(--glass-raise)), var(--glow-paint);
+  --glass-raise-attach: scroll, fixed, fixed;
 }
 [data-palette='dusk'] {
   color-scheme: dark;
@@ -336,11 +345,16 @@
   --search-hit: #6b5620;
   --grad-a: #ff7a594f;
   --grad-b: #8e3fbf66;
+  --glow-paint: var(--glow-image);
+  --glow-attach: fixed;
   --glass-chrome: transparent;
   --glass-surface: #1a1220b3;
   --glass-host: transparent;
   --glass-stage: transparent;
   --glass-raise: #221829c7;
+  --glass-raise-base: var(--chrome);
+  --glass-raise-paint: linear-gradient(var(--glass-raise), var(--glass-raise)), var(--glow-paint);
+  --glass-raise-attach: scroll, fixed, fixed;
 }
 [data-palette='nebula'] {
   color-scheme: dark;
@@ -373,11 +387,16 @@
   --search-hit: #6b5620;
   --grad-a: #e040fb52;
   --grad-b: #3d5afe5c;
+  --glow-paint: var(--glow-image);
+  --glow-attach: fixed;
   --glass-chrome: transparent;
   --glass-surface: #0f0d1ab3;
   --glass-host: transparent;
   --glass-stage: transparent;
   --glass-raise: #151226c7;
+  --glass-raise-base: var(--chrome);
+  --glass-raise-paint: linear-gradient(var(--glass-raise), var(--glass-raise)), var(--glow-paint);
+  --glass-raise-attach: scroll, fixed, fixed;
 }
 [data-palette='solar'] {
   color-scheme: dark;
@@ -410,11 +429,16 @@
   --search-hit: #6b5620;
   --grad-a: #ff8a004f;
   --grad-b: #ffd16638;
+  --glow-paint: var(--glow-image);
+  --glow-attach: fixed;
   --glass-chrome: transparent;
   --glass-surface: #17130eb3;
   --glass-host: transparent;
   --glass-stage: transparent;
   --glass-raise: #1e1912c7;
+  --glass-raise-base: var(--chrome);
+  --glass-raise-paint: linear-gradient(var(--glass-raise), var(--glass-raise)), var(--glow-paint);
+  --glass-raise-attach: scroll, fixed, fixed;
 }
 [data-palette='ember'] {
   color-scheme: dark;
@@ -447,11 +471,16 @@
   --search-hit: #6b5620;
   --grad-a: #d9341f57;
   --grad-b: #ffa0004a;
+  --glow-paint: var(--glow-image);
+  --glow-attach: fixed;
   --glass-chrome: transparent;
   --glass-surface: #1e110cb3;
   --glass-host: transparent;
   --glass-stage: transparent;
   --glass-raise: #271812c7;
+  --glass-raise-base: var(--chrome);
+  --glass-raise-paint: linear-gradient(var(--glass-raise), var(--glass-raise)), var(--glow-paint);
+  --glass-raise-attach: scroll, fixed, fixed;
 }
 [data-palette='orchid'] {
   color-scheme: dark;
@@ -484,11 +513,16 @@
   --search-hit: #6b5620;
   --grad-a: #d61f9e57;
   --grad-b: #7c3aed5c;
+  --glow-paint: var(--glow-image);
+  --glow-attach: fixed;
   --glass-chrome: transparent;
   --glass-surface: #190e1cb3;
   --glass-host: transparent;
   --glass-stage: transparent;
   --glass-raise: #211427c7;
+  --glass-raise-base: var(--chrome);
+  --glass-raise-paint: linear-gradient(var(--glass-raise), var(--glass-raise)), var(--glow-paint);
+  --glass-raise-attach: scroll, fixed, fixed;
 }
 [data-palette='glacier'] {
   color-scheme: light;
@@ -521,11 +555,16 @@
   --search-hit: #f2dfa0;
   --grad-a: #7fc8ff80;
   --grad-b: #8ef0d066;
+  --glow-paint: var(--glow-image);
+  --glow-attach: fixed;
   --glass-chrome: transparent;
   --glass-surface: #f8fbfdd1;
   --glass-host: transparent;
   --glass-stage: transparent;
   --glass-raise: #ffffffe0;
+  --glass-raise-base: var(--chrome);
+  --glass-raise-paint: linear-gradient(var(--glass-raise), var(--glass-raise)), var(--glow-paint);
+  --glass-raise-attach: scroll, fixed, fixed;
 }
 [data-palette='peach'] {
   color-scheme: light;
@@ -558,11 +597,16 @@
   --search-hit: #f2dfa0;
   --grad-a: #ffb38a8c;
   --grad-b: #ff8fb070;
+  --glow-paint: var(--glow-image);
+  --glow-attach: fixed;
   --glass-chrome: transparent;
   --glass-surface: #fff8f3d1;
   --glass-host: transparent;
   --glass-stage: transparent;
   --glass-raise: #ffffffe0;
+  --glass-raise-base: var(--chrome);
+  --glass-raise-paint: linear-gradient(var(--glass-raise), var(--glass-raise)), var(--glow-paint);
+  --glass-raise-attach: scroll, fixed, fixed;
 }
 [data-palette='lagoon'] {
   color-scheme: light;
@@ -595,11 +639,16 @@
   --search-hit: #f2dfa0;
   --grad-a: #4fd1c580;
   --grad-b: #5b9bff66;
+  --glow-paint: var(--glow-image);
+  --glow-attach: fixed;
   --glass-chrome: transparent;
   --glass-surface: #f6fbfcd1;
   --glass-host: transparent;
   --glass-stage: transparent;
   --glass-raise: #ffffffe0;
+  --glass-raise-base: var(--chrome);
+  --glass-raise-paint: linear-gradient(var(--glass-raise), var(--glass-raise)), var(--glow-paint);
+  --glass-raise-attach: scroll, fixed, fixed;
 }
 [data-palette='moss'] {
   color-scheme: light;
@@ -632,11 +681,16 @@
   --search-hit: #f2dfa0;
   --grad-a: #8fd66f80;
   --grad-b: #c8c95a66;
+  --glow-paint: var(--glow-image);
+  --glow-attach: fixed;
   --glass-chrome: transparent;
   --glass-surface: #f8faf0d1;
   --glass-host: transparent;
   --glass-stage: transparent;
   --glass-raise: #ffffffe0;
+  --glass-raise-base: var(--chrome);
+  --glass-raise-paint: linear-gradient(var(--glass-raise), var(--glass-raise)), var(--glow-paint);
+  --glass-raise-attach: scroll, fixed, fixed;
 }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more), (forced-colors: active) {
   :is([data-palette='aurora'], [data-palette='dusk'], [data-palette='nebula'], [data-palette='solar'], [data-palette='ember'], [data-palette='orchid'], [data-palette='glacier'], [data-palette='peach'], [data-palette='lagoon'], [data-palette='moss']) {
@@ -646,7 +700,9 @@
     --glass-surface: var(--surface);
     --glass-host: var(--surface);
     --glass-stage: var(--stage);
-    --glass-raise: var(--card);
+    --glass-raise-base: var(--card);
+    --glass-raise-paint: none;
+    --glass-raise-attach: scroll;
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -778,7 +834,7 @@ h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 1px 0 
    and the position up over the page. It is an overlay, so the page never resizes or refits. The band
    is the only page area the footer takes while closed, and it collapses once the footer is open so it
    never covers the page above the open footer. */
-footer { position: absolute; z-index: 15; left: 0; right: 0; bottom: 0; display: flex; gap: 2px; align-items: center; height: var(--footer-height); padding: 2px 6px 0; background-color: var(--chrome); background-image: var(--glow-paint); background-attachment: fixed; translate: 0 calc(100% - 3px); transition: translate .16s ease, opacity .2s, box-shadow .16s; }
+footer { position: absolute; z-index: 15; left: 0; right: 0; bottom: 0; display: flex; gap: 2px; align-items: center; height: var(--footer-height); padding: 2px 6px 0; background-color: var(--chrome); background-image: var(--glow-paint); background-attachment: var(--glow-attach); translate: 0 calc(100% - 3px); transition: translate .16s ease, opacity .2s, box-shadow .16s; }
 footer::before { content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: 12px; }
 footer:hover, footer:focus-within, footer:has(#progress:active) { translate: 0 0; box-shadow: 0 -6px 20px light-dark(#25203514, transparent); }
 footer:hover::before, footer:focus-within::before { height: 0; }
