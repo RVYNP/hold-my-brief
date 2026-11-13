@@ -451,9 +451,8 @@ test('the hand tool and the saved zoom keep working after a gesture', async ({ p
   expect(await scroll()).toEqual([left + 40, top + 60]);
   await expect(level(page)).toHaveText(zoom);
   // The zoom is part of the saved reading state, in the new form: a true scale, not a fit, with the marker that says so.
-  await page.waitForTimeout(800);
-  const saved = JSON.parse(await page.evaluate(() => Object.entries(localStorage).filter(([key]) => key.startsWith('hold-my-brief:') && key.length > 40).map(([, value]) => value)[0]));
-  expect(saved.options).toMatchObject({ fitted: false, zoom: Number(zoom.replace('%', '')) / 100, zoomModel: 2 });
+  const saved = () => page.evaluate(() => { const value = Object.entries(localStorage).filter(([key]) => key.startsWith('hold-my-brief:') && key.length > 40).map(([, text]) => text)[0]; return value ? JSON.parse(value).options : undefined; });
+  await expect.poll(saved).toMatchObject({ fitted: false, zoom: Number(zoom.replace('%', '')) / 100, zoomModel: 2 });
   expect(errors).toEqual([]);
 });
 
@@ -495,11 +494,13 @@ test('an image is 100 % at one image pixel per CSS pixel; Ctrl + wheel zooms it 
   await fitOf(page, 'page');
   const img = page.locator('.image-frame img');
   // A fit shows the scale it came to, and keeps following the window.
+  // The label follows the image's size by a frame, so compare them once it has caught up.
+  const labelOffBy = async () => Math.abs((await percent(page)) - (await img.boundingBox())!.width / 600 * 100);
   const fitBox = (await img.boundingBox())!;
-  expect(Math.abs((await percent(page)) - fitBox.width / 600 * 100)).toBeLessThanOrEqual(1);
+  await expect.poll(labelOffBy).toBeLessThanOrEqual(1);
   await page.setViewportSize({ width: 1080, height: 400 });
   await expect.poll(async () => (await img.boundingBox())!.width).toBeLessThan(fitBox.width - 20);
-  expect(Math.abs((await percent(page)) - (await img.boundingBox())!.width / 600 * 100)).toBeLessThanOrEqual(1);
+  await expect.poll(labelOffBy).toBeLessThanOrEqual(1);
   await page.setViewportSize({ width: 1080, height: 680 });
 
   await page.locator('.image-reader').focus(); await page.keyboard.press('Shift+Digit0');

@@ -419,6 +419,9 @@ for (const layout of ['single', 'spread'] as const) {
   });
 }
 
+/** Lets the page present `count` frames: the view-state sync that follows an input is scheduled on animation frames, so a check made before they pass can miss a move. */
+const afterFrames = (page: Page, count: number) => page.evaluate(count => new Promise<void>(resolve => { const next = (left: number) => left ? requestAnimationFrame(() => next(left - 1)) : resolve(); next(count); }), count);
+
 for (const layout of ['single', 'spread'] as const) {
   test(`pressing or releasing Control or Shift, and Shift + wheel, never move or recentre the page, ${layout} view`, async ({ page }) => {
     const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
@@ -431,8 +434,8 @@ for (const layout of ['single', 'spread'] as const) {
     const before = await box();
     const keys = async (note: string) => {
       const state: [typeof before, number[]] = [await box(), await scroll()];
-      for (const key of ['Control', 'Shift', 'Alt']) { await page.keyboard.down(key); await page.waitForTimeout(80); await unmoved(`${note}: ${key} down`, state); await page.keyboard.up(key); await page.waitForTimeout(80); await unmoved(`${note}: ${key} up`, state); }
-      await page.keyboard.down('Control'); await page.keyboard.down('Shift'); await page.waitForTimeout(150); await page.keyboard.up('Shift'); await page.keyboard.up('Control'); await page.waitForTimeout(150);
+      for (const key of ['Control', 'Shift', 'Alt']) { await page.keyboard.down(key); await afterFrames(page, 5); await unmoved(`${note}: ${key} down`, state); await page.keyboard.up(key); await afterFrames(page, 5); await unmoved(`${note}: ${key} up`, state); }
+      await page.keyboard.down('Control'); await page.keyboard.down('Shift'); await afterFrames(page, 10); await page.keyboard.up('Shift'); await page.keyboard.up('Control'); await afterFrames(page, 10);
       await unmoved(`${note}: Control and Shift together`, state);
       return state;
     };
@@ -442,13 +445,13 @@ for (const layout of ['single', 'spread'] as const) {
     await page.mouse.move(pointer.x, pointer.y);
     await keys('at Fit');
     let state: [typeof before, number[]] = [await box(), await scroll()];
-    await page.keyboard.down('Shift'); await page.mouse.wheel(0, 120); await page.keyboard.up('Shift'); await page.waitForTimeout(300);
+    await page.keyboard.down('Shift'); await page.mouse.wheel(0, 120); await page.keyboard.up('Shift'); await afterFrames(page, 20);
     await unmoved('Shift + wheel at Fit (nothing to scroll)', state);
 
     expectNoSnap(await wheelAt(page, layout, await onPage(page, layout, .2, .2), [NOTCH, NOTCH]), 'zoom out');
     await page.mouse.move((await onPage(page, layout, .5, .5)).x, (await onPage(page, layout, .5, .5)).y);
     state = await keys('after zooming out');
-    await page.keyboard.down('Shift'); await page.mouse.wheel(0, 120); await page.keyboard.up('Shift'); await page.waitForTimeout(300);
+    await page.keyboard.down('Shift'); await page.mouse.wheel(0, 120); await page.keyboard.up('Shift'); await afterFrames(page, 20);
     await unmoved('Shift + wheel on a slid page that fits', state);
 
     await fitPage(page, layout);
@@ -458,7 +461,9 @@ for (const layout of ['single', 'spread'] as const) {
     // Shift + wheel scrolls (sideways on Windows, vertically on a Mac): the page moves by exactly what it scrolled, and is never recentred.
     const [left, top] = await scroll(), natural = await box();
     // Upwards, so that a page resting against the far end (a zoom at its right edge does) can still scroll that way.
-    await page.keyboard.down('Shift'); await page.mouse.wheel(0, -120); await page.keyboard.up('Shift'); await page.waitForTimeout(300);
+    await page.keyboard.down('Shift'); await page.mouse.wheel(0, -120); await page.keyboard.up('Shift');
+    // The wheel's scroll is eased by the engine: read it once it has moved and stopped.
+    let seen = ''; await expect.poll(async () => { const now = JSON.stringify(await scroll()); const stopped = now !== JSON.stringify([left, top]) && now === seen; seen = now; return stopped; }, { message: 'the wheel scrolled the page, and it has stopped' }).toBe(true);
     const [leftNow, topNow] = await scroll(), now = await box();
     expect(Math.abs(leftNow - left) + Math.abs(topNow - top), 'the wheel scrolled the page').toBeGreaterThan(20);
     expect(now!.x - natural!.x).toBeCloseTo(-(leftNow - left), 1); expect(now!.y - natural!.y).toBeCloseTo(-(topNow - top), 1);

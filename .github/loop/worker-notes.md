@@ -11,10 +11,9 @@ those paths as your worktree. This repository is public: never post absolute pat
   required foliate sandbox patch; never skip it).
 - Checks, each with its counts in the PR body:
   - `npm test` (unit), `npx tsc --noEmit` (types);
-  - `npm run test:e2e` (Playwright starts its own Vite server on port 1421). Before it, make sure nothing
-    listens there: `lsof -nP -iTCP:1421 -sTCP:LISTEN` prints nothing. If something does, do not kill it;
-    run the other checks and list e2e under **Not run**. Run only the specs your change touches with
-    `npx playwright test e2e/<file>.spec.ts`, then the full suite once at the end;
+  - `npm run test:e2e`: run e2e with `E2E_PORT=$((20000 + <PR number>))`; Playwright starts its own server on that
+    port. Run only the specs your change touches with `npx playwright test e2e/<file>.spec.ts`, then the full suite
+    once at the end;
   - Rust: `export CARGO_BUILD_JOBS=4`, then `cargo test --manifest-path src-tauri/Cargo.toml --locked`
     (the target directory stays inside your worktree).
 - Windows-only behaviour (WebView2 native smoke, NSIS installer) is not available to you: do the rest

@@ -90,6 +90,10 @@ Browser tests pick a browser automatically: `CHROME_PATH`, then a branded Chrome
 a cached Playwright Chromium. Nothing is downloaded at test time. Tests construct their own small
 documents; they do not use production files.
 
+`npm run test:e2e` starts its own Vite server on port 1421, or on `E2E_PORT` when it is set, so
+checkouts that run at the same time each take a port of their own. It never reuses a server that is
+already listening: a busy port fails the run instead of testing another checkout's build.
+
 `test:native` differs by platform. On Windows it drives the real WebView2 over CDP and asserts the
 full IPC surface. On macOS, WKWebView exposes no CDP endpoint, so it verifies launch, liveness and
 clean quit, and skips the transport assertions with an explicit reason. Quit any running instance

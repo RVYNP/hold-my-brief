@@ -127,6 +127,8 @@ test('Actual size is Shift+0, Ctrl+1 no longer is, and typing in a field ignores
   await page.goto('/');
   await page.locator('#file-input').setInputFiles(pdf('plates.pdf'));
   await shown(page, 'plates.pdf');
+  // The tab exists before its document is drawn: a shortcut pressed until then goes to a reader that cannot act on it.
+  await expect(page.locator('#position')).toContainText('Page 1 of 5'); await expect(page.locator('#loading')).toBeHidden(); await expect(page.locator('.pdf-render-status')).toHaveCount(0);
   await page.locator('.pdf-reader').focus();
   await page.keyboard.press('Control+0');
   // A fit follows the panel, so its % can still move while the layout settles: what must not change is that a fit is in force.

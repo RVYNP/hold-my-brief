@@ -30,6 +30,8 @@
  * Fixed-layout EPUB pages live in same-origin iframes whose pointer input never reaches the
  * application document, so each frame document is watched directly (`watchFrame`).
  */
+import { PREVIEW_CLASS } from './zoom-gesture';
+
 export const DRAG_SLOP = 3;
 /** How much of a moved page must stay inside the panel on each axis, in px. */
 export const KEEP = 64;
@@ -216,6 +218,8 @@ export class Panner {
    * so the host can scroll it again.
    */
   private settle(drop: boolean) {
+    // A zoom gesture scales the page by transform: its box is not content that grew, and the gesture's own commit places the page again.
+    if (this.scroller?.classList.contains(PREVIEW_CLASS)) return;
     if (!this.offset.x && !this.offset.y) return;
     const room = this.room(), stale = this.fitted && (!drop || this.size() !== this.sized);
     let waiting = false;

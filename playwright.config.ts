@@ -33,15 +33,19 @@ const browser = resolveChromiumExecutable() as { executablePath?: string; channe
 // Printed once so a failing launch names the exact binary that was tried.
 console.log(`[playwright] ${platform()}/${process.arch} browser: ${browser.origin}${browser.note ? ` -- ${browser.note}` : ''}`);
 
+// One port per worker (E2E_PORT), so several checkouts can run e2e at once. 1421 stays the default.
+const port = Number(process.env.E2E_PORT ?? 1421);
+
 export default defineConfig({
   testDir: './e2e',
   use: {
-    baseURL: 'http://127.0.0.1:1421',
+    baseURL: `http://127.0.0.1:${port}`,
     ...(browser.channel ? { channel: browser.channel } : {}),
     ...(browser.executablePath ? { launchOptions: { executablePath: browser.executablePath } } : {}),
     viewport: { width: 420, height: 620 },
   },
-  webServer: { command: 'npm run dev -- --port 1421', url: 'http://127.0.0.1:1421', reuseExistingServer: true },
+  // Never reuse a server: it could belong to another checkout. A busy port fails fast (Vite strictPort).
+  webServer: { command: `npm run dev -- --port ${port}`, url: `http://127.0.0.1:${port}`, reuseExistingServer: false },
   timeout: 30000,
   // The first document open on a cold dev server transforms pdfjs-dist/foliate on demand;
   // on a CI runner that alone took longer than the 5 s default and failed the first PDF test.

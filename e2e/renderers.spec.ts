@@ -393,7 +393,10 @@ test('library drawer floats over the page and never resizes it, while drag, keyb
   await page.getByRole('button', { name: /Back to reading/ }).click();
   await expect(root).not.toHaveClass(/is-board/);
   expect(await pageGeometry()).toEqual(untouched);
-  await page.reload();
+  // A reload reopens the document, and the library refresh that follows redraws the drawer and may move focus: a key or a menu used before it
+  // lands goes nowhere. It has landed once the drawer marks the document that is open.
+  const reopened = async () => { await expect(page.locator('#position')).toContainText('Page 1 of 3'); await expect(page.locator('.library-panel [aria-current="true"]')).toHaveCount(1); };
+  await page.reload(); await reopened();
   await expect(handle).toHaveAttribute('aria-valuenow', '334');
   expect(await docked()).toBe(true);
   // Arrows move the separator visually, so Left widens a right-docked library.
@@ -414,7 +417,7 @@ test('library drawer floats over the page and never resizes it, while drag, keyb
   expect(await contained()).toBe(true);
   await chooseFromViewMenu(page, 'List');
   await expect(documents).toHaveClass(/library-list/);
-  await page.reload();
+  await page.reload(); await reopened();
   await expect(documents).toHaveClass(/library-list/);
   await chooseFromViewMenu(page, 'Grid');
   await expect(documents).toHaveClass(/library-grid/);
@@ -960,6 +963,15 @@ test('a slid PDF page is re-clamped on resize, and text selection still lands on
     range.setStart(node, start); range.setEnd(node, start + 'selectable'.length);
     const box = range.getBoundingClientRect(); return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
   });
+  // The loading bar's going away refits the page about 100 ms later and swaps it for a new one; measure a word only once the page has stopped changing.
+  await expect(page.locator('#loading')).toBeHidden();
+  await page.waitForFunction(() => {
+    const state = window as unknown as { sheetSeen?: { node: Element | null; box: string; since: number } }, node = document.querySelector('.pdf-page'), now = performance.now();
+    const box = node ? JSON.stringify(node.getBoundingClientRect()) : '', seen = state.sheetSeen;
+    if (!seen || seen.node !== node || seen.box !== box) { state.sheetSeen = { node, box, since: now }; return false; }
+    return !!node && now - seen.since >= 300;
+  }, undefined, { polling: 'raf' });
+  await expect(page.locator('.textLayer')).toContainText('First page with selectable text');
   const before = await word();
   await host.focus(); await page.keyboard.press('h');
   await dragPanel(page, host, 30, 40);
@@ -1224,6 +1236,7 @@ test('image-only PDF pages carry no note, say so in the tooltip and explain a se
   await page.keyboard.press('h');
   await expect(page.getByRole('button', { name: 'Hand tool' })).toHaveAttribute('aria-pressed', 'false');
   await noNote();
+  await expect(title).toHaveAttribute('title', tip); // The page is known to be image-only once its text has been read; a select-drag before that explains nothing.
   await drag(); await expect(notice).toBeVisible(); await expect(notice).toContainText(message);
   await expect(page.locator('#retry-save')).toBeHidden();
   await page.getByRole('button', { name: 'Dismiss message' }).click(); await expect(notice).toBeHidden();
