@@ -4,19 +4,26 @@ import type { Position } from './types';
 
 export type Progress = { fraction: number; page?: number; pages?: number };
 
-/** What to save beside a position, or nothing when it says nothing about progress (a single image, a position that is not a number). */
-export function progressOf(position: Pick<Position, 'fraction' | 'scrub'>): Progress | undefined {
+/**
+ * What to save beside a position, or nothing when it says nothing about progress (a single image, a position that is not a number).
+ * In two-page view the position is the first page of the pair, and a page turn leaves the fraction short of 1 (it counts the pair's
+ * first page only), so showing the last pair is the end of the document: its fraction is saved as 1.
+ */
+export function progressOf(position: Pick<Position, 'fraction' | 'scrub' | 'spread'>): Progress | undefined {
   const { scrub, fraction } = position;
   if (!Number.isFinite(fraction)) return undefined;
   const clamped = Math.min(1, Math.max(0, fraction));
-  if (scrub.unit === 'page') return scrub.total > 1 ? { fraction: clamped, page: scrub.current, pages: scrub.total } : undefined;
+  if (scrub.unit === 'page') {
+    if (scrub.total <= 1) return undefined;
+    const lastSpread = position.spread === 'active' && scrub.current + 1 >= scrub.total;
+    return { fraction: lastSpread ? 1 : clamped, page: scrub.current, pages: scrub.total };
+  }
   return { fraction: clamped };
 }
 
 /**
- * A paged document is "finished" on its last page, or at its very end: in two-page view the saved page is the first of the pair, so
- * the final spread (95-96 of 96) saves page 95 and only its fraction, which an explicit jump to the end makes 1, says it is the end.
- * Reflowable text is finished once the rounded percentage reaches 100.
+ * A paged document is "finished" on its last page, or at its very end (fraction 1: an explicit jump to the end, or the last pair of
+ * a two-page view, see `progressOf`). Reflowable text is finished once the rounded percentage reaches 100.
  */
 export function isFinished(progress: Progress): boolean {
   return progress.page !== undefined && progress.pages !== undefined ? progress.page >= progress.pages || progress.fraction >= .999 : progress.fraction >= .995;

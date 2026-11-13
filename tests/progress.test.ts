@@ -43,6 +43,17 @@ describe('progressOf', () => {
     expect(progressOf({ fraction: .38, scrub: scrub('percent', 38, 100) })).toEqual({ fraction: .38 });
     expect(progressOf({ fraction: .5, scrub: scrub('line', 20, 40) })).toEqual({ fraction: .5 });
   });
+  it('saves the end of the document when the last pair of a two-page view is showing', () => {
+    const spread = { spread: 'active' as const };
+    // Without a cover pairing the last pair of 96 is 95-96, with one the last pair of 97 is 96-97; a page turn leaves the fraction short of 1.
+    expect(progressOf({ fraction: 94 / 96, scrub: scrub('page', 95, 96), ...spread })).toEqual({ fraction: 1, page: 95, pages: 96 });
+    expect(progressOf({ fraction: 95 / 97, scrub: scrub('page', 96, 97), ...spread })).toEqual({ fraction: 1, page: 96, pages: 97 });
+    expect(formatProgress(progressOf({ fraction: 94 / 96, scrub: scrub('page', 95, 96), ...spread }))).toBe('Finished');
+    // Earlier pairs, and single-page view at the same page, are not the end.
+    expect(progressOf({ fraction: 92 / 96, scrub: scrub('page', 93, 96), ...spread })!.fraction).toBeLessThan(1);
+    expect(progressOf({ fraction: 94 / 96, scrub: scrub('page', 95, 96) })).toEqual({ fraction: 94 / 96, page: 95, pages: 96 });
+    expect(progressOf({ fraction: 94 / 96, scrub: scrub('page', 95, 96), spread: 'waiting' })!.fraction).toBeLessThan(1);
+  });
   it('has no progress for a single image or a position that is not a number, and clamps the rest', () => {
     expect(progressOf({ fraction: 0, scrub: scrub('page', 1, 1) })).toBeUndefined();
     expect(progressOf({ fraction: Number.NaN, scrub: scrub('percent', 0, 100) })).toBeUndefined();
