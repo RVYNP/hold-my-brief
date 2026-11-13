@@ -43,6 +43,10 @@ const GROUP_ORDER: readonly CommandGroup[] = ['File', 'Navigate', 'View', 'Windo
  */
 export const COMMANDS: readonly Command[] = [
   { id: 'open', label: 'Open file…', group: 'File', keywords: ['load', 'recent'], shortcut: 'Ctrl O' },
+  { id: 'new-tab', label: 'New tab…', group: 'File', keywords: ['open', 'document', 'tabs'], shortcut: 'Ctrl T' },
+  { id: 'close-tab', label: 'Close tab', group: 'File', keywords: ['tabs', 'document', 'shut'], shortcut: 'Ctrl W' },
+  { id: 'next-tab', label: 'Next tab', group: 'File', keywords: ['tabs', 'switch', 'right'], shortcut: 'Ctrl Tab' },
+  { id: 'previous-tab', label: 'Previous tab', group: 'File', keywords: ['tabs', 'switch', 'left'], shortcut: 'Ctrl Shift Tab' },
   { id: 'library', label: 'Toggle document library', group: 'File', keywords: ['sidebar', 'books', 'collection'], shortcut: 'Ctrl B' },
   { id: 'library-side', label: 'Move library to other side', group: 'File', keywords: ['dock', 'rail', 'sidebar', 'left', 'right', 'lock'] },
   { id: 'library-board', label: 'Library board', group: 'File', keywords: ['board', 'grid', 'browse', 'collection'] },
@@ -56,7 +60,7 @@ export const COMMANDS: readonly Command[] = [
   { id: 'screen-next', label: 'Next screen', group: 'Navigate', keywords: ['scroll down'], shortcut: 'Space', requiresDocument: true },
   { id: 'fit-page', label: 'Fit page', group: 'View', keywords: ['zoom', 'whole page'], shortcut: 'Ctrl 0', requiresDocument: true },
   { id: 'fit-width', label: 'Fit width', group: 'View', keywords: ['zoom', 'wide'], shortcut: 'Ctrl 2', requiresDocument: true },
-  { id: 'actual-size', label: 'Actual size (100%)', group: 'View', keywords: ['zoom', '100', 'real size', 'original'], shortcut: 'Ctrl 1', requiresDocument: true },
+  { id: 'actual-size', label: 'Actual size (100%)', group: 'View', keywords: ['zoom', '100', 'real size', 'original'], shortcut: 'Shift 0', requiresDocument: true },
   { id: 'rotate', label: 'Rotate page 90°', group: 'View', keywords: ['orientation', 'landscape', 'sideways'], requiresDocument: true },
   { id: 'spread', label: 'Two-page spread', group: 'View', keywords: ['facing', 'dual', 'pair'], shortcut: 'Ctrl 3', requiresDocument: true },
   { id: 'cover', label: 'Cover page alone', group: 'View', keywords: ['spread', 'first page'], requiresDocument: true },
@@ -78,11 +82,22 @@ export const COMMANDS: readonly Command[] = [
 /** The keyboard model, kept separate from what each command does. */
 export type Shortcut = {
   id: string;
+  /** The key's value, compared lower-cased. Ignored when `code` is given. */
   key: string;
+  /** The physical key, for bindings whose `key` changes with Shift or the layout (Shift+0 types `)`; Alt+1 types a symbol on macOS). */
+  code?: string;
   ctrl?: boolean;
   alt?: boolean;
   shift?: boolean;
+  /** ⌘ on macOS. Every other binding requires it to be up, so OS-level ⌘ shortcuts still reach the webview. */
+  meta?: boolean;
 };
+
+/** A binding for Ctrl and the same one for ⌘, where the platform's modifier is the natural one. */
+const orCommand = (shortcut: Shortcut): Shortcut[] => [{ ...shortcut, ctrl: true }, { ...shortcut, ctrl: false, meta: true }];
+/** Select tab 1…8 and, with 9, the last one: Alt+digit everywhere, ⌘+digit on macOS. (Ctrl+2…4 are the fit, spread and preview commands.) */
+export const TAB_DIGITS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
+export const tabShortcutId = (digit: number) => `select-tab-${digit}`;
 
 /**
  * Shortcuts handled by the global keydown listener. `key` is compared lower-cased against
@@ -100,7 +115,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: 'goto', key: 'g', ctrl: true },
   { id: 'find', key: 'f', ctrl: true },
   { id: 'fit-page', key: '0', ctrl: true },
-  { id: 'actual-size', key: '1', ctrl: true },
+  { id: 'actual-size', key: '0', code: 'Digit0', shift: true },
   { id: 'fit-width', key: '2', ctrl: true },
   { id: 'spread', key: '3', ctrl: true },
   { id: 'page-strip', key: '4', ctrl: true },
@@ -108,19 +123,26 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: 'larger', key: '+', ctrl: true },
   { id: 'larger', key: '=', ctrl: true },
   { id: 'back', key: 'arrowleft', alt: true },
+  ...orCommand({ id: 'new-tab', key: 't' }),
+  ...orCommand({ id: 'close-tab', key: 'w' }),
+  { id: 'next-tab', key: 'tab', ctrl: true },
+  { id: 'previous-tab', key: 'tab', ctrl: true, shift: true },
+  ...orCommand({ id: 'next-tab', key: 'arrowright', alt: true }),
+  ...orCommand({ id: 'previous-tab', key: 'arrowleft', alt: true }),
+  ...TAB_DIGITS.flatMap(digit => [{ id: tabShortcutId(digit), key: String(digit), code: `Digit${digit}`, alt: true }, { id: tabShortcutId(digit), key: String(digit), code: `Digit${digit}`, meta: true }]),
 ];
 
 /** Shortcut ids that are interface affordances rather than dispatchable commands. */
-export const INTERFACE_SHORTCUTS: readonly string[] = ['command-palette'];
+export const INTERFACE_SHORTCUTS: readonly string[] = ['command-palette', ...TAB_DIGITS.map(tabShortcutId)];
 
 /**
  * Which action an event reaches, or undefined. Modifier state must match exactly, except
  * that `larger` is reachable through both `+` and `=`.
  */
-export function shortcutFor(event: { key: string; ctrlKey: boolean; altKey: boolean; shiftKey: boolean; metaKey?: boolean }): string | undefined {
-  if (event.metaKey) return undefined;
+export function shortcutFor(event: { key: string; code?: string; ctrlKey: boolean; altKey: boolean; shiftKey: boolean; metaKey?: boolean }): string | undefined {
   const key = event.key.toLowerCase();
-  return SHORTCUTS.find(shortcut => shortcut.key === key
+  return SHORTCUTS.find(shortcut => (shortcut.code ? shortcut.code === event.code : shortcut.key === key)
+    && Boolean(shortcut.meta) === Boolean(event.metaKey)
     && Boolean(shortcut.ctrl) === event.ctrlKey
     && Boolean(shortcut.alt) === event.altKey
     && Boolean(shortcut.shift) === event.shiftKey)?.id;
@@ -154,6 +176,7 @@ const MOVING_KEYS: readonly ShortcutRow[] = [
 /** Keys of the interface itself, shown after the catalog. */
 const INTERFACE_KEYS: readonly ShortcutRow[] = [
   { label: 'Command palette', keys: ['Ctrl', 'K'] },
+  { label: 'Go to tab 1–8 / last tab', keys: ['Alt', '1…9'], note: 'or ⌘ 1…9 on macOS' },
   { label: 'Resize the library', keys: ['←', '→'], note: 'on its divider' },
   { label: 'Close a dialog or popover', keys: ['Esc'] },
 ];

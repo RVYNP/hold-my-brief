@@ -45,7 +45,7 @@ async function openMenu(page: Page) {
 const pageBox = async (page: Page) => (await page.locator('.pdf-page').boundingBox())!;
 /** Actual size by its shortcut, with the page settled at it. */
 async function actualSize(page: Page) {
-  await page.locator('.pdf-reader').focus(); await page.keyboard.press('Control+1');
+  await page.locator('.pdf-reader').focus(); await page.keyboard.press('Shift+Digit0');
   await expect(level(page)).toHaveText('100%'); await fitOf(page, ''); await settled(page);
 }
 
@@ -62,7 +62,7 @@ test('the zoom level is a menu button showing the real scale: field, commands wi
   await expect(level(page)).toHaveAttribute('aria-expanded', 'true');
   await expect(field(page)).toHaveValue(`${await percent(page)}%`);
   const entries = menu(page).locator('[role^="menuitem"]');
-  await expect(entries).toHaveText(['Zoom inCtrl +', 'Zoom outCtrl −', 'Fit pageCtrl 0', 'Fit widthCtrl 2', 'Actual size (100%)Ctrl 1', '50%', '200%']);
+  await expect(entries).toHaveText(['Zoom inCtrl +', 'Zoom outCtrl −', 'Fit pageCtrl 0', 'Fit widthCtrl 2', 'Actual size (100%)Shift 0', '50%', '200%']);
   // The fit in force carries the check; no fit, no check.
   const checked = async () => menu(page).locator('[aria-checked=true]').allTextContents();
   expect(await checked()).toEqual(['Fit pageCtrl 0']);
@@ -82,7 +82,7 @@ test('the zoom level is a menu button showing the real scale: field, commands wi
   expect(errors).toEqual([]);
 });
 
-test('100 % is the page at its physical size at CSS resolution, whatever the window, and Ctrl 1 is its shortcut', async ({ page }) => {
+test('100 % is the page at its physical size at CSS resolution, whatever the window, and Shift+0 is its shortcut', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await openPdf(page);
   await actualSize(page);
@@ -464,7 +464,7 @@ test('a two-page spread zooms to a true scale too', async ({ page }) => {
   await page.locator('.pdf-reader').focus(); await page.keyboard.press('PageDown');
   await expect(page.locator('#position')).toContainText('Pages 2–3 of 3');
   await expect(page.locator('.pdf-spread .pdf-page')).toHaveCount(2); await expect(page.locator('.pdf-render-status')).toHaveCount(0);
-  await page.keyboard.press('Control+1'); await expect(level(page)).toHaveText('100%'); await fitOf(page, '');
+  await page.keyboard.press('Shift+Digit0'); await expect(level(page)).toHaveText('100%'); await fitOf(page, '');
   await expect(page.locator('.pdf-render-status')).toHaveCount(0);
   const spread = (await page.locator('.pdf-spread').boundingBox())!;
   expect(spread.width).toBeCloseTo(PAGE_WIDTH * 2, 0); expect(spread.height).toBeCloseTo(PAGE_HEIGHT, 0);
@@ -502,7 +502,7 @@ test('an image is 100 % at one image pixel per CSS pixel; Ctrl + wheel zooms it 
   expect(Math.abs((await percent(page)) - (await img.boundingBox())!.width / 600 * 100)).toBeLessThanOrEqual(1);
   await page.setViewportSize({ width: 1080, height: 680 });
 
-  await page.locator('.image-reader').focus(); await page.keyboard.press('Control+1');
+  await page.locator('.image-reader').focus(); await page.keyboard.press('Shift+Digit0');
   await expect(level(page)).toHaveText('100%'); await fitOf(page, '');
   const before = (await img.boundingBox())!;
   expect(before.width).toBeCloseTo(600, 0); expect(before.height).toBeCloseTo(400, 0);
@@ -636,7 +636,7 @@ const paintedCanvas = async (page: Page) => { await expect.poll(async () => (awa
 test('800 % of an ordinary page draws within the canvas budget: pixels capped, never a blank or failed canvas', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await openPdf(page, sheetPdf(612, 792));
-  await page.locator('.pdf-reader').focus(); await page.keyboard.press('Control+1');
+  await page.locator('.pdf-reader').focus(); await page.keyboard.press('Shift+Digit0');
   await openMenu(page); await field(page).fill('800'); await page.keyboard.press('Enter');
   await expect(level(page)).toHaveText('800%'); await settled(page);
   const box = await pageBox(page);
@@ -650,7 +650,7 @@ test('800 % of an ordinary page draws within the canvas budget: pixels capped, n
 test('a very large sheet stops at the zoom its size allows, and still draws', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await openPdf(page, sheetPdf(3370, 4768)); // A0, at 100 % 4 493 x 6 357 CSS px.
-  await page.locator('.pdf-reader').focus(); await page.keyboard.press('Control+1');
+  await page.locator('.pdf-reader').focus(); await page.keyboard.press('Shift+Digit0');
   const zoomIn = page.getByRole('button', { name: 'Zoom in' });
   await openMenu(page); await field(page).fill('800'); await page.keyboard.press('Enter');
   // 24 000 CSS px along the long side: 24 000 / (4768 x 96/72) = 377 %.

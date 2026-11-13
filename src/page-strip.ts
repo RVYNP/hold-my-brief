@@ -77,6 +77,10 @@ export type PageStrip = {
   sink: PreviewSink;
   /** Empties the strip, for a document that is gone. */
   clear: () => void;
+  /** Where the user has scrolled the strip to look ahead or back, or undefined while it follows the page. */
+  scrollPosition: () => number | undefined;
+  /** Scrolls the strip back to a place `scrollPosition` reported, and leaves it there until the page moves. */
+  restoreScroll: (left: number) => void;
 };
 
 /** Builds the strip. `onError` receives a failed page turn. */
@@ -305,5 +309,8 @@ export function createPageStrip(onError: (error: unknown) => void): PageStrip {
     items.clear(); view = undefined; layout = undefined; layoutKey = ''; active = undefined; centred = true;
     scroller.removeAttribute('aria-activedescendant'); scroller.scrollLeft = 0;
   }
-  return { element, sink, clear };
+  function restoreScroll(left: number) {
+    centred = false; cancelAnimationFrame(glide); scroller.scrollLeft = left; update(true);
+  }
+  return { element, sink, clear, scrollPosition: () => (centred ? undefined : scroller.scrollLeft), restoreScroll };
 }

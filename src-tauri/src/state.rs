@@ -305,12 +305,51 @@ impl Default for WindowState {
     }
 }
 
+/// One open document tab: enough to draw the tab and to reopen its document.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct SavedTab {
+    pub path: String,
+    pub name: String,
+    pub format: String,
+}
+
+/// The tabs open when the reader last ran, in order, and which one was showing (an index into `tabs`; `None` is Home).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct TabSession {
+    pub tabs: Vec<SavedTab>,
+    pub active: Option<usize>,
+}
+
+pub const MAX_TABS: usize = 64;
+
+impl TabSession {
+    /// Drops what cannot be a tab (no path, a repeated document, anything past the cap) and keeps `active` on the same tab.
+    pub fn sanitized(self) -> Self {
+        let mut tabs: Vec<SavedTab> = Vec::new();
+        let mut active = None;
+        for (index, tab) in self.tabs.into_iter().enumerate() {
+            if tab.path.is_empty() || tabs.len() >= MAX_TABS || tabs.iter().any(|kept| kept.path == tab.path) {
+                continue;
+            }
+            if self.active == Some(index) {
+                active = Some(tabs.len());
+            }
+            tabs.push(tab);
+        }
+        Self { tabs, active }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SavedState {
     pub version: u32,
     pub recents: Vec<Recent>,
     pub window: WindowState,
+    /// Added after version 1 shipped: state files written before it have no such key and load with no tabs.
+    pub tabs: TabSession,
     pub documents: HashMap<String, ReadingState>,
     pub path_ids: HashMap<String, String>,
     #[serde(skip_serializing)]
@@ -323,6 +362,7 @@ impl Default for SavedState {
             version: 1,
             recents: vec![],
             window: WindowState::default(),
+            tabs: TabSession::default(),
             documents: HashMap::new(),
             path_ids: HashMap::new(),
             library: Library::default(),
@@ -342,6 +382,8 @@ impl<'de> Deserialize<'de> for SavedState {
             version: u32,
             recents: Vec<Recent>,
             window: WindowState,
+            #[serde(default)]
+            tabs: TabSession,
             documents: HashMap<String, ReadingState>,
             path_ids: HashMap<String, String>,
             #[serde(default, deserialize_with = "present_library")]
@@ -361,6 +403,7 @@ impl<'de> Deserialize<'de> for SavedState {
             version: input.version,
             recents: input.recents,
             window: input.window,
+            tabs: input.tabs.sanitized(),
             documents: input.documents,
             path_ids: input.path_ids,
             library,
@@ -552,6 +595,11 @@ impl Store {
         self.saved.path_ids.iter()
             .filter_map(|(path, id)| Some((path.clone(), self.saved.documents.get(id)?.progress?)))
             .collect()
+    }
+
+    pub fn save_tabs(&mut self, session: TabSession) -> Result<(), String> {
+        self.saved.tabs = session.sanitized();
+        self.persist()
     }
 
     pub fn promote(&mut self, id: &str) -> Result<(), String> {
@@ -817,5 +865,73 @@ mod tests {
         store.edit_library(LibraryChange::RemoveDocument { path: "book.txt".into() }).unwrap();
         assert!(store.saved.library.documents.is_empty());
         assert_eq!(fs::read(file).unwrap(), original_json);
+    }
+
+    fn tab(path: &str) -> SavedTab {
+        SavedTab { path: path.into(), name: format!("{path}.pdf"), format: "pdf".into() }
+    }
+
+    #[test]
+    fn open_tabs_round_trip_in_order_with_the_active_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("state.json");
+        let mut store = Store::load(file.clone());
+        assert_eq!(store.saved.tabs, TabSession::default());
+        let session = TabSession { tabs: vec![tab("/c"), tab("/a"), tab("/b")], active: Some(1) };
+        store.save_tabs(session.clone()).unwrap();
+        let loaded = Store::load(file.clone());
+        assert_eq!(loaded.saved.tabs, session);
+        // The file uses the names the frontend reads.
+        let json: Value = serde_json::from_slice(&fs::read(&file).unwrap()).unwrap();
+        assert_eq!(json["tabs"]["tabs"][0]["path"], "/c");
+        assert_eq!(json["tabs"]["active"], 1);
+        // Home showing is saved as no active tab, and closing the last tab saves an empty list.
+        store.save_tabs(TabSession { tabs: vec![tab("/a")], active: None }).unwrap();
+        assert_eq!(Store::load(file.clone()).saved.tabs, TabSession { tabs: vec![tab("/a")], active: None });
+        store.save_tabs(TabSession::default()).unwrap();
+        assert_eq!(Store::load(file).saved.tabs, TabSession::default());
+    }
+
+    #[test]
+    fn state_files_from_before_tabs_still_load() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("state.json");
+        let mut saved = SavedState::default();
+        saved.recents.push(recent("book.txt"));
+        saved.documents.insert("digest".into(), ReadingState { locator: serde_json::json!({"line": 9}), options: Value::Null, progress: None });
+        saved.path_ids.insert("book.txt".into(), "digest".into());
+        saved.window.pinned = true;
+        let mut old = serde_json::to_value(&saved).unwrap();
+        assert!(old.as_object_mut().unwrap().remove("tabs").is_some());
+        fs::write(&file, serde_json::to_vec(&old).unwrap()).unwrap();
+        let store = Store::load(file.clone());
+        assert!(store.warning.is_none(), "an old file must not be treated as unreadable");
+        assert_eq!(store.saved.tabs, TabSession::default());
+        assert!(store.saved.window.pinned);
+        assert_eq!(store.saved.documents["digest"].locator["line"], 9);
+        assert!(!fs::read_dir(dir.path()).unwrap().any(|e| e.unwrap().file_name().to_string_lossy().starts_with("state-unreadable-")));
+        // A newer file read by an older build is the other direction: extra keys are ignored by serde, so nothing to test there.
+    }
+
+    #[test]
+    fn saved_tabs_are_cleaned_on_save_and_on_load() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("state.json");
+        let mut store = Store::load(file.clone());
+        let messy = TabSession { tabs: vec![tab("/a"), tab(""), tab("/a"), tab("/b")], active: Some(3) };
+        store.save_tabs(messy.clone()).unwrap();
+        assert_eq!(store.saved.tabs, TabSession { tabs: vec![tab("/a"), tab("/b")], active: Some(1) });
+        let many = TabSession { tabs: (0..MAX_TABS + 5).map(|i| tab(&format!("/{i}"))).collect(), active: Some(MAX_TABS + 2) };
+        store.save_tabs(many).unwrap();
+        assert_eq!(store.saved.tabs.tabs.len(), MAX_TABS);
+        assert_eq!(store.saved.tabs.active, None);
+        // A hand-edited file is cleaned the same way when it is read.
+        let mut raw = serde_json::to_value(&SavedState::default()).unwrap();
+        raw["tabs"] = serde_json::json!({ "tabs": [{ "path": "/x" }, { "path": "/x" }, { "path": "/y", "name": "y.pdf", "format": "pdf" }], "active": 2 });
+        fs::write(&file, serde_json::to_vec(&raw).unwrap()).unwrap();
+        let loaded = Store::load(file);
+        assert_eq!(loaded.saved.tabs.tabs.len(), 2);
+        assert_eq!(loaded.saved.tabs.active, Some(1));
+        assert_eq!(loaded.saved.tabs.tabs[1].name, "y.pdf");
     }
 }

@@ -245,6 +245,8 @@ test('opening a document reveals the page at its settled size and rasterises it 
     expect(revealed.layout, `${where}: the reading area moved under the strip`).toBe(settled.layout);
     expect(revealed.bitmap, `${where}: the page was revealed at a size it then left`).toEqual(settled.bitmap);
     expect(appends, `${where}: the page was rasterised more than once`).toBe(1);
+    // The tab would come back at the next load, and its saved place would be restored: close it so every size opens the document for the first time.
+    await page.keyboard.press('Control+w'); await expect(page.locator('#tab-list .tab')).toHaveCount(0);
   }
 });
 
@@ -695,7 +697,7 @@ test('reflowable EPUB renders real chapters, blocks scripts/network, and follows
   const buffer = await epubFixture(); await recordFixture('flow.epub', buffer, { chapters: 2, layout: 'reflowable', hostileContent: ['script', 'external image'] });
   const file = { name: 'flow.epub', mimeType: 'application/epub+zip', buffer };
   await page.locator('#file-input').setInputFiles(file);
-  await expect(page.locator('#filename')).toHaveText('flow.epub');
+  await expect(page.locator('#filename')).toHaveAttribute('title', /flow\.epub$/); // The tab is titled by the book's own title once that is read.
   await expect(page.locator('#position')).toContainText('Opening chapter');
   const content = () => page.frames().find(frame => frame.url().startsWith('blob:'))!;
   await expect.poll(() => !!content()).toBe(true);
@@ -728,7 +730,7 @@ test('fixed-layout EPUB keeps physical single pages and supports next/fit', asyn
   await page.goto('/');
   const buffer = await epubFixture(true); await recordFixture('fixed.epub', buffer, { pages: 2, layout: 'pre-paginated', viewport: '800 x 1000' });
   await page.locator('#file-input').setInputFiles({ name: 'fixed.epub', mimeType: 'application/epub+zip', buffer });
-  await expect(page.locator('#filename')).toHaveText('fixed.epub');
+  await expect(page.locator('#filename')).toHaveAttribute('title', /fixed\.epub$/);
   await expect(page.locator('#filekind')).toHaveAttribute('title', /Page view/);
   await expect(page.locator('#position')).toContainText('Page 1 of 2');
   const first = page.frames().find(frame => frame.url().startsWith('blob:'))!;
@@ -758,7 +760,7 @@ test('PDF view controls zoom, pan 1:1 by hand tool and middle button, and keep l
   await expect(host).toHaveClass(/hand-tool/); // Grab cursor, because a drag now always does something.
   await page.keyboard.press('h');
   await expect(hand).toHaveAttribute('aria-pressed', 'false');
-  await page.keyboard.press('Control+1'); // Actual size.
+  await page.keyboard.press('Shift+Digit0'); // Actual size.
   await expect(page.locator('#zoom-level')).toHaveText('100%'); await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', '');
   for (let i = 0; i < 2; i++) await page.getByRole('button', { name: 'Zoom in' }).click(); // 110%, 125%
   await page.keyboard.press('Control+Equal'); // Shortcut and pill share one zoom state.
@@ -934,7 +936,7 @@ test('a slid page keeps its offset across page turns and goes back on zoom, fit,
   // Zooming past fit (here to actual size) makes the page overflow: it is scrolled, not slid, and the point that was at the middle of the panel (the
   // page's own middle, at a fit) stays there instead of the page snapping to its top (see zoom-anchor.spec.ts).
   await dragPanel(page, host, 30, 40);
-  await page.keyboard.press('Control+1'); // Actual size: a 533 x 800 px page overflows the panel.
+  await page.keyboard.press('Shift+Digit0'); // Actual size: a 533 x 800 px page overflows the panel.
   await expect(page.locator('#zoom-level')).toHaveText('100%'); await settle();
   expect(await host.evaluate(el => el.scrollHeight - el.clientHeight > 1)).toBe(true);
   expect(await host.evaluate(el => el.classList.contains('page-moved') || el.style.getPropertyValue('--pan-x') !== ''), 'no slide is left over').toBe(false);
@@ -1080,7 +1082,7 @@ for (const side of ['left', 'right'] as const) for (const layout of ['single', '
     await page.keyboard.press('Control+0'); await fitted(); // A fresh fit puts the page back.
     await drag('fresh, in the margin', inMargin);
     // Zoom in past fit (so the page scrolls), then back to Fit: a slide again, from the natural place.
-    await page.keyboard.press('Control+1');
+    await page.keyboard.press('Shift+Digit0');
     await expect(page.locator('#zoom-level')).toHaveText('100%'); await expect(page.locator('.pdf-render-status')).toHaveCount(0);
     await page.keyboard.press('Control+0'); await fitted();
     await drag('back at Fit, on the page', onPage);
@@ -1177,7 +1179,7 @@ test('image-only PDF pages carry no note, say so in the tooltip and explain a se
   };
   const zoomTo = async (level: string, button: 'Zoom in' | 'Zoom out') => {
     // Levels are true scales, so the walk starts from actual size, which is on the ladder.
-    await page.locator('.pdf-reader:not(.staging)').focus(); await page.keyboard.press('Control+1'); await expect(page.locator('#zoom-level')).toHaveText('100%'); await expect(page.locator('.pdf-render-status')).toHaveCount(0);
+    await page.locator('.pdf-reader:not(.staging):not(.tab-hidden)').focus(); await page.keyboard.press('Shift+Digit0'); await expect(page.locator('#zoom-level')).toHaveText('100%'); await expect(page.locator('.pdf-render-status')).toHaveCount(0);
     // One step at a time: a click is applied asynchronously, so wait for the label to move before the next.
     for (let i = 0; i < 14; i++) {
       const current = (await page.locator('#zoom-level').textContent())!;
@@ -1226,6 +1228,7 @@ test('image-only PDF pages carry no note, say so in the tooltip and explain a se
   await drag(); await expect(notice).toBeHidden(); // Once per opened document.
 
   // Opening the document again re-arms it; two-page view and zoom levels never draw a note.
+  await host.focus(); await page.keyboard.press('Control+w'); await expect(page.locator('#tab-list .tab')).toHaveCount(0); // The same document would only be shown again, so close its tab first.
   // The saved place is restored. The document on screen already says "Page 3 of 4", so the reopened one has to have finished loading (and
   // replaced it) before the position or the absence of a staging host means anything.
   await open(); await expect(page.locator('#loading')).toBeHidden(); await expect(page.locator('#position')).toContainText('Page 3 of 4'); await expect(page.locator('.reader-host.staging')).toHaveCount(0);
@@ -1290,7 +1293,7 @@ test('Ctrl + wheel and a pinch over a fixed-layout EPUB page zoom the document, 
   // 100 % is the book's declared viewport (800 px wide), and a fit shows the scale Foliate fits the page at, measured on the page.
   const framePx = async () => (await (await frame.frameElement()).boundingBox())!.width;
   await expect.poll(async () => Math.abs(Number((await page.locator('#zoom-level').textContent())!.replace('%', '')) - (await framePx()) / 8)).toBeLessThanOrEqual(1);
-  await page.locator('.reader-host').focus(); await page.keyboard.press('Control+1');
+  await page.locator('.reader-host').focus(); await page.keyboard.press('Shift+Digit0');
   await expect(page.locator('#zoom-level')).toHaveText('100%');
   await expect.poll(framePx).toBeCloseTo(800, 0);
   const prevented = await frame.evaluate(() => {

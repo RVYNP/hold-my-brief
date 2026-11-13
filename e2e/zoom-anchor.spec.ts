@@ -105,8 +105,8 @@ const ROUTES: Route[] = [
   { name: 'the 200% preset', from: 400, to: 200, at: [.5, .5], reachable: true, run: async page => { await level(page).click(); await page.locator('#zoom-menu [role^="menuitem"]', { hasText: '200%' }).click(); } },
   { name: 'the zoom out button', from: 400, to: 300, at: [.5, .5], reachable: true, run: page => page.getByRole('button', { name: 'Zoom out' }).click() },
   // From the bottom-right corner back out to actual size the corner itself is held: the centre point cannot be, the scroll limit is in the way.
-  { name: 'Actual size (Ctrl 1) from a corner', from: 300, to: 100, at: [1, 1], reachable: false, run: page => page.keyboard.press('Control+1') },
-  { name: 'Actual size (Ctrl 1)', from: 300, to: 100, at: [.5, .5], reachable: true, height: 360, run: page => page.keyboard.press('Control+1') },
+  { name: 'Actual size (Shift 0) from a corner', from: 300, to: 100, at: [1, 1], reachable: false, run: page => page.keyboard.press('Shift+Digit0') },
+  { name: 'Actual size (Shift 0)', from: 300, to: 100, at: [.5, .5], reachable: true, height: 360, run: page => page.keyboard.press('Shift+Digit0') },
 ];
 for (const layout of ['single', 'spread'] as const) for (const side of ['left', 'right'] as const) for (const route of ROUTES) {
   test(`${route.name} holds the viewport centre instead of snapping, ${layout} view, rail on the ${side}`, async ({ page }) => {

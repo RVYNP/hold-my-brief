@@ -31,7 +31,7 @@ test('a closed library is a rail of recent covers: titled, ringed on the open on
   await expect(covers.nth(1)).not.toHaveAttribute('aria-current', 'true');
 
   // The rail overlays the reading panel: the panel and the reading surface keep their boxes whether the rail or the drawer stands there.
-  const geometry = async () => ({ workspace: await page.locator('#workspace').boundingBox(), host: await page.locator('.reader-host:not(.staging)').boundingBox() });
+  const geometry = async () => ({ workspace: await page.locator('#workspace').boundingBox(), host: await page.locator('.reader-host:not(.staging):not(.tab-hidden)').boundingBox() });
   const withRail = await geometry();
   expect(withRail.workspace!.width).toBe(1080);
 

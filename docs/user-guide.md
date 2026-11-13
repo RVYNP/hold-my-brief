@@ -5,10 +5,43 @@ Everything Hold My Brief does, in detail. For a quick tour, see the [README](../
 ## Opening documents
 
 Open a PDF, DRM-free EPUB, Markdown, TXT or image file (PNG, JPEG, WebP, GIF, AVIF, BMP) with
-Ctrl+O, **Open file…** in the command palette, a single-file drop or a command-line file argument. The Windows installer adds
+Ctrl+O, **Open file…** in the command palette, a single-file drop or a command-line file argument; each opens in a new tab. The Windows installer adds
 Hold My Brief to Explorer's **Open with** list for the document formats without changing the default
 app; clean-account installer behavior has not yet been verified. A second instance routes its file
 request to the running app.
+
+## Tabs
+
+Every document opens in its own tab, from every way of opening one: the file dialog, the library, the rail's covers, Home,
+recents, the assistant, a command-line argument or a second instance, and a drop. A document that is already open is not opened
+twice; its tab is shown instead. Closing the last document tab shows **Home**.
+
+In a window at least 720 px wide the toolbar carries a strip of tabs: a **Home** tab (icon only, always first), then one tab per
+document with its format, its title (an EPUB's own title once it is known), and a close ×. The tab you are reading also shows
+where you are ("40 / 146"). **+** after the last tab opens the file dialog into a new tab. When there are more tabs than fit, the strip
+scrolls and a **⌄** at its end lists them all. Drag a tab to reorder; middle-click a tab to close it. Empty strip space still drags the window.
+
+In a compact window (under 720 px) there is no strip. The title shows the open document's name, how many tabs are open and a ⌄; it
+opens a menu with Home, every document (with its format and place, and a close ×), and **New tab…**.
+
+| Action | Shortcut |
+| --- | --- |
+| New tab (opens the file dialog) | Ctrl+T (⌘T on macOS) |
+| Close tab | Ctrl+W (⌘W on macOS) |
+| Next / previous tab | Ctrl+Tab / Ctrl+Shift+Tab, or Ctrl+Alt+Right / Left (⌘⌥→ / ⌘⌥← on macOS) |
+| Go to tab 1–8, last tab | Alt+1…8, Alt+9 (⌘1…8, ⌘9 on macOS) |
+
+Ctrl+2, Ctrl+3 and Ctrl+4 stay fit width, two-page spread and page previews, which is why tab numbers use Alt on Windows and
+⌘ on macOS rather than Ctrl.
+
+Each tab keeps its own position, zoom and fit, text settings, hand tool, page-preview scroll and find text. The pin, size lock,
+appearance, library and the position of the view controls are shared by the whole window. At most three tabs keep their page in memory (the three
+shown most recently); the others are put away and reopen at the place you left them, with the usual
+"Opening…" notice, the next time you select them. Switching between the three live tabs is instant.
+
+The open tabs, their order and the one showing are remembered and restored at the next launch (in the browser preview, in this
+browser's storage). Only the tab that was showing opens at once; the others open when selected. A tab whose file has gone shows
+**File not found** with **Locate…** and **Close tab**, rather than failing the launch.
 
 With nothing saved, the window opens on **Hand it over.** Once documents have been opened, it opens
 on **Home**, a page of covers that wraps to the window's width, with tall and short pictures kept in their
@@ -43,8 +76,8 @@ this build, so run the PDF through an OCR tool first if you need its text. This 
 The toolbar is one row, and the window has no separate title bar. On macOS the close, minimize and
 zoom buttons sit at the toolbar's left end; on Windows, minimize, maximize and close sit at its right
 end. Drag any empty part of the toolbar to move the window, and double-click it to maximize. The
-document's name in the middle opens the command
-palette (Ctrl+K), where you can open a file, jump, find or change any setting.
+tabs sit between the library button and the pin (see Tabs above). Ctrl+K opens the command
+palette, where you can open a file, jump, find or change any setting.
 
 The pin button keeps the reader above ordinary windows. The lock button captures its outer
 dimensions while allowing movement. Each is highlighted while on. Ctrl+Shift+T toggles pin;
@@ -55,7 +88,7 @@ document has pages, **Appearance and text…**, the AI assistant, the window pre
 fit and zoom, is on the page's floating controls, on its keys, and in the palette.
 
 While another app has focus, the reader's buttons and progress line fade so a pinned window stays
-quiet beside your work; the document's name, its position and the page keep full strength. Click the
+quiet beside your work; the tabs, the document's position and the page keep full strength. Click the
 reader and everything returns.
 
 ## Appearance
@@ -159,7 +192,7 @@ switching between one and two pages work as before. This applies to PDFs and ima
 above the pill. Its top is a field: type a percentage such as `135` and press Enter to apply it.
 Anything it cannot read goes back to the current level, and a number outside 10–800 is held to that
 range. Below it are **Zoom in** (Ctrl +), **Zoom out** (Ctrl −), **Fit page** (Ctrl 0), **Fit width**
-(Ctrl 2), **Actual size (100%)** (Ctrl 1) and the presets **50%** and **200%**. Up and Down move through the field and the
+(Ctrl 2), **Actual size (100%)** (Shift+0) and the presets **50%** and **200%**. Up and Down move through the field and the
 entries, Home and End jump to the first and last entry, and Escape, Tab, a click elsewhere or choosing
 an entry close it. Escape and Tab put focus back on the level. A choice does too when the menu was opened
 from the keyboard; opened with the mouse, it leaves focus on the page, so PgDn and Space keep working.
@@ -322,7 +355,10 @@ lock.
 | Document library | Ctrl+B |
 | Resize library (divider focused) | Left / Right (Shift: larger steps), Home / End, Enter resets |
 | Pin / size lock | Ctrl+Shift+T / Ctrl+Shift+L |
-| Fit page / fit width / actual size (100%) | Ctrl+0 / Ctrl+2 / Ctrl+1 |
+| Fit page / fit width / actual size (100%) | Ctrl+0 / Ctrl+2 / Shift+0 |
+| New tab / close tab | Ctrl+T / Ctrl+W (⌘T / ⌘W on macOS) |
+| Next / previous tab | Ctrl+Tab / Ctrl+Shift+Tab |
+| Go to tab 1–8, last tab | Alt+1…8, Alt+9 (⌘1…8, ⌘9 on macOS) |
 | Two-page spread | Ctrl+3 |
 | Page previews (PDF) | Ctrl+4 |
 | Zoom or text size | Ctrl++ / Ctrl+− (pages step along the zoom ladder); Ctrl/⌘ + wheel or trackpad pinch zooms toward the pointer |
