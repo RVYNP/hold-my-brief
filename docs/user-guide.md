@@ -194,20 +194,31 @@ panel is wide enough.
 ### Page previews
 
 For PDFs, **Page previews** (the pill's filmstrip button, **Ctrl+4**, or *Page previews* in the command
-palette) shows the next pages in a strip under the page: the next three in single-page view, the next
-two spreads in two-page view (paired the way the view pairs them, so the cover stands alone). Each
-thumbnail carries the page label the footer uses, Roman numerals included. Click one, or Tab to it and
-press Enter or Space, to go there as if you had turned the pages; PgDn, PgUp and the arrow keys keep
-turning pages from anywhere, and the strip follows. Near the end it lists what is left, and on the last
-page it says "End of document".
+palette) shows the document as a filmstrip under the page. The page you are on (or the spread, in
+two-page view) sits in the middle with an accent ring; pages before it are to its left, faded back, and
+pages after it to its right, so you can see where you are. Spreads are joined pairs, paired the way the
+view pairs them, so the cover stands alone. Each item is numbered by its place in the document ("20",
+or "20–21" for a spread), never by the page labels a PDF prints; the footer still shows those.
+
+Scroll the strip to look ahead or back: the mouse wheel (or a trackpad's sideways swipe) and dragging
+both move it sideways without changing where you are reading. Click a page, or Tab to the strip, use the
+arrow keys to move along it (Home and End go to the ends) and press Enter or Space, to go there as if you
+had turned the pages; the strip then glides back to the middle (it jumps if your system asks for reduced
+motion, or when the page is far away). PgDn and PgUp keep turning pages from anywhere, and the strip
+follows. Thumbnails are drawn only for the pages in or near view, after the page itself, so a long
+document costs no more than a short one and they never delay the page.
+
+Hovering the progress bar along the footer shows a small card above the pointer with the page that spot
+would go to ("Page 12 of 146", or the spread, in two-page view); dragging the bar moves the card with it,
+and it disappears when the pointer leaves. It works whether or not the strip is open. Other formats keep the
+bar's plain tooltip.
 
 The strip is a fixed band, so turning pages never refits the page; turning the strip on or off fits
 the page once to the room that remains, and the view-controls pill stays above it. The strip ends above the
 footer's lane along the bottom edge, so the footer, when you move to the edge to open it, never covers a thumbnail. It is one setting for
 every PDF (off until you turn it on) and is remembered between sessions. While the reading area is
 shorter than 360 px the strip is hidden and the page gets the whole height; it returns with the height,
-and the setting is kept. Markdown, TXT, EPUB and images have no previews. Thumbnails are drawn after the
-page itself, so they never delay it.
+and the setting is kept. Markdown, TXT, EPUB and images have no previews.
 
 ### Find in document
 

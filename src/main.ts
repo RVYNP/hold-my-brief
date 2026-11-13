@@ -21,6 +21,7 @@ import { createPageStrip, MIN_PANEL_HEIGHT } from './page-strip';
 import { DEFAULT_LIMITS, migrateLegacyZoom, stepZoom, wheelFactor, ZOOM_MODEL, zoomPercent, type Point as ZoomPoint } from './zoom';
 import { createZoomGesture } from './zoom-gesture';
 import { createZoomMenu } from './zoom-menu';
+import { createProgressPreview } from './progress-preview';
 initAppearance();
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
@@ -277,7 +278,7 @@ const viewChanged = () => { cancelAnimationFrame(viewFrame); viewFrame = request
 const viewObserver = new ResizeObserver(viewChanged);
 for (const element of [workspace, pill, $('library-root')]) viewObserver.observe(element);
 new MutationObserver(viewChanged).observe($('reader-layout'), { attributes: true, attributeFilter: ['class'] });
-// Page previews (PDF): the next pages in a fixed band under the reading surface. The preference is global and
+// Page previews (PDF): a filmstrip of the document in a fixed band under the reading surface. The preference is global and
 // off until chosen; the band is shown only for a document that has previews and a panel tall enough to spare
 // it. It is room the reading surface leaves (CSS, `has-page-strip`), not a row in the page's flow, so turning
 // a page never resizes what the page was fitted to.
@@ -302,6 +303,9 @@ function syncPageStrip() {
   stripReader?.setPreviews?.(undefined); pageStrip.clear();
   stripReader = feeder; feeder?.setPreviews?.(pageStrip.sink);
 }
+// Hovering or dragging the progress bar previews the page under the pointer (PDF only: the other formats have no pages to draw).
+createProgressPreview(scrubber, $('app'), () => reader?.thumbnails && position?.scrub.unit === 'page'
+  ? { source: reader.thumbnails, spread: position.spread === 'active', cover: position.scrub.cover !== false, total: position.scrub.total } : undefined);
 scrubber.oninput = () => { scrubbing = true; ++scrubRequest; updateScrubValue(true); };
 scrubber.onchange = () => {
   if (!reader || !position) return;
@@ -653,8 +657,8 @@ document.addEventListener('keydown', event => {
     const horizontal = target instanceof HTMLElement && target.closest('pre,table,[data-horizontal-scroll]');
     const mapping: Record<string, Parameters<ReaderAdapter['navigate']>[0]> = { pagedown: 'next', pageup: 'previous', home: 'start', end: 'end', ' ': event.shiftKey ? 'screen-previous' : 'screen-next' };
     if (reader?.mode !== 'scroll' && !horizontal) { mapping.arrowright = 'next'; mapping.arrowleft = 'previous'; }
-    // Arrow and page keys turn pages from a focused thumbnail too; Space is left to press it.
-    if (mapping[key] && !(inStrip && key === ' ')) operation = () => void navigate(mapping[key]);
+    // Page keys turn pages from the focused strip too; its arrows, Home, End, Enter and Space are its own (it stops them before they get here).
+    if (mapping[key]) operation = () => void navigate(mapping[key]);
   }
   if (operation) { event.preventDefault(); operation(); }
 });
