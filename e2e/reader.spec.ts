@@ -104,7 +104,9 @@ test('a glow theme fixes the scheme, disables the mode control, and a normal fam
   await expect(sheet.locator('.appearance-mode-note')).toHaveText('Glow themes have one mode.');
   // The window is the page colour under the two glows, and the toolbar lets them through.
   expect(await root.evaluate(element => getComputedStyle(element).backgroundImage.match(/radial-gradient/g)?.length)).toBe(2);
-  expect(await page.locator('.toolbar').evaluate(element => getComputedStyle(element).backgroundColor)).toBe('rgba(0, 0, 0, 0)');
+  // (A runner whose OS asks for reduced transparency gets the opaque fallback instead, which is the next check's subject.)
+  const reduced = await page.evaluate(() => matchMedia('(prefers-reduced-transparency: reduce), (prefers-contrast: more), (forced-colors: active)').matches);
+  expect(await page.locator('.toolbar').evaluate(element => getComputedStyle(element).backgroundColor)).toBe(reduced ? 'rgb(7, 17, 15)' : 'rgba(0, 0, 0, 0)');
   await sheet.getByRole('radio', { name: 'Peach' }).click();
   await expect(root).toHaveAttribute('data-theme', 'light');
   await page.mouse.move(5, 5);
