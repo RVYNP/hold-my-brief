@@ -231,11 +231,16 @@ export function createPageStrip(onError: (error: unknown) => void): PageStrip {
 
   // Gestures: the wheel (a mouse's vertical wheel scrolls it sideways) and dragging scroll the strip alone.
   // Both axes are driven here: left to the engine, a sideways wheel can go to the window's swipe-to-navigate instead and not scroll the strip.
+  // WebKit keeps scroll offsets in whole pixels: the fraction a trackpad's small deltas leave over is carried to the next event, or slow pans stall one way and step the other. Below a pixel only: an end of the strip clamps, and that excess is dropped.
+  let wheelRest = 0;
   scroller.addEventListener('wheel', event => {
     if (event.ctrlKey) return;
     centred = false; cancelAnimationFrame(glide); event.preventDefault();
     const delta = Math.abs(event.deltaY) > Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
-    scroller.scrollLeft += delta * (event.deltaMode === 1 ? 16 : 1);
+    const target = scroller.scrollLeft + delta * (event.deltaMode === 1 ? 16 : 1) + wheelRest;
+    scroller.scrollLeft = target;
+    const rest = target - scroller.scrollLeft;
+    wheelRest = Math.abs(rest) < 1 ? rest : 0;
   }, { passive: false });
   let drag: { id: number; x: number; left: number; moved: boolean } | undefined;
   // The strip never takes focus from the page by a click; Tab reaches it.
