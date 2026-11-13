@@ -38,6 +38,11 @@
       "name": "Hold My Brief document",
       "description": "Open this document in Hold My Brief",
       "role": "Viewer"
+    }, {
+      "ext": ["png", "jpg", "jpeg", "webp", "gif", "avif", "bmp"],
+      "name": "Hold My Brief image",
+      "description": "Open this image in Hold My Brief",
+      "role": "Viewer"
     }],
     "windows": { "nsis": { "installMode": "currentUser" } }
   }
