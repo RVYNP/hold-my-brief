@@ -177,7 +177,7 @@ function updateViewControls() {
   // Fixed-layout EPUB rebuilds its renderer when the page layout changes; follow it.
   const scroller = reader.scroller?.();
   if (scroller !== pannedScroller) { pannedScroller = scroller; pan.attach(scroller, activeHost); }
-  pan.refresh(position?.spread);
+  pan.refresh(position?.spread, options.fitted);
   // The level is always the real scale; a fit is a mode that follows the window, and the adapter says what scale it came to.
   const fitted = options.fitted, width = options.fit === 'width', current = zoomLevel();
   const level = `${zoomPercent(current)}%`;

@@ -107,6 +107,8 @@ export class Panner {
   private layout?: string;
   /** Panel size when the offset was last known to fit, to tell a stale page after a resize from content that really grew. */
   private sized = '';
+  /** Whether the page follows the panel (a fit): only then can a page that overflows be one the adapter has yet to refit. */
+  private fitted = true;
 
   /** Hand tool state; stays on across zoom, resize and page turns. */
   get hand() { return this.on; }
@@ -215,7 +217,7 @@ export class Panner {
    */
   private settle(drop: boolean) {
     if (!this.offset.x && !this.offset.y) return;
-    const room = this.room(), stale = !drop || this.size() !== this.sized;
+    const room = this.room(), stale = this.fitted && (!drop || this.size() !== this.sized);
     let waiting = false;
     if (!room || (!room.fits.x && !room.fits.y)) {
       if (stale) return;
@@ -225,7 +227,7 @@ export class Panner {
       for (const axis of ['x', 'y'] as const) {
         if (room.fits[axis]) offset[axis] = next[axis];
         else if (!stale) offset[axis] = 0;
-        else waiting = true;
+        else if (offset[axis]) waiting = true;
       }
       this.offset = offset;
     }
@@ -292,8 +294,9 @@ export class Panner {
       this.offset = clampOffset({ x: x + dx, y: y + dy }, page, panel);
       this.apply();
     } else {
-      this.scroller.scrollLeft = drag.left - dx;
-      this.scroller.scrollTop = drag.top - dy;
+      // An axis the page is slid on does not scroll: its overflow is hidden, and a script write would still move the page.
+      if (!this.offset.x) this.scroller.scrollLeft = drag.left - dx;
+      if (!this.offset.y) this.scroller.scrollTop = drag.top - dy;
     }
   }
 
@@ -332,7 +335,8 @@ export class Panner {
    * Re-evaluates the page offset and cursor after a zoom, resize or page turn. `layout` names the
    * page layout in force (single page or two-page view); a change of it puts the page back.
    */
-  refresh(layout = '') {
+  refresh(layout = '', fitted = true) {
+    this.fitted = fitted;
     if (layout !== this.layout) { if (this.layout !== undefined) this.recenter(); this.layout = layout; }
     this.settle(true); this.sync();
   }

@@ -176,8 +176,9 @@ also get **Page previews**, below), and stays in step with Ctrl+−/+ and Ctrl+0
 Hand button) and drag. When a zoomed page is larger than the panel, the drag pans it 1:1. When the
 page or spread fits the panel (a fit, or zoomed out far enough), the drag slides the whole page, or both pages
 of a spread, around the panel 1:1, like a sheet across a desk; at least 64 pixels of it always stay
-inside. The page keeps its place when you turn pages and goes back to the middle when you change the
-zoom or fit (Ctrl+0 included), switch between one and two pages, or open another document. Text
+inside. The page keeps its place when you turn pages and goes back to the middle on a fit (Ctrl+0 or Ctrl+2, even
+when it is already fitted), when you switch between one and two pages, or when you open another document. A zoom holds the
+spot at the centre of the panel instead and may keep the page slid (see "Where a zoom stays", below). Text
 selection pauses while the hand is on, and a click without movement still follows links. Middle-button
 drag pans or slides in any mode. The hand turns off when a new document opens (and, in a fixed-layout EPUB, when switching between one and two pages rebuilds the view). Markdown, TXT and
 reflowable EPUB reflow instead of zooming, so they have no pill and no panning.

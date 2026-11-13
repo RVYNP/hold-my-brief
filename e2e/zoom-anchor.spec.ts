@@ -220,6 +220,7 @@ async function observe(page: Page, layout: Layout, pointer: { x: number; y: numb
   const before = await under(page, layout, pointer.x, pointer.y);
   await gesture();
   await expect(page.locator(hostOf(layout))).toHaveClass(/zoom-preview/);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))); // The scaled page is painted once per frame.
   const scaling = await under(page, layout, pointer.x, pointer.y);
   await finish?.();
   await settled(page, layout);
@@ -227,12 +228,17 @@ async function observe(page: Page, layout: Layout, pointer: { x: number; y: numb
   await page.waitForTimeout(500);
   return { before, scaling, settled: settledAt, later: await under(page, layout, pointer.x, pointer.y), after };
 }
-/** A Ctrl + wheel gesture at `pointer`, one wheel event per delta, then the page settles. */
+/**
+ * A Ctrl + wheel gesture at `pointer`: one wheel event per delta, all sent in one turn so that they are one gesture however slow the machine is
+ * (notches sent one by one can arrive more than the 160 ms that ends a gesture apart; the second gesture then starts from the page the first one
+ * committed, which is correct but not what these cases measure).
+ */
 const wheelAt = (page: Page, layout: Layout, pointer: { x: number; y: number }, deltas: number[]) => observe(page, layout, pointer, async () => {
   await page.mouse.move(pointer.x, pointer.y);
-  await page.keyboard.down('Control');
-  for (const delta of deltas) await page.mouse.wheel(0, delta);
-  await page.keyboard.up('Control');
+  await page.evaluate(({ x, y, deltas }) => {
+    const target = document.elementFromPoint(x, y)!;
+    for (const deltaY of deltas) target.dispatchEvent(new WheelEvent('wheel', { deltaY, ctrlKey: true, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+  }, { x: pointer.x, y: pointer.y, deltas });
 });
 /**
  * Nothing moves when the gesture settles: the crisp page is where the scaled one was (to the pixel, give or take the half percent the zoom is
@@ -251,7 +257,7 @@ function expectNoSnap(shown: Shown, note: string) {
     const wanted = scroll + (before[f] - settled[f]) * size, unreachable = max > 1 && (wanted < -1 || wanted > max + 1);
     if (!unreachable) {
       expect(Math.abs(settled[f] - before[f]) * size, `${note}: ${axis} point is no longer under the pointer (before ${before[f].toFixed(3)}, settled ${settled[f].toFixed(3)}, size ${size.toFixed(0)}, scroll ${scroll}/${max})`).toBeLessThanOrEqual(rounding);
-      expect(Math.abs(scaling[f] - before[f]) * size, `${note}: ${axis} point left the pointer while scaling`).toBeLessThanOrEqual(2);
+      expect(Math.abs(scaling[f] - before[f]) * size, `${note}: ${axis} point left the pointer while scaling`).toBeLessThanOrEqual(rounding);
     }
   }
 }
@@ -336,6 +342,50 @@ test('a page that fits sideways but not vertically is slid sideways and still sc
   const moved = await page.locator('.pdf-page').boundingBox();
   expect(moved!.x).toBeCloseTo(top!.x, 1); // Sideways it stays where the zoom held it.
   expect(await hostSize(page, 'single')).toEqual(size);
+});
+
+test('the hand tool scrolls only the axis that is not slid: a drag on a page slid sideways moves it up and down, never sideways', async ({ page }) => {
+  await open(page, 'single', 'left');
+  // A zoom at the left of the page slides it to the right (positive offset) while it overflows vertically; its right edge now lies past the panel's,
+  // so the host has sideways scroll range that only a script write could use.
+  await wheelAt(page, 'single', await onPage(page, 'single', .1, .8), [-40, -20]);
+  const host = page.locator(HOST);
+  await expect(host).toHaveClass(/page-moved-x/); await expect(host).not.toHaveClass(/page-moved-y/);
+  expect(await host.evaluate(el => el.style.getPropertyValue('--pan-x'))).toMatch(/^[1-9]/);
+  expect(await host.evaluate(el => el.scrollWidth - el.clientWidth), 'a translated page widens the scroll range').toBeGreaterThan(1);
+  await page.getByRole('button', { name: 'Hand tool' }).click();
+  await expect(page.getByRole('button', { name: 'Hand tool' })).toHaveAttribute('aria-pressed', 'true');
+  const before = (await page.locator('.pdf-page').boundingBox())!, top = await host.evaluate(el => el.scrollTop);
+  // A script write to the hidden axis is undone by the next layout check, so the page would not stay moved: watch every scroll position the host takes.
+  await page.evaluate(() => { const w = window as unknown as { seen: number[] }; w.seen = []; addEventListener('scroll', event => w.seen.push((event.target as HTMLElement).scrollLeft), true); });
+  const panel = (await host.boundingBox())!, from = { x: panel.x + panel.width - 150, y: panel.y + panel.height - 80 };
+  await page.mouse.move(from.x, from.y); await page.mouse.down(); await page.mouse.move(from.x - 90, from.y + 60, { steps: 8 });
+  // Mid-drag, the page is where it was sideways: a script write to the hidden axis would already have moved it by the sideways range.
+  expect((await page.locator('.pdf-page').boundingBox())!.x, 'mid-drag: sideways').toBeCloseTo(before.x, 1);
+  expect(await host.evaluate(el => el.scrollLeft), 'mid-drag: scrollLeft').toBe(0);
+  await page.mouse.up();
+  expect(await page.evaluate(() => (window as unknown as { seen: number[] }).seen.filter(left => left !== 0)), 'the host never scrolled sideways').toEqual([]);
+  const after = (await page.locator('.pdf-page').boundingBox())!;
+  expect(after.x, 'sideways it stays where the zoom held it').toBeCloseTo(before.x, 1);
+  expect(await host.evaluate(el => el.scrollLeft)).toBe(0);
+  expect(await host.evaluate(el => el.scrollTop), 'up and down it scrolls 1:1').toBeCloseTo(top - 60, 0);
+  await page.waitForTimeout(300);
+  expect((await page.locator('.pdf-page').boundingBox())!.x).toBeCloseTo(before.x, 1); // And nothing jumps back later.
+});
+
+test('a page slid at a true zoom is put back when the window shrinks until it overflows, and then scrolls', async ({ page }) => {
+  await open(page, 'single', 'left');
+  await wheelAt(page, 'single', await onPage(page, 'single', .15, .15), [NOTCH]); // About 76 %: 304 x 405 px, slid off-centre.
+  const host = page.locator(HOST);
+  await expect(host).toHaveClass(/page-moved/);
+  await page.setViewportSize({ width: 300, height: 260 }); // The window is no wider than the page, nor as tall: it overflows both ways.
+  await expect(host).not.toHaveClass(/page-moved/);
+  await expect(host).not.toHaveClass(/page-moved-x/); await expect(host).not.toHaveClass(/page-moved-y/);
+  await settled(page, 'single');
+  expect(await host.evaluate(el => el.scrollHeight - el.clientHeight > 1 || el.scrollWidth - el.clientWidth > 1), 'the page overflows now').toBe(true);
+  const top = await host.evaluate(el => el.scrollTop), box = (await host.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.wheel(0, 120);
+  await expect.poll(() => host.evaluate(el => el.scrollTop)).toBeGreaterThan(top);
 });
 
 for (const layout of ['single', 'spread'] as const) {
