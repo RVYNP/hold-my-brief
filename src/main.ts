@@ -18,7 +18,7 @@ import { assignShelfSlots, closeHome, fillHomePictures, homeRows, renderHome } f
 import { repaintCovers } from './cards';
 import { canThumbnail, createThumbnailStore } from './thumbnails';
 import { createPageStrip, MIN_PANEL_HEIGHT } from './page-strip';
-import { stepZoom, wheelFactor, ZOOM_MAX, ZOOM_MIN, type Point as ZoomPoint } from './zoom';
+import { DEFAULT_LIMITS, migrateLegacyZoom, stepZoom, wheelFactor, ZOOM_MODEL, zoomPercent, type Point as ZoomPoint } from './zoom';
 import { createZoomGesture } from './zoom-gesture';
 import { createZoomMenu } from './zoom-menu';
 initAppearance();
@@ -139,6 +139,9 @@ function updateScrubValue(preview = false) {
   scrubber.setAttribute('aria-valuetext', label);
   if (preview) $('position').textContent = `${label} · release to jump`;
 }
+/** The level the open document is drawn at; before it is drawn, 100 %. */
+const zoomLevel = () => reader?.zoomLevel?.() ?? (options.fitted ? 1 : options.zoom);
+const zoomLimits = () => reader?.zoomLimits?.() ?? DEFAULT_LIMITS;
 /** Syncs the view-controls pill, page-layout toggles and the title subtitle with the current position, zoom, layout and hand-tool state. */
 function updateViewControls() {
   if (!reader || !active) return;
@@ -147,8 +150,9 @@ function updateViewControls() {
   const scroller = reader.scroller?.();
   if (scroller !== pannedScroller) { pannedScroller = scroller; pan.attach(scroller, activeHost); }
   pan.refresh(position?.spread);
-  const fitted = Math.abs(options.zoom - 1) < .005, width = options.fit === 'width';
-  const level = fitted ? (width ? 'Width' : 'Fit') : `${Math.round(options.zoom * 100)}%`;
+  // The level is always the real scale; a fit is a mode that follows the window, and the adapter says what scale it came to.
+  const fitted = options.fitted, width = options.fit === 'width', current = zoomLevel();
+  const level = `${zoomPercent(current)}%`;
   const layout = position?.spread, waiting = layout === 'waiting' ? `Two pages appear when the reading area is at least ${MIN_SPREAD_WIDTH} px wide` : '';
   const kind = reader.mode === 'fixed' && fitted && !width && layout === 'active' ? 'Two-page view'
     : `${reader.mode !== 'fixed' ? (reader.mode === 'paginated' ? 'Reading view' : 'Scroll view') : fitted ? (width ? 'Fit width' : 'Page view') : level}${layout === 'active' ? ' · Two pages' : ''}`;
@@ -188,13 +192,13 @@ function updateViewControls() {
   // The level opens the zoom menu; double-clicking it still toggles fit page/fit width (while zoomed it first returns to the current fit).
   const next = fitted && !width ? 'fit-width' : fitted ? 'fit-page' : `fit-${options.fit}`;
   const levelButton = $('zoom-level');
-  levelButton.querySelector('span')!.textContent = level; levelButton.dataset.next = next;
-  levelButton.setAttribute('aria-label', `Zoom menu, ${level}`);
-  levelButton.title = `${fitted ? (width ? 'Fit width' : 'Fit page') : `Zoom ${level}`} · click for zoom options · double-click for ${next === 'fit-width' ? 'fit width (Ctrl 2)' : 'fit page (Ctrl 0)'}`;
-  const canZoomOut = options.zoom > ZOOM_MIN, canZoomIn = options.zoom < ZOOM_MAX;
+  levelButton.querySelector('span')!.textContent = level; levelButton.dataset.next = next; levelButton.dataset.fit = fitted ? options.fit : '';
+  levelButton.setAttribute('aria-label', `Zoom menu, ${level}${fitted ? `, ${width ? 'fit width' : 'fit page'}` : ''}`);
+  levelButton.title = `${fitted ? `${width ? 'Fit width' : 'Fit page'} · ${level}` : `Zoom ${level}`} · click for zoom options · double-click for ${next === 'fit-width' ? 'fit width (Ctrl 2)' : 'fit page (Ctrl 0)'}`;
+  const limits = zoomLimits(), canZoomOut = stepZoom(current, -1, limits) < current - .004, canZoomIn = stepZoom(current, 1, limits) > current + .004;
   $<HTMLButtonElement>('zoom-out').disabled = !canZoomOut;
   $<HTMLButtonElement>('zoom-in').disabled = !canZoomIn;
-  zoomMenu.update({ zoom: options.zoom, canZoomIn, canZoomOut });
+  zoomMenu.update({ level: current, fit: fitted ? options.fit : undefined, limits, canZoomIn, canZoomOut });
   // The hand tool is always available while the pill is shown: it scrolls an overflowing page and slides a fitting one.
   $('hand-tool').setAttribute('aria-pressed', String(pan.hand));
 }
@@ -205,7 +209,7 @@ $('zoom-out').onclick = () => void action('smaller').catch(fail);
 $('zoom-in').onclick = () => void action('larger').catch(fail);
 $('zoom-level').ondblclick = () => void action($('zoom-level').dataset.next ?? 'fit-page').catch(fail);
 // The level is a menu button: it offers the zoom commands, a field to type a percentage into, and presets.
-const zoomMenu = createZoomMenu($<HTMLButtonElement>('zoom-level'), choice => void (choice.kind === 'command' ? action(choice.id) : changeOptions({ zoom: choice.zoom })).catch(fail));
+const zoomMenu = createZoomMenu($<HTMLButtonElement>('zoom-level'), choice => void (choice.kind === 'command' ? action(choice.id) : changeOptions({ fitted: false, zoom: choice.zoom })).catch(fail));
 $('hand-tool').onclick = toggleHand;
 $('view-single').onclick = () => void changeOptions({ spread: false });
 $('view-spread').onclick = () => void changeOptions({ spread: true });
@@ -488,13 +492,19 @@ async function load(open: () => Promise<Opened | null>, label = 'document'): Pro
     candidate = await adapter(doc.format); if (token !== request) return false;
     stripSpace(candidate); // A page-preview strip's room is there before the document is fitted, so opening never refits it.
     staging = document.createElement('section'); staging.className = 'reader-host staging'; staging.tabIndex = 0; staging.setAttribute('aria-label', 'Reading surface'); $('view-controls').before(staging);
-    const prefs = { ...defaultOptions, ...doc.previousState?.options };
+    // Options saved before zoom was a true scale hold a multiplier of the fit. They open fitted and are converted below, once the document is drawn, so the page keeps its size; saving then writes the new form.
+    const saved = doc.previousState?.options, legacy = Boolean(saved) && saved!.zoomModel !== ZOOM_MODEL, legacyZoom = Number(saved?.zoom);
+    const prefs: ReaderOptions = { ...defaultOptions, ...saved, zoomModel: ZOOM_MODEL, ...(legacy ? { fitted: true, zoom: 1 } : {}) };
     const current = candidate;
     await candidate.open({ ...doc, bytes: doc.bytes }, staging, {
       onPosition: p => { if (reader === current) showPosition(p); }, onError: fail, openExternal, requestPassword: password, onFrame: doc => { pan.watchFrame(doc); watchFrameZoom(doc); },
       resolveImage: desktop ? async relative => { const result = await native<{bytes: number[]; mime: string}>('read_relative_image', { path: doc.path, relative }); const url = URL.createObjectURL(new Blob([new Uint8Array(result.bytes)], { type: result.mime })); urls.push(url); return url; } : undefined,
     }, prefs);
     if (doc.previousState?.locator) await candidate.restore(doc.previousState.locator);
+    if (legacy && candidate.mode === 'fixed') {
+      const converted = migrateLegacyZoom({ fit: prefs.fit, zoom: legacyZoom }, candidate.legacyZoomBase?.(prefs.fit), candidate.zoomLimits?.());
+      if (!converted.fitted) { Object.assign(prefs, converted); await candidate.setOptions(prefs); }
+    }
     if (token !== request) return false;
     await confirmDocument(doc).catch(error => notify(`Your library could not be saved. Reading is still available. ${error instanceof Error ? error.message : String(error)}`));
     await flush();
@@ -541,13 +551,14 @@ $('menu-toggle').onclick = () => {
 $('menu').addEventListener('click', event => { const box = $('menu').getBoundingClientRect(); if (event.target === $('menu') && (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom)) closeDialog($<HTMLDialogElement>('menu')); });
 $('menu-palette').onclick = () => { closeDialog($<HTMLDialogElement>('menu')); openPalette(); };
 if (desktop) document.querySelectorAll<HTMLElement>('#menu [data-desktop]').forEach(item => { item.hidden = false; });
-async function changeOptions(next: Partial<ReaderOptions>) { if (!reader) return; if ('zoom' in next || 'fit' in next) pan.recenter(); const previous = options; options = { ...options, ...next }; try { await reader.setOptions(options); showPosition(reader.getPosition()); } catch (error) { options = previous; fail(error); } }
+async function changeOptions(next: Partial<ReaderOptions>) { if (!reader) return; if ('zoom' in next || 'fit' in next || 'fitted' in next) pan.recenter(); const previous = options; options = { ...options, ...next }; try { await reader.setOptions(options); showPosition(reader.getPosition()); } catch (error) { options = previous; fail(error); } }
 async function action(name: string) {
   if (name === 'goto') jump();
   else if (name === 'appearance') appearanceSheet.open();
   else if (name === 'pin' || name === 'lock') await toggle(name);
   else if (name === 'compact' || name === 'reading') { if (!desktop) return notify('Window presets are available in the desktop app.'); updateWindow(await native('set_preset', { preset: name })); }
-  else if (name === 'fit-page' || name === 'fit-width') await changeOptions({ fit: name === 'fit-page' ? 'page' : 'width', zoom: 1 });
+  else if (name === 'fit-page' || name === 'fit-width') await changeOptions({ fit: name === 'fit-page' ? 'page' : 'width', fitted: true });
+  else if (name === 'actual-size') await changeOptions({ fitted: false, zoom: 1 });
   else if (name === 'rotate') await changeOptions({ rotation: (options.rotation + 90) % 360 });
   else if (name === 'spread') { if (reader?.spreads) await changeOptions({ spread: !options.spread }); }
   else if (name === 'cover') await changeOptions({ cover: !options.cover });
@@ -556,7 +567,7 @@ async function action(name: string) {
     try { localStorage.setItem(stripKey, stripWanted ? 'on' : 'off'); } catch { /* Optional preference. */ }
     updateViewControls();
   }
-  else if (name === 'smaller' || name === 'larger') { const direction = name === 'larger' ? 1 : -1; await changeOptions(reader?.mode === 'fixed' ? { zoom: stepZoom(options.zoom, direction) } : { fontSize: Math.max(12, Math.min(40, options.fontSize + direction * 2)) }); }
+  else if (name === 'smaller' || name === 'larger') { const direction = name === 'larger' ? 1 : -1; await changeOptions(reader?.mode === 'fixed' ? { fitted: false, zoom: stepZoom(zoomLevel(), direction, zoomLimits()) } : { fontSize: Math.max(12, Math.min(40, options.fontSize + direction * 2)) }); }
   else if (name === 'type') appearanceSheet.open('text');
   else if (name === 'outline') { const list = $('outline-list'); list.replaceChildren(); const entries = reader?.outline() ?? []; if (!entries.length) list.textContent = 'No contents outline in this document.'; for (const item of entries) { const button = document.createElement('button'); button.textContent = item.label; button.onclick = () => { void reader?.goTo(item.target).then(() => closeDialog($<HTMLDialogElement>('contents'))).catch(fail); }; list.append(button); } showDialog('contents'); }
   else if (name === 'shortcuts') showDialog('shortcuts');
@@ -575,8 +586,9 @@ document.addEventListener('pointerdown', () => document.documentElement.classLis
 // but only a page-based document moves; the zoom commits once the input pauses (see zoom-gesture.ts).
 const zoomGesture = createZoomGesture({
   scroller: () => reader?.mode === 'fixed' ? reader.scroller?.() : undefined,
-  zoom: () => options.zoom,
-  commit: async zoom => { await changeOptions({ zoom }); return options.zoom; },
+  zoom: zoomLevel,
+  limits: zoomLimits,
+  commit: zoom => changeOptions({ fitted: false, zoom }),
 });
 let pinching = false, pinchScale = 1;
 /** The WebKit-only gesture events: `scale` is cumulative from the start of the pinch. */

@@ -405,7 +405,7 @@ test('with the strip on, the hand tool slides a fitting page above the strip, ne
   await expect(strip(page)).toBeVisible();
   await expectPainted(page, [2, 3, 4]);
   const size = await settledHeight(page), sheet = page.locator('.pdf-page');
-  await expect(page.locator('#zoom-level')).toHaveText('Fit');
+  await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', 'page');
   await page.keyboard.press('h');
   await expect(page.getByRole('button', { name: 'Hand tool' })).toHaveAttribute('aria-pressed', 'true');
 

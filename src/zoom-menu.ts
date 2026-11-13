@@ -1,9 +1,10 @@
 import { COMMANDS } from './commands';
-import { parseZoomInput, ZOOM_PRESETS, zoomPercent } from './zoom';
+import { DEFAULT_LIMITS, parseZoomInput, ZOOM_PRESETS, zoomPercent, type ZoomLimits } from './zoom';
 
-/** What choosing an entry asks for: a command by catalog id, or an absolute zoom (a multiplier of the current fit). */
-export type ZoomChoice = { kind: 'command'; id: 'larger' | 'smaller' | 'fit-page' | 'fit-width' } | { kind: 'zoom'; zoom: number };
-export type ZoomMenuState = { zoom: number; canZoomIn: boolean; canZoomOut: boolean };
+/** What choosing an entry asks for: a command by catalog id, or a true zoom (1 = actual size). */
+export type ZoomChoice = { kind: 'command'; id: 'larger' | 'smaller' | 'fit-page' | 'fit-width' | 'actual-size' } | { kind: 'zoom'; zoom: number };
+/** `level` is the zoom being drawn, which is the field's value; `fit` is the fit mode in force, if any, and gets the check. */
+export type ZoomMenuState = { level: number; fit?: 'page' | 'width'; limits: ZoomLimits; canZoomIn: boolean; canZoomOut: boolean };
 export interface ZoomMenu {
   readonly element: HTMLElement;
   isOpen(): boolean;
@@ -15,12 +16,12 @@ export interface ZoomMenu {
 const shortcutOf = (id: string) => COMMANDS.find(command => command.id === id)?.shortcut;
 const COMMAND_ROWS = [
   { id: 'larger', label: 'Zoom in' }, { id: 'smaller', label: 'Zoom out' },
-  { id: 'fit-page', label: 'Fit page' }, { id: 'fit-width', label: 'Fit width' },
+  { id: 'fit-page', label: 'Fit page' }, { id: 'fit-width', label: 'Fit width' }, { id: 'actual-size', label: 'Actual size (100%)' },
 ] as const;
 
 /**
  * The popover on the zoom level, like the zoom menu of a design tool: a field to type a percentage into, the
- * zoom and fit commands with their keys, then a few presets. It is a menu in the keyboard sense: Up/Down/Home/End
+ * zoom, fit and actual-size commands with their keys (the fit in force is checked), then a few presets. It is a menu in the keyboard sense: Up/Down/Home/End
  * move between its entries, Escape and Tab close it and return focus to its button, as does a choice.
  * The popover opens above the button (the pill sits at the bottom of the panel) and flips below it without room.
  */
@@ -33,22 +34,25 @@ export function createZoomMenu(button: HTMLButtonElement, choose: (choice: ZoomC
   const menu = document.createElement('div');
   menu.setAttribute('role', 'menu'); menu.setAttribute('aria-label', 'Zoom');
   const separator = () => { const line = document.createElement('div'); line.className = 'zoom-sep'; line.setAttribute('role', 'separator'); return line; };
-  const entry = (label: string, choice: ZoomChoice, keys?: string) => {
+  const entry = (label: string, choice: ZoomChoice, keys?: string, radio = false) => {
     const item = document.createElement('button');
-    item.type = 'button'; item.tabIndex = -1; item.setAttribute('role', 'menuitem');
-    const text = document.createElement('span'); text.textContent = label; item.append(text);
+    item.type = 'button'; item.tabIndex = -1; item.setAttribute('role', radio ? 'menuitemradio' : 'menuitem');
+    if (radio) item.setAttribute('aria-checked', 'false');
+    // A slot for the check, on every entry so the labels line up.
+    const check = document.createElement('span'); check.className = 'zoom-check'; check.setAttribute('aria-hidden', 'true');
+    const text = document.createElement('span'); text.className = 'zoom-label'; text.textContent = label; item.append(check, text);
     if (keys) item.append(Object.assign(document.createElement('kbd'), { textContent: keys }));
     item.onclick = () => { close(true); choose(choice); };
     return item;
   };
-  const commands = new Map(COMMAND_ROWS.map(row => [row.id, entry(row.label, { kind: 'command', id: row.id }, shortcutOf(row.id))]));
+  const commands = new Map(COMMAND_ROWS.map(row => [row.id, entry(row.label, { kind: 'command', id: row.id }, shortcutOf(row.id), row.id === 'fit-page' || row.id === 'fit-width')]));
   const presets = ZOOM_PRESETS.map(zoom => entry(`${zoomPercent(zoom)}%`, { kind: 'zoom', zoom }));
-  menu.append(commands.get('larger')!, commands.get('smaller')!, separator(), commands.get('fit-page')!, commands.get('fit-width')!, separator(), ...presets);
+  menu.append(commands.get('larger')!, commands.get('smaller')!, separator(), commands.get('fit-page')!, commands.get('fit-width')!, commands.get('actual-size')!, separator(), ...presets);
   element.append(field, menu);
   document.body.append(element);
 
-  let shown = '100%';
-  const items = (): HTMLElement[] => [field, ...[...menu.querySelectorAll<HTMLButtonElement>('[role=menuitem]')].filter(item => !item.disabled)];
+  let shown = '100%', limits = DEFAULT_LIMITS;
+  const items = (): HTMLElement[] => [field, ...[...menu.querySelectorAll<HTMLButtonElement>('[role^=menuitem]')].filter(item => !item.disabled)];
   const isOpen = () => !element.hidden;
 
   function place() {
@@ -81,7 +85,7 @@ export function createZoomMenu(button: HTMLButtonElement, choose: (choice: ZoomC
     next?.focus();
   }
   function apply() {
-    const zoom = parseZoomInput(field.value);
+    const zoom = parseZoomInput(field.value, limits);
     if (zoom === undefined) { field.value = shown; field.select(); return; } // Unreadable: back to what is shown.
     close(true); choose({ kind: 'zoom', zoom });
   }
@@ -115,7 +119,8 @@ export function createZoomMenu(button: HTMLButtonElement, choose: (choice: ZoomC
   return {
     element, isOpen, close,
     update(state) {
-      shown = `${zoomPercent(state.zoom)}%`;
+      shown = `${zoomPercent(state.level)}%`; limits = state.limits;
+      for (const fit of ['page', 'width'] as const) commands.get(`fit-${fit}`)!.setAttribute('aria-checked', String(state.fit === fit));
       if (document.activeElement !== field) field.value = shown;
       (commands.get('larger') as HTMLButtonElement).disabled = !state.canZoomIn;
       (commands.get('smaller') as HTMLButtonElement).disabled = !state.canZoomOut;

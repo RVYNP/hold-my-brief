@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { clampZoom, pageFraction, parseZoomInput, roundZoom, scrollToHold, stepZoom, wheelFactor, ZOOM_MAX, ZOOM_MIN, ZOOM_PRESETS, ZOOM_STEPS, zoomAbout, zoomPercent } from '../src/zoom';
+import { clampZoom, migrateLegacyZoom, pageFraction, parseZoomInput, roundZoom, scrollToHold, stepZoom, wheelFactor, ZOOM_MAX, ZOOM_MIN, ZOOM_MODEL, ZOOM_PRESETS, ZOOM_STEPS, zoomAbout, zoomPercent } from '../src/zoom';
+import { defaultOptions } from '../src/types';
 
 describe('zoom ladder', () => {
   it('is the documented ladder, ascending, from the floor to the ceiling', () => {
-    expect(ZOOM_STEPS.map(zoomPercent)).toEqual([25, 33, 50, 67, 75, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400]);
+    expect(ZOOM_STEPS.map(zoomPercent)).toEqual([10, 25, 33, 50, 67, 75, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 600, 800]);
     expect(ZOOM_STEPS[0]).toBe(ZOOM_MIN);
     expect(ZOOM_STEPS.at(-1)).toBe(ZOOM_MAX);
     expect([...ZOOM_STEPS].sort((a, b) => a - b)).toEqual([...ZOOM_STEPS]);
@@ -14,15 +15,17 @@ describe('zoom ladder', () => {
     expect(stepZoom(1, -1)).toBe(.9);
     expect(stepZoom(.25, 1)).toBe(.33);
     expect(stepZoom(2, 1)).toBe(2.5);
-    expect(stepZoom(.5, -1)).toBe(.33);
+    expect(stepZoom(4, 1)).toBe(6);
+    expect(stepZoom(.25, -1)).toBe(.1);
   });
 
-  it('snaps to the next rung from a value between rungs, in either direction', () => {
+  it('snaps to the next rung from a level a fit came to, in either direction', () => {
+    expect(stepZoom(.8217, 1)).toBe(.9);
+    expect(stepZoom(.8217, -1)).toBe(.75);
     expect(stepZoom(1.3, 1)).toBe(1.5);
     expect(stepZoom(1.3, -1)).toBe(1.25);
-    expect(stepZoom(.8, 1)).toBe(.9);
-    expect(stepZoom(.8, -1)).toBe(.75);
-    expect(stepZoom(3.7, 1)).toBe(4);
+    expect(stepZoom(5, 1)).toBe(6);
+    expect(stepZoom(.05, 1)).toBe(.1);
   });
 
   it('treats a value within half a percent of a rung as on it', () => {
@@ -33,23 +36,31 @@ describe('zoom ladder', () => {
   it('stops at the ends and recovers from a stored value outside the range', () => {
     expect(stepZoom(ZOOM_MAX, 1)).toBe(ZOOM_MAX);
     expect(stepZoom(ZOOM_MIN, -1)).toBe(ZOOM_MIN);
-    expect(stepZoom(5, 1)).toBe(ZOOM_MAX);
-    expect(stepZoom(5, -1)).toBe(4);
-    expect(stepZoom(.1, -1)).toBe(ZOOM_MIN);
-    expect(stepZoom(.1, 1)).toBe(ZOOM_MIN);
+    expect(stepZoom(9, 1)).toBe(ZOOM_MAX);
+    expect(stepZoom(9, -1)).toBe(8);
+    expect(stepZoom(.05, -1)).toBe(ZOOM_MIN);
   });
 
   it('walks the whole ladder up and back down', () => {
     let zoom: number = ZOOM_MIN; const up = [zoom];
-    for (let i = 0; i < 20 && zoom < ZOOM_MAX; i++) up.push(zoom = stepZoom(zoom, 1));
+    for (let i = 0; i < 30 && zoom < ZOOM_MAX; i++) up.push(zoom = stepZoom(zoom, 1));
     expect(up).toEqual([...ZOOM_STEPS]);
     const down = [zoom];
-    for (let i = 0; i < 20 && zoom > ZOOM_MIN; i++) down.push(zoom = stepZoom(zoom, -1));
+    for (let i = 0; i < 30 && zoom > ZOOM_MIN; i++) down.push(zoom = stepZoom(zoom, -1));
     expect(down).toEqual([...ZOOM_STEPS].reverse());
   });
 
-  it('offers 50, 100 and 200 % as presets, all on the ladder', () => {
-    expect(ZOOM_PRESETS.map(zoomPercent)).toEqual([50, 100, 200]);
+  it('stops at the limits of a page too large for the full range, which end on no rung', () => {
+    const large = { min: ZOOM_MIN, max: 5.33 };
+    expect(stepZoom(4, 1, large)).toBe(5.33);
+    expect(stepZoom(5.33, 1, large)).toBe(5.33);
+    expect(stepZoom(5.33, -1, large)).toBe(4);
+    expect(stepZoom(7, -1, large)).toBe(4);
+    expect(stepZoom(3, 1, { min: ZOOM_MIN, max: 3 })).toBe(3);
+  });
+
+  it('offers 50 and 200 % as presets, both on the ladder', () => {
+    expect(ZOOM_PRESETS.map(zoomPercent)).toEqual([50, 200]);
     for (const preset of ZOOM_PRESETS) expect(ZOOM_STEPS).toContain(preset);
   });
 });
@@ -68,22 +79,67 @@ describe('zoom field', () => {
   });
 
   it('clamps to the supported range', () => {
-    expect(parseZoomInput('900')).toBe(ZOOM_MAX);
-    expect(parseZoomInput('4000%')).toBe(ZOOM_MAX);
+    expect(parseZoomInput('9000')).toBe(ZOOM_MAX);
+    expect(parseZoomInput('80000%')).toBe(ZOOM_MAX);
     expect(parseZoomInput('1')).toBe(ZOOM_MIN);
-    expect(parseZoomInput('24.9')).toBe(ZOOM_MIN);
+    expect(parseZoomInput('9.9')).toBe(ZOOM_MIN);
+    expect(parseZoomInput('900')).toBe(ZOOM_MAX);
+  });
+
+  it('clamps to the limits of the page on screen, never rounding past them', () => {
+    expect(parseZoomInput('800', { min: ZOOM_MIN, max: 5.337 })).toBe(5.33);
+    expect(parseZoomInput('10', { min: .124, max: 8 })).toBe(.13);
   });
 
   it('rejects what is not a positive number, so the field reverts', () => {
     for (const text of ['', ' ', 'abc', '12a', '-50', '+50', '0', '0%', '1,5', '1e3', '%', '50 %%', 'NaN', 'Infinity']) expect(parseZoomInput(text), text).toBeUndefined();
   });
 
-  it('clamps and rounds values stored by earlier versions', () => {
+  it('clamps and rounds stored values', () => {
     expect(clampZoom(NaN)).toBe(1);
-    expect(clampZoom(9)).toBe(ZOOM_MAX);
+    expect(clampZoom(90)).toBe(ZOOM_MAX);
     expect(clampZoom(.01)).toBe(ZOOM_MIN);
     expect(roundZoom(1.2349)).toBe(1.23);
     expect(roundZoom(.995)).toBe(1);
+  });
+});
+
+describe('saved zoom from before zoom was a true scale', () => {
+  it('versions what a saved zoom means', () => {
+    expect(ZOOM_MODEL).toBe(2);
+    expect(defaultOptions.zoomModel).toBe(ZOOM_MODEL);
+    expect(defaultOptions.fitted).toBe(true);
+  });
+
+  it('keeps a multiplier of 1 as the fit it was, whichever the fit', () => {
+    expect(migrateLegacyZoom({ fit: 'page', zoom: 1 }, .82)).toEqual({ fit: 'page', fitted: true, zoom: 1 });
+    expect(migrateLegacyZoom({ fit: 'width', zoom: 1.004 }, 1.31)).toEqual({ fit: 'width', fitted: true, zoom: 1 });
+  });
+
+  it('turns any other multiplier into the true scale the page was drawn at, keeping its fit for a later return', () => {
+    // Fit page drew the page at 82 %; 1.5x of that was 123 %.
+    const converted = migrateLegacyZoom({ fit: 'page', zoom: 1.5 }, .82);
+    expect(converted.fitted).toBe(false); expect(converted.fit).toBe('page');
+    expect(converted.zoom).toBeCloseTo(1.23, 12);
+    expect(migrateLegacyZoom({ fit: 'width', zoom: .5 }, 1.31)).toEqual({ fit: 'width', fitted: false, zoom: 1.31 * .5 });
+  });
+
+  it('does not round, so the page keeps its size exactly, but stays in range', () => {
+    expect(migrateLegacyZoom({ fit: 'page', zoom: 1.37 }, .8217).zoom).toBe(.8217 * 1.37);
+    expect(migrateLegacyZoom({ fit: 'page', zoom: 4 }, 3).zoom).toBe(ZOOM_MAX);
+    expect(migrateLegacyZoom({ fit: 'page', zoom: .25 }, .3).zoom).toBe(ZOOM_MIN);
+    expect(migrateLegacyZoom({ fit: 'page', zoom: 4 }, 3, { min: ZOOM_MIN, max: 5 }).zoom).toBe(5);
+  });
+
+  it('is the multiplier itself where the format never scaled by the fit (a fixed-layout book, base 1)', () => {
+    expect(migrateLegacyZoom({ fit: 'page', zoom: 1.5 }, 1)).toEqual({ fit: 'page', fitted: false, zoom: 1.5 });
+  });
+
+  it('keeps the fit rather than guess when nothing is known', () => {
+    expect(migrateLegacyZoom({ fit: 'page', zoom: 2 }, undefined)).toEqual({ fit: 'page', fitted: true, zoom: 1 });
+    expect(migrateLegacyZoom({ fit: 'width', zoom: NaN }, .8)).toEqual({ fit: 'width', fitted: true, zoom: 1 });
+    expect(migrateLegacyZoom({ fit: 'page', zoom: 2 }, 0)).toEqual({ fit: 'page', fitted: true, zoom: 1 });
+    expect(migrateLegacyZoom({ fit: 'page', zoom: -2 }, .8)).toEqual({ fit: 'page', fitted: true, zoom: 1 });
   });
 });
 

@@ -684,6 +684,24 @@ mod tests {
         assert_eq!(fs::read(source).unwrap(), b"original source");
     }
 
+    /// The reader decides what a saved zoom means (`zoomModel`), so the store must hand options back exactly as saved: the
+    /// old fit-relative form, which the reader converts on open, and the true-scale form, with its fit mode and marker.
+    #[test]
+    fn saved_view_options_round_trip_in_both_zoom_forms() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("state.json");
+        let legacy = serde_json::json!({ "fit": "width", "zoom": 1.35, "rotation": 90, "spread": false });
+        let current = serde_json::json!({ "fit": "page", "fitted": false, "zoom": 8.0, "zoomModel": 2, "rotation": 0, "spread": true });
+        let mut store = Store::load(file.clone());
+        store.save_position("old".into(), "/a.pdf".into(), ReadingState { locator: serde_json::json!({"page": 3}), options: legacy.clone() }).unwrap();
+        store.save_position("new".into(), "/b.pdf".into(), ReadingState { locator: serde_json::json!({"page": 4}), options: current.clone() }).unwrap();
+        let loaded = Store::load(file);
+        assert_eq!(loaded.saved.documents["old"].options, legacy);
+        assert!(loaded.saved.documents["old"].options.get("zoomModel").is_none());
+        assert_eq!(loaded.saved.documents["new"].options, current);
+        assert_eq!(loaded.saved.documents["new"].options["zoomModel"], 2);
+    }
+
     #[test]
     fn library_restores_authorization_without_recents_and_preserves_organization() {
         let dir = tempfile::tempdir().unwrap();

@@ -1,4 +1,4 @@
-import { pageFraction, roundZoom, scrollToHold, zoomAbout, ZOOM_MAX, ZOOM_MIN, type Point, type Pose } from './zoom';
+import { pageFraction, roundZoom, scrollToHold, zoomAbout, type Point, type Pose, type ZoomLimits } from './zoom';
 
 /** Marks a scroller whose page is being scaled by a gesture; adapters must not refit it meanwhile (see the PDF and image resize handlers). */
 export const PREVIEW_CLASS = 'zoom-preview';
@@ -10,10 +10,12 @@ const SETTLE_MS = 160;
 export type ZoomGestureTarget = {
   /** The scroll container of the open page-based document, or undefined when it cannot zoom by gesture. */
   scroller(): HTMLElement | undefined;
-  /** The zoom committed to the document now. */
+  /** The level the document is drawn at now, also while a fit is in force. */
   zoom(): number;
-  /** Applies a zoom and resolves once the document is drawn at it; resolves to the zoom that is now committed. */
-  commit(zoom: number): Promise<number>;
+  /** The range the page on screen can be zoomed within. */
+  limits(): ZoomLimits;
+  /** Applies a true zoom (leaving any fit) and resolves once the document is drawn at it. */
+  commit(zoom: number): Promise<void>;
 };
 
 type Gesture = { host: HTMLElement; surface: HTMLElement | null; base: number; pose: Pose; origin: Point; pointer: Point };
@@ -52,20 +54,20 @@ export function createZoomGesture(target: ZoomGestureTarget) {
     const current = gesture;
     if (!current || committing) return;
     cancelAnimationFrame(frame); paint();
-    const zoom = roundZoom(Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, current.base * current.pose.scale)));
     const { host, surface, pointer, pose } = current;
+    const limits = target.limits(), zoom = roundZoom(Math.max(limits.min, Math.min(limits.max, current.base * pose.scale)), limits);
+    const changed = pose.scale !== 1;
     const size = surface ? { width: surface.offsetWidth, height: surface.offsetHeight } : undefined;
     const held = size ? pageFraction(pose, { x: pointer.x - current.origin.x, y: pointer.y - current.origin.y }, size) : undefined;
     committing = true;
-    let committed = current.base;
-    try { committed = zoom === current.base ? current.base : await target.commit(zoom); }
+    try { if (changed) await target.commit(zoom); }
     finally {
       // The scaled page is replaced by the crisp one (or, for an image, resized in place) in the same task.
       if (surface) { surface.style.transform = ''; surface.style.transformOrigin = ''; }
       host.classList.remove(PREVIEW_CLASS);
       gesture = undefined; committing = false;
     }
-    const fresh = held && committed !== current.base ? host.querySelector<HTMLElement>(SURFACE) : null;
+    const fresh = held && changed ? host.querySelector<HTMLElement>(SURFACE) : null;
     if (fresh && held) {
       const box = fresh.getBoundingClientRect(), edge = host.getBoundingClientRect();
       host.scrollLeft = scrollToHold(box.left - edge.left + host.scrollLeft, held.x, box.width, pointer.x - edge.left);
@@ -82,7 +84,8 @@ export function createZoomGesture(target: ZoomGestureTarget) {
     gesture ??= begin(at);
     if (!gesture) return;
     gesture.pointer = at;
-    gesture.pose = zoomAbout(gesture.pose, factor, { x: at.x - gesture.origin.x, y: at.y - gesture.origin.y }, ZOOM_MIN / gesture.base, ZOOM_MAX / gesture.base);
+    const limits = target.limits();
+    gesture.pose = zoomAbout(gesture.pose, factor, { x: at.x - gesture.origin.x, y: at.y - gesture.origin.y }, limits.min / gesture.base, limits.max / gesture.base);
     if (!frame) frame = requestAnimationFrame(paint);
     clearTimeout(timer); timer = setTimeout(() => void settle(), SETTLE_MS);
   }
