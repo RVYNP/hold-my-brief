@@ -681,9 +681,9 @@ $('tab-state-primary').onclick = () => {
 };
 $('tab-state-close').onclick = () => { if (tabs.active) closeTab(tabs.active.path); };
 
-/** Shows a tab, or Home for none. A tab with no page yet starts opening; opening something else meanwhile is given up. */
 /** Tab 1…8, or 9 for the last one: reached by Alt+digit and ⌘+digit as keys and, on macOS, by the Window menu's items. No such tab: nothing happens. */
 function selectTabNumber(digit: number) { const tab = tabs.byNumber(digit); if (tab) selectTab(tab.path); }
+/** Shows a tab, or Home for none. A tab with no page yet starts opening; opening something else meanwhile is given up. */
 function selectTab(path: string | undefined) {
   const tab = path === undefined ? undefined : tabs.find(path);
   if (path !== undefined && !tab) return;
