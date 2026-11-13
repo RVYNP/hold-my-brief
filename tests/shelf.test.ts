@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { assignCoverSlots, collectionDisplayName, coverFamily, coverFill, coverHash, coverHue, coverSecondaryInk, coverSeedOf, coverStyle, coverTintRgb, fileTitle, fileVersion, groupIntoShelves, unfiledHue } from '../src/shelf';
+import { assignCoverSlots, collectionDisplayName, coverFamily, coverFill, coverHash, coverHue, coverSecondaryInk, coverSeedOf, coverStyle, coverTintRgb, displayTitle, fileTitle, fileVersion, groupIntoShelves, isGenericName, parentFolder, unfiledHue } from '../src/shelf';
 import { coverFamilies, coverPalette, familyFor, seedFrom } from '../src/procedural-cover';
 import { contrast, palettes, type Rgb } from '../src/theme';
 
@@ -153,5 +153,39 @@ describe('generated cover colours', () => {
     it('keeps the plain band the very colour of the art\'s ground tone, so the two meet without a seam', () => {
       for (const id of [...ids, undefined]) expect(unpack(coverTintRgb(id, mode)), String(id)).toEqual(coverPalette(coverHue(id), mode)[0]);
     });
+  });
+});
+
+describe('generic file names', () => {
+  it('knows the stems that name nothing, with or without a number, and digits-only ones', () => {
+    for (const name of ['source.pdf', 'Source.PDF', 'document.epub', 'scan.png', 'file.txt', 'untitled.md', 'Untitled 2.md', 'scan_001.pdf', '0042.png', '7']) expect(isGenericName(name), name).toBe(true);
+    for (const name of ['Rust-Book-1.99.epub', 'sources.pdf', 'source-notes.md', '2026-10-29.md', 'a1.pdf', 'report.pdf']) expect(isGenericName(name), name).toBe(false);
+  });
+});
+
+describe('parentFolder', () => {
+  it('is the last folder of either path style, and nothing for a bare name or a browser content id', () => {
+    expect(parentFolder('/Users/x/work/refs/03_wwe_mag/source.pdf')).toBe('03_wwe_mag');
+    expect(parentFolder('C:\\Users\\x\\refs\\09_dirtrider\\source.pdf')).toBe('09_dirtrider');
+    expect(parentFolder('C:\\scan.pdf')).toBeUndefined(); // a drive root is no folder
+    expect(parentFolder('\\\\?\\C:\\refs\\09_x\\source.pdf')).toBe('09_x'); // extended-length prefix
+    expect(parentFolder('\\\\?\\C:\\source.pdf')).toBeUndefined();
+    expect(parentFolder('source.pdf')).toBeUndefined();
+    expect(parentFolder(`${'ab'.repeat(32)}/source.pdf`)).toBeUndefined();
+  });
+});
+
+describe('displayTitle', () => {
+  const generic = { name: 'source.pdf', path: '/refs/03_wwe_mag/source.pdf' };
+  it('uses the folder for a generic file name', () => { expect(displayTitle(generic)).toBe('03_wwe_mag'); expect(displayTitle(generic, undefined, true)).toBe('03_wwe_mag'); });
+  it('prefers an EPUB\'s own title, even over a generic name', () => { expect(displayTitle({ name: 'source.epub', path: '/refs/x/source.epub' }, ' Real Book ')).toBe('Real Book'); });
+  it('keeps the file name (or its cleaned form) when the name says something', () => {
+    const named = { name: 'Rust-Book-1.99.epub', path: '/refs/1-languages/Rust-Book-1.99.epub' };
+    expect(displayTitle(named)).toBe('Rust-Book-1.99.epub');
+    expect(displayTitle(named, undefined, true)).toBe('Rust Book');
+  });
+  it('falls back to the file name for a generic name with no folder to borrow', () => {
+    expect(displayTitle({ name: 'source.pdf', path: 'source.pdf' })).toBe('source.pdf');
+    expect(displayTitle({ name: 'source.pdf', path: `${'cd'.repeat(32)}/source.pdf` }, undefined, true)).toBe('source');
   });
 });

@@ -1,5 +1,6 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { bigLibrary, seedLibrary, type FixtureCollection, type FixtureDocument } from './home-fixture';
+import { libraryToggle } from './library-controls';
 
 const PAGED = { fraction: 39 / 145, page: 40, pages: 146 };
 const mixed: FixtureDocument[] = [
@@ -168,15 +169,15 @@ test('Show all and a collection card open the library on that scope', async ({ p
   await expect(page.locator('#library-root.is-board')).toBeVisible(); // The board, where there is room.
   await expect(page.locator('[data-doc-path]')).toHaveCount(3);
   await expect(page.locator('[data-doc-path]').filter({ hasText: 'Done.pdf' })).toHaveCount(0);
-  await page.locator('#library-toggle').click(); // Back to Home.
+  await libraryToggle(page).click(); // Back to Home.
   await expect(page.locator('#library-root')).toBeHidden();
   await region(page, 'Favorites').getByRole('button', { name: 'Show all: Favorites' }).click();
   await expect(scope).toHaveText('Favorites');
   await expect(page.locator('[data-doc-path]')).toHaveCount(2);
-  await page.locator('#library-toggle').click();
+  await libraryToggle(page).click();
   await region(page, 'Collections').getByRole('button', { name: 'Show all: Collections' }).click();
   await expect(scope).toHaveText('All references');
-  await page.locator('#library-toggle').click();
+  await libraryToggle(page).click();
   await region(page, 'Collections').getByRole('button', { name: /Collection Alpha shelf/ }).click();
   await expect(scope).toHaveText('Alpha shelf');
   await expect(page.locator('[data-doc-path]')).toHaveCount(3);

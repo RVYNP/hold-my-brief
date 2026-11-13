@@ -1,31 +1,39 @@
-/* The library is an out-of-flow drawer over the reading panel at every width: it never takes
-   width from #workspace, so opening, dragging or docking it cannot move or refit the page. */
+/* The info rail is an out-of-flow drawer over the reading panel at every width: it never takes
+   width from #workspace, so opening, dragging or docking it cannot move or refit the page. From 720 px it stands beside the
+   48 px icon rail (6 px margin, 48 px rail, 6 px gap: it starts 60 px from the edge). */
 .library-root { --library-width: 270px; position: absolute; z-index: 20; top: 0; bottom: 0; left: 0; display: flex; flex: 0 0 auto; width: calc(var(--library-width) + 10px); min-width: 0; min-height: 0; margin: 0 0 0 6px; }
 .library-panel { position: relative; container: library-panel / inline-size; display: flex; flex-direction: column; flex: 1 1 auto; height: 100%; min-width: 0; min-height: 0; padding: 8px 8px 6px; overflow: auto; border: 1px solid var(--border); border-radius: 9px; background-color: var(--glass-raise-base); background-image: var(--glass-raise-paint); background-attachment: var(--glass-raise-attach); box-shadow: var(--shadow-drawer); scrollbar-width: thin; scrollbar-color: var(--faint) transparent; }
 .library-panel button, .library-panel input, .library-panel select { font-size: 12px; }
-/* Header, one line: the glyph, the name, then + (add files, sources), → (the board), the dock and close buttons. */
+/* Header, one line: the view's name and count, then the filter, + New (Collections), + (add files; compact windows and the board), → (the board) and close (compact). */
 .library-header { display: flex; align-items: center; gap: 7px; flex-shrink: 0; margin: 0 0 6px 8px; }
-.library-header-glyph { display: grid; place-items: center; flex: none; color: var(--muted); }
-.library-header h2 { flex: 1; min-width: 0; margin: 0; font-size: 16px; }
+.library-header h2 { display: flex; flex: 1; align-items: baseline; gap: 6px; min-width: 0; margin: 0; overflow: hidden; font-size: 16px; white-space: nowrap; }
+.library-title-count { color: var(--muted); font: 400 11px/1 var(--font-mono); letter-spacing: 0; }
 .library-header-actions { display: flex; align-items: center; flex-shrink: 0; }
 .library-header button { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; color: var(--muted); }
-.library-header button:hover { color: var(--fg); }
+.library-header button:hover, .library-header button[aria-expanded=true] { color: var(--fg); }
+.library-header .library-new-collection { width: auto; padding: 0 6px; color: var(--accent-ink); font-size: 11px; font-weight: 600; }
+.library-panel [hidden] { display: none !important; }
 /* Resize handle: a 10 px hit area between the library and the reading panel. The drawer keeps the
    geometry of the retired divider, anchored to the 6 px page margin, so the panel stays put. */
 .library-right { flex-direction: row-reverse; }
 .library-right > .library-root { left: auto; right: 0; flex-direction: row-reverse; margin: 0 6px 0 0; }
 /* --shadow-drawer casts rightward; a right-docked drawer uses the symmetric popover shadow. */
 .library-right .library-panel { box-shadow: var(--shadow-popover); }
-/* Everything that floats over the reading panel's edge starts beside what stands there: the drawer when the library is open,
-   else the 60 px rail (a 6 px margin before it, 6 px after). The right-docked view controls move out from under it too. The
-   position is fully specified (left/right/translate): the workspace `@container` query in style.css only starts matching at
-   734 px (workspace content width = viewport - 14), so between 720 and 733 px the base `left: 50%; translate: -50% 0` still
-   applies and would over-constrain the pill if this rule only set `right`. The applied width is exposed on #reader-layout by
-   applyWidth in library.ts. */
+/* Everything that floats over the reading panel's edge starts beside what stands there: the icon rail (a 6 px margin, 48 px, 6 px
+   after) and, when the info rail is open, the info rail (its width and the 10 px handle, 6 px after). The right-docked view controls
+   move out from under it too. The position is fully specified (left/right/translate): the workspace `@container` query in style.css
+   only starts matching at 734 px (workspace content width = viewport - 14), so between 720 and 733 px the base `left: 50%;
+   translate: -50% 0` still applies and would over-constrain the pill if this rule only set `right`. The applied width is exposed on
+   #reader-layout by applyWidth in library.ts. */
 @media (min-width: 720px) {
-  #reader-layout { --library-clear: 72px; }
-  #reader-layout.library-open { --library-clear: calc(var(--library-width, 270px) + 16px); }
+  #reader-layout { --library-clear: 60px; }
+  #reader-layout.library-open { --library-clear: calc(var(--library-width, 270px) + 76px); }
   #reader-layout.library-right #view-controls { left: auto; right: var(--library-clear); translate: none; }
+  /* The info rail ends where the icon rail does: above the footer's lane (see style.css), so the footer is never under it. */
+  .library-root { bottom: var(--footer-height); left: 54px; }
+  .library-right > .library-root { left: auto; right: 54px; }
+  .library-header .library-plus, .library-header .library-close { display: none; }
+  .is-board .library-header .library-plus { display: grid; }
 }
 .library-resize { position: relative; z-index: 2; flex: 0 0 10px; display: grid; place-items: center; cursor: col-resize; touch-action: none; outline: none; }
 .library-resize::before { content: ''; position: absolute; inset: 0 4px; border-radius: 1px; background: var(--accent-border); }
@@ -46,8 +54,9 @@
 /* Nothing inside the drawer is a bordered box: actions are text, fields are tinted fills, filters are
    plain dropdown text, and selection is a tint. Only the drawer's own edge is drawn. */
 .library-search-label { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.library-search { flex-shrink: 0; width: 100%; min-width: 0; padding: 5px 8px; border: 0; border-radius: 6px; background: color-mix(in srgb, var(--hover) 55%, var(--raise)); color: var(--fg); }
-.library-search::placeholder { color: var(--muted); }
+.library-search, .library-tree-search { flex-shrink: 0; width: 100%; min-width: 0; padding: 5px 8px; border: 0; border-radius: 6px; background: color-mix(in srgb, var(--hover) 55%, var(--raise)); color: var(--fg); }
+.library-search::placeholder, .library-tree-search::placeholder { color: var(--muted); }
+.library-tree-filter { flex: none; margin: 0 0 6px; }
 .library-facets { display: flex; flex-shrink: 0; flex-wrap: wrap; gap: 0 6px; margin: 0; }
 .library-facets select { flex: 0 1 auto; min-width: 0; max-width: 100%; padding: 4px 16px 4px 2px; border: 0; border-radius: 4px; background-color: transparent; background-position: right 6px center, right 2px center; color: var(--muted); font-size: 11px !important; }
 .library-facets select:hover { color: var(--fg); }
@@ -66,26 +75,19 @@
 .library-collection-action { padding: 5px 4px; flex-shrink: 0; color: var(--muted); }
 .library-collection-action:last-child { font-size: 16px; }
 .library-no-collections { margin: 4px 7px 8px; color: var(--muted); font-size: 11px; line-height: 1.5; }
-/* Chips row: the scope chip (opens the popover), then a chip per file type. It scrolls sideways; nothing wraps or runs past the edge. */
+/* Chips row (the board): the scope's name, then a chip per file type. It scrolls sideways; nothing wraps or runs past the edge. */
 .library-scope { display: flex; flex-shrink: 0; align-items: center; gap: 4px; min-width: 0; margin: 0 0 6px; overflow-x: auto; scrollbar-width: none; }
 .library-scope::-webkit-scrollbar { display: none; }
 .library-scope.has-more { mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
-.library-scope-name { display: flex; align-items: center; gap: 5px; flex: none; max-width: 70%; padding: 3px 8px; border: 0; border-radius: 999px; background: var(--hover-subtle); color: var(--fg); font-weight: 600; }
-.library-scope-name:hover, .library-scope-name[aria-expanded=true] { background: var(--hover); }
-.library-scope-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.library-chevron { flex: none; color: var(--muted); }
+.library-scope-name { flex: none; max-width: 70%; margin: 0; overflow: hidden; padding: 4px 2px; font-size: 15px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .library-type-chips { display: flex; flex: none; gap: 4px; }
 .library-type-chip { flex: none; padding: 3px 9px; border: 0; border-radius: 999px; color: var(--muted); }
 .library-type-chip:hover { background: var(--hover-subtle); color: var(--fg); }
 .library-type-chip[aria-pressed=true] { background: var(--accent-soft); color: var(--accent-ink); }
-/* Search and sort row: a search button that opens into the field, the count, and the one Recent menu. */
+/* The board's search and sort row: the field, the count, and the one Recent menu. */
 .library-searchbar { display: flex; flex-shrink: 0; align-items: center; gap: 4px; min-width: 0; margin: 0 0 6px; }
-.library-search-toggle { display: grid; place-items: center; flex: none; width: 26px; height: 26px; padding: 0; color: var(--muted); }
-.library-search-toggle:hover, .library-search-toggle[aria-expanded=true] { color: var(--fg); }
 .library-search-field { flex: 1; min-width: 0; }
 .library-result-count { margin: 0 2px 0 auto; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-/* While the field is open the count stays for assistive technology only; the field needs the room. */
-.library-searchbar.is-searching .library-result-count { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); }
 .library-view-button { display: flex; flex: none; align-items: center; gap: 5px; padding: 3px 6px; border: 0; color: var(--muted); }
 .library-view-button:hover, .library-view-button[aria-expanded=true] { color: var(--fg); }
 .library-menu-icon { flex: none; }
@@ -109,8 +111,7 @@
 .library-grid .library-tile-scrim { display: none; }
 /* An EPUB's generated cover prints its own title; its caption (space is reserved) appears only once the cover image has replaced it. */
 .library-tile.is-cover .library-tile-media:not(.is-loaded) ~ .library-tile-caption { visibility: hidden; }
-.library-scope-menu { position: absolute; z-index: 4; top: var(--scope-top, 100px); left: 8px; right: 8px; display: flex; flex-direction: column; max-height: calc(100% - var(--scope-top, 100px) - 12px); padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); box-shadow: var(--shadow-popover); }
-.library-scope-menu .library-facets { margin: 4px 0 0 2px; padding-top: 4px; border-top: 1px solid var(--hairline); }
+.library-board-nav .library-facets { margin: 4px 0 0 2px; padding-top: 4px; border-top: 1px solid var(--hairline); }
 .library-item-menu { position: absolute; z-index: 5; display: flex; flex-direction: column; min-width: 150px; padding: 4px; border: 1px solid var(--border); border-radius: 7px; background: var(--card); box-shadow: var(--shadow-popover); }
 .library-item-menu button { padding: 6px 10px; text-align: left; }
 .library-pager { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; padding-top: 4px; color: var(--muted); font-size: 11px; }
@@ -138,7 +139,7 @@
 .library-organize { font-weight: 600; }
 .library-card-actions button:hover { color: var(--fg); background: var(--hover); }
 .library-card-actions .library-favorite[aria-pressed=true] { color: var(--accent); background: transparent; border-color: transparent; opacity: 1; pointer-events: auto; }
-.library-list .library-document:has(.library-favorite[aria-pressed=true]) .library-document-open { padding-right: 30px; }
+.library-list .library-document:has(.library-favorite[aria-pressed=true]) .library-document-open { padding-right: 36px; }
 .library-document:hover .library-card-actions button, .library-document:focus-within .library-card-actions button, .library-document.is-menu-open .library-card-actions button, .library-list .library-document.is-active .library-card-actions button { opacity: 1; pointer-events: auto; }
 .library-list .library-document:hover .library-document-open, .library-list .library-document:focus-within .library-document-open, .library-list .library-document.is-active .library-document-open, .library-list .library-document.is-menu-open .library-document-open { padding-right: 60px; }
 
@@ -203,6 +204,7 @@
    and the saved drawer width is not touched. A left rail holds the tree, the main column the grid, and from
    1200 px a detail strip joins. */
 .library-root.is-board { width: calc(100% - 12px); }
+@media (min-width: 720px) { .library-root.is-board { width: calc(100% - 66px); } }
 .is-board .library-resize { display: none; }
 .is-board .library-panel { padding: 0; overflow: hidden; }
 .library-panel:focus { outline: none; }
@@ -216,14 +218,11 @@
 .library-board-rail { padding: 8px 6px 6px; }
 .library-board-main { padding: 8px 10px 6px; border-left: 1px solid var(--hairline); }
 .is-board .library-header-actions > :not(.library-plus) { display: none; }
-.is-board .library-scope-menu { position: static; flex: 1 1 auto; max-height: none; min-height: 0; padding: 0; overflow-y: auto; border: 0; border-radius: 0; background: transparent; box-shadow: none; scrollbar-width: thin; }
-.is-board .library-scope-menu .library-navigation { overflow: visible; }
+.library-board-nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+.library-board-nav .library-navigation { overflow: visible; }
 .is-board .library-scope { gap: 6px; margin: 0 0 8px; }
-.is-board .library-scope-name { margin: 0; padding: 4px 2px; background: transparent; font-size: 15px; font-weight: 650; pointer-events: none; }
-.is-board .library-scope-name .library-chevron { display: none; }
 .is-board .library-result-count { margin: 0 auto 0 2px; }
 .is-board .library-search-field { flex: 0 1 220px; }
-.is-board .library-search-toggle { display: none; }
 .is-board .library-documents { margin-top: 0; }
 .library-board-toggle { display: grid; place-items: center; }
 .library-board-back { display: flex; flex: none; align-items: center; gap: 5px; padding: 4px 8px; color: var(--fg); font-weight: 600; }
@@ -361,7 +360,7 @@
 @media (max-height: 480px) {
   .library-panel { padding: 7px 9px; }
   .library-header { margin-bottom: 3px; }
-  .library-scope, .library-searchbar { margin-bottom: 4px; }
+  .library-searchbar { margin-bottom: 4px; }
   .library-facets { margin-bottom: 6px; }
   .library-facets select { padding-top: 4px; padding-bottom: 4px; }
   .library-navigation { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-content: start; gap: 2px; max-height: 42%; min-height: 94px; }
@@ -373,32 +372,58 @@
   .library-documents { min-height: 56px; }
   .library-empty { padding-top: 8px; }
 }
-/* Rail: the library's closed form from 720 px up. Covers are 40 x 54; the open reference wears the accent ring. */
-.library-rail { display: none; }
-@media (min-width: 720px) {
-  #reader-layout:not(.library-open) > .library-rail { position: absolute; z-index: 20; top: 0; bottom: var(--footer-height); left: 6px; display: flex; flex-direction: column; align-items: center; gap: 10px; width: 60px; padding: 8px 0; overflow: hidden; border: 1px solid var(--border); border-radius: 9px; background-color: var(--glass-raise-base); background-image: var(--glass-raise-paint); background-attachment: var(--glass-raise-attach); }
-  #reader-layout.library-right:not(.library-open) > .library-rail { left: auto; right: 6px; }
-  #reader-layout.library-right .library-rail-toggle svg { transform: scaleX(-1); }
-  /* The drawer ends where the rail does: above the footer's lane (see style.css), so the footer is never under it. */
-  .library-root { bottom: var(--footer-height); }
-  #reader-layout:not(.library-open):not(.library-right) #empty.is-home { padding-left: calc(var(--library-clear) + 4px); }
-  #reader-layout.library-right:not(.library-open) #empty.is-home { padding-right: calc(var(--library-clear) + 4px); }
-}
-.library-rail-toggle, .library-rail-side { display: grid; place-items: center; flex: none; width: 32px; height: 32px; padding: 0; color: var(--muted); }
-.library-rail-toggle:hover, .library-rail-side:hover { color: var(--fg); }
-/* The covers scroll between the library button and the side button, which stay put at the rail's two ends. */
-.library-rail-list { display: flex; flex: 0 1 auto; flex-direction: column; align-items: center; gap: 8px; width: 100%; min-height: 0; padding: 5px 0; overflow: hidden auto; scrollbar-width: none; }
-.library-rail-side { margin-top: auto; }
-.library-rail-menu { position: fixed; z-index: 40; display: flex; flex-direction: column; min-width: 180px; padding: 4px; border: 1px solid var(--border); border-radius: 7px; background: var(--card); box-shadow: var(--shadow-popover); }
-.library-rail-menu button { padding: 6px 10px 6px 24px; text-align: left; font-size: 12px; }
-.library-rail-menu button[aria-checked=true] { background: var(--hover-subtle); background-image: radial-gradient(circle at 12px 50%, var(--accent) 0 2.5px, transparent 3px); }
-.library-rail-item { position: relative; display: block; flex: none; width: 40px; height: 54px; }
-.library-rail-cover { display: block; width: 40px; height: 54px; padding: 0; border-radius: 4px; }
-.library-rail-cover:hover { background: transparent; }
-.library-rail-cover .library-tile-media { width: 100%; height: 100%; aspect-ratio: auto; }
-.library-rail-cover .library-tile-scrim, .library-rail-cover .library-cover-text, .library-rail-cover .library-tile-format { display: none; }
-.library-rail-cover .library-cover-art { height: 100%; }
-.library-rail-cover:focus-visible { outline: none; }
-.library-rail-cover:focus-visible .library-tile-media::after { box-shadow: inset 0 0 0 2px var(--accent); }
-.library-rail-cover.is-active { box-shadow: 0 0 0 2px var(--raise), 0 0 0 4px var(--accent); }
+/* Tree: the library as nested folders with the documents inside. One row is 26 px, indented 14 px a level; sections are quiet captions. */
+.library-tree { flex: 1 1 0; min-height: 78px; margin: 0 -4px; padding: 0 4px 4px; overflow-x: hidden; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--faint) transparent; }
+.tree-row { display: flex; align-items: center; gap: 4px; box-sizing: border-box; height: 26px; padding: 0 6px 0 calc(4px + var(--depth, 0) * 14px); border-radius: 6px; font-size: 12px; line-height: 1.2; white-space: nowrap; cursor: default; outline: none; user-select: none; }
+.tree-row:hover { background: var(--hover-subtle); }
+.tree-row:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
+.tree-row.is-menu-open { background: var(--hover); }
+.tree-row.is-active { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+.tree-row.is-active:hover { background: var(--accent-soft-hover); }
+.tree-chevron { display: grid; flex: none; place-items: center; width: 12px; color: var(--muted); }
+.tree-chevron-icon { transition: rotate .12s; }
+.tree-row[aria-expanded=true] > .tree-chevron .tree-chevron-icon { rotate: 90deg; }
+.tree-icon { display: grid; flex: none; place-items: center; color: var(--muted); }
+.tree-row.is-active .tree-icon, .tree-row.is-active .tree-meta { color: inherit; }
+.tree-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tree-row.is-root .tree-label { font-weight: 650; }
+.tree-label mark { border-radius: 2px; background: color-mix(in srgb, var(--accent) 26%, transparent); color: inherit; }
+.tree-meta { flex: none; margin-left: auto; padding-left: 6px; color: var(--muted); font: 11px/1 var(--font-mono); letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.tree-row.is-missing .tree-label { color: var(--muted); font-style: italic; }
+.tree-row.is-section { height: 22px; margin-top: 10px; padding-left: 6px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; }
+.tree-row.is-section:first-child { margin-top: 2px; }
+.tree-row.is-section .tree-label { flex: 0 1 auto; }
+.tree-row.is-section .tree-meta { margin-left: 6px; padding-left: 0; }
+@media (prefers-reduced-motion: reduce) { .tree-chevron-icon { transition: none; } }
 
+/* The Add files menu and the dialogs stand outside the info rail, so they work while it is closed; the menu is fixed to the window, beside the icon rail's button. */
+.library-add-menu { position: fixed; z-index: 40; }
+.library-dialog-host { display: contents; }
+
+/* Icon rail: from 720 px up, a 48 px strip of the library's views, Home and Add files, and at its foot the side switch and Appearance.
+   A window-level overlay like the info rail, so it never changes the page's box; the active icon wears the accent-soft fill. */
+.icon-rail { display: none; }
+@media (min-width: 720px) {
+  #reader-layout > .icon-rail { position: absolute; z-index: 21; top: 0; bottom: var(--footer-height); left: 6px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; box-sizing: border-box; width: 48px; padding: 8px 0; border: 1px solid var(--border); border-radius: 9px; background-color: var(--glass-raise-base); background-image: var(--glass-raise-paint); background-attachment: var(--glass-raise-attach); }
+  #reader-layout.library-right > .icon-rail { left: auto; right: 6px; }
+  #reader-layout:not(.library-right) #empty.is-home { padding-left: 64px; }
+  #reader-layout.library-right #empty.is-home { padding-right: 64px; }
+  /* The toolbar's library button is the compact window's door; here the icon rail is. */
+  #library-toggle { display: none; }
+}
+.icon-rail-group { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.icon-rail-button { position: relative; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--muted); }
+.icon-rail-button:hover { background: var(--hover-subtle); color: var(--fg); }
+.icon-rail-button[aria-pressed=true] { background: var(--accent-soft); color: var(--accent-ink); }
+.icon-rail-button[aria-pressed=true]:hover { background: var(--accent-soft-hover); }
+.icon-rail-button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* Light: the design's dark ink pill. Dark: a raised card. Drawn on the side away from the rail's edge, after a short hover. */
+.icon-rail-button::after { content: attr(data-tip); position: absolute; top: 50%; left: calc(100% + 10px); z-index: 2; padding: 5px 8px; border: 1px solid light-dark(var(--fg), var(--border)); border-radius: 6px; background: light-dark(var(--fg), var(--card)); color: light-dark(var(--chrome), var(--fg)); font: 11px/1.3 var(--font-mono); white-space: nowrap; pointer-events: none; opacity: 0; transform: translateY(-50%); }
+.icon-rail[data-library-side=right] .icon-rail-button::after { left: auto; right: calc(100% + 10px); }
+.icon-rail-button:hover::after, .icon-rail-button:focus-visible::after { opacity: 1; transition: opacity .12s .35s; }
+.icon-rail-button:focus-visible::after { transition-delay: 0s; }
+.icon-rail-button[aria-expanded=true]::after { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .icon-rail-button:hover::after, .icon-rail-button:focus-visible::after { transition: none; } }
+.icon-rail-menu { position: fixed; z-index: 40; display: flex; flex-direction: column; min-width: 180px; padding: 4px; border: 1px solid var(--border); border-radius: 7px; background: var(--card); box-shadow: var(--shadow-popover); }
+.icon-rail-menu button { padding: 6px 10px 6px 24px; text-align: left; font-size: 12px; }
+.icon-rail-menu button[aria-checked=true] { background: var(--hover-subtle); background-image: radial-gradient(circle at 12px 50%, var(--accent) 0 2.5px, transparent 3px); }

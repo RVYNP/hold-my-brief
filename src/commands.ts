@@ -48,6 +48,7 @@ export const COMMANDS: readonly Command[] = [
   { id: 'next-tab', label: 'Next tab', group: 'File', keywords: ['tabs', 'switch', 'right'], shortcut: 'Ctrl Tab' },
   { id: 'previous-tab', label: 'Previous tab', group: 'File', keywords: ['tabs', 'switch', 'left'], shortcut: 'Ctrl Shift Tab' },
   { id: 'library', label: 'Toggle document library', group: 'File', keywords: ['sidebar', 'books', 'collection'], shortcut: 'Ctrl B' },
+  { id: 'library-search', label: 'Search the library', group: 'File', keywords: ['find', 'filter', 'folders', 'documents', 'tree', 'sidebar'], shortcut: 'Ctrl Shift F' },
   { id: 'library-side', label: 'Move library to other side', group: 'File', keywords: ['dock', 'rail', 'sidebar', 'left', 'right', 'lock'] },
   { id: 'library-board', label: 'Library board', group: 'File', keywords: ['board', 'grid', 'browse', 'collection'] },
   { id: 'find', label: 'Find in document…', group: 'Navigate', keywords: ['search', 'text', 'grep', 'locate'], shortcut: 'Ctrl F', requiresDocument: true },
@@ -114,6 +115,7 @@ export const tabDigit = (id: string | undefined): number | undefined => {
 export const SHORTCUTS: readonly Shortcut[] = [
   { id: 'command-palette', key: 'k', ctrl: true },
   { id: 'library', key: 'b', ctrl: true },
+  { id: 'library-search', key: 'f', ctrl: true, shift: true },
   { id: 'pin', key: 't', ctrl: true, shift: true },
   { id: 'lock', key: 'l', ctrl: true, shift: true },
   { id: 'open', key: 'o', ctrl: true },

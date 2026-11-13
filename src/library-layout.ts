@@ -4,8 +4,8 @@ export const libraryWidth = { default: 270, min: 240, max: 520, step: 16, largeS
 export const libraryHandleWidth = 10;
 const maxViewportShare = .55;
 const minReadingWidth = 320;
-// Outer 6 px margins on both sides of the reader layout plus the handle.
-const layoutChrome = 6 + 6 + libraryHandleWidth;
+// What stands beside the reading panel when the info rail is open: the 6 px margin, the 48 px icon rail, the 6 px gap, the handle and the 6 px margin on the far side.
+const layoutChrome = 6 + 48 + 6 + libraryHandleWidth + 6;
 
 export type LibrarySide = 'left' | 'right';
 

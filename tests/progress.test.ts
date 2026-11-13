@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatProgress, inProgress, isFinished, progressOf } from '../src/progress';
 import { recentTiles } from '../src/home';
-import { railItems } from '../src/library-rail';
 
 describe('formatProgress', () => {
   it('names the page and the total for a fixed-layout document', () => {
@@ -61,14 +60,13 @@ describe('progressOf', () => {
   });
 });
 
-describe('progress on Home and the rail', () => {
+describe('progress on Home', () => {
   const recents = [{ path: 'a', name: 'a.pdf', format: 'pdf', lastOpened: 2 }, { path: 'b', name: 'b.epub', format: 'epub', lastOpened: 1 }];
   const progress = { a: { fraction: .125, page: 12, pages: 96 } };
   it('carries a document\'s progress onto its tile, and none where it has none', () => {
     const [first, second] = recentTiles(recents, [], { progress });
     expect(first!.progress).toEqual(progress.a);
     expect(second).not.toHaveProperty('progress');
-    expect(railItems(recents, [], undefined, progress)[0]!.progress).toEqual(progress.a);
   });
 });
 
