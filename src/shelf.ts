@@ -30,10 +30,13 @@ const contentId = /^[0-9a-f]{64}$/;
 /** True for a file stem that names nothing (`source`, `document`, `scan`, `file`, `untitled`, optionally numbered, or digits only). */
 export function isGenericName(name: string): boolean { return genericStem.test(withoutExtension(name).trim()); }
 
-/** The folder a file sits in, from its path (either separator); none for a bare name or a browser-build content id. */
+/** A watched folder's document goes by `folder:<root id>:<path below the root>` (folder_index.rs); the root id is not a folder. */
+const folderItemRoot = /^folder:[0-9a-f]{16}:/;
+
+/** The folder a file sits in, from its path (either separator) or a watched folder's item id; none for a bare name, a file at a watched folder's top, or a browser-build content id. */
 export function parentFolder(path: string): string | undefined {
   // `?` and `.` are the `\\?\` / `\\.\` extended-length prefixes, and `C:` a drive: none of them is a folder.
-  const parts = path.split(/[\\/]/).filter(part => part && part !== '?' && part !== '.');
+  const parts = path.replace(folderItemRoot, '').split(/[\\/]/).filter(part => part && part !== '?' && part !== '.');
   const folder = parts.length > 1 ? parts[parts.length - 2] : undefined;
   return folder && !contentId.test(folder) && !/^[A-Za-z]:$/.test(folder) ? folder : undefined;
 }

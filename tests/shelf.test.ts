@@ -171,6 +171,9 @@ describe('parentFolder', () => {
     expect(parentFolder('\\\\?\\C:\\refs\\09_x\\source.pdf')).toBe('09_x'); // extended-length prefix
     expect(parentFolder('\\\\?\\C:\\source.pdf')).toBeUndefined();
     expect(parentFolder('source.pdf')).toBeUndefined();
+    expect(parentFolder('folder:485e41a8d1a72538:03_wwe_mag/source.pdf')).toBe('03_wwe_mag'); // a watched folder's item id, as tabs and Home keep it
+    expect(parentFolder('folder:485e41a8d1a72538:refs/09_x/issues/source.pdf')).toBe('issues');
+    expect(parentFolder('folder:485e41a8d1a72538:source.pdf')).toBeUndefined(); // at the watched folder's top: the root id is no folder
     expect(parentFolder(`${'ab'.repeat(32)}/source.pdf`)).toBeUndefined();
   });
 });
