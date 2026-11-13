@@ -157,23 +157,31 @@ test('page turns follow in the strip: the middle glides by one page, and jumps w
   await page.keyboard.press('Control+4');
   await expectPainted(page, [1, 2]);
   await expectCentred(page);
+  const start = await scrollLeft(page);
   await page.evaluate(() => { window.scrolls.length = 0; });
   await page.keyboard.press('PageDown');
   await expect(position(page)).toContainText('Page 2 of 20');
   await expectCentred(page);
-  await page.waitForTimeout(150);
-  const glided = await page.evaluate(() => [...new Set(window.scrolls)]);
-  expect(glided.length).toBeGreaterThan(2); // Intermediate offsets between where it was and the middle of page 2.
-  expect(glided.at(-1)).toBe(String(Math.round(1 * 74 + 33)));
+  // Scroll events are delivered a frame after the scroll; the glide is over once the last offset recorded is the middle of page 2.
+  const middle = String(Math.round(1 * 74 + 33));
+  await expect.poll(() => page.evaluate(() => window.scrolls.at(-1))).toBe(middle);
+  const glided = await page.evaluate(() => [...new Set(window.scrolls)].map(Number));
+  // A jump leaves one offset, the middle itself. A glide leaves it and every frame on the way, so at least one offset between where the
+  // strip was and the middle, rising towards it and never behind where it started; how many frames fit in the 220 ms is the runner's frame
+  // rate, not the behaviour.
+  expect(glided.length).toBeGreaterThan(1);
+  expect(glided.at(-1)).toBe(Number(middle));
+  expect(glided.slice(0, -1).every(offset => offset > start && offset < Number(middle))).toBe(true);
+  expect(glided).toEqual([...glided].sort((a, b) => a - b));
 
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.evaluate(() => { window.scrolls.length = 0; });
   await page.keyboard.press('PageDown');
   await expect(position(page)).toContainText('Page 3 of 20');
   await expectCentred(page);
-  await page.waitForTimeout(150); // Scroll events are delivered a frame after the scroll.
-  const jumped = await page.evaluate(() => [...new Set(window.scrolls)]);
-  expect(jumped).toEqual([String(2 * 74 + 33)]);
+  const next = String(2 * 74 + 33);
+  await expect.poll(() => page.evaluate(() => window.scrolls.at(-1))).toBe(next);
+  expect(await page.evaluate(() => [...new Set(window.scrolls)])).toEqual([next]);
 });
 
 test('page turns with the strip on never refit the page or raise an error', async ({ page }) => {

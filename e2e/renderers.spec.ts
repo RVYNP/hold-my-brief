@@ -970,9 +970,14 @@ test('a slid PDF page is re-clamped on resize, and text selection still lands on
   await page.keyboard.press('h'); // Turn the tool back on for the push.
   await expect(page.getByRole('button', { name: 'Hand tool' })).toHaveAttribute('aria-pressed', 'true');
   await pushToEdge(page, host, 1);
+  // The page refits 100 ms after the panel resizes, and the refit page replaces the old one: "no render in flight" says nothing before that
+  // render has started, and the page is briefly absent while it is swapped in. The page that was there is marked so the refit one can be told from it.
+  await sheet.evaluate(el => el.setAttribute('data-stale', ''));
   await page.setViewportSize({ width: 400, height: 620 });
   // The panel has to be the new size before the corner means anything: until then the old page, still clamped to the old panel, can satisfy it.
   await expect.poll(async () => (await panelSize(host))[0]).toBe(400);
+  await expect(page.locator('.pdf-page:not([data-stale])')).toHaveCount(1);
+  await expect(sheet).toHaveCount(1);
   const atCorner = async () => {
     const panel = (await host.boundingBox())!, [width, height] = await panelSize(host), box = await sheet.boundingBox();
     return !!box && Math.abs(box.x - (panel.x + width - 64)) < 1 && Math.abs(box.y - (panel.y + height - 64)) < 1;
@@ -983,7 +988,9 @@ test('a slid PDF page is re-clamped on resize, and text selection still lands on
   // Narrower still: the old page is briefly too wide for the panel, but the refit page fits again, so the offset is kept
   // and clamped to the corner of the smaller panel rather than dropped.
   const wide = (await sheet.boundingBox())!;
+  await sheet.evaluate(el => el.setAttribute('data-stale', ''));
   await page.setViewportSize({ width: 340, height: 620 });
+  await expect(page.locator('.pdf-page:not([data-stale])')).toHaveCount(1);
   await expect.poll(async () => ((await sheet.boundingBox())?.width ?? Infinity) < wide.width - 1).toBe(true);
   await expect(page.locator('.pdf-render-status')).toHaveCount(0);
   await expect.poll(atCorner).toBe(true);
@@ -1157,7 +1164,7 @@ test('image-only PDF pages carry no note, say so in the tooltip and explain a se
   const file = { name: 'mixed-scan.pdf', mimeType: 'application/pdf', buffer };
   await recordFixture('mixed-scan.pdf', buffer, { pages: 4, textLayer: 'pages 1 and 4 only' });
   const open = () => page.locator('#file-input').setInputFiles(file);
-  const host = page.locator('.pdf-reader'), notice = page.locator('#notice'), title = page.locator('#filekind');
+  const host = page.locator('.pdf-reader:not(.staging)'), notice = page.locator('#notice'), title = page.locator('#filekind'); // Not the staging host a reopened document is built in.
   const tip = /^Image-only page: text can't be selected or searched$/m;
   const noNote = async () => {
     await expect(page.locator('.pdf-scan-note')).toHaveCount(0);
@@ -1219,7 +1226,9 @@ test('image-only PDF pages carry no note, say so in the tooltip and explain a se
   await drag(); await expect(notice).toBeHidden(); // Once per opened document.
 
   // Opening the document again re-arms it; two-page view and zoom levels never draw a note.
-  await open(); await expect(page.locator('#position')).toContainText('Page 3 of 4'); await expect(page.locator('.reader-host.staging')).toHaveCount(0); // The saved place is restored.
+  // The saved place is restored. The document on screen already says "Page 3 of 4", so the reopened one has to have finished loading (and
+  // replaced it) before the position or the absence of a staging host means anything.
+  await open(); await expect(page.locator('#loading')).toBeHidden(); await expect(page.locator('#position')).toContainText('Page 3 of 4'); await expect(page.locator('.reader-host.staging')).toHaveCount(0);
   await page.locator('.reader-host').focus(); await page.keyboard.press('Control+3');
   await expect(page.locator('.pdf-spread')).toHaveAttribute('data-side', 'both');
   await expect(page.locator('#position')).toContainText('Pages 2–3 of 4');
