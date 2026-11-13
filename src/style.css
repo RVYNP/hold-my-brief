@@ -207,7 +207,10 @@
   --shadow-drawer: 8px 0 30px light-dark(#25203524, transparent);
   --shadow-page: 0 2px 12px light-dark(#25203518, transparent);
   color: var(--fg);
-  background: var(--chrome);
+  /* The window: --chrome under the two glows (transparent outside the glow families), fixed to the window. */
+  background-color: var(--chrome);
+  background-image: var(--glow-paint);
+  background-attachment: fixed;
   accent-color: var(--accent);
 }
 :root[data-theme='dark'] { color-scheme: dark; }
@@ -219,6 +222,431 @@
     --border: color-mix(in srgb, var(--fg) 38%, var(--surface));
     --hairline: color-mix(in srgb, var(--fg) 30%, var(--surface));
     --track: color-mix(in srgb, var(--fg) 45%, var(--surface));
+  }
+}
+/*
+ * Glow themes: ten families with ONE scheme each (Aurora, Dusk, Nebula, Solar, Ember, Orchid dark;
+ * Glacier, Peach, Lagoon, Moss light), ported from Tracks (docs/GLOW_THEMES_PLAN.md and
+ * docs/design/glow-themes-2026-11.json there). Their tokens are plain colours, not light-dark()
+ * pairs; `color-scheme` is fixed per family and src/theme.ts keeps data-theme equal to it.
+ *
+ * The window is the page colour under two radial glows fixed to the window (the :root rule above),
+ * and the layout surfaces let it through while reading surfaces stay opaque:
+ *
+ *   Tracks            HMB token(s)                   Notes
+ *   page              --chrome, --stage              opaque; the native window colour (src/theme.ts)
+ *   panel (alpha)     --glass-surface                #workspace: Home, the stage around PDF pages
+ *   panel (opaque)    --surface, --paper             panel composited over page: dialogs, EPUB/text paper
+ *   card (alpha)      --glass-raise                  library rail and drawer (over the window's own glow, never over the document)
+ *   card (opaque)     --card                         card composited over page: menus, sheets, popovers
+ *   raise             --raise                        find bar, page strip, loading bar
+ *   (page, no fill)   --glass-chrome, --glass-host, --glass-stage   toolbar; the page-based reader host and the PDF stage (the workspace's panel shows)
+ *   l1 / l2 / l3      --hairline / --border / --hover, --track (= l3)
+ *   t1 / t2 / t4      --fg and --ink / --muted / --faint   (t3 has no HMB role: two text tiers above faint)
+ *   accent            --accent, --accent-ink; accent-fill --accent-fill; on-accent --on-accent
+ *   (tints)           --accent-soft, --accent-border: accent mixed into the opaque card
+ *   bad               --error, --danger             as fill, on-accent is its label colour
+ *   warn              --notice-ink                  on the card; --notice-border is a tint of it
+ *   scrim, grad-a/b   --scrim, --grad-a, --grad-b
+ *   ok, live, series-*, track-*, bad-tint, logo-comfy: not used by Hold My Brief.
+ *
+ * Under prefers-reduced-transparency, prefers-contrast: more or forced-colors the glow is not drawn and
+ * every glass token becomes the opaque surface (the block after the families).
+ * tests/palette-contrast.test.ts holds every text token to 4.5:1 on page, panel and card in the
+ * no-glow, grad-a-full and grad-b-full cases.
+ */
+:root, [data-palette] {
+  --grad-a: transparent;
+  --grad-b: transparent;
+  --glow-paint: radial-gradient(ellipse 70% 55% at 62% -8%, var(--grad-a), transparent), radial-gradient(ellipse 65% 60% at 95% 100%, var(--grad-b), transparent);
+  --glass-chrome: var(--chrome);
+  --glass-surface: var(--surface);
+  --glass-host: var(--surface);
+  --glass-stage: var(--stage);
+  --glass-raise: var(--raise);
+  /* The rail and the drawer float over the document, so they must not show it through: their glass is the
+     window's own glow, fixed to the window beneath a wash of --glass-raise (three layers: wash, glow, glow). */
+  --glass-raise-paint: linear-gradient(var(--glass-raise), var(--glass-raise)), var(--glow-paint);
+}
+[data-palette='aurora'] {
+  color-scheme: dark;
+  --chrome: #07110f;
+  --stage: #07110f;
+  --surface: #0a1715;
+  --card: #0e1e1b;
+  --raise: #173029;
+  --paper: #0a1715;
+  --ink: #e6f2ee;
+  --fg: #e6f2ee;
+  --muted: #b2c8c1;
+  --faint: #4b6560;
+  --border: #ffffff1a;
+  --hairline: #ffffff0f;
+  --hover: #ffffff29;
+  --track: #ffffff29;
+  --accent: #6ee7c8;
+  --accent-ink: #6ee7c8;
+  --accent-fill: #6ee7c8;
+  --on-accent: #04130f;
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--card));
+  --accent-border: color-mix(in srgb, var(--accent) 40%, var(--card));
+  --error: #ff8b94;
+  --danger: #ff8b94;
+  --notice: var(--card);
+  --notice-ink: #f0c060;
+  --notice-border: color-mix(in srgb, var(--notice-ink) 40%, var(--card));
+  --scrim: #0000008c;
+  --search-hit: #6b5620;
+  --grad-a: #2bd9a349;
+  --grad-b: #8b5cf659;
+  --glass-chrome: transparent;
+  --glass-surface: #0b1a17b3;
+  --glass-host: transparent;
+  --glass-stage: transparent;
+  --glass-raise: #10221ec7;
+}
+[data-palette='dusk'] {
+  color-scheme: dark;
+  --chrome: #120c14;
+  --stage: #120c14;
+  --surface: #18101c;
+  --card: #1e1524;
+  --raise: #2b1f33;
+  --paper: #18101c;
+  --ink: #f3e9ee;
+  --fg: #f3e9ee;
+  --muted: #cdbbc5;
+  --faint: #64525e;
+  --border: #ffffff1a;
+  --hairline: #ffffff0f;
+  --hover: #ffffff29;
+  --track: #ffffff29;
+  --accent: #ffb37a;
+  --accent-ink: #ffb37a;
+  --accent-fill: #ffb37a;
+  --on-accent: #1a0e06;
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--card));
+  --accent-border: color-mix(in srgb, var(--accent) 40%, var(--card));
+  --error: #ff7a99;
+  --danger: #ff7a99;
+  --notice: var(--card);
+  --notice-ink: #ffc857;
+  --notice-border: color-mix(in srgb, var(--notice-ink) 40%, var(--card));
+  --scrim: #0000008c;
+  --search-hit: #6b5620;
+  --grad-a: #ff7a594f;
+  --grad-b: #8e3fbf66;
+  --glass-chrome: transparent;
+  --glass-surface: #1a1220b3;
+  --glass-host: transparent;
+  --glass-stage: transparent;
+  --glass-raise: #221829c7;
+}
+[data-palette='nebula'] {
+  color-scheme: dark;
+  --chrome: #08070f;
+  --stage: #08070f;
+  --surface: #0d0b17;
+  --card: #121021;
+  --raise: #1e1a33;
+  --paper: #0d0b17;
+  --ink: #eceaf7;
+  --fg: #eceaf7;
+  --muted: #bcb8d3;
+  --faint: #514c70;
+  --border: #ffffff1a;
+  --hairline: #ffffff0f;
+  --hover: #ffffff29;
+  --track: #ffffff29;
+  --accent: #9db4ff;
+  --accent-ink: #9db4ff;
+  --accent-fill: #9db4ff;
+  --on-accent: #0b0b1f;
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--card));
+  --accent-border: color-mix(in srgb, var(--accent) 40%, var(--card));
+  --error: #ff6b8a;
+  --danger: #ff6b8a;
+  --notice: var(--card);
+  --notice-ink: #f2c15c;
+  --notice-border: color-mix(in srgb, var(--notice-ink) 40%, var(--card));
+  --scrim: #0000008c;
+  --search-hit: #6b5620;
+  --grad-a: #e040fb52;
+  --grad-b: #3d5afe5c;
+  --glass-chrome: transparent;
+  --glass-surface: #0f0d1ab3;
+  --glass-host: transparent;
+  --glass-stage: transparent;
+  --glass-raise: #151226c7;
+}
+[data-palette='solar'] {
+  color-scheme: dark;
+  --chrome: #0f0d0a;
+  --stage: #0f0d0a;
+  --surface: #15110d;
+  --card: #1b1610;
+  --raise: #282117;
+  --paper: #15110d;
+  --ink: #f2ece2;
+  --fg: #f2ece2;
+  --muted: #cabfaf;
+  --faint: #625849;
+  --border: #ffffff1a;
+  --hairline: #ffffff0f;
+  --hover: #ffffff29;
+  --track: #ffffff29;
+  --accent: #ffb547;
+  --accent-ink: #ffb547;
+  --accent-fill: #ffb547;
+  --on-accent: #1a1104;
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--card));
+  --accent-border: color-mix(in srgb, var(--accent) 40%, var(--card));
+  --error: #ff8274;
+  --danger: #ff8274;
+  --notice: var(--card);
+  --notice-ink: #ffd166;
+  --notice-border: color-mix(in srgb, var(--notice-ink) 40%, var(--card));
+  --scrim: #0000008c;
+  --search-hit: #6b5620;
+  --grad-a: #ff8a004f;
+  --grad-b: #ffd16638;
+  --glass-chrome: transparent;
+  --glass-surface: #17130eb3;
+  --glass-host: transparent;
+  --glass-stage: transparent;
+  --glass-raise: #1e1912c7;
+}
+[data-palette='ember'] {
+  color-scheme: dark;
+  --chrome: #120a07;
+  --stage: #120a07;
+  --surface: #1a0f0b;
+  --card: #221510;
+  --raise: #33201a;
+  --paper: #1a0f0b;
+  --ink: #f6ebe4;
+  --fg: #f6ebe4;
+  --muted: #d2bbae;
+  --faint: #6b5448;
+  --border: #ffffff1a;
+  --hairline: #ffffff0f;
+  --hover: #ffffff29;
+  --track: #ffffff29;
+  --accent: #ff9a55;
+  --accent-ink: #ff9a55;
+  --accent-fill: #ff9a55;
+  --on-accent: #1a0c04;
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--card));
+  --accent-border: color-mix(in srgb, var(--accent) 40%, var(--card));
+  --error: #ff8b8b;
+  --danger: #ff8b8b;
+  --notice: var(--card);
+  --notice-ink: #ffc857;
+  --notice-border: color-mix(in srgb, var(--notice-ink) 40%, var(--card));
+  --scrim: #0000008c;
+  --search-hit: #6b5620;
+  --grad-a: #d9341f57;
+  --grad-b: #ffa0004a;
+  --glass-chrome: transparent;
+  --glass-surface: #1e110cb3;
+  --glass-host: transparent;
+  --glass-stage: transparent;
+  --glass-raise: #271812c7;
+}
+[data-palette='orchid'] {
+  color-scheme: dark;
+  --chrome: #0f0711;
+  --stage: #0f0711;
+  --surface: #160c19;
+  --card: #1d1122;
+  --raise: #2d1b35;
+  --paper: #160c19;
+  --ink: #f5e9f5;
+  --fg: #f5e9f5;
+  --muted: #d0bcd3;
+  --faint: #644e6b;
+  --border: #ffffff1a;
+  --hairline: #ffffff0f;
+  --hover: #ffffff29;
+  --track: #ffffff29;
+  --accent: #f08ce0;
+  --accent-ink: #f08ce0;
+  --accent-fill: #f08ce0;
+  --on-accent: #1a0716;
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--card));
+  --accent-border: color-mix(in srgb, var(--accent) 40%, var(--card));
+  --error: #ff7a99;
+  --danger: #ff7a99;
+  --notice: var(--card);
+  --notice-ink: #f5c45e;
+  --notice-border: color-mix(in srgb, var(--notice-ink) 40%, var(--card));
+  --scrim: #0000008c;
+  --search-hit: #6b5620;
+  --grad-a: #d61f9e57;
+  --grad-b: #7c3aed5c;
+  --glass-chrome: transparent;
+  --glass-surface: #190e1cb3;
+  --glass-host: transparent;
+  --glass-stage: transparent;
+  --glass-raise: #211427c7;
+}
+[data-palette='glacier'] {
+  color-scheme: light;
+  --chrome: #eef3f7;
+  --stage: #eef3f7;
+  --surface: #f6fafc;
+  --card: #fdfefe;
+  --raise: #e7eef3;
+  --paper: #f6fafc;
+  --ink: #10202e;
+  --fg: #10202e;
+  --muted: #3e5466;
+  --faint: #a3b2be;
+  --border: #12304a1a;
+  --hairline: #12304a10;
+  --hover: #12304a29;
+  --track: #12304a29;
+  --accent: #1a5db0;
+  --accent-ink: #1a5db0;
+  --accent-fill: #1a5db0;
+  --on-accent: #ffffff;
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--card));
+  --accent-border: color-mix(in srgb, var(--accent) 40%, var(--card));
+  --error: #b22735;
+  --danger: #b22735;
+  --notice: var(--card);
+  --notice-ink: #885200;
+  --notice-border: color-mix(in srgb, var(--notice-ink) 40%, var(--card));
+  --scrim: #1a1a1a4d;
+  --search-hit: #f2dfa0;
+  --grad-a: #7fc8ff80;
+  --grad-b: #8ef0d066;
+  --glass-chrome: transparent;
+  --glass-surface: #f8fbfdd1;
+  --glass-host: transparent;
+  --glass-stage: transparent;
+  --glass-raise: #ffffffe0;
+}
+[data-palette='peach'] {
+  color-scheme: light;
+  --chrome: #fbf1ea;
+  --stage: #fbf1ea;
+  --surface: #fef7f1;
+  --card: #fffdfc;
+  --raise: #f6e8de;
+  --paper: #fef7f1;
+  --ink: #2a1a12;
+  --fg: #2a1a12;
+  --muted: #5a4337;
+  --faint: #b8a397;
+  --border: #3a1f121a;
+  --hairline: #3a1f1210;
+  --hover: #3a1f1229;
+  --track: #3a1f1229;
+  --accent: #a63409;
+  --accent-ink: #a63409;
+  --accent-fill: #a63409;
+  --on-accent: #ffffff;
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--card));
+  --accent-border: color-mix(in srgb, var(--accent) 40%, var(--card));
+  --error: #b61139;
+  --danger: #b61139;
+  --notice: var(--card);
+  --notice-ink: #845000;
+  --notice-border: color-mix(in srgb, var(--notice-ink) 40%, var(--card));
+  --scrim: #1a1a1a4d;
+  --search-hit: #f2dfa0;
+  --grad-a: #ffb38a8c;
+  --grad-b: #ff8fb070;
+  --glass-chrome: transparent;
+  --glass-surface: #fff8f3d1;
+  --glass-host: transparent;
+  --glass-stage: transparent;
+  --glass-raise: #ffffffe0;
+}
+[data-palette='lagoon'] {
+  color-scheme: light;
+  --chrome: #ecf5f6;
+  --stage: #ecf5f6;
+  --surface: #f4fafb;
+  --card: #fdfefe;
+  --raise: #e2eef0;
+  --paper: #f4fafb;
+  --ink: #0d2329;
+  --fg: #0d2329;
+  --muted: #34545c;
+  --faint: #9fb5bb;
+  --border: #0e3a441a;
+  --hairline: #0e3a4410;
+  --hover: #0e3a4429;
+  --track: #0e3a4429;
+  --accent: #095f7b;
+  --accent-ink: #095f7b;
+  --accent-fill: #095f7b;
+  --on-accent: #ffffff;
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--card));
+  --accent-border: color-mix(in srgb, var(--accent) 40%, var(--card));
+  --error: #a72532;
+  --danger: #a72532;
+  --notice: var(--card);
+  --notice-ink: #7f4c00;
+  --notice-border: color-mix(in srgb, var(--notice-ink) 40%, var(--card));
+  --scrim: #1a1a1a4d;
+  --search-hit: #f2dfa0;
+  --grad-a: #4fd1c580;
+  --grad-b: #5b9bff66;
+  --glass-chrome: transparent;
+  --glass-surface: #f6fbfcd1;
+  --glass-host: transparent;
+  --glass-stage: transparent;
+  --glass-raise: #ffffffe0;
+}
+[data-palette='moss'] {
+  color-scheme: light;
+  --chrome: #f0f3e6;
+  --stage: #f0f3e6;
+  --surface: #f7f9ee;
+  --card: #fdfefc;
+  --raise: #e7ecd9;
+  --paper: #f7f9ee;
+  --ink: #1b2410;
+  --fg: #1b2410;
+  --muted: #4a5a34;
+  --faint: #aab596;
+  --border: #2a3a141a;
+  --hairline: #2a3a1410;
+  --hover: #2a3a1429;
+  --track: #2a3a1429;
+  --accent: #4b680a;
+  --accent-ink: #4b680a;
+  --accent-fill: #4b680a;
+  --on-accent: #ffffff;
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--card));
+  --accent-border: color-mix(in srgb, var(--accent) 40%, var(--card));
+  --error: #b22735;
+  --danger: #b22735;
+  --notice: var(--card);
+  --notice-ink: #845000;
+  --notice-border: color-mix(in srgb, var(--notice-ink) 40%, var(--card));
+  --scrim: #1a1a1a4d;
+  --search-hit: #f2dfa0;
+  --grad-a: #8fd66f80;
+  --grad-b: #c8c95a66;
+  --glass-chrome: transparent;
+  --glass-surface: #f8faf0d1;
+  --glass-host: transparent;
+  --glass-stage: transparent;
+  --glass-raise: #ffffffe0;
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more), (forced-colors: active) {
+  :is([data-palette='aurora'], [data-palette='dusk'], [data-palette='nebula'], [data-palette='solar'], [data-palette='ember'], [data-palette='orchid'], [data-palette='glacier'], [data-palette='peach'], [data-palette='lagoon'], [data-palette='moss']) {
+    --grad-a: transparent;
+    --grad-b: transparent;
+    --glass-chrome: var(--chrome);
+    --glass-surface: var(--surface);
+    --glass-host: var(--surface);
+    --glass-stage: var(--stage);
+    --glass-raise: var(--card);
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -243,7 +671,7 @@ select:hover { border-color: var(--accent-border); }
    be scrolled by code (a find match's scrollIntoView did, pushing the toolbar off the top). */
 #app { --footer-height: 30px; position: relative; height: 100dvh; min-width: 300px; display: flex; flex-direction: column; overflow: clip; }
 /* One 38 px row. Empty toolbar space drags the window (data-tauri-drag-region), so it never selects text. */
-.toolbar { display: flex; align-items: center; gap: 2px; height: 38px; padding: 0 6px; background: var(--chrome); flex-shrink: 0; -webkit-user-select: none; user-select: none; }
+.toolbar { display: flex; align-items: center; gap: 2px; height: 38px; padding: 0 6px; background: var(--glass-chrome); flex-shrink: 0; -webkit-user-select: none; user-select: none; }
 /* macOS draws the traffic lights over the toolbar's left end (titleBarStyle Overlay). */
 .mac-titlebar .toolbar { padding-left: 78px; }
 /* In full screen macOS hides the traffic lights, so their room goes too. */
@@ -291,7 +719,7 @@ select:hover { border-color: var(--accent-border); }
    --workspace-border is the reading panel's edge, which the strip is positioned outside of. */
 #reader-layout { --find-bar-height: 39px; --workspace-border: 1px; position: relative; display: flex; flex: 1; min-height: 0; min-width: 0; }
 /* The page is not boxed: it meets the chrome edge to edge, set apart by tone and one hairline. */
-#workspace { position: relative; flex: 1; min-height: 0; min-width: 0; border-top: var(--workspace-border) solid var(--hairline); background: var(--surface); overflow: hidden; }
+#workspace { position: relative; flex: 1; min-height: 0; min-width: 0; border-top: var(--workspace-border) solid var(--hairline); background: var(--glass-surface); overflow: hidden; }
 /* First run is a page of type, not a stack of boxes: the mark is a plain glyph, the one filled
    control is the call to action sized to its words, and recents are a quiet list. */
 #empty { height: 100%; overflow: auto; padding: 32px 28px 24px; max-width: 640px; margin: auto; display: flex; flex-direction: column; align-items: flex-start; }
@@ -350,7 +778,7 @@ h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 1px 0 
    and the position up over the page. It is an overlay, so the page never resizes or refits. The band
    is the only page area the footer takes while closed, and it collapses once the footer is open so it
    never covers the page above the open footer. */
-footer { position: absolute; z-index: 15; left: 0; right: 0; bottom: 0; display: flex; gap: 2px; align-items: center; height: var(--footer-height); padding: 2px 6px 0; background: var(--chrome); translate: 0 calc(100% - 3px); transition: translate .16s ease, opacity .2s, box-shadow .16s; }
+footer { position: absolute; z-index: 15; left: 0; right: 0; bottom: 0; display: flex; gap: 2px; align-items: center; height: var(--footer-height); padding: 2px 6px 0; background-color: var(--chrome); background-image: var(--glow-paint); background-attachment: fixed; translate: 0 calc(100% - 3px); transition: translate .16s ease, opacity .2s, box-shadow .16s; }
 footer::before { content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: 12px; }
 footer:hover, footer:focus-within, footer:has(#progress:active) { translate: 0 0; box-shadow: 0 -6px 20px light-dark(#25203514, transparent); }
 footer:hover::before, footer:focus-within::before { height: 0; }
@@ -393,7 +821,7 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
 #loading button { color: var(--accent-ink); }
 #dismiss-notice { font-size: 15px !important; font-weight: 400 !important; line-height: 1; }
 [hidden] { display: none !important; }
-.reader-host { position: absolute; inset: 0; overflow: auto; background: var(--surface); scrollbar-color: var(--faint) transparent; scrollbar-width: thin; }
+.reader-host { position: absolute; inset: 0; overflow: auto; background: var(--glass-host); scrollbar-color: var(--faint) transparent; scrollbar-width: thin; }
 .reader-host.text-reader, .reader-host.reflow-reader { background: var(--paper); color: var(--ink); }
 .reader-host.staging { visibility: hidden; pointer-events: none; }
 .reader-host:focus-visible { outline-offset: -3px; }
@@ -570,6 +998,7 @@ dd { margin: 0; color: var(--muted); }
 /* A sheet opened with the mouse rings nothing; Tab brings focus rings back (as for the menu and page). */
 :root:not(.keyboard-focus) #appearance :focus-visible { outline: none; }
 #appearance .appearance-hint { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+#appearance .appearance-mode-note { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
 #appearance .appearance-hint[data-previewing] { color: var(--accent-ink); }
 .sheet-label { color: var(--muted); font: 11px/1.3 var(--font-mono); letter-spacing: .2px; }
 .choices { flex: 1; display: flex; gap: 2px; min-width: 0; }
@@ -579,10 +1008,11 @@ dd { margin: 0; color: var(--muted); }
 .theme-group { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 /* Seven families in rows of four (4 + 3): seven across would not fit the sheet, and 5 + 2 orphans two. */
 .theme-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 8px; }
+.theme-row-glow { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .theme-card { display: flex; flex-direction: column; gap: 5px; min-width: 0; padding: 0; border: 0; text-align: left; white-space: normal; }
 .theme-card:hover { background: transparent; }
 /* Each tile is its own family's window tone (its chrome), with its page ink and accent: no border. */
-.theme-tile { display: flex; flex-direction: column; gap: 7px; padding: 8px 9px; background: var(--chrome); border-radius: 7px; transition: box-shadow .12s; }
+.theme-tile { display: flex; flex-direction: column; gap: 7px; padding: 8px 9px; background-color: var(--chrome); background-image: var(--glow-paint); border-radius: 7px; transition: box-shadow .12s; }
 .theme-card:hover .theme-tile { box-shadow: 0 0 0 1px var(--track); }
 .theme-card[aria-checked=true] .theme-tile, .theme-card[data-previewing] .theme-tile { box-shadow: 0 0 0 2px var(--accent); }
 .theme-row:has([data-previewing]) .theme-card[aria-checked=true]:not([data-previewing]) .theme-tile { box-shadow: none; }

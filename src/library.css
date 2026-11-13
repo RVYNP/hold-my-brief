@@ -1,7 +1,7 @@
 /* The library is an out-of-flow drawer over the reading panel at every width: it never takes
    width from #workspace, so opening, dragging or docking it cannot move or refit the page. */
 .library-root { --library-width: 270px; position: absolute; z-index: 20; top: 0; bottom: 0; left: 0; display: flex; flex: 0 0 auto; width: calc(var(--library-width) + 10px); min-width: 0; min-height: 0; margin: 0 0 0 6px; }
-.library-panel { position: relative; container: library-panel / inline-size; display: flex; flex-direction: column; flex: 1 1 auto; height: 100%; min-width: 0; min-height: 0; padding: 8px 8px 6px; overflow: auto; border: 1px solid var(--border); border-radius: 9px; background: var(--raise); box-shadow: var(--shadow-drawer); scrollbar-width: thin; scrollbar-color: var(--faint) transparent; }
+.library-panel { position: relative; container: library-panel / inline-size; display: flex; flex-direction: column; flex: 1 1 auto; height: 100%; min-width: 0; min-height: 0; padding: 8px 8px 6px; overflow: auto; border: 1px solid var(--border); border-radius: 9px; background-color: var(--chrome); background-image: var(--glass-raise-paint); background-attachment: scroll, fixed, fixed; box-shadow: var(--shadow-drawer); scrollbar-width: thin; scrollbar-color: var(--faint) transparent; }
 .library-panel button, .library-panel input, .library-panel select { font-size: 12px; }
 /* Header, one line: the glyph, the name, then + (add files, sources), → (the board), the dock and close buttons. */
 .library-header { display: flex; align-items: center; gap: 7px; flex-shrink: 0; margin: 0 0 6px 8px; }
@@ -376,7 +376,7 @@
 /* Rail: the library's closed form from 720 px up. Covers are 40 x 54; the open reference wears the accent ring. */
 .library-rail { display: none; }
 @media (min-width: 720px) {
-  #reader-layout:not(.library-open) > .library-rail { position: absolute; z-index: 20; top: 0; bottom: var(--footer-height); left: 6px; display: flex; flex-direction: column; align-items: center; gap: 10px; width: 60px; padding: 8px 0; overflow: hidden; border: 1px solid var(--border); border-radius: 9px; background: var(--raise); }
+  #reader-layout:not(.library-open) > .library-rail { position: absolute; z-index: 20; top: 0; bottom: var(--footer-height); left: 6px; display: flex; flex-direction: column; align-items: center; gap: 10px; width: 60px; padding: 8px 0; overflow: hidden; border: 1px solid var(--border); border-radius: 9px; background-color: var(--chrome); background-image: var(--glass-raise-paint); background-attachment: scroll, fixed, fixed; }
   #reader-layout.library-right:not(.library-open) > .library-rail { left: auto; right: 6px; }
   #reader-layout.library-right .library-rail-toggle svg { transform: scaleX(-1); }
   /* The drawer ends where the rail does: above the footer's lane (see style.css), so the footer is never under it. */

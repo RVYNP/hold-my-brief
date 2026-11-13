@@ -3,6 +3,10 @@ import { desktop } from './bridge';
 /**
  * Appearance: light/dark mode, theme family, optional custom accent and a page tone.
  *
+ * A glow theme (aurora … moss, see style.css) is a family with ONE scheme: while it is applied
+ * `data-theme` is its scheme whatever `mode` says, and `mode` is left untouched so that choosing a
+ * normal family again restores the earlier light/dark/system choice.
+ *
  * Every UI color is a token in style.css written as `light-dark(light, dark)`;
  * `data-theme` on the root element selects the column through `color-scheme`,
  * `data-palette` selects a token family and `data-page` a page tone for text documents.
@@ -13,14 +17,22 @@ import { desktop } from './bridge';
  * the record's format (`mode`, `palette`, `accent`, `page`, and the derived `vars`).
  */
 export type AppearanceMode = 'system' | 'light' | 'dark';
-export type Palette = 'brief' | 'lilac' | 'birch' | 'graphite' | 'arctic' | 'blossom' | 'peony';
+export type Family = 'brief' | 'lilac' | 'birch' | 'graphite' | 'arctic' | 'blossom' | 'peony';
+export type Glow = 'aurora' | 'dusk' | 'nebula' | 'solar' | 'ember' | 'orchid' | 'glacier' | 'peach' | 'lagoon' | 'moss';
+export type Palette = Family | Glow;
 export type PageTone = 'theme' | 'white' | 'sepia' | 'dim';
 export type Scheme = 'light' | 'dark';
 export type Appearance = { mode: AppearanceMode; palette: Palette; accent: string | null; page: PageTone };
 export type Rgb = [number, number, number];
 
 export const appearanceKey = 'hold-my-brief:appearance';
-export const palettes: readonly Palette[] = ['brief', 'lilac', 'birch', 'graphite', 'arctic', 'blossom', 'peony'];
+/** The families that follow the light/dark/system mode. */
+export const palettes: readonly Family[] = ['brief', 'lilac', 'birch', 'graphite', 'arctic', 'blossom', 'peony'];
+/** The glow themes in the order the sheet shows them, each with its one scheme. public/theme-boot.js repeats this table. */
+export const glowSchemes: Readonly<Record<Glow, Scheme>> = { aurora: 'dark', dusk: 'dark', nebula: 'dark', solar: 'dark', ember: 'dark', orchid: 'dark', glacier: 'light', peach: 'light', lagoon: 'light', moss: 'light' };
+export const glows = Object.keys(glowSchemes) as readonly Glow[];
+export const allPalettes: readonly Palette[] = [...palettes, ...glows];
+export const isGlow = (palette: Palette): palette is Glow => palette in glowSchemes;
 export const pageTones: readonly PageTone[] = ['theme', 'white', 'sepia', 'dim'];
 export const defaultAppearance: Appearance = { mode: 'system', palette: 'brief', accent: null, page: 'theme' };
 const accentTokens = ['--accent', '--accent-ink', '--accent-fill', '--accent-fill-hover', '--accent-soft', '--accent-soft-hover', '--accent-border'] as const;
@@ -120,7 +132,7 @@ function parse(raw: string | null): Appearance {
     if (!saved || typeof saved !== 'object') return defaultAppearance;
     return {
       mode: saved.mode === 'light' || saved.mode === 'dark' ? saved.mode : 'system',
-      palette: palettes.includes(saved.palette as Palette) ? saved.palette as Palette : defaultAppearance.palette,
+      palette: allPalettes.includes(saved.palette as Palette) ? saved.palette as Palette : defaultAppearance.palette,
       accent: typeof saved.accent === 'string' && hexColor.test(saved.accent) ? saved.accent.toLowerCase() : null,
       page: pageTones.includes(saved.page as PageTone) ? saved.page as PageTone : defaultAppearance.page,
     };
@@ -129,18 +141,23 @@ function parse(raw: string | null): Appearance {
 let systemDark: MediaQueryList | undefined;
 export const appearance = () => current;
 export const scheme = (): Scheme => document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+/** The scheme an appearance shows: a glow theme's own, otherwise the mode (system follows the OS). */
+export function schemeOf(next: Appearance): Scheme {
+  if (isGlow(next.palette)) return glowSchemes[next.palette];
+  return next.mode === 'system' ? (systemDark?.matches ? 'dark' : 'light') : next.mode;
+}
 
 /** Applies an appearance without saving it (previews); `saveAppearance` keeps it. */
 export function applyAppearance(next: Appearance) {
   current = next;
   const root = document.documentElement;
-  root.dataset.theme = next.mode === 'system' ? (systemDark?.matches ? 'dark' : 'light') : next.mode;
+  root.dataset.theme = schemeOf(next);
   root.dataset.palette = next.palette;
   if (next.page === 'theme') delete root.dataset.page; else root.dataset.page = next.page;
   const vars = next.accent ? accentVars(next.accent) : undefined;
   for (const name of accentTokens) if (vars) root.style.setProperty(name, vars[name]); else root.style.removeProperty(name);
   for (const listener of listeners) listener(next);
-  void syncWindow(next.mode);
+  void syncWindow(isGlow(next.palette) ? glowSchemes[next.palette] : next.mode);
 }
 export function saveAppearance(next: Appearance) {
   try { localStorage.setItem(appearanceKey, JSON.stringify({ ...next, vars: next.accent ? accentVars(next.accent) : {} })); } catch { /* Optional preference. */ }
@@ -151,7 +168,7 @@ export function initAppearance() {
   let saved: string | null = null;
   try { saved = localStorage.getItem(appearanceKey); } catch { /* Storage may be unavailable. */ }
   systemDark = matchMedia('(prefers-color-scheme: dark)');
-  systemDark.addEventListener('change', () => { if (current.mode === 'system') applyAppearance(current); });
+  systemDark.addEventListener('change', () => { if (current.mode === 'system' && !isGlow(current.palette)) applyAppearance(current); });
   applyAppearance(parse(saved));
   window.addEventListener('storage', event => { if (event.key === appearanceKey) applyAppearance(parse(event.newValue)); });
 }
@@ -176,7 +193,7 @@ export function readingColors(): ReadingColors {
   return { scheme: scheme(), ink: resolve('--ink'), paper: resolve('--paper'), accent: resolve('--accent') };
 }
 
-async function syncWindow(mode: AppearanceMode) {
+async function syncWindow(mode: AppearanceMode | Scheme) {
   if (!desktop) return;
   const chrome = resolve('--chrome');
   try {

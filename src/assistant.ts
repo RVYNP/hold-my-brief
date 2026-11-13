@@ -2,7 +2,7 @@ import type { LibraryDocument } from './catalog-types';
 import type { LibraryFilterResult } from './library';
 import type { SearchHit, SearchOptions } from './search';
 import type { OutlineItem } from './types';
-import { palettes } from './theme';
+import { allPalettes } from './theme';
 
 /**
  * The opt-in assistant: Claude or another model, through the user's own Anthropic, OpenRouter or
@@ -230,8 +230,8 @@ export function readerTools(env: ReaderEnvironment): Tool[] {
       },
     },
     {
-      name: 'set_appearance', description: `Changes how the reader looks. mode: system, light or dark. theme: ${palettes.join(', ')} (blossom and peony are the pink ones). page (text documents only): theme, white, sepia or dim.`,
-      input_schema: { type: 'object', properties: { mode: { type: 'string', enum: ['system', 'light', 'dark'] }, theme: { type: 'string', enum: [...palettes] }, page: { type: 'string', enum: ['theme', 'white', 'sepia', 'dim'] } } },
+      name: 'set_appearance', description: `Changes how the reader looks. mode: system, light or dark. theme: ${allPalettes.join(', ')} (blossom and peony are the pink ones; aurora, dusk, nebula, solar, ember and orchid are dark glow themes and glacier, peach, lagoon and moss light ones, each with one mode of its own). page (text documents only): theme, white, sepia or dim.`,
+      input_schema: { type: 'object', properties: { mode: { type: 'string', enum: ['system', 'light', 'dark'] }, theme: { type: 'string', enum: [...allPalettes] }, page: { type: 'string', enum: ['theme', 'white', 'sepia', 'dim'] } } },
       run: async input => {
         const summary = env.setAppearance({ mode: input.mode as string | undefined, theme: input.theme as string | undefined, page: input.page as string | undefined });
         return { result: { appearance: summary }, step: `Appearance: ${summary}` };
