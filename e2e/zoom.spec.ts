@@ -621,6 +621,8 @@ const canvasState = (page: Page) => page.evaluate(() => {
   const pixel = canvas.getContext('2d')!.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1).data;
   return { width: canvas.width, height: canvas.height, painted: pixel[3] === 255 && pixel[2] > pixel[0] };
 });
+/** `settled` only says the page has committed; rastering a canvas this large can finish a moment later on a slow runner. */
+const paintedCanvas = async (page: Page) => { await expect.poll(async () => (await canvasState(page)).painted, { timeout: 15_000 }).toBe(true); return canvasState(page); };
 
 test('800 % of an ordinary page draws within the canvas budget: pixels capped, never a blank or failed canvas', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
@@ -630,10 +632,9 @@ test('800 % of an ordinary page draws within the canvas budget: pixels capped, n
   await expect(level(page)).toHaveText('800%'); await settled(page);
   const box = await pageBox(page);
   expect(box.width).toBeCloseTo(612 * 96 / 72 * 8, 0); // 6 528 x 8 448 CSS px.
-  const canvas = await canvasState(page);
+  const canvas = await paintedCanvas(page);
   expect(canvas.width * canvas.height).toBeLessThanOrEqual(16_000_000 * 1.02); // The renderer's pixel budget: past about 430 % a Letter page is drawn at fewer device pixels than it is shown at.
   expect(Math.max(canvas.width, canvas.height)).toBeLessThanOrEqual(16_384);   // And the side every webview's canvas allows.
-  expect(canvas.painted).toBe(true);
   expect(errors).toEqual([]);
 });
 
@@ -648,9 +649,8 @@ test('a very large sheet stops at the zoom its size allows, and still draws', as
   await expect(zoomIn).toBeDisabled();
   const box = await pageBox(page);
   expect(Math.max(box.width, box.height)).toBeLessThanOrEqual(24_001);
-  const canvas = await canvasState(page);
+  const canvas = await paintedCanvas(page);
   expect(canvas.width * canvas.height).toBeLessThanOrEqual(16_000_000 * 1.02);
-  expect(canvas.painted).toBe(true);
   // Zooming in again goes nowhere; Ctrl + wheel stops there too.
   await page.keyboard.press('Control+Equal');
   const sheet = await pageBox(page);
