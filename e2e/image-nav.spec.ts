@@ -15,7 +15,7 @@ const HEIGHT = 680;
 async function openImages(page: Page, width: number, side: 'left' | 'right', drawerWidth = 270) {
   await page.setViewportSize({ width, height: HEIGHT });
   await page.goto('/');
-  await page.evaluate(([value, drawer]) => { localStorage.setItem('hold-my-brief:library-side', value); localStorage.setItem('hold-my-brief:library-width', drawer); }, [side, String(drawerWidth)]);
+  await page.evaluate(([value, drawer]) => { localStorage.removeItem('hold-my-brief:view-controls'); localStorage.setItem('hold-my-brief:library-side', value); localStorage.setItem('hold-my-brief:library-width', drawer); }, [side, String(drawerWidth)]);
   await page.reload();
   await page.locator('.library-panel input[type=file]').setInputFiles(plates.slice(1)); // Two images in the collection first, so the one opened next has neighbours for the arrows to walk to.
   await page.locator('#file-input').setInputFiles(plates[0]);
@@ -67,22 +67,38 @@ for (const side of ['left', 'right'] as const) {
   });
 }
 
-test('a view-controls pill dragged over the image navigation is steered clear of it', async ({ page }) => {
-  await openImages(page, 1080, 'left');
-  await page.locator('#library-toggle').click(); await expect(page.locator('#library-rail')).toBeVisible();
-  const nav = page.locator('.library-image-navigation'), pill = page.locator('#view-controls'), grip = page.getByRole('button', { name: 'Move view controls' });
-  const navBox = await boxOf(nav);
-  for (const target of [{ x: navBox.x + navBox.width / 2, y: navBox.y + navBox.height / 2 }, { x: navBox.x + 10, y: navBox.y - 4 }, { x: navBox.x + navBox.width - 10, y: HEIGHT - 8 }]) {
-    const handle = await boxOf(grip);
-    await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
-    await page.mouse.down(); await page.mouse.move(target.x, target.y, { steps: 8 }); await page.mouse.up();
-    await openFooter(page, 1080);
-    const [pillBox, footerBox, navNow] = [await boxOf(pill), await boxOf(page.locator('footer')), await boxOf(nav)];
-    expect(apart(pillBox, navNow), `pill ${JSON.stringify(pillBox)} over nav ${JSON.stringify(navNow)}`).toBe(true);
-    expect(apart(pillBox, footerBox)).toBe(true);
-    await page.mouse.move(540, 300);
-  }
-});
+for (const side of ['left', 'right'] as const) {
+  test(`a view-controls pill dragged anywhere stays clear of the image navigation, the footer and the ${side} rail or drawer, from 720 to 1080 px`, async ({ page }) => {
+    test.setTimeout(150_000); // Ten placements, six drops each.
+    for (const [width, drawerWidth] of [[720, 270], [720, 520], [760, 270], [790, 270], [1080, 270]]) {
+      for (const drawerOpen of [false, true]) {
+        await openImages(page, width, side, drawerWidth);
+        const drawer = page.locator('#library-root'), aside = drawerOpen ? drawer : page.locator('#library-rail');
+        if (await drawer.isVisible() !== drawerOpen) await page.locator('#library-toggle').click();
+        await expect(aside).toBeVisible();
+        const nav = page.locator('.library-image-navigation'), pill = page.locator('#view-controls'), footer = page.locator('footer'), grip = page.getByRole('button', { name: 'Move view controls' });
+        // Drop the pill on the nav, on each of the bottom corners and the bottom centre of the panel, and against the rail or drawer.
+        const navBox = await boxOf(nav), asideBox = await boxOf(aside);
+        const beside = side === 'left' ? asideBox.x + asideBox.width + 4 : asideBox.x - 4;
+        const targets = [{ x: navBox.x + navBox.width / 2, y: navBox.y + navBox.height / 2 }, { x: navBox.x + 10, y: navBox.y - 4 }, { x: width - 8, y: HEIGHT - 8 }, { x: width / 2, y: HEIGHT - 8 }, { x: beside, y: HEIGHT - 8 }, { x: beside, y: HEIGHT / 2 }];
+        for (const target of targets) {
+          await page.mouse.move(width / 2, HEIGHT / 2);
+          const handle = await boxOf(grip);
+          await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+          await page.mouse.down(); await page.mouse.move(target.x, target.y, { steps: 8 }); await page.mouse.up();
+          await openFooter(page, width);
+          const at = `at ${width} px (${drawerOpen ? 'drawer' : 'rail'}, drag to ${Math.round(target.x)},${Math.round(target.y)})`;
+          const [pillBox, footerBox, navNow, asideNow] = [await boxOf(pill), await boxOf(footer), await boxOf(nav), await boxOf(aside)];
+          expect(apart(pillBox, navNow), `pill ${JSON.stringify(pillBox)} over nav ${JSON.stringify(navNow)} ${at}`).toBe(true);
+          expect(apart(pillBox, footerBox), `pill over footer ${at}`).toBe(true);
+          expect(apart(pillBox, asideBox), `pill ${JSON.stringify(pillBox)} over rail/drawer ${JSON.stringify(asideNow)} ${at}`).toBe(true);
+          expect(pillBox.x).toBeGreaterThanOrEqual(0); expect(pillBox.x + pillBox.width).toBeLessThanOrEqual(width + .5);
+          await page.mouse.move(width / 2, HEIGHT / 2);
+        }
+      }
+    }
+  });
+}
 
 test('with the footer open, the arrows are clickable and walk the collection', async ({ page }) => {
   await openImages(page, 720, 'left');
