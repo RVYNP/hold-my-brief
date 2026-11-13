@@ -3,13 +3,13 @@
   public-domain works via `scripts/reshoot-media.mjs`), no machine paths, keys or personal data.
   A new dependency needs its licence in `THIRD_PARTY.md`.
 - CI's browser tests run in Chromium (Edge on Windows, Chrome or Playwright Chromium on macOS), **not**
-  in WKWebView. The macOS app runs in WKWebView, and on macOS `test:native` only checks launch, liveness
-  and clean quit. Read for anything WebKit treats differently: CSS (`backdrop-filter`, `:has`, scroll
-  snapping, `overflow: clip`), pointer, wheel and gesture events, `ResizeObserver` timing, clipboard,
-  drag and drop of files.
-- Windows native smoke drives the real WebView2 over CDP; macOS has no equivalent, so native IPC changes
-  are proven on Windows only. Windows path handling (case, either slash, `\\?\`, drive roots) and CRLF
-  checkouts (no `.gitattributes`): a test that matches source text must normalise `\r\n`.
+  in WKWebView, which is what the macOS app runs in. Read for anything WebKit treats differently: CSS
+  (`backdrop-filter`, `:has`, scroll snapping, `overflow: clip`), pointer, wheel and gesture events,
+  `ResizeObserver` timing, clipboard, drag and drop of files.
+- CI never launches the macOS app: it only builds the `.app` bundle (`test:native` runs on Windows only,
+  where it drives the real WebView2 over CDP). A change to native startup, plugins, capabilities or the
+  macOS file-open path is unproven on macOS. Windows path handling (case, either slash, `\\?\`, drive
+  roots) and CRLF checkouts (no `.gitattributes`): a test that matches source text must normalise `\r\n`.
 - The security model in `docs/development.md` is a product requirement: document scripts and automatic
   external requests stay blocked, EPUB frames stay sandboxed without scripts, Markdown raw HTML stays
   off, local images resolve only inside the document's own directory tree, external links need a click,
