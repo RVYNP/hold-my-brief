@@ -302,3 +302,35 @@ test('cancelling a slow open leaves every tab exactly as it was, and a late resu
   await expect(page.locator('#loading')).toBeHidden();
   await tab(page, 'a.txt').click(); await shown(page, 'a.txt'); // The other tab still works.
 });
+
+test('tabs with the same title say which folder each is from; the others stay plain', async ({ page }) => {
+  await page.goto('/');
+  const same = (text: string) => page.locator('#file-input').setInputFiles({ name: 'source.txt', mimeType: 'text/plain', buffer: Buffer.from(text.repeat(40)) });
+  await same('First copy of the source.\n'); await shown(page, 'source.txt');
+  // A title that is alone has nothing added.
+  await expect(page.locator('#tab-list .tab-hint')).toHaveText(['']);
+  await expect(page.locator('#tab-list .tab-hint').first()).toBeHidden();
+  await same('A different file with the same name.\n');
+  await expect(titles(page)).toHaveText(['source.txt', 'source.txt']);
+  await open(page, 'other.txt'); await shown(page, 'other.txt');
+  const hints = page.locator('#tab-list .tab-hint');
+  await expect(hints.nth(0)).toHaveText(/^[0-9a-f]{6}$/);
+  await expect(hints.nth(1)).toHaveText(/^[0-9a-f]{6}$/);
+  expect(await hints.nth(0).textContent()).not.toBe(await hints.nth(1).textContent());
+  await expect(hints.nth(2)).toBeHidden();
+  // The tooltip names the whole path.
+  expect(await tab(page, 'source.txt').first().getAttribute('title')).toMatch(/^source\.txt\n[0-9a-f]{64}\/source\.txt$/);
+  // The compact switcher shows it too.
+  await page.setViewportSize({ width: 420, height: 620 });
+  await page.locator('#title').click();
+  const rows = page.locator('#tab-menu .tab-menu-row');
+  await expect(rows.nth(1).locator('.tab-hint')).toHaveText(/^[0-9a-f]{6}$/);
+  await expect(rows.nth(2).locator('.tab-hint')).toHaveText(/^[0-9a-f]{6}$/);
+  await expect(rows.nth(3).locator('.tab-hint')).toHaveCount(0);
+  // Closing one of the pair takes the other's hint away.
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({ width: 1080, height: 680 });
+  await tab(page, 'source.txt').first().hover();
+  await tab(page, 'source.txt').first().locator('.tab-close').click();
+  await expect(page.locator('#tab-list .tab-hint').first()).toBeHidden();
+});
