@@ -32,9 +32,10 @@ export function isGenericName(name: string): boolean { return genericStem.test(w
 
 /** The folder a file sits in, from its path (either separator); none for a bare name or a browser-build content id. */
 export function parentFolder(path: string): string | undefined {
-  const parts = path.split(/[\\/]/).filter(Boolean);
+  // `?` and `.` are the `\\?\` / `\\.\` extended-length prefixes, and `C:` a drive: none of them is a folder.
+  const parts = path.split(/[\\/]/).filter(part => part && part !== '?' && part !== '.');
   const folder = parts.length > 1 ? parts[parts.length - 2] : undefined;
-  return folder && !contentId.test(folder) ? folder : undefined;
+  return folder && !contentId.test(folder) && !/^[A-Za-z]:$/.test(folder) ? folder : undefined;
 }
 
 /**

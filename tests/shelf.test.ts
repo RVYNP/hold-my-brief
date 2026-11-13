@@ -167,6 +167,9 @@ describe('parentFolder', () => {
   it('is the last folder of either path style, and nothing for a bare name or a browser content id', () => {
     expect(parentFolder('/Users/x/work/refs/03_wwe_mag/source.pdf')).toBe('03_wwe_mag');
     expect(parentFolder('C:\\Users\\x\\refs\\09_dirtrider\\source.pdf')).toBe('09_dirtrider');
+    expect(parentFolder('C:\\scan.pdf')).toBeUndefined(); // a drive root is no folder
+    expect(parentFolder('\\\\?\\C:\\refs\\09_x\\source.pdf')).toBe('09_x'); // extended-length prefix
+    expect(parentFolder('\\\\?\\C:\\source.pdf')).toBeUndefined();
     expect(parentFolder('source.pdf')).toBeUndefined();
     expect(parentFolder(`${'ab'.repeat(32)}/source.pdf`)).toBeUndefined();
   });

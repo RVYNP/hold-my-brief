@@ -194,6 +194,8 @@ export function createTreeView(root: HTMLElement, host: TreeHost) {
     const row = rows[index]!; const { node } = row; const open = node.children.length > 0 && isOpen(node);
     const go = (at: number) => { event.preventDefault(); focusRow(rows[Math.max(0, Math.min(rows.length - 1, at))]?.node.id); };
     if (event.altKey) return;
+    // Only letters typed one after another form a search: any other key starts the next one afresh.
+    if (event.key.length !== 1) { typed = ''; window.clearTimeout(typedTimer); }
     switch (event.key) {
       case 'ArrowDown': go(index + 1); return;
       case 'ArrowUp': go(index - 1); return;
