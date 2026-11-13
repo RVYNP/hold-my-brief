@@ -9,7 +9,7 @@ import { ImageAdapter } from './adapters/image';
 import { createPalette } from './palette';
 import { createFindBar } from './find-bar';
 import { COMMANDS, shortcutFor, shortcutReference, unavailableReason } from './commands';
-import { appearance, initAppearance, onAppearanceChange, pageTones, palettes, saveAppearance, scheme, type AppearanceMode } from './theme';
+import { appearance, initAppearance, onAppearanceChange, allPalettes, pageTones, saveAppearance, scheme, type AppearanceMode } from './theme';
 import { appearanceSummary, createAppearanceSheet, paletteIcon } from './appearance';
 import { createAssistantPanel } from './assistant-panel';
 import { DRAG_SLOP, Panner } from './pan';
@@ -444,7 +444,7 @@ const assistant = createAssistantPanel($('reader-layout'), {
       saveAppearance({
         ...kept,
         mode: (['system', 'light', 'dark'] as const satisfies readonly AppearanceMode[]).find(mode => mode === change.mode) ?? kept.mode,
-        palette: palettes.find(palette => palette === change.theme) ?? kept.palette,
+        palette: allPalettes.find(palette => palette === change.theme) ?? kept.palette,
         page: pageTones.find(tone => tone === change.page) ?? kept.page,
       });
       return appearanceSummary();

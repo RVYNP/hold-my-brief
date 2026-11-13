@@ -1,4 +1,4 @@
-.pdf-reader { overflow: auto; padding: 16px; background: var(--stage); }
+.pdf-reader { overflow: auto; padding: 16px; background: var(--glass-stage); }
 /* Faithful: PDF pages are painted on white paper in every theme and never recolored. */
 .pdf-page { position: relative; margin: 0 auto; background: #ffffff; box-shadow: var(--shadow-page); flex-shrink: 0; }
 .pdf-page canvas { display: block; }

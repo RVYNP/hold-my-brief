@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { accentVars, contrast, liftInk, type Rgb } from '../src/theme';
+import { accentVars, allPalettes, contrast, glowSchemes, glows, isGlow, liftInk, palettes, type Rgb } from '../src/theme';
 
 const hex = (value: string): Rgb => [1, 3, 5].map(i => parseInt(value.slice(i, i + 2), 16)) as Rgb;
 const pair = (value: string) => /^light-dark\((#[0-9a-f]{6}), (#[0-9a-f]{6})\)$/.exec(value)!.slice(1).map(hex);
@@ -35,5 +35,15 @@ describe('liftInk', () => {
     const [r, g, b] = lifted;
     expect(contrast(lifted, darkSurface)).toBeGreaterThanOrEqual(7);
     expect(b).toBeGreaterThan(r); expect(b).toBeGreaterThan(g);
+  });
+});
+
+describe('glow themes', () => {
+  it('are ten palettes of their own, four light and six dark, none of them a family', () => {
+    expect(glows).toEqual(['aurora', 'dusk', 'nebula', 'solar', 'ember', 'orchid', 'glacier', 'peach', 'lagoon', 'moss']);
+    expect(Object.values(glowSchemes).filter(scheme => scheme === 'light')).toHaveLength(4);
+    expect(allPalettes).toEqual([...palettes, ...glows]);
+    expect(palettes.some(isGlow)).toBe(false);
+    expect(glows.every(isGlow)).toBe(true);
   });
 });

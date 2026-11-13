@@ -1,8 +1,8 @@
-import { appearance, applyAppearance, palettes, readingColors, rgbToHex, saveAppearance, type Appearance, type AppearanceMode, type PageTone, type Palette } from './theme';
+import { appearance, applyAppearance, glows, glowSchemes, isGlow, palettes, readingColors, rgbToHex, saveAppearance, schemeOf, type Appearance, type AppearanceMode, type PageTone, type Palette } from './theme';
 
 const icon = (size: number, body: string) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 export const paletteIcon = icon(14, '<circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.84-.44-1.13-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.67h2c3.05 0 5.55-2.5 5.55-5.55C21.97 6.01 17.46 2 12 2z"/>');
-const names: Record<Palette, string> = { brief: 'Brief', lilac: 'Lilac', birch: 'Birch', graphite: 'Graphite', arctic: 'Arctic', blossom: 'Blossom', peony: 'Peony' };
+const names: Record<Palette, string> = { brief: 'Brief', lilac: 'Lilac', birch: 'Birch', graphite: 'Graphite', arctic: 'Arctic', blossom: 'Blossom', peony: 'Peony', aurora: 'Aurora', dusk: 'Dusk', nebula: 'Nebula', solar: 'Solar', ember: 'Ember', orchid: 'Orchid', glacier: 'Glacier', peach: 'Peach', lagoon: 'Lagoon', moss: 'Moss' };
 const modes: [AppearanceMode, string, string][] = [
   ['system', 'System', icon(13, '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8m-4-4v4"/>')],
   ['light', 'Light', icon(13, '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>')],
@@ -23,11 +23,13 @@ export type TextControls = {
   change: (next: Partial<TextSettings>) => Promise<void>;
 };
 
-/** Menu label for the kept appearance, e.g. "Brief · System". */
+/** Menu label for the kept appearance, e.g. "Brief · System"; a glow theme has one scheme, so it reads "Aurora · Dark". */
 export function appearanceSummary() {
   const kept = appearance();
-  return `${names[kept.palette]} · ${modes.find(([mode]) => mode === kept.mode)![1]}`;
+  const mode = isGlow(kept.palette) ? glowSchemes[kept.palette] : kept.mode;
+  return `${names[kept.palette]} · ${modes.find(([id]) => id === mode)![1]}`;
 }
+const card = (palette: Palette) => `<button class="theme-card" role="radio" data-choice="${palette}"><span class="theme-tile" data-palette="${palette}"><span class="theme-sample">Aa</span><span class="theme-dots" aria-hidden="true"><span></span><span></span><span></span></span></span><span class="theme-name">${names[palette]}</span></button>`;
 
 /** Radio group with a roving tab stop: arrows move focus, and `selectOnFocus` groups also choose. */
 function radioGroup(group: HTMLElement, selectOnFocus: boolean) {
@@ -58,9 +60,12 @@ export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextContr
     <div class="sheet-head"><h2 id="appearance-title">Appearance</h2><div class="sheet-tabs" role="tablist" aria-label="Appearance sections"><button role="tab" id="appearance-tab-colour" data-tab="colour" aria-controls="appearance-colour">Colour</button><button role="tab" id="appearance-tab-text" data-tab="text" aria-controls="appearance-text">Text</button></div><button class="sheet-close" data-close aria-label="Close appearance">${icon(15, '<path d="M18 6 6 18M6 6l12 12"/>')}</button></div>
     <div class="sheet-panel" id="appearance-colour" role="tabpanel" aria-labelledby="appearance-tab-colour">
     <div class="appearance-row"><span class="sheet-label" id="appearance-mode-label">MODE</span>
-      <div class="choices appearance-modes" role="radiogroup" aria-labelledby="appearance-mode-label">${modes.map(([mode, label, glyph]) => `<button role="radio" data-mode="${mode}">${glyph}${label}</button>`).join('')}</div></div>
+      <div class="theme-group"><div class="choices appearance-modes" role="radiogroup" aria-labelledby="appearance-mode-label">${modes.map(([mode, label, glyph]) => `<button role="radio" data-mode="${mode}">${glyph}${label}</button>`).join('')}</div>
+      <p class="appearance-mode-note" hidden>Glow themes have one mode.</p></div></div>
     <div class="appearance-row appearance-row-top"><span class="sheet-label" id="appearance-theme-label">THEME</span>
-      <div class="theme-group"><div class="theme-row" role="radiogroup" aria-labelledby="appearance-theme-label">${palettes.map(palette => `<button class="theme-card" role="radio" data-choice="${palette}"><span class="theme-tile" data-palette="${palette}"><span class="theme-sample">Aa</span><span class="theme-dots" aria-hidden="true"><span></span><span></span><span></span></span></span><span class="theme-name">${names[palette]}</span></button>`).join('')}</div>
+      <div class="theme-group"><div class="theme-row" role="radiogroup" aria-labelledby="appearance-theme-label">${palettes.map(card).join('')}</div></div></div>
+    <div class="appearance-row appearance-row-top"><span class="sheet-label" id="appearance-glow-label">GLOW</span>
+      <div class="theme-group"><div class="theme-row theme-row-glow" role="radiogroup" aria-labelledby="appearance-glow-label">${glows.map(card).join('')}</div>
       <p class="appearance-hint" aria-live="polite">${restingHint}</p></div></div>
     <div class="appearance-row"><span class="sheet-label" id="appearance-accent-label">ACCENT</span>
       <div class="swatches" role="radiogroup" aria-labelledby="appearance-accent-label">
@@ -87,7 +92,8 @@ export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextContr
     <p class="appearance-note appearance-text-note">Text settings apply to Markdown, plain text and reflowable books. PDF pages, fixed-layout books and images zoom instead (Ctrl + and Ctrl −).</p>
     </div>`;
   const hint = dialog.querySelector<HTMLElement>('.appearance-hint')!;
-  const modeGroup = dialog.querySelector<HTMLElement>('.appearance-modes')!, themeRow = dialog.querySelector<HTMLElement>('.theme-row')!;
+  const modeGroup = dialog.querySelector<HTMLElement>('.appearance-modes')!, modeNote = dialog.querySelector<HTMLElement>('.appearance-mode-note')!;
+  const themeRows = Array.from(dialog.querySelectorAll<HTMLElement>('.theme-row'));
   const swatches = dialog.querySelector<HTMLElement>('.swatches')!, themeSwatch = dialog.querySelector<HTMLElement>('.swatch-theme')!;
   const custom = dialog.querySelector<HTMLButtonElement>('.swatch-custom')!, picker = dialog.querySelector<HTMLInputElement>('.swatch-input')!;
   const toneGroup = dialog.querySelector<HTMLElement>('[aria-labelledby=appearance-page-label]')!;
@@ -110,10 +116,13 @@ export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextContr
   let kept: Appearance = appearance();
 
   function render() {
-    const shown = appearance(), previewing = shown.palette !== kept.palette;
-    check(modeGroup, item => item.dataset.mode === kept.mode);
-    check(themeRow, item => item.dataset.choice === kept.palette);
-    for (const card of themeRow.querySelectorAll<HTMLElement>('.theme-card')) card.toggleAttribute('data-previewing', previewing && card.dataset.choice === shown.palette);
+    const shown = appearance(), previewing = shown.palette !== kept.palette, fixed = isGlow(shown.palette);
+    // A glow theme fixes the scheme: the control shows it, disabled; `mode` itself is untouched, so a normal family restores it.
+    check(modeGroup, item => item.dataset.mode === (fixed ? schemeOf(shown) : kept.mode));
+    for (const item of modeGroup.querySelectorAll<HTMLButtonElement>('[data-mode]')) item.disabled = fixed;
+    modeNote.hidden = !fixed;
+    for (const row of themeRows) check(row, item => item.dataset.choice === kept.palette);
+    for (const card of dialog.querySelectorAll<HTMLElement>('.theme-card')) card.toggleAttribute('data-previewing', previewing && card.dataset.choice === shown.palette);
     const preset = kept.accent === null || presets.some(([, color]) => color === kept.accent);
     check(swatches, item => item === custom ? !preset : item.dataset.accent === (kept.accent ?? ''));
     themeSwatch.dataset.palette = shown.palette;
@@ -149,7 +158,7 @@ export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextContr
   function restore() { if (appearance() !== kept) { applyAppearance(kept); render(); } }
 
   for (const group of [modeGroup, swatches, toneGroup, spacingGroup, marginGroup, wrapGroup]) radioGroup(group, true);
-  radioGroup(themeRow, false);
+  for (const row of themeRows) radioGroup(row, false);
   modeGroup.addEventListener('click', event => { const mode = (event.target as Element).closest<HTMLElement>('[data-mode]')?.dataset.mode as AppearanceMode | undefined; if (mode) keep({ mode }); });
   toneGroup.addEventListener('click', event => { const page = (event.target as Element).closest<HTMLElement>('[data-tone]')?.dataset.tone as PageTone | undefined; if (page) keep({ page }); });
   spacingGroup.addEventListener('click', event => { const value = (event.target as Element).closest<HTMLElement>('[data-spacing]')?.dataset.spacing; if (value) editText({ lineHeight: Number(value) }); });
@@ -160,14 +169,16 @@ export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextContr
     const settings = text.current();
     if (step && settings) editText({ fontSize: Math.max(12, Math.min(40, settings.fontSize + step)) });
   });
-  themeRow.addEventListener('click', event => { const palette = (event.target as Element).closest<HTMLElement>('[data-choice]')?.dataset.choice as Palette | undefined; if (palette) keep({ palette }); });
-  for (const card of themeRow.querySelectorAll<HTMLElement>('.theme-card')) {
-    const palette = card.dataset.choice as Palette;
-    card.addEventListener('pointerenter', () => preview(palette));
-    card.addEventListener('focus', () => preview(palette));
+  for (const row of themeRows) {
+    row.addEventListener('click', event => { const palette = (event.target as Element).closest<HTMLElement>('[data-choice]')?.dataset.choice as Palette | undefined; if (palette) keep({ palette }); });
+    for (const card of row.querySelectorAll<HTMLElement>('.theme-card')) {
+      const palette = card.dataset.choice as Palette;
+      card.addEventListener('pointerenter', () => preview(palette));
+      card.addEventListener('focus', () => preview(palette));
+    }
+    row.addEventListener('pointerleave', restore);
+    row.addEventListener('focusout', event => { if (!themeRows.some(other => other.contains(event.relatedTarget as Node | null))) restore(); });
   }
-  themeRow.addEventListener('pointerleave', restore);
-  themeRow.addEventListener('focusout', event => { if (!themeRow.contains(event.relatedTarget as Node | null)) restore(); });
   swatches.addEventListener('click', event => {
     const swatch = (event.target as Element).closest<HTMLElement>('[role=radio]');
     if (!swatch) return;

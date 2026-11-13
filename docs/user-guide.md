@@ -68,6 +68,11 @@ window. Its **Colour** tab holds:
   dark version, and every one keeps its text at WCAG AA contrast or better.
   Hover over or focus a theme to preview it on the whole window, click or press Enter to keep it, and
   move away or press Escape to go back to the theme you kept.
+- **Glow:** ten themes with one mode each: Aurora, Dusk, Nebula, Solar, Ember and Orchid (dark), Glacier,
+  Peach, Lagoon and Moss (light), ported from Tracks. Two soft glows of colour sit behind the toolbar, the
+  library and the area around PDF pages; text documents keep an opaque page. Choosing one fixes the mode
+  (the Mode control shows it, disabled), and choosing a normal theme again brings your earlier mode back.
+  With reduced transparency, more contrast or forced colours on, the glow is not drawn.
 - **Accent:** the theme's own accent, one of seven presets, or a custom color. Contrast is adjusted
   automatically so text and controls stay readable.
 - **Page:** Match theme, White, Sepia or Dim for text documents (Markdown, TXT and reflowable EPUB).

@@ -85,6 +85,49 @@ test('text settings live in the appearance sheet, apply to the open text and kee
   await expect(sheet.getByRole('button', { name: 'Larger text' })).toBeHidden();
   await expect(sheet.locator('.appearance-text-note')).toBeVisible();
 });
+test('a glow theme fixes the scheme, disables the mode control, and a normal family brings the mode back', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.goto('/');
+  const root = page.locator('html');
+  await page.getByRole('button', { name: 'Reader menu' }).click();
+  await page.getByRole('button', { name: /Appearance/ }).click();
+  const sheet = page.locator('#appearance');
+  const modes = sheet.locator('.appearance-modes');
+  await sheet.getByRole('radio', { name: 'Light' }).click();
+  await expect(sheet.locator('.theme-row-glow .theme-card')).toHaveCount(10);
+  await sheet.getByRole('radio', { name: 'Aurora' }).hover();
+  await expect(root).toHaveAttribute('data-palette', 'aurora');
+  await expect(root).toHaveAttribute('data-theme', 'dark');
+  await sheet.getByRole('radio', { name: 'Aurora' }).click();
+  await expect(modes.getByRole('radio', { name: 'Dark' })).toHaveAttribute('aria-checked', 'true');
+  await expect(modes.getByRole('radio', { name: 'Light' })).toBeDisabled();
+  await expect(sheet.locator('.appearance-mode-note')).toHaveText('Glow themes have one mode.');
+  // The window is the page colour under the two glows, and the toolbar lets them through.
+  expect(await root.evaluate(element => getComputedStyle(element).backgroundImage.match(/radial-gradient/g)?.length)).toBe(2);
+  // (A runner whose OS asks for reduced transparency gets the opaque fallback instead, which is the next check's subject.)
+  const reduced = await page.evaluate(() => matchMedia('(prefers-reduced-transparency: reduce), (prefers-contrast: more), (forced-colors: active)').matches);
+  expect(await page.locator('.toolbar').evaluate(element => getComputedStyle(element).backgroundColor)).toBe(reduced ? 'rgb(7, 17, 15)' : 'rgba(0, 0, 0, 0)');
+  await sheet.getByRole('radio', { name: 'Peach' }).click();
+  await expect(root).toHaveAttribute('data-theme', 'light');
+  await page.mouse.move(5, 5);
+  await page.keyboard.press('Escape');
+  await page.reload();
+  await expect(root).toHaveAttribute('data-palette', 'peach');
+  await expect(root).toHaveAttribute('data-theme', 'light');
+  // Back to a normal family: the earlier mode choice (Light) is restored and the control works again.
+  await page.getByRole('button', { name: 'Reader menu' }).click();
+  await page.getByRole('button', { name: /Appearance/ }).click();
+  await sheet.getByRole('radio', { name: 'Lilac' }).click();
+  await expect(modes.getByRole('radio', { name: 'Light' })).toBeEnabled();
+  await expect(modes.getByRole('radio', { name: 'Light' })).toHaveAttribute('aria-checked', 'true');
+  await expect(root).toHaveAttribute('data-theme', 'light');
+  await expect(sheet.locator('.appearance-mode-note')).toBeHidden();
+  // With more contrast asked for, the glow is not drawn and the toolbar is the opaque page colour.
+  await sheet.getByRole('radio', { name: 'Aurora' }).click();
+  await page.emulateMedia({ contrast: 'more' });
+  expect(await root.evaluate(element => getComputedStyle(element).getPropertyValue('--grad-a'))).toBe('transparent');
+  expect(await page.locator('.toolbar').evaluate(element => getComputedStyle(element).backgroundColor)).toBe('rgb(7, 17, 15)');
+});
 test('appearance previews on hover, keeps on click, restores on Escape and persists', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' });
   await page.goto('/');
