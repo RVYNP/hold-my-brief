@@ -198,7 +198,8 @@ export function createPageStrip(onError: (error: unknown) => void): PageStrip {
     if (!animate || from === left) { scroller.scrollLeft = left; return; }
     const began = performance.now();
     const step = (now: number) => {
-      const t = Math.min(1, (now - began) / GLIDE_MS);
+      // The frame's timestamp is when the frame began, which can be earlier than the moment the glide was started in the same frame: without the floor the first step eases from a negative time and lands behind where the strip was.
+      const t = Math.max(0, Math.min(1, (now - began) / GLIDE_MS));
       scroller.scrollLeft = t < 1 ? from + (left - from) * (1 - (1 - t) ** 3) : left;
       if (t < 1) glide = requestAnimationFrame(step);
     };

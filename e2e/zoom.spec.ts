@@ -280,6 +280,17 @@ async function onScreen(page: Page, fraction: { x: number; y: number }) {
   return { x: box.x + fraction.x * box.width, y: box.y + fraction.y * box.height };
 }
 
+/**
+ * `count` Ctrl + wheel notches at `at`, delivered in one task so that they are one gesture however slow the machine is. Real wheel events sent
+ * one at a time can arrive further apart than the gesture's quiet time (160 ms) on a loaded runner; the gesture then commits between notches,
+ * and a page that still fits the panel after the first commit cannot hold the point under the pointer (it is centred), so the later notches
+ * zoom about a point that has already moved. That is how the page behaves, not what this test is about.
+ */
+const wheelNotches = (page: Page, at: { x: number; y: number }, deltaY: number, count: number) => page.evaluate(({ at, deltaY, count }) => {
+  const target = document.elementFromPoint(at.x, at.y);
+  for (let i = 0; i < count; i++) target!.dispatchEvent(new WheelEvent('wheel', { ctrlKey: true, deltaY, clientX: at.x, clientY: at.y, bubbles: true, cancelable: true }));
+}, { at, deltaY, count });
+
 test('Ctrl + wheel zooms toward the pointer: the page point under it stays under it, then renders crisply', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await openPdf(page);
@@ -292,9 +303,7 @@ test('Ctrl + wheel zooms toward the pointer: the page point under it stays under
   const canvas = await page.locator('.pdf-page canvas').elementHandle();
 
   await page.mouse.move(pointer.x, pointer.y);
-  await page.keyboard.down('Control');
-  for (let i = 0; i < 4; i++) await page.mouse.wheel(0, -100);
-  await page.keyboard.up('Control');
+  await wheelNotches(page, pointer, -100, 4);
   // The level follows the gesture: four notches is 1.49^4, about 495 % of 100 %: wide enough that the page overflows the panel and the point can be held.
   await expect(level(page)).toHaveText(/^4[0-9]{2}%$/);
   await settled(page);
