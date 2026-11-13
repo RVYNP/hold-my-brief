@@ -9,7 +9,7 @@
 import { slotAt } from './tabs';
 
 /** What one tab shows. `where` is the short place ("40 / 146"), empty until the document has been read; `progress` is the library's wording for how far in it is ("p. 12 / 96", "37 %", "Finished"), for the tab menu. */
-export type TabView = { path: string; title: string; format: string; where: string; progress: string; active: boolean; problem: boolean };
+export type TabView = { path: string; title: string; hint: string; format: string; where: string; progress: string; active: boolean; problem: boolean };
 
 export type TabHandlers = {
   /** A tab was chosen; `undefined` is Home. */
@@ -78,16 +78,17 @@ export function createTabStrip(elements: { home: HTMLElement; list: HTMLElement;
   function build(view: TabView): HTMLElement {
     const tab = document.createElement('div');
     tab.className = 'tab'; tab.dataset.path = view.path; tab.setAttribute('role', 'tab'); tab.tabIndex = 0;
-    const format = text('span', 'tab-format', ''), title = text('span', 'tab-title', ''), where = text('span', 'tab-where', '');
-    tab.append(format, title, where, closeButton(view.title));
+    const format = text('span', 'tab-format', ''), title = text('span', 'tab-title', ''), hint = text('span', 'tab-hint', ''), where = text('span', 'tab-where', '');
+    tab.append(format, title, hint, where, closeButton(view.title));
     return tab;
   }
   function fill(tab: HTMLElement, view: TabView) {
     tab.classList.toggle('is-active', view.active); tab.classList.toggle('has-problem', view.problem);
     tab.setAttribute('aria-selected', String(view.active));
-    tab.title = view.path;
+    tab.title = view.hint ? `${view.title}\n${view.path}` : view.path;
     setText(tab.querySelector('.tab-format')!, view.format.toUpperCase());
     setText(tab.querySelector('.tab-title')!, view.title);
+    setText(tab.querySelector('.tab-hint')!, view.hint);
     setText(tab.querySelector('.tab-where')!, view.active ? view.where : '');
     tab.querySelector('.tab-close')!.setAttribute('aria-label', `Close ${view.title}`);
   }
@@ -183,10 +184,11 @@ export function createTabStrip(elements: { home: HTMLElement; list: HTMLElement;
   menu.id = 'tab-menu'; menu.className = 'tab-menu'; menu.hidden = true; menu.setAttribute('role', 'menu'); menu.setAttribute('aria-label', 'Open tabs');
   document.body.append(menu);
   let anchor: HTMLElement | undefined;
-  function row(label: string, meta: string | undefined, active: boolean, glyph: string, onChoose: () => void, onClose?: () => void) {
+  function row(label: string, meta: string | undefined, active: boolean, glyph: string, onChoose: () => void, onClose?: () => void, hint = '', tip = '') {
     const item = document.createElement('div');
     item.className = 'tab-menu-row'; item.setAttribute('role', 'menuitem'); item.tabIndex = -1; item.classList.toggle('is-active', active);
-    const body = document.createElement('span'); body.className = 'tab-menu-text'; body.append(text('span', 'tab-menu-title', label));
+    const body = document.createElement('span'); body.className = 'tab-menu-text'; const heading = text('span', 'tab-menu-title', label); if (hint) heading.append(text('span', 'tab-hint', hint)); body.append(heading);
+    if (tip) item.title = tip;
     if (meta) body.append(text('span', 'tab-menu-meta', meta));
     item.append(icon(glyph, 14), body);
     if (onClose) { const close = closeButton(label); close.onclick = event => { event.stopPropagation(); onClose(); }; item.append(close); }
@@ -195,7 +197,7 @@ export function createTabStrip(elements: { home: HTMLElement; list: HTMLElement;
   }
   function fillMenu() {
     const rows: HTMLElement[] = [row('Home', undefined, homeActive, icons.home, () => handlers.select(undefined))];
-    for (const view of views) rows.push(row(view.title, [view.format.toUpperCase(), view.progress].filter(Boolean).join(' · '), view.active, icons.document, () => handlers.select(view.path), () => handlers.close(view.path)));
+    for (const view of views) rows.push(row(view.title, [view.format.toUpperCase(), view.progress].filter(Boolean).join(' · '), view.active, icons.document, () => handlers.select(view.path), () => handlers.close(view.path), view.hint, `${view.title}\n${view.path}`));
     const separator = document.createElement('div'); separator.className = 'tab-menu-separator'; separator.setAttribute('role', 'separator');
     const fresh = row('New tab…', undefined, false, icons.plus, () => handlers.newTab());
     fresh.append(text('kbd', 'tab-menu-key', newTabKeys));

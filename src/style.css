@@ -783,6 +783,10 @@ select:hover { border-color: var(--accent-border); }
 .tab-title { max-width: 118px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px/1.2 var(--font-ui); }
 .tab.is-active .tab-title { max-width: 140px; font-weight: 600; }
 .tab.has-problem .tab-title { font-style: italic; }
+.tab-hint { color: var(--muted); font: 12px/1.2 var(--font-ui); font-weight: 400; white-space: nowrap; max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
+.tab-hint:empty { display: none; }
+.tab-hint::before { content: '·'; display: inline-block; margin-right: 4px; }
+.tab-menu-title .tab-hint { margin-left: 6px; font-size: 11px; }
 .tab-where { font: 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--muted); }
 .tab-where:empty { display: none; }
 .tab-close { display: none; place-items: center; flex: none; width: 18px; height: 18px; padding: 0; border-radius: 5px; color: var(--muted); }

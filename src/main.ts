@@ -26,6 +26,7 @@ import { createZoomMenu } from './zoom-menu';
 import { createProgressPreview } from './progress-preview';
 import { TabList, type SavedTab } from './tabs';
 import { createTabStrip, type TabView } from './tab-strip';
+import { titleHints } from './tab-titles';
 initAppearance();
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
@@ -646,7 +647,8 @@ function tabWhere(tab: Tab) {
 }
 let paintedTabs = '';
 function paintTabs() {
-  const views: TabView[] = tabs.tabs.map(tab => ({ path: tab.path, title: tabTitle(tab), format: tab.format, where: tabWhere(tab), progress: formatProgress(progressOf((tab === shown ? position : tab.position) ?? { fraction: NaN, scrub: { current: 0, total: 0, unit: 'line' } })) ?? '', active: tab === tabs.active, problem: Boolean(tab.problem) }));
+  const hints = titleHints(tabs.tabs.map(tab => ({ path: tab.path, title: tabTitle(tab) })));
+  const views: TabView[] = tabs.tabs.map(tab => ({ path: tab.path, title: tabTitle(tab), hint: hints.get(tab.path) ?? '', format: tab.format, where: tabWhere(tab), progress: formatProgress(progressOf((tab === shown ? position : tab.position) ?? { fraction: NaN, scrub: { current: 0, total: 0, unit: 'line' } })) ?? '', active: tab === tabs.active, problem: Boolean(tab.problem) }));
   const key = JSON.stringify([views, tabs.size]);
   if (key === paintedTabs) return;
   paintedTabs = key;
