@@ -55,7 +55,7 @@ With nothing saved, the window opens on **Hand it over.** Once documents have be
 on **Home**:
 
 - **Jump back in** is the eight documents you looked at last, most recent first: four across in a wide window, two
-  in a narrower one, one in the compact window. Each card has the cover, the title and, if you got part of the way
+  in a narrower one and in the compact window (2 × 4), one only below about 380 px of width. Each card has the cover, the title and, if you got part of the way
   through, a thin line showing how far. Click one to open it (or switch to its tab).
 - **Continue reading** shelves what you have started and not finished, most recent first, with where you got to
   (`PDF · p. 40 / 146`). **Favorites** shelves what you starred. **Collections** has one card per top-level
@@ -65,7 +65,7 @@ on **Home**:
   cards. **Show all** opens the library on that selection (**Continue reading**, **Favorites**, or all references for
   Collections); a collection card opens the library on that collection. A section with nothing in it is left out.
 - The chips under the title (**All**, **PDF**, **EPUB**, **Markdown**, **Text**, **Images**, only the types you have) filter every
-  section; **All** restores the mixed view.
+  section; **All** restores the mixed view. They stay on one row that scrolls sideways when the window is narrow.
 
 **Browse library** and **Open files** are in the header. Edits made in the library refresh Home. A picture fills in when its
 thumbnail is ready; a book without a picture keeps the generated cover it has on its shelf. An EPUB shows the title from its

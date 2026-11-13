@@ -75,7 +75,7 @@ test('the chips offer only the types the library has, and filter every section',
   await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Jump back in', 'Continue reading', 'Favorites', 'Collections']);
 });
 
-test('Jump back in is the 8 most recently opened, in 4, 2 or 1 columns, as 52 px cards with a 39 x 52 cover and a progress line', async ({ page }) => {
+test('Jump back in is the 8 most recently opened, in 4, 2 (also at 420) or 1 columns, as 52 px cards with a 39 x 52 cover and a progress line', async ({ page }) => {
   await seedLibrary(page, mixed, mixedCollections);
   const grid = region(page, 'Jump back in').getByRole('list');
   const cards = grid.getByRole('listitem');
@@ -98,8 +98,14 @@ test('Jump back in is the 8 most recently opened, in 4, 2 or 1 columns, as 52 px
   expect(await columns(grid)).toBe(2);
   await expect(cards).toHaveCount(8);
   await page.setViewportSize({ width: 420, height: 620 });
-  expect(await columns(grid)).toBe(1);
+  expect(await columns(grid)).toBe(2); // 2 x 4 in the compact window.
   await expect(cards).toHaveCount(8);
+  expect((await cards.nth(1).boundingBox())!.y).toBeCloseTo((await cards.nth(0).boundingBox())!.y, 0);
+  expect((await cards.nth(2).boundingBox())!.y).toBeGreaterThan((await cards.nth(0).boundingBox())!.y + 52);
+  await page.setViewportSize({ width: 360, height: 620 });
+  expect(await columns(grid)).toBe(1); // Below about 380 px of content width.
+  await expect(cards).toHaveCount(8);
+  await page.setViewportSize({ width: 420, height: 620 });
   // No sideways overflow in the compact window.
   expect(await page.locator('#empty').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
 });
@@ -330,4 +336,30 @@ test('the first launch with nothing saved keeps the empty screen', async ({ page
   await page.goto('/');
   await expect(page.locator('#empty-open')).toBeVisible();
   await expect(page.locator('#empty.is-home')).toHaveCount(0);
+});
+
+test('the chips stay on one row at every width and scroll sideways with a fade, no scrollbar, and the keyboard reaches them all', async ({ page }) => {
+  await seedLibrary(page, mixed, mixedCollections);
+  const row = page.locator('.home-chips');
+  const oneRow = () => row.evaluate(node => new Set([...node.children].map(chip => Math.round(chip.getBoundingClientRect().top))).size === 1);
+  expect(await oneRow()).toBe(true);
+  expect(await row.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true); // Wide: all fit, no fade.
+  expect(await row.evaluate(node => node.style.getPropertyValue('--fade-end'))).toBe('0px');
+  await page.setViewportSize({ width: 420, height: 620 });
+  expect(await oneRow()).toBe(true);
+  expect(await row.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
+  expect(await row.evaluate(node => getComputedStyle(node).scrollbarWidth)).toBe('none');
+  await expect.poll(() => row.evaluate(node => node.style.getPropertyValue('--fade-end'))).toBe('28px');
+  expect(await row.evaluate(node => node.style.getPropertyValue('--fade-start'))).toBe('0px');
+  expect(await row.evaluate(node => getComputedStyle(node).maskImage)).toContain('linear-gradient');
+  // Tab brings the last chip into view, and the fade moves to the other edge.
+  await chip(page, 'Images').focus();
+  await expect.poll(() => row.evaluate(node => { const box = node.getBoundingClientRect(), last = node.lastElementChild!.getBoundingClientRect(); return last.right <= box.right + .5 && last.left >= box.left; })).toBe(true);
+  await expect.poll(() => row.evaluate(node => node.style.getPropertyValue('--fade-start'))).toBe('28px');
+  await expect.poll(() => row.evaluate(node => node.style.getPropertyValue('--fade-end'))).toBe('0px');
+  await page.keyboard.press('Enter');
+  await expect(chip(page, 'Images')).toHaveAttribute('aria-pressed', 'true');
+  expect(await oneRow()).toBe(true);
+  await page.setViewportSize({ width: 300, height: 620 });
+  expect(await oneRow()).toBe(true);
 });

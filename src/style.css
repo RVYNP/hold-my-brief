@@ -876,8 +876,10 @@ h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 1px 0 
 .home-file:hover { color: var(--fg); background: var(--hover-subtle); }
 /* #empty-open is also the splash's large button; in the header it is a peer of Browse library. */
 #empty.is-home #empty-open { margin-top: 0; display: block; padding: 6px 10px; }
-.home-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
-.home-chip { padding: 5px 13px; border-radius: 999px; background: var(--hover); color: var(--fg); font-size: 12px; font-weight: 600; line-height: 1.4; }
+/* One line at every width: it scrolls sideways (no scrollbar) and fades at an edge while there is more. The padding keeps focus rings from being clipped. */
+.home-chips { --fade-start: 0px; --fade-end: 0px; display: flex; gap: 8px; margin: -3px -3px 17px; padding: 3px; overflow-x: auto; overflow-y: hidden; scroll-padding-inline: 31px; scrollbar-width: none; -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent 100%); mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent 100%); }
+.home-chips::-webkit-scrollbar { display: none; }
+.home-chip { flex: none; padding: 5px 13px; border-radius: 999px; background: var(--hover); color: var(--fg); font-size: 12px; font-weight: 600; line-height: 1.4; }
 .home-chip:hover { background: color-mix(in srgb, var(--hover) 82%, var(--fg)); }
 .home-chip[aria-pressed=true], .home-chip[aria-pressed=true]:hover { background: var(--fg); border-color: transparent; color: var(--surface); }
 .home-no-matches { color: var(--muted); font-size: 13px; line-height: 1.6; }
@@ -896,9 +898,9 @@ h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 1px 0 
 .home-mosaic .library-tile-scrim, .home-mosaic .library-cover-text, .home-mosaic .library-tile-format, .home-mosaic .library-tile-note,
 .home-card-cover .library-tile-scrim { display: none; }
 .home-jump-open .library-cover-art, .home-mosaic .library-cover-art { height: 100%; }
-/* Jump back in: 52 px cards, the cover 39 x 52 flush left, the title and a 3 px progress line beside it. */
+/* Jump back in: two columns from 380 px of content width (titles ellipsize), four from 860, one below 380. 52 px cards, the cover 39 x 52 flush left, the title and a 3 px progress line beside it. */
 .home-jump-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
-@container (min-width: 480px) { .home-jump-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (min-width: 380px) { .home-jump-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @container (min-width: 860px) { .home-jump-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .home-jump { position: relative; min-width: 0; }
 .home-jump-open { display: flex; align-items: center; gap: 10px; width: 100%; height: 52px; padding: 0 12px 0 0; border-radius: 6px; background: var(--home-card); overflow: hidden; }

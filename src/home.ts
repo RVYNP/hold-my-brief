@@ -197,7 +197,7 @@ function control(className: string, label?: string, text?: string): HTMLButtonEl
 }
 
 type Shelf = { track: HTMLElement; previous: HTMLButtonElement; next: HTMLButtonElement };
-let current: { shelves: Shelf[]; resize: ResizeObserver; lazy?: IntersectionObserver; frame: number; reduced: MediaQueryList } | undefined;
+let current: { shelves: Shelf[]; chips?: HTMLElement; resize: ResizeObserver; lazy?: IntersectionObserver; frame: number; reduced: MediaQueryList } | undefined;
 
 function disposeHome() {
   if (!current) return;
@@ -209,8 +209,13 @@ function syncShelf({ track, previous, next }: Shelf) {
   previous.hidden = track.scrollLeft <= 1;
   next.hidden = track.scrollLeft + track.clientWidth >= track.scrollWidth - 1;
 }
+/** The chip row is one line that scrolls sideways; a fade shows at an edge while there is more beyond it. */
+function fadeChips(row: HTMLElement) {
+  row.style.setProperty('--fade-start', row.scrollLeft > 1 ? '28px' : '0px');
+  row.style.setProperty('--fade-end', row.scrollLeft + row.clientWidth < row.scrollWidth - 1 ? '28px' : '0px');
+}
 function scheduleSync(view: NonNullable<typeof current>) {
-  if (!view.frame) view.frame = requestAnimationFrame(() => { view.frame = 0; if (current === view) for (const shelf of view.shelves) syncShelf(shelf); });
+  if (!view.frame) view.frame = requestAnimationFrame(() => { view.frame = 0; if (current !== view) return; for (const shelf of view.shelves) syncShelf(shelf); if (view.chips) fadeChips(view.chips); });
 }
 
 /** One tab stop per list, arrows between its cards (and up and down by row in the grid). */
@@ -405,8 +410,9 @@ export function renderHome(root: HTMLElement, sections: HomeSections, actions: H
   buttons.append(openFile, browse);
   bar.append(element('h1', '', 'Home'), buttons);
   root.append(bar);
+  let chipRow: HTMLElement | undefined;
   if (actions.types.length) {
-    const chips = element('div', 'home-chips');
+    const chips = chipRow = element('div', 'home-chips');
     chips.setAttribute('role', 'group');
     chips.setAttribute('aria-label', 'File type');
     for (const [value, label] of actions.types) {
@@ -416,6 +422,8 @@ export function renderHome(root: HTMLElement, sections: HomeSections, actions: H
       chip.onclick = () => actions.selectFormat(value);
       chips.append(chip);
     }
+    // A chip reached by Tab is brought fully into the row (the browser leaves one that is partly visible where it is).
+    chips.addEventListener('focusin', event => (event.target as HTMLElement).scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }));
     root.append(chips);
   }
   if (homeIsEmpty(sections)) {
@@ -440,6 +448,7 @@ export function renderHome(root: HTMLElement, sections: HomeSections, actions: H
   if (sections.favorites.length) root.append(shelf('favorites', 'Favorites', sections.favorites.map(item => documentCard(item, painter, item.format.toUpperCase())), { label: 'Show all: Favorites', run: () => actions.viewAll('favorites') }, painter));
   if (sections.collections.length) root.append(shelf('collections', 'Collections', sections.collections.map(card => collectionCard(card, painter)), { label: 'Show all: Collections', run: () => actions.viewAll('all') }, painter));
   current = view;
+  if (chipRow) { view.chips = chipRow; view.resize.observe(chipRow); chipRow.addEventListener('scroll', () => scheduleSync(view), { passive: true }); }
   for (const { track } of view.shelves) { view.resize.observe(track); track.addEventListener('scroll', () => scheduleSync(view), { passive: true }); }
   scheduleSync(view);
 }
