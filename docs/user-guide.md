@@ -345,6 +345,10 @@ image navigation sit beside it. The rail and the drawer end above the footer's s
 so the footer is never under them. Opening the library swaps the rail for the drawer, and closing it brings
 the rail back. With nothing opened yet the rail is just the library button; compact windows have no rail.
 
+An image opened from a collection shows a small **previous / next** pill at the bottom of the reading panel, just
+above the footer's strip, so the footer never covers it when it opens. The view controls stand directly above it
+(and a view-controls pill you drag stays clear of it), beside the rail or drawer, at any window width.
+
 The rail can be kept on either side. The button at the foot of the rail (its glyph shows the side it will
 move to, and it is named *Move library to the left* or *…right*) moves it across; so does right-clicking
 the rail, which offers **Keep library on the left** and **Keep library on the right**, and

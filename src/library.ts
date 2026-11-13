@@ -438,7 +438,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   function renderImageNavigation() {
     const focused = document.activeElement instanceof HTMLElement && imageNavigation.contains(document.activeElement) ? document.activeElement.dataset.imageDirection : undefined;
     imageNavigation.replaceChildren(); const doc = library.documents.find(item => item.path === activePath);
-    imageNavigation.hidden = !doc || !isImage(doc); if (!doc || !isImage(doc)) return;
+    imageNavigation.hidden = !doc || !isImage(doc); workspace?.classList.toggle('has-image-navigation', !imageNavigation.hidden); if (!doc || !isImage(doc)) return;
     imageSequence = imageSequence.filter(path => library.documents.some(item => item.path === path && isImage(item)));
     if (!imageSequence.includes(doc.path)) imageSequence = matches.filter(isImage).map(item => item.path);
     if (!imageSequence.includes(doc.path)) imageSequence = [doc.path];

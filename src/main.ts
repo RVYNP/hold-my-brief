@@ -223,8 +223,15 @@ let pillPlacement: Placement | null = null;
 try { pillPlacement = parsePlacement(localStorage.getItem(pillKey)); } catch { /* Optional preference. */ }
 const pillPanel = () => ({ width: workspace.clientWidth, height: workspace.clientHeight });
 const pillBox = () => ({ width: pill.offsetWidth, height: pill.offsetHeight });
-/** How much of the panel's bottom the page-preview strip and the footer lane under it take while the strip is shown: the pill keeps above it. */
-const pillStrip = () => workspace.classList.contains('has-page-strip') ? Math.max(0, workspace.getBoundingClientRect().bottom - pageStrip.element.getBoundingClientRect().top) : 0;
+/**
+ * How much of the panel's bottom the pill keeps above: the page-preview strip and the footer lane under it, or the image-navigation
+ * pill and the footer lane under that (an image document has the second, a PDF the first, never both).
+ */
+const pillStrip = () => {
+  const bottom = workspace.getBoundingClientRect().bottom;
+  const covered = (element: Element | null) => element ? Math.max(0, bottom - element.getBoundingClientRect().top) : 0;
+  return Math.max(workspace.classList.contains('has-page-strip') ? covered(pageStrip.element) : 0, workspace.classList.contains('has-image-navigation') ? covered(workspace.querySelector('.library-image-navigation')) : 0);
+};
 function drawerBand() {
   // The compact sheet covers the whole layout over a scrim; only the side-by-side drawer, or the rail that stands in for it, is steered around.
   if (matchMedia('(max-width: 719px)').matches) return null;
@@ -278,6 +285,7 @@ const viewChanged = () => { cancelAnimationFrame(viewFrame); viewFrame = request
 const viewObserver = new ResizeObserver(viewChanged);
 for (const element of [workspace, pill, $('library-root')]) viewObserver.observe(element);
 new MutationObserver(viewChanged).observe($('reader-layout'), { attributes: true, attributeFilter: ['class'] });
+new MutationObserver(viewChanged).observe(workspace, { attributes: true, attributeFilter: ['class'] }); // The image navigation appearing or going takes or gives back the pill's lane.
 // Page previews (PDF): a filmstrip of the document in a fixed band under the reading surface. The preference is global and
 // off until chosen; the band is shown only for a document that has previews and a panel tall enough to spare
 // it. It is room the reading surface leaves (CSS, `has-page-strip`), not a row in the page's flow, so turning
