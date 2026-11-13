@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COMMANDS, INTERFACE_SHORTCUTS, SHORTCUTS, appliesTo, tabShortcutId, groupCommands, parseIntent, scoreCommand, searchCommands, shortcutFor, shortcutReference, unavailableReason, type Command } from '../src/commands';
+import { COMMANDS, INTERFACE_SHORTCUTS, SHORTCUTS, appliesTo, tabShortcutId, tabDigit, groupCommands, parseIntent, scoreCommand, searchCommands, shortcutFor, shortcutReference, unavailableReason, type Command } from '../src/commands';
 
 const byId = (id: string): Command => {
   const found = COMMANDS.find(command => command.id === id);
@@ -87,6 +87,11 @@ describe('shortcut matching', () => {
     expect(shortcutFor(event('ArrowLeft', { metaKey: true, altKey: true }))).toBe('previous-tab');
     expect(shortcutFor(event('ArrowLeft', { altKey: true }))).toBe('back');
     expect(shortcutFor(event('t', { ctrlKey: true, metaKey: true }))).toBeUndefined();
+  });
+
+  it('maps a tab id back to its digit, for keys and for the macOS Window menu alike', () => {
+    for (let digit = 1; digit <= 9; digit++) expect(tabDigit(tabShortcutId(digit))).toBe(digit);
+    for (const id of [undefined, 'close-tab', 'select-tab-0', 'select-tab-10', 'select-tab-', 'select-tab-x']) expect(tabDigit(id)).toBeUndefined();
   });
 
   it('selects tab 1…9 with Alt or ⌘ plus the digit, whatever the digit types', () => {
