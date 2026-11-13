@@ -13,7 +13,7 @@ import { COMMANDS, shortcutFor, shortcutReference, unavailableReason } from './c
 import { appearance, initAppearance, onAppearanceChange, allPalettes, pageTones, saveAppearance, scheme, type AppearanceMode } from './theme';
 import { appearanceSummary, createAppearanceSheet, paletteIcon } from './appearance';
 import { createAssistantPanel } from './assistant-panel';
-import { DRAG_SLOP, Panner } from './pan';
+import { DRAG_SLOP, Panner, type Offset } from './pan';
 import { MIN_SPREAD_WIDTH, pagesLabel, spreadPages } from './spread';
 import { assignShelfSlots, closeHome, fillHomePictures, homeSections, homeTypes, renderHome } from './home';
 import { repaintCovers } from './cards';
@@ -21,7 +21,7 @@ import { canThumbnail, createThumbnailStore } from './thumbnails';
 import { createPageStrip, MIN_PANEL_HEIGHT } from './page-strip';
 import { DEFAULT_LIMITS, migrateLegacyZoom, stepZoom, wheelFactor, ZOOM_MODEL, zoomPercent, type Point as ZoomPoint } from './zoom';
 import { createZoomGesture } from './zoom-gesture';
-import { holdView, type Hold } from './zoom-anchor';
+import { holdView, type Anchor, type Hold, type Spot } from './zoom-anchor';
 import { createZoomMenu } from './zoom-menu';
 import { createProgressPreview } from './progress-preview';
 import { TabList, type SavedTab } from './tabs';
@@ -177,7 +177,7 @@ function updateViewControls() {
   // Fixed-layout EPUB rebuilds its renderer when the page layout changes; follow it.
   const scroller = reader.scroller?.();
   if (scroller !== pannedScroller) { pannedScroller = scroller; pan.attach(scroller, activeHost); }
-  pan.refresh(position?.spread);
+  pan.refresh(position?.spread, options.fitted);
   // The level is always the real scale; a fit is a mode that follows the window, and the adapter says what scale it came to.
   const fitted = options.fitted, width = options.fit === 'width', current = zoomLevel();
   const level = `${zoomPercent(current)}%`;
@@ -827,14 +827,18 @@ $('menu-palette').onclick = () => { closeDialog($<HTMLDialogElement>('menu')); o
 if (desktop) document.querySelectorAll<HTMLElement>('#menu [data-desktop]').forEach(item => { item.hidden = false; });
 /**
  * What a zoom or fit change holds still (see zoom-anchor.ts): a zoom, the centre of the view; fit width, the line at its top, so the reading
- * position survives; fit page shows the whole page and centres it. A wheel or pinch gesture holds the point under the pointer itself.
+ * position survives; fit page shows the whole page and centres it. A wheel or pinch gesture passes the point under the pointer itself.
  */
 const holdFor = (next: Partial<ReaderOptions>): Hold | false => next.fitted === false ? 'centre' : next.fitted && next.fit === 'width' ? 'top' : false;
-async function changeOptions(next: Partial<ReaderOptions>, hold: Hold | false = holdFor(next)) {
+async function changeOptions(next: Partial<ReaderOptions>, hold: Hold | Spot | false = holdFor(next)) {
   if (!reader) return;
   const zooms = 'zoom' in next || 'fit' in next || 'fitted' in next;
-  if (zooms) pan.recenter(); // A slid page goes back first, so the point held is measured where the page lies.
-  const open = reader, held = zooms && hold ? holdView(open.scroller?.(), hold) : undefined;
+  const open = reader, host = open.scroller?.();
+  // The point is read where the page is drawn, slid or not; only then does a slid page go back, so the redrawn page starts from its natural place.
+  const spot = zooms && hold ? typeof hold === 'string' ? holdView(host, hold) : hold : undefined;
+  if (zooms) pan.recenter();
+  // Fit width wants the line at the top only as far as the page scrolls: a fit may centre, so it never slides the page.
+  const held: Anchor | undefined = host && spot && { ...spot, host, ...(hold === 'top' ? {} : { slide: (offset: Offset) => pan.slideTo(offset) }) };
   const previous = options; options = { ...options, ...next };
   try {
     await open.setOptions(options, held);
@@ -877,7 +881,7 @@ const zoomGesture = createZoomGesture({
   scroller: () => reader?.mode === 'fixed' ? reader.scroller?.() : undefined,
   zoom: zoomLevel,
   limits: zoomLimits,
-  commit: zoom => changeOptions({ fitted: false, zoom }, false), // The gesture puts the point under the pointer back itself.
+  commit: (zoom, spot) => changeOptions({ fitted: false, zoom }, spot ?? false),
 });
 let pinching = false, pinchScale = 1;
 /** The WebKit-only gesture events: `scale` is cumulative from the start of the pinch. */

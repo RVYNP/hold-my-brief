@@ -92,11 +92,3 @@ export function zoomAbout(pose: Pose, factor: number, at: Point, min: number, ma
 export function pageFraction(pose: Pose, at: Point, size: { width: number; height: number }): Point {
   return { x: (at.x - pose.x) / (pose.scale * size.width), y: (at.y - pose.y) / (pose.scale * size.height) };
 }
-
-/**
- * The scroll offset that puts page fraction `fraction` under the pointer at `pointer` (from the scroller's
- * edge) when the page, now `size`, starts `origin` from the scroll content's edge. Callers clamp it.
- */
-export function scrollToHold(origin: number, fraction: number, size: number, pointer: number): number {
-  return origin + fraction * size - pointer;
-}
