@@ -250,6 +250,10 @@ test('only thumbnails near the view are rendered: opening, jumping far and holdi
   await openPdf(page, { count: 60 });
   await page.keyboard.press('Control+4');
   await expectPainted(page, [1, 2, 3, 4]);
+  // Turning the strip on refits the page once, after a debounce; a render it supersedes can leave a started thumbnail behind, which is a
+  // refit's doing and not a turn's. Wait for the refit to land (and for it to finish drawing) before counting.
+  await settledHeight(page);
+  await expect(page.locator('.pdf-render-status')).toHaveCount(0);
   // Page 1 is in the middle: about 7 items to its right are in view, 2 more are look-ahead, and none to its left exist.
   const opened = await quiet(page);
   expect(opened).toBeGreaterThanOrEqual(7);
@@ -645,7 +649,7 @@ test('with the strip on, the hand tool slides a fitting page above the strip, ne
   await expect(strip(page)).toBeVisible();
   await expectPainted(page, [1, 2, 3]);
   const size = await settledHeight(page), sheet = page.locator('.pdf-page');
-  await expect(page.locator('#zoom-level')).toHaveText('Fit');
+  await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', 'page');
   await page.keyboard.press('h');
   await expect(page.getByRole('button', { name: 'Hand tool' })).toHaveAttribute('aria-pressed', 'true');
 
