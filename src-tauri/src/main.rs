@@ -9,7 +9,7 @@ mod thumbnails;
 
 use serde::Serialize;
 use serde_json::Value;
-use crate::state::{Library, LibraryChange, LibraryDocument, Progress, ReadingState, Recent, Store, WindowState};
+use crate::state::{Library, LibraryChange, LibraryDocument, Progress, ReadingState, Recent, Store, TabSession, WindowState};
 use std::{
     collections::HashMap,
     fs,
@@ -42,6 +42,7 @@ struct OpenedFile {
 struct StateView {
     recents: Vec<Recent>,
     window: WindowState,
+    tabs: TabSession,
     warning: Option<String>,
 }
 
@@ -295,8 +296,14 @@ fn get_state(state: State<'_, Shared>) -> Result<StateView, String> {
     Ok(StateView {
         recents: store.saved.recents.clone(),
         window: store.saved.window.clone(),
+        tabs: store.saved.tabs.clone(),
         warning: store.warning.clone(),
     })
+}
+
+#[tauri::command]
+fn save_tabs(session: TabSession, state: State<'_, Shared>) -> Result<(), String> {
+    state.lock().map_err(|_| "Reading state is unavailable")?.save_tabs(session)
 }
 
 #[tauri::command]
@@ -564,6 +571,23 @@ fn argument_file(args: impl IntoIterator<Item = String>, cwd: &Path) -> Option<P
         .map(|p| if p.is_absolute() { p } else { cwd.join(p) })
 }
 
+/// macOS ships "Close Window" on ⌘W in its default menu, and a menu accelerator is taken before the page sees the key. ⌘W closes
+/// a tab here, so that item becomes "Close Tab" and tells the page; the page closes the window itself when no tab is open.
+#[cfg(target_os = "macos")]
+fn install_menu(app: &tauri::App) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem, MenuItemKind};
+    let menu = Menu::default(app.handle())?;
+    for item in menu.items()? {
+        let MenuItemKind::Submenu(submenu) = item else { continue };
+        let entries = submenu.items()?;
+        let Some(index) = entries.iter().position(|entry| matches!(entry, MenuItemKind::Predefined(predefined) if predefined.text().is_ok_and(|text| text.starts_with("Close")))) else { continue };
+        submenu.remove(&entries[index])?;
+        submenu.insert(&MenuItem::with_id(app, "close-tab", "Close Tab", true, Some("CmdOrCtrl+W"))?, index)?;
+    }
+    app.set_menu(menu)?;
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
@@ -579,6 +603,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             open_file,
             get_state,
+            save_tabs,
             get_library,
             reading_progress,
             edit_library,
@@ -616,6 +641,8 @@ fn main() {
             let shared = Arc::new(Mutex::new(Store::load(directory.join("state.json"))));
             app.manage(shared.clone());
             app.manage(thumbnails::ThumbnailCache::new(app.path().app_cache_dir()?.join("thumbs")));
+            #[cfg(target_os = "macos")]
+            install_menu(app)?;
             let window = app
                 .get_webview_window("main")
                 .ok_or("Main window is missing")?;
@@ -659,6 +686,11 @@ fn main() {
                         .app_handle()
                         .emit("reader-warning", "Drop one document at a time.");
                 }
+            }
+        })
+        .on_menu_event(|app, event| {
+            if event.id() == "close-tab" {
+                let _ = app.emit("close-tab-request", ());
             }
         })
         .on_window_event(|window, event| {

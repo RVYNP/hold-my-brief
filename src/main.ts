@@ -1,10 +1,10 @@
 import './style.css';
 import { defaultOptions, type Position, type ReaderAdapter, type ReaderOptions } from './types';
 import { nudgeFor, parsePlacement, placementOf, resolvePlacement, serialisePlacement, type Placement, type Point } from './view-controls-position';
-import { desktop, native, state, browserFile, persist, openExternal, confirmDocument, openLibraryDocument, chooseDocument, getLibrary, imageFormats, type Opened, type Recent, type WindowState } from './bridge';
+import { desktop, native, state, browserFile, persist, openExternal, confirmDocument, touchDocument, openLibraryDocument, chooseDocument, getLibrary, imageFormats, locateLibraryDocument, saveTabs, type Opened, type Recent, type WindowState } from './bridge';
 import { emptyLibrary, type Library } from './catalog-types';
 import { createLibrary } from './library';
-import { progressOf, type Progress } from './progress';
+import { formatProgress, progressOf, type Progress } from './progress';
 import { createLibraryRail, openedOrder, railItems } from './library-rail';
 import { ImageAdapter } from './adapters/image';
 import { createPalette } from './palette';
@@ -24,13 +24,16 @@ import { createZoomGesture } from './zoom-gesture';
 import { holdView, type Hold } from './zoom-anchor';
 import { createZoomMenu } from './zoom-menu';
 import { createProgressPreview } from './progress-preview';
+import { TabList, type SavedTab } from './tabs';
+import { createTabStrip, type TabView } from './tab-strip';
 initAppearance();
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-  <header class="toolbar" data-tauri-drag-region><button id="library-toggle" class="icon-button" aria-label="Document library" aria-controls="library-root" aria-expanded="false" title="Document library (Ctrl+B)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16m-3-12v8"/></svg></button><button id="ask" class="title" aria-haspopup="dialog" aria-keyshortcuts="Control+K" title="Go to, find or run a command (Ctrl+K)"><svg class="ask-mark" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M9.94 15.5a2 2 0 0 0-1.44-1.44l-6.13-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.13a.5.5 0 0 1 .96 0l1.58 6.13a2 2 0 0 0 1.44 1.44l6.13 1.58a.5.5 0 0 1 0 .96l-6.13 1.58a2 2 0 0 0-1.44 1.44l-1.58 6.13a.5.5 0 0 1-.96 0z"/></svg><strong id="filename">Hold My Brief</strong><span id="filekind">A reader that holds.</span><span class="visually-hidden">. Go to, find or run a command</span><kbd class="ask-key" aria-hidden="true">Ctrl K</kbd></button><button id="pin" class="icon-button" aria-label="Pin" aria-pressed="false" title="Always on top (Ctrl+Shift+T)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg></button><button id="lock" class="icon-button" aria-label="Lock" aria-pressed="false" title="Lock dimensions (Ctrl+Shift+L)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></button><button id="menu-toggle" class="icon-button" aria-label="Reader menu" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button><div class="caption" role="group" aria-label="Window"><button id="caption-minimize" aria-label="Minimize" title="Minimize"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5.5h10" stroke="currentColor"/></svg></button><button id="caption-maximize" aria-label="Maximize" title="Maximize"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" aria-hidden="true"><rect class="caption-max" x=".5" y=".5" width="9" height="9"/><path class="caption-restore" d="M2.5 2.5V.5h7v7h-2M.5 2.5h7v7h-7z"/></svg></button><button id="caption-close" aria-label="Close" title="Close"><svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" aria-hidden="true"><path d="M.5.5l9 9m0-9l-9 9"/></svg></button></div></header>
+  <header class="toolbar" data-tauri-drag-region><button id="library-toggle" class="icon-button" aria-label="Document library" aria-controls="library-root" aria-expanded="false" title="Document library (Ctrl+B)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16m-3-12v8"/></svg></button><nav id="tab-strip" class="tab-strip" aria-label="Open documents" data-tauri-drag-region><button id="home-tab" class="tab-home" role="tab" aria-label="Home" title="Home"></button><div id="tab-list" class="tab-list" role="tablist" aria-label="Documents"></div><button id="tab-add" class="tab-add" aria-label="New tab" title="New tab"></button><button id="tab-overflow" class="tab-overflow" aria-label="All tabs" title="All tabs" aria-haspopup="menu" aria-expanded="false" hidden></button></nav><button id="title" class="title" aria-haspopup="menu" aria-expanded="false" title="Open tabs"><strong id="filename">Hold My Brief</strong><span id="filekind">A reader that holds.</span><span id="tab-count" class="tab-count"></span></button><button id="pin" class="icon-button" aria-label="Pin" aria-pressed="false" title="Always on top (Ctrl+Shift+T)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg></button><button id="lock" class="icon-button" aria-label="Lock" aria-pressed="false" title="Lock dimensions (Ctrl+Shift+L)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></button><button id="menu-toggle" class="icon-button" aria-label="Reader menu" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button><div class="caption" role="group" aria-label="Window"><button id="caption-minimize" aria-label="Minimize" title="Minimize"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5.5h10" stroke="currentColor"/></svg></button><button id="caption-maximize" aria-label="Maximize" title="Maximize"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" aria-hidden="true"><rect class="caption-max" x=".5" y=".5" width="9" height="9"/><path class="caption-restore" d="M2.5 2.5V.5h7v7h-2M.5 2.5h7v7h-7z"/></svg></button><button id="caption-close" aria-label="Close" title="Close"><svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" aria-hidden="true"><path d="M.5.5l9 9m0-9l-9 9"/></svg></button></div></header>
   <aside id="notice" role="status" hidden><span></span><button id="retry-save" hidden>Retry save</button><button id="dismiss-notice" aria-label="Dismiss message">×</button></aside>
   <div id="reader-layout"><div id="loading" role="status" hidden><span></span><button id="cancel">Cancel</button></div><div id="library-root"></div><nav id="library-rail"></nav>
   <main id="workspace"><section id="empty"><div class="book-mark" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M9 3v18m4-13h3m-3 4h3"/></svg></div><p class="eyebrow">KEEP YOUR PLACE</p><h1>Hand it over.</h1><p>Drop a brief and it stays pinned<br>exactly where you leave it.</p><button id="empty-open" class="primary">Hold a brief <span>↗</span></button><p class="formats">PDF · EPUB · MARKDOWN · TEXT</p><div id="recents"></div><p id="preview-note" hidden>Browser preview · Pin and size lock are available in the desktop app.</p></section>
+  <section id="tab-state" hidden><h2 id="tab-state-title"></h2><p id="tab-state-detail"></p><div class="tab-state-actions"><button id="tab-state-primary" class="primary"></button><button id="tab-state-close">Close tab</button></div></section>
   <div id="view-controls" role="group" aria-label="View controls" hidden><button id="view-grip" type="button" aria-label="Move view controls" title="Drag to move · double-click to reset"><svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" aria-hidden="true"><circle cx="2" cy="3" r="1"/><circle cx="6" cy="3" r="1"/><circle cx="2" cy="7" r="1"/><circle cx="6" cy="7" r="1"/><circle cx="2" cy="11" r="1"/><circle cx="6" cy="11" r="1"/></svg></button><button id="zoom-out" aria-label="Zoom out" title="Zoom out (Ctrl −)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button><button id="zoom-level" type="button"><span>Fit</span><svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 3l2.5 2.5L6.5 3"/></svg></button><button id="zoom-in" aria-label="Zoom in" title="Zoom in (Ctrl +)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button><span class="view-sep" aria-hidden="true"></span><button id="hand-tool" aria-label="Hand tool" aria-pressed="false" aria-disabled="false" title="Hand tool: drag to pan (H)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg></button><span id="view-layout" class="view-group" role="group" aria-label="Page layout" hidden><span class="view-sep" aria-hidden="true"></span><button id="view-single" aria-label="Single page" aria-pressed="true" title="Single page"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg></button><button id="view-spread" aria-label="Two pages" aria-pressed="false" title="Two-page spread (Ctrl 3)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></button></span><span id="view-previews" class="view-group" hidden><span class="view-sep" aria-hidden="true"></span><button id="page-strip-toggle" aria-label="Page previews" aria-pressed="false" title="Page previews (Ctrl 4)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="10" rx="2"/><rect x="3" y="17" width="4.5" height="4" rx="1"/><rect x="9.75" y="17" width="4.5" height="4" rx="1"/><rect x="16.5" y="17" width="4.5" height="4" rx="1"/></svg></button></span></div></main>
   </div>
   <footer><button id="previous" aria-label="Previous page" title="Previous page (PgUp)" disabled>←</button><button id="position" title="Go to location (Ctrl+G)" disabled>Ready when you are</button><button id="next" aria-label="Next page" title="Next page (PgDn)" disabled>→</button><input id="progress" type="range" aria-label="Document position" title="Click or drag to jump through the document" min="0" max="100" step="1" value="0" disabled></footer>
@@ -94,6 +97,23 @@ let activeHost: HTMLElement | undefined;
 let cancelPending: (() => void) | undefined;
 const pan = new Panner();
 let pannedScroller: HTMLElement | undefined;
+/**
+ * The documents open as tabs. `reader`, `active`, `options`, `position`, `activeHost`, `pannedScroller` and `scanNoticeShown` above
+ * are the working copy of the tab that is showing (`shown`); `leave` takes them back into the tab, `enter` loads the next tab's into them.
+ * Every other tab holds its own reader and host (live) or only its saved place (hibernated), see `hibernate`.
+ */
+type Tab = {
+  path: string; name: string; format: string;
+  doc?: Opened; reader?: ReaderAdapter; host?: HTMLElement;
+  options: ReaderOptions; position?: Position; hand: boolean; stripScroll?: number; find?: string; scanNoticeShown: boolean;
+  /** Where a hibernated tab picks up again; absent for a tab never opened this session, which takes its saved place from the store. */
+  resume?: { locator: Position['locator']; options: ReaderOptions };
+  problem?: { kind: 'missing' | 'failed'; message: string };
+};
+const tabs = new TabList<Tab>();
+let shown: Tab | undefined;
+/** The tab a pending open is filling, while the loading notice is up. */
+let loadingTarget: Tab | undefined;
 /** The scan notice is shown once per opened document; opening a document re-arms it. */
 let scanNoticeShown = false;
 
@@ -115,7 +135,7 @@ document.addEventListener('pointerdown', down => {
 }, true);
 function fail(error: unknown) { notify(error instanceof Error ? error.message : String(error)); }
 function updateWindow(next: WindowState) { windowState = next; $('pin').setAttribute('aria-pressed', String(next.pinned)); $('pin').title = next.pinned ? 'Pinned on top (Ctrl+Shift+T)' : 'Always on top (Ctrl+Shift+T)'; $('lock').setAttribute('aria-pressed', String(next.locked)); $('lock').title = next.locked ? 'Size locked (Ctrl+Shift+L)' : 'Lock dimensions (Ctrl+Shift+L)'; $<HTMLButtonElement>('caption-maximize').disabled = next.locked; }
-function showPosition(p: Position) {
+function showPosition(p: Position, save = true) {
   position = p;
   const percent = Math.max(0, Math.min(100, p.fraction * 100));
   const label = active?.format === 'epub' && reader?.mode === 'paginated' ? `${p.label} position` : `${p.label} · ${reader?.mode === 'fixed' ? '' : '≈'}${Math.round(percent)}% position`;
@@ -128,7 +148,7 @@ function showPosition(p: Position) {
     scrubber.disabled = Number(scrubber.max) <= Number(scrubber.min);
     updateScrubValue();
   }
-  dirty = true; clearTimeout(saveTimer); saveTimer = setTimeout(() => void flush(), 650);
+  if (save) { dirty = true; clearTimeout(saveTimer); saveTimer = setTimeout(() => void flush(), 650); }
   updateViewControls();
 }
 function updateScrubValue(preview = false) {
@@ -166,6 +186,7 @@ function updateViewControls() {
   // An image-only page is announced here, never drawn over the page. Find reports the same limit.
   const imageOnly = position?.imageOnly ? "Image-only page: text can't be selected or searched" : '';
   $('filekind').textContent = where.replace(/^(?:Pages?|Line) ([\d–-]+) of (\d+)(?: · .*)?$/, '$1 / $2');
+  paintTabs();
   $('filekind').title = [where, `${active.format.toUpperCase()} · ${kind}${pan.hand ? ' · Hand' : ''}`, imageOnly, waiting].filter(Boolean).join('\n');
   const spreads = !!reader.spreads, spread = spreads && options.spread;
   const toggles = [$<HTMLButtonElement>('spread-toggle'), $<HTMLButtonElement>('view-spread')];
@@ -347,8 +368,8 @@ function showDialog(id: string) {
   const dialog = $(id);
   if (!(dialog instanceof HTMLDialogElement)) return;
   if (dialog.classList.contains('drop')) {
-    const title = $('ask').getBoundingClientRect(), width = Math.min(320, innerWidth - 12);
-    dialog.style.top = `${Math.round($('ask').closest('header')!.getBoundingClientRect().bottom + 4)}px`;
+    const title = ($('tab-strip').offsetParent ? $('tab-strip') : $('title')).getBoundingClientRect(), width = Math.min(320, innerWidth - 12);
+    dialog.style.top = `${Math.round($('title').closest('header')!.getBoundingClientRect().bottom + 4)}px`;
     dialog.style.left = `${Math.round(Math.max(6, Math.min(title.left, innerWidth - width - 6)))}px`;
   }
   dialog.showModal();
@@ -364,7 +385,7 @@ document.querySelectorAll<HTMLDialogElement>('dialog.drop').forEach(dialog => di
   if (event.target === dialog && (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom)) closeDialog(dialog);
 }));
 const library = createLibrary($('library-root'), {
-  open: path => load(() => openLibraryDocument(path), path.split(/[\\/]/).pop()),
+  open: path => openPath(path),
   error: fail,
   changed: (next, progress) => { homeLibrary = next; homeProgress = { ...progress }; if ($('empty').classList.contains('is-home')) paintHome(); paintRail(); },
   progressChanged: progress => { homeProgress = { ...progress }; if ($('empty').classList.contains('is-home')) paintHome(); paintRail(); },
@@ -375,7 +396,7 @@ $('library-toggle').onclick = () => library.toggle();
 // The library closed is a rail of the latest recents. It shares Home's picture store, so a cover made for one is there for the other.
 const rail = createLibraryRail($('library-rail'), {
   toggle: () => library.toggle(),
-  open: (path, name) => { void load(() => openLibraryDocument(path), name); },
+  open: (path, name) => { void openPath(path, name); },
   picture: (path, format, alive) => homeThumbs.request(path, format, alive),
   peek: path => homeThumbs.peek(path),
   epub: (path, alive) => homeThumbs.loadEpub(path, alive),
@@ -442,7 +463,7 @@ const assistant = createAssistantPanel($('reader-layout'), {
     library: async () => (await getLibrary()).documents,
     filterLibrary: change => library.filter(change),
     colourNames: library.colourNames,
-    open: doc => load(() => openLibraryDocument(doc.path), doc.name),
+    open: doc => openPath(doc.path, doc.name),
     setAppearance: change => {
       const kept = appearance();
       saveAppearance({
@@ -473,7 +494,9 @@ async function command(id: string) {
   const entry = COMMANDS.find(candidate => candidate.id === id);
   const reason = entry && unavailableReason(entry, { hasDocument: Boolean(reader), desktop, format: active?.format });
   if (reason) { notify(reason); return; }
-  if (id === 'open') openFile();
+  if (id === 'open' || id === 'new-tab') openFile();
+  else if (id === 'close-tab') { if (shown) closeTab(shown.path); }
+  else if (id === 'next-tab' || id === 'previous-tab') { const next = tabs.neighbour(id === 'next-tab' ? 1 : -1); if (next) selectTab(next.path); }
   else if (id === 'library') library.toggle();
   else if (id === 'library-board') library.board();
   else if (id === 'library-side') library.setSide(library.side() === 'left' ? 'right' : 'left');
@@ -497,14 +520,25 @@ async function adapter(format: string): Promise<ReaderAdapter> {
   if (Object.hasOwn(imageFormats, format)) return new ImageAdapter();
   return new (await import('./adapters/text')).TextAdapter();
 }
-async function load(open: () => Promise<Opened | null>, label = 'document'): Promise<boolean> {
+/**
+ * Opens a document into a tab: a new one at `at` (the end by default), or `target`, a tab that is showing but holds nothing yet
+ * (restored, hibernated, or one whose open failed). A document that is already open in a live tab is only shown. The page is built
+ * off screen first and swapped in only once it is ready, so a slow or cancelled open leaves every other tab exactly as it was.
+ */
+async function load(open: () => Promise<Opened | null>, label = 'document', { target, at }: { target?: Tab; at?: number } = {}): Promise<boolean> {
   const token = ++request; cancelPending?.();
+  loadingTarget = target; paintTabState();
   $('loading').hidden = false; $('loading').querySelector('span')!.textContent = `Opening ${label}…`;
-  let candidate: ReaderAdapter | undefined, staging: HTMLElement | undefined;
+  let candidate: ReaderAdapter | undefined, staging: HTMLElement | undefined, opening = true;
   const urls: string[] = [];
   cancelPending = () => { candidate?.destroy(); staging?.remove(); for (const url of urls) URL.revokeObjectURL(url); };
   try {
     await flush(); const doc = await open(); if (!doc || token !== request) return false;
+    opening = false;
+    // A dialog or a CLI request only now says which document it is: if it is already open, that tab is the one to fill or show.
+    const tab = target ?? tabs.find(doc.path) ?? { path: doc.path, name: doc.name, format: doc.format, options: { ...defaultOptions }, hand: false, scanNoticeShown: false };
+    if (tab.reader) { doc.bytes = new Uint8Array(); selectTab(tab.path); void touch(tab); return true; }
+    if (tab.resume) doc.previousState = { locator: tab.resume.locator, options: tab.resume.options };
     $('loading').querySelector('span')!.textContent = `Opening ${doc.name}…`;
     candidate = await adapter(doc.format); if (token !== request) return false;
     stripSpace(candidate); // A page-preview strip's room is there before the document is fitted, so opening never refits it.
@@ -514,7 +548,8 @@ async function load(open: () => Promise<Opened | null>, label = 'document'): Pro
     const prefs: ReaderOptions = { ...defaultOptions, ...saved, zoomModel: ZOOM_MODEL, ...(legacy ? { fitted: true, zoom: 1 } : {}) };
     const current = candidate;
     await candidate.open({ ...doc, bytes: doc.bytes }, staging, {
-      onPosition: p => { if (reader === current) showPosition(p); }, onError: fail, openExternal, requestPassword: password, onFrame: doc => { pan.watchFrame(doc); watchFrameZoom(doc); },
+      // The tab showing hears its reader fully; a live tab out of sight only keeps the place.
+      onPosition: p => { if (reader === current) showPosition(p); else if (tab.reader === current) tab.position = p; }, onError: fail, openExternal, requestPassword: password, onFrame: doc => { pan.watchFrame(doc); watchFrameZoom(doc); },
       resolveImage: desktop ? async relative => { const result = await native<{bytes: number[]; mime: string}>('read_relative_image', { path: doc.path, relative }); const url = URL.createObjectURL(new Blob([new Uint8Array(result.bytes)], { type: result.mime })); urls.push(url); return url; } : undefined,
     }, prefs);
     if (doc.previousState?.locator) await candidate.restore(doc.previousState.locator);
@@ -526,27 +561,188 @@ async function load(open: () => Promise<Opened | null>, label = 'document'): Pro
     await confirmDocument(doc).catch(error => notify(`Your library could not be saved. Reading is still available. ${error instanceof Error ? error.message : String(error)}`));
     await flush();
     if (token !== request) return false;
-    zoomGesture.cancel(); reader?.destroy(); activeHost?.remove();
     doc.bytes = new Uint8Array();
-    reader = candidate; active = doc; options = prefs; activeHost = staging; staging.classList.remove('staging'); $('empty').hidden = true;
-    pannedScroller = reader.scroller?.(); pan.attach(pannedScroller, staging); scanNoticeShown = false;
-    ++scrubRequest; scrubbing = false;
-    $('filename').textContent = doc.name; $('filename').title = doc.path;
-    for (const id of ['previous', 'position', 'next']) $<HTMLButtonElement>(id).disabled = false;
-    showPosition(reader.getPosition()); staging.focus(); candidate = undefined; staging = undefined; cancelPending = undefined;
-    // Marks belong to the adapter that produced them, so a new document starts with none.
-    findBar.close();
+    Object.assign(tab, { name: doc.name, format: doc.format, doc, reader: candidate, host: staging, options: prefs, position: candidate.getPosition(), hand: false, stripScroll: undefined, find: undefined, scanNoticeShown: false, resume: undefined, problem: undefined });
+    staging.classList.remove('staging'); staging.classList.add('tab-hidden'); // `enter` shows it
+    if (!tabs.find(tab.path)) tabs.open(tab, at);
+    tabs.markLive(tab.path);
+    show(tab, true);
+    showPosition(candidate.getPosition()); // A reopened or converted document saves its place and options again.
+    staging.focus(); candidate = undefined; staging = undefined; cancelPending = undefined;
     if (doc.warning) notify(doc.warning);
+    if (tab.format === 'epub') void homeThumbs.loadEpub(tab.path, () => Boolean(tabs.find(tab.path))).then(() => paintTabs());
     if (desktop) homeRecents = (await state()).recents; // The store moves the opened document to the front.
     await library.refresh(doc.path).catch(fail);
     return true;
-  } catch (error) { if (token === request) fail(error); return false; }
-  finally { candidate?.destroy(); staging?.remove(); if (token === request) { $('loading').hidden = true; cancelPending = undefined; syncPageStrip(); } }
+  } catch (error) {
+    if (token === request) {
+      fail(error);
+      if (target && !target.reader) { target.problem = { kind: opening ? 'missing' : 'failed', message: error instanceof Error ? error.message : String(error) }; }
+    }
+    return false;
+  }
+  finally { candidate?.destroy(); staging?.remove(); if (token === request) { $('loading').hidden = true; cancelPending = undefined; loadingTarget = undefined; syncPageStrip(); paintTabState(); } }
 }
-function openFile(path?: string) { if (desktop) void load(() => chooseDocument(path), path?.split(/[\\/]/).pop()); else $<HTMLInputElement>('file-input').click(); }
-$('ask').onclick = () => openPalette(); $('empty-open').onclick = () => openFile();
-$<HTMLInputElement>('file-input').onchange = event => { const input = event.target as HTMLInputElement; if (input.files?.[0]) { const file = input.files[0]; void load(() => browserFile(file), file.name); } input.value = ''; };
-$('cancel').onclick = () => { ++request; cancelPending?.(); cancelPending = undefined; $<HTMLDialogElement>('password').close(); $('loading').hidden = true; syncPageStrip(); };
+
+/** Takes the showing tab's working copy back into the tab, saves its place, and puts it out of sight. */
+function leave(tab: Tab) {
+  void flush();
+  if (tab.reader && tab.reader === reader) { tab.options = options; tab.position = position; tab.hand = pan.hand; tab.scanNoticeShown = scanNoticeShown; tab.stripScroll = pageStrip.scrollPosition(); }
+  tab.find = findBar.isOpen() ? findBar.query() : undefined;
+  tab.host?.classList.add('tab-hidden');
+  findBar.close(); zoomGesture.cancel();
+}
+
+/** Frees a tab's reader and host, keeping where it was (and how it was viewed) so showing it again reopens it there. */
+function hibernate(tab: Tab) {
+  if (!tab.reader) return;
+  let locator = tab.position?.locator;
+  try { locator = tab.reader.getPosition().locator; } catch { /* Keep the last reported place. */ }
+  if (locator) tab.resume = { locator: structuredClone(locator), options: { ...tab.options } };
+  tab.reader.destroy(); tab.host?.remove();
+  tab.reader = tab.host = undefined;
+  tabs.markHibernated(tab.path);
+}
+
+/** Shows `next` (or Home, for none): the one place the working copy changes hands. */
+function show(next: Tab | undefined, refreshed = false) {
+  if (shown === next && !refreshed) return;
+  if (shown && shown !== next) leave(shown);
+  shown = next; tabs.activate(next?.path);
+  reader = next?.reader; active = next?.doc; options = next?.options ?? { ...defaultOptions }; position = next?.position; activeHost = next?.host;
+  scanNoticeShown = next?.scanNoticeShown ?? false; ++scrubRequest; scrubbing = false;
+  for (const path of tabs.hibernation()) hibernate(tabs.find(path)!);
+  next?.host?.classList.remove('tab-hidden');
+  pannedScroller = reader?.scroller?.(); pan.attach(pannedScroller, activeHost); if (next) pan.setHand(next.hand);
+  $('empty').hidden = Boolean(next);
+  syncPageStrip(); if (next?.stripScroll !== undefined) pageStrip.restoreScroll(next.stripScroll);
+  for (const id of ['previous', 'position', 'next']) $<HTMLButtonElement>(id).disabled = !reader;
+  if (reader && position) showPosition(position, false); else paintNoDocument();
+  activeHost?.focus();
+  if (next?.find !== undefined) findBar.open(next.find, false);
+  paintTabState(); paintTabs(); paintRail(); saveSession();
+  if (!next) paintHome();
+  else if (!next.reader && !next.problem) void reopen(next);
+}
+
+/** What the reading area, footer and title show while no document does: Home, or a tab waiting to open. */
+function paintNoDocument() {
+  $('position').textContent = 'Ready when you are'; $('position').title = 'Go to location (Ctrl+G)';
+  scrubber.value = '0'; scrubber.disabled = true; scrubber.style.setProperty('--scrub-fill', '0%');
+  $('view-controls').hidden = true; zoomMenu.close();
+  $('filekind').textContent = 'A reader that holds.'; $('filekind').title = '';
+}
+
+/** Reopens a tab that holds nothing: its place was saved when it hibernated (or by the last session), and the page comes back there. */
+function reopen(tab: Tab) { return load(() => openLibraryDocument(tab.path), tab.name, { target: tab }); }
+
+const tabTitle = (tab: Tab) => tab.format === 'epub' ? homeThumbs.epub(tab.path)?.title?.trim() || tab.name : tab.name;
+/** Where a tab is, short: "40 / 146" for pages and lines, a percentage for the rest. */
+function tabWhere(tab: Tab) {
+  const place = tab === shown ? position : tab.position;
+  if (!place) return '';
+  const pages = place.label.match(/^(?:Pages?|Line) ([\d–-]+) of (\d+)/);
+  return pages ? `${pages[1]} / ${pages[2]}` : `${Math.round(Math.max(0, Math.min(100, place.fraction * 100)))} %`;
+}
+let paintedTabs = '';
+function paintTabs() {
+  const views: TabView[] = tabs.tabs.map(tab => ({ path: tab.path, title: tabTitle(tab), format: tab.format, where: tabWhere(tab), progress: formatProgress(progressOf((tab === shown ? position : tab.position) ?? { fraction: NaN, scrub: { current: 0, total: 0, unit: 'line' } })) ?? '', active: tab === tabs.active, problem: Boolean(tab.problem) }));
+  const key = JSON.stringify([views, tabs.size]);
+  if (key === paintedTabs) return;
+  paintedTabs = key;
+  strip.paint(views, !tabs.active);
+  const here = tabs.active;
+  $('filename').textContent = here ? tabTitle(here) : 'Hold My Brief'; $('filename').title = here?.path ?? '';
+  $('tab-count').textContent = tabs.size ? String(tabs.size) : '';
+}
+
+/** The placeholder for a showing tab that has no page: its file is missing, its open failed, or it is not opened yet. */
+function paintTabState() {
+  const tab = tabs.active, waiting = Boolean(tab && !tab.reader && loadingTarget !== tab);
+  $('tab-state').hidden = !waiting || !tab;
+  if (!waiting || !tab) return;
+  const problem = tab.problem;
+  $('tab-state-title').textContent = problem?.kind === 'missing' ? 'File not found' : problem ? 'This document could not be opened' : 'Not opened yet';
+  $('tab-state-detail').textContent = problem ? `${tab.name} — ${problem.message}` : tab.name;
+  $('tab-state-primary').textContent = problem?.kind === 'missing' ? 'Locate…' : problem ? 'Try again' : 'Open';
+}
+$('tab-state-primary').onclick = () => {
+  const tab = tabs.active;
+  if (!tab) return;
+  if (tab.problem?.kind === 'missing' && desktop) {
+    void locateLibraryDocument(tab.path).then(() => { tab.problem = undefined; void reopen(tab); }).catch(fail);
+  } else if (tab.problem?.kind === 'missing') openFile();
+  else { tab.problem = undefined; void reopen(tab); }
+};
+$('tab-state-close').onclick = () => { if (tabs.active) closeTab(tabs.active.path); };
+
+/** Shows a tab, or Home for none. A tab with no page yet starts opening; opening something else meanwhile is given up. */
+function selectTab(path: string | undefined) {
+  const tab = path === undefined ? undefined : tabs.find(path);
+  if (path !== undefined && !tab) return;
+  if (tab === shown) return;
+  if (loadingTarget !== tab) cancelOpen();
+  show(tab);
+}
+
+function closeTab(path: string) {
+  const tab = tabs.find(path);
+  if (!tab) return;
+  if (loadingTarget === tab) cancelOpen();
+  const wasShown = shown === tab;
+  if (wasShown) {
+    void flush(); tab.find = undefined; findBar.close(); zoomGesture.cancel();
+    reader = undefined; syncPageStrip(); // The strip lets go of the reader before it is destroyed.
+  }
+  tab.reader?.destroy(); tab.host?.remove(); tab.reader = tab.host = undefined;
+  const next = tabs.close(path);
+  if (wasShown) { shown = undefined; show(next, true); } else { paintTabs(); saveSession(); }
+}
+
+let sessionTimer: ReturnType<typeof setTimeout> | undefined;
+/** Remembers the open tabs for the next launch; several changes in one tick are one write. */
+function saveSession() {
+  if (sessionTimer) return;
+  sessionTimer = setTimeout(() => {
+    sessionTimer = undefined;
+    const session = tabs.session((tab): SavedTab => ({ path: tab.path, name: tab.name, format: tab.format }));
+    void saveTabs(session).catch(fail);
+  });
+}
+
+const strip = createTabStrip(
+  { home: $('home-tab'), list: $('tab-list'), add: $('tab-add'), overflow: $('tab-overflow') },
+  { select: selectTab, close: closeTab, newTab: () => openFile(), move: (path, to) => { tabs.move(path, to); paintTabs(); saveSession(); } },
+  platform === 'mac' ? '⌘T' : 'Ctrl T',
+);
+$('title').onclick = () => (strip.isMenuOpen() ? strip.closeMenu() : strip.openMenu($('title')));
+
+/** Opens a library document in a tab, or shows the tab it is already in. */
+function openPath(path: string, name = path.split(/[\\/]/).pop()) { return openTab(path, () => openLibraryDocument(path), name); }
+/** `path` is the document's identity when it is known before it is read (a library path, or the path a request named). */
+async function openTab(path: string | undefined, open: () => Promise<Opened | null>, label?: string) {
+  const existing = path ? tabs.find(path) : undefined;
+  if (!existing) return load(open, label);
+  existing.problem = undefined;
+  if (shown === existing) { if (!existing.reader) void reopen(existing); } else selectTab(existing.path);
+  if (existing.reader) void touch(existing);
+  return true;
+}
+/** Opening a document that is already open still counts as opening it: it moves to the front of the recents. */
+async function touch(tab: Tab) {
+  if (!tab.doc) return;
+  try {
+    await touchDocument(tab.doc);
+    if (desktop) homeRecents = (await state()).recents;
+    await library.refresh(tab.path);
+  } catch (error) { fail(error); }
+}
+function openFile(path?: string) { if (desktop) void openTab(path, () => chooseDocument(path), path?.split(/[\\/]/).pop()); else $<HTMLInputElement>('file-input').click(); }
+$('empty-open').onclick = () => openFile();
+$<HTMLInputElement>('file-input').onchange = event => { const input = event.target as HTMLInputElement; if (input.files?.[0]) { const file = input.files[0]; void openTab(undefined, () => browserFile(file), file.name); } input.value = ''; };
+/** Gives up the pending open; every tab stays as it was. */
+function cancelOpen() { ++request; cancelPending?.(); cancelPending = undefined; loadingTarget = undefined; $<HTMLDialogElement>('password').close(); $('loading').hidden = true; syncPageStrip(); paintTabState(); }
+$('cancel').onclick = cancelOpen;
 $('dismiss-notice').onclick = () => { $('notice').hidden = true; };
 $('retry-save').onclick = () => { dirty = true; void flush(); };
 async function navigate(action: Parameters<ReaderAdapter['navigate']>[0]) { try { await reader?.navigate(action); } catch (error) { fail(error); } }
@@ -677,7 +873,8 @@ document.addEventListener('keydown', event => {
   const inStrip = target instanceof Node && pageStrip.element.contains(target);
   // Catalog shortcuts go through the same dispatcher as the menu and the palette.
   const shortcut = shortcutFor(event);
-  if (shortcut === 'back') operation = () => void navigate('back');
+  if (shortcut?.startsWith('select-tab-')) operation = () => { const tab = tabs.byNumber(Number(shortcut.slice('select-tab-'.length))); if (tab) selectTab(tab.path); };
+  else if (shortcut === 'back') operation = () => void navigate('back');
   else if (shortcut === 'page-strip' && reader && !reader.setPreviews) return; // Only a PDF has previews; for any other document the key is not ours.
   else if (shortcut) operation = () => void command(shortcut).catch(fail);
   else if (key === 'h' && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey && !event.repeat && pan.pannable && (target === document.body || target instanceof Node && (activeHost?.contains(target) || $('view-controls').contains(target)))) operation = toggleHand;
@@ -690,7 +887,7 @@ document.addEventListener('keydown', event => {
   }
   if (operation) { event.preventDefault(); operation(); }
 });
-if (!desktop) { $('preview-note').hidden = false; document.addEventListener('dragover', event => event.preventDefault()); document.addEventListener('drop', event => { event.preventDefault(); if (event.dataTransfer?.files.length !== 1) return notify('Drop one document at a time.'); const file = event.dataTransfer.files[0]; void load(() => browserFile(file), file.name); }); }
+if (!desktop) { $('preview-note').hidden = false; document.addEventListener('dragover', event => event.preventDefault()); document.addEventListener('drop', event => { event.preventDefault(); if (event.dataTransfer?.files.length !== 1) return notify('Drop one document at a time.'); const file = event.dataTransfer.files[0]; void openTab(undefined, () => browserFile(file), file.name); }); }
 function paintHome() {
   const empty = $('empty');
   splashHtml ??= empty.innerHTML;
@@ -702,7 +899,7 @@ function paintHome() {
   }
   const generation = ++homePicture;
   renderHome(empty, rows, {
-    open: (path, name) => { void load(() => openLibraryDocument(path), name); },
+    open: (path, name) => { void openPath(path, name); },
     openFile: () => openFile(),
     viewAll: scope => library.browse(scope),
     picture: { can: canThumbnail, ratio: path => homeThumbs.ratio(path), peek: path => homeThumbs.peek(path) },
@@ -730,12 +927,16 @@ async function initialize() {
   await library.refresh().catch(fail);
   homeLibrary = await getLibrary().catch(() => emptyLibrary());
   paintHome(); paintRail();
+  for (const entry of saved.tabs.tabs) tabs.open({ ...entry, options: { ...defaultOptions }, hand: false, scanNoticeShown: false });
+  show(saved.tabs.active === null ? undefined : tabs.tabs[saved.tabs.active], true);
   if (desktop) {
     const { listen } = await import('@tauri-apps/api/event');
+    const { getCurrentWindow } = await import('@tauri-apps/api/window');
     await listen<string>('open-request', event => openFile(event.payload));
     await listen<WindowState>('window-state', event => updateWindow(event.payload));
+    // macOS routes ⌘W through its menu (see install_menu in main.rs). With no tab to close, it closes the window as it always did.
+    await listen('close-tab-request', () => { if (shown) closeTab(shown.path); else void getCurrentWindow().close(); });
     await listen<string | null>('reader-warning', event => { if (event.payload) notify(event.payload); });
-    const { getCurrentWindow } = await import('@tauri-apps/api/window');
     const appWindow = getCurrentWindow();
     let closing = false; await appWindow.onCloseRequested(async event => { if (closing) return; event.preventDefault(); await flush(); closing = true; await appWindow.close(); });
     if (platform === 'windows') {

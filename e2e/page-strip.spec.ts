@@ -420,7 +420,7 @@ test('Ctrl 4 and the palette command toggle previews for a PDF; neither exists f
   await page.locator('#file-input').setInputFiles(markdown());
   await expect(page.locator('#filename')).toHaveText('notes.md');
   await expect(strip(page)).toBeHidden();
-  await expect.poll(() => page.locator('.reader-host').evaluate(el => el.clientHeight)).toBe(markdownHeight);
+  await expect.poll(() => page.locator('.reader-host:not(.tab-hidden)').evaluate(el => el.clientHeight)).toBe(markdownHeight);
   await page.locator('#file-input').setInputFiles({ name: 'strip.pdf', mimeType: 'application/pdf', buffer: pagedPdf(PAGES) });
   await expect(page.locator('#position')).toContainText('Page 1 of 9');
   await expect(strip(page)).toBeVisible();

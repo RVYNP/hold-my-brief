@@ -59,12 +59,13 @@ test('the palette filters as you type and runs the chosen command', async ({ pag
   await expect(page.locator('#position')).toContainText('120');
 });
 
-test('the title opens the palette, a typed number goes there and free text finds it', async ({ page }) => {
+test('the menu opens the palette, a typed number goes there and free text finds it', async ({ page }) => {
   await page.goto('/');
   await page.locator('#file-input').setInputFiles(textDocument);
   await expect(page.locator('#filename')).toHaveText('palette.txt');
 
-  await page.locator('#ask').click();
+  await page.getByRole('button', { name: 'Reader menu' }).click();
+  await page.locator('#menu-palette').click();
   await expect(page.locator('#palette-input')).toBeFocused();
   await page.locator('#palette-input').fill('page 150');
   await expect(page.locator('.palette-row').first()).toHaveText('Go to 150');

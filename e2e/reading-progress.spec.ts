@@ -61,7 +61,7 @@ test('a PDF row says which page the reader got to, the rail cover repeats it, an
 test('an EPUB row shows a percentage, and a text file does too', async ({ page }) => {
   await start(page);
   await page.locator('#file-input').setInputFiles({ name: 'progress.epub', mimeType: 'application/epub+zip', buffer: await longEpub() });
-  await expect(page.locator('#filename')).toHaveText('progress.epub');
+  await expect(page.locator('#filename')).toHaveAttribute('title', /progress\.epub$/); // The tab is titled by the book's own title once read.
   await expect(page.locator('#position')).toContainText('One');
   await goTo(page, '40%');
   await expect(page.locator('#position')).toContainText(/≈(3\d|4\d)%/);

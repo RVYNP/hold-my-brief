@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COMMANDS, INTERFACE_SHORTCUTS, SHORTCUTS, appliesTo, groupCommands, parseIntent, scoreCommand, searchCommands, shortcutFor, shortcutReference, unavailableReason, type Command } from '../src/commands';
+import { COMMANDS, INTERFACE_SHORTCUTS, SHORTCUTS, appliesTo, tabShortcutId, groupCommands, parseIntent, scoreCommand, searchCommands, shortcutFor, shortcutReference, unavailableReason, type Command } from '../src/commands';
 
 const byId = (id: string): Command => {
   const found = COMMANDS.find(command => command.id === id);
@@ -30,7 +30,7 @@ describe('command catalog', () => {
 });
 
 describe('shortcut matching', () => {
-  const event = (key: string, modifiers: Partial<{ ctrlKey: boolean; altKey: boolean; shiftKey: boolean; metaKey: boolean }> = {}) => ({ key, ctrlKey: false, altKey: false, shiftKey: false, ...modifiers });
+  const event = (key: string, modifiers: Partial<{ ctrlKey: boolean; altKey: boolean; shiftKey: boolean; metaKey: boolean; code: string }> = {}) => ({ key, ctrlKey: false, altKey: false, shiftKey: false, ...modifiers });
 
   it('reaches the palette on Ctrl+K and not on a bare k', () => {
     expect(shortcutFor(event('k', { ctrlKey: true }))).toBe('command-palette');
@@ -45,7 +45,8 @@ describe('shortcut matching', () => {
   it('requires exact modifier state so Ctrl+Shift+K is not Ctrl+K', () => {
     expect(shortcutFor(event('k', { ctrlKey: true, shiftKey: true }))).toBeUndefined();
     expect(shortcutFor(event('t', { ctrlKey: true, shiftKey: true }))).toBe('pin');
-    expect(shortcutFor(event('t', { ctrlKey: true }))).toBeUndefined();
+    expect(shortcutFor(event('t', { ctrlKey: true }))).toBe('new-tab');
+    expect(shortcutFor(event('k', { ctrlKey: true, altKey: true }))).toBeUndefined();
   });
 
   it('reaches zoom-in through both + and = but not from the bare keys', () => {
@@ -66,10 +67,41 @@ describe('shortcut matching', () => {
     expect(shortcutFor(event('o', { ctrlKey: true, metaKey: true }))).toBeUndefined();
   });
 
+  it('puts Actual size on Shift+0 (the physical key, which types a symbol under Shift) and frees Ctrl+1', () => {
+    expect(shortcutFor(event(')', { shiftKey: true, code: 'Digit0' }))).toBe('actual-size');
+    expect(shortcutFor(event('0', { shiftKey: true, code: 'Digit0' }))).toBe('actual-size');
+    expect(shortcutFor(event('0', { code: 'Digit0' }))).toBeUndefined();
+    expect(shortcutFor(event('0', { ctrlKey: true, code: 'Digit0' }))).toBe('fit-page');
+    expect(shortcutFor(event('1', { ctrlKey: true, code: 'Digit1' }))).toBeUndefined();
+    expect(byId('actual-size').shortcut).toBe('Shift 0');
+  });
+
+  it('reaches the tab commands with Ctrl or, on macOS, ⌘', () => {
+    expect(shortcutFor(event('t', { ctrlKey: true }))).toBe('new-tab');
+    expect(shortcutFor(event('t', { metaKey: true }))).toBe('new-tab');
+    expect(shortcutFor(event('w', { ctrlKey: true }))).toBe('close-tab');
+    expect(shortcutFor(event('w', { metaKey: true }))).toBe('close-tab');
+    expect(shortcutFor(event('Tab', { ctrlKey: true }))).toBe('next-tab');
+    expect(shortcutFor(event('Tab', { ctrlKey: true, shiftKey: true }))).toBe('previous-tab');
+    expect(shortcutFor(event('ArrowRight', { ctrlKey: true, altKey: true }))).toBe('next-tab');
+    expect(shortcutFor(event('ArrowLeft', { metaKey: true, altKey: true }))).toBe('previous-tab');
+    expect(shortcutFor(event('ArrowLeft', { altKey: true }))).toBe('back');
+    expect(shortcutFor(event('t', { ctrlKey: true, metaKey: true }))).toBeUndefined();
+  });
+
+  it('selects tab 1…9 with Alt or ⌘ plus the digit, whatever the digit types', () => {
+    for (let digit = 1; digit <= 9; digit++) {
+      expect(shortcutFor(event('¡', { altKey: true, code: `Digit${digit}` }))).toBe(tabShortcutId(digit));
+      expect(shortcutFor(event(String(digit), { metaKey: true, code: `Digit${digit}` }))).toBe(tabShortcutId(digit));
+    }
+    expect(shortcutFor(event('2', { ctrlKey: true, code: 'Digit2' }))).toBe('fit-width'); // Ctrl+2…4 keep their commands.
+    expect(shortcutFor(event('1', { code: 'Digit1' }))).toBeUndefined();
+  });
+
   it('never maps one key combination to two different commands', () => {
     const seen = new Set<string>();
     for (const shortcut of SHORTCUTS) {
-      const signature = `${shortcut.ctrl ? 'c' : ''}${shortcut.alt ? 'a' : ''}${shortcut.shift ? 's' : ''}:${shortcut.key}`;
+      const signature = `${shortcut.ctrl ? 'c' : ''}${shortcut.alt ? 'a' : ''}${shortcut.shift ? 's' : ''}${shortcut.meta ? 'm' : ''}:${shortcut.code ?? shortcut.key}`;
       expect(seen.has(signature), `duplicate binding ${signature}`).toBe(false);
       seen.add(signature);
     }

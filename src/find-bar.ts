@@ -31,8 +31,10 @@ export type FindBarContext = {
 export type FindBar = {
   /** The bar element, to be inserted into the document once. */
   element: HTMLElement;
-  /** Shows the bar and focuses its field; `query`, when given, replaces the field and searches. */
-  open: (query?: string) => void;
+  /** Shows the bar and focuses its field; `query`, when given, replaces the field and searches (unless `search` is false, which only fills the field). */
+  open: (query?: string, search?: boolean) => void;
+  /** What the field holds. */
+  query: () => string;
   close: () => void;
   isOpen: () => boolean;
   /** Reruns the current query, e.g. after a document change while the bar is open. */
@@ -164,13 +166,14 @@ export function createFindBar(context: FindBarContext): FindBar {
 
   return {
     element: bar,
-    open: (query?: string) => {
+    open: (query?: string, search = true) => {
       bar.hidden = false;
       if (query !== undefined) input.value = query;
       input.focus();
       input.select();
-      if (input.value.trim()) void run();
+      if (search && input.value.trim()) void run();
     },
+    query: () => input.value,
     close,
     isOpen: () => !bar.hidden,
     refresh: () => { if (!bar.hidden) void run(); },

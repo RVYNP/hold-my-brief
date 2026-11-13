@@ -4,6 +4,7 @@ import type { Progress } from './progress';
 import { getBrowserFile, getBrowserLibrary, mutateBrowserLibrary } from './library-store';
 import type { Library, LibraryChange, LibraryDocument } from './catalog-types';
 import { applyLibraryChange, localDocument, requireCollection } from './library-model';
+import { emptySession, readSession, type TabSession } from './tabs';
 export type { Library, LibraryChange, LibraryDocument, Collection } from './catalog-types';
 export const desktop = isTauri();
 export type WindowState = { width: number; height: number; pinned: boolean; locked: boolean };
@@ -11,15 +12,25 @@ export type Recent = { path: string; name: string; format: Format; lastOpened: n
 export type Saved = { locator: Locator; options: ReaderOptions; progress?: Progress };
 export type Opened = { id: string; path: string; name: string; format: Format; bytes: Uint8Array; previousState?: Saved; warning?: string };
 export type OpenedMeta = Omit<Opened, 'bytes'>;
-export type State = { recents: Recent[]; window: WindowState; warning?: string };
+export type State = { recents: Recent[]; window: WindowState; tabs: TabSession; warning?: string };
 export const imageFormats: Record<string, true> = { png: true, jpg: true, jpeg: true, webp: true, gif: true, avif: true, bmp: true };
 
 // Failed renders can be garbage-collected together with their pending file.
 const pendingFiles = new WeakMap<Opened, File>();
 const confirmed = new WeakSet<Opened>();
 export const native = <T>(command: string, args?: Record<string, unknown>) => invoke<T>(command, args);
+/** The browser build keeps the open tabs here. It is not under the `hold-my-brief:` prefix that "Delete saved reading data" clears, matching the desktop build, which keeps them across that too. */
+const browserTabsKey = 'hold-my-brief-tabs';
+function browserTabs(): TabSession {
+  try { return readSession(JSON.parse(localStorage.getItem(browserTabsKey) ?? 'null')); } catch { return emptySession(); }
+}
 export async function state(): Promise<State> {
-  return desktop ? native('get_state') : { recents: [], window: { width: 420, height: 620, pinned: false, locked: false } };
+  return desktop ? native<State>('get_state').then(saved => ({ ...saved, tabs: readSession(saved.tabs) })) : { recents: [], window: { width: 420, height: 620, pinned: false, locked: false }, tabs: browserTabs() };
+}
+/** Remembers which documents are open as tabs, in order, and which one is showing. */
+export async function saveTabs(session: TabSession): Promise<void> {
+  if (desktop) await native('save_tabs', { session });
+  else localStorage.setItem(browserTabsKey, JSON.stringify(session));
 }
 function fileFormat(file: File): Format {
   const ext = file.name.split('.').pop()?.toLowerCase();
@@ -130,6 +141,11 @@ export async function confirmDocument(doc: Opened): Promise<void> {
   });
   confirmed.add(doc);
   pendingFiles.delete(doc);
+}
+/** Moves a document that is already open to the front of the recents, as opening it would; nothing is read. */
+export async function touchDocument(doc: { id: string; path: string }): Promise<void> {
+  if (desktop) { await native('confirm_open', { id: doc.id, path: doc.path }); return; }
+  await mutateBrowserLibrary(library => { const existing = library.documents.find(document => document.path === doc.path); if (existing) existing.lastOpened = Date.now(); });
 }
 export async function persist(doc: Opened, locator: Locator, options: ReaderOptions, progress?: Progress) {
   if (desktop) await native('save_position', { id: doc.id, path: doc.path, name: doc.name, format: doc.format, locator, options, progress: progress ?? null });
