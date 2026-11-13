@@ -57,5 +57,6 @@ export function restoreView(anchor: Anchor) {
     if (max > 1) host[scroll] = Math.max(0, Math.min(max, wanted));
     else { host[scroll] = 0; slide[axis] = -wanted; }
   }
-  if (Math.abs(slide.x) > .25 || Math.abs(slide.y) > .25) anchor.slide?.(slide);
+  // An image is centred inside a frame at least as large as the panel, so the frame's fractions say nothing about where the picture is: it only scrolls.
+  if (!host.querySelector(':scope > .image-frame') && (Math.abs(slide.x) > .25 || Math.abs(slide.y) > .25)) anchor.slide?.(slide);
 }

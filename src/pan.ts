@@ -36,6 +36,8 @@ export const KEEP = 64;
 const MOVED = 'page-moved', MOVED_X = 'page-moved-x', MOVED_Y = 'page-moved-y';
 /** The committed PDF page or spread, or the image, that a move shifts: its box is the page. */
 const PAGE = ':scope > .pdf-page, :scope > .pdf-spread, :scope .image-frame img';
+/** What the host lays out around the page and scrolls: the page or spread, or the frame an image sits in. */
+const CONTENT = ':scope > .pdf-page, :scope > .pdf-spread, :scope > .image-frame';
 const XHTML = 'http://www.w3.org/1999/xhtml';
 const FRAME_STYLE = `html.float-hand, html.float-hand * { cursor: grab !important; -webkit-user-select: none !important; user-select: none !important; }
 html.float-hand a[href], html.float-hand a[href] * { cursor: pointer !important; }
@@ -79,6 +81,19 @@ export function clampOffset(offset: Offset, page: Box, panel: Box, keep = KEEP):
   };
   return { x: axis(offset.x, page.left, page.right, panel.left, panel.right), y: axis(offset.y, page.top, page.bottom, panel.top, panel.bottom) };
 }
+
+/**
+ * Which axes of the host hold everything the host lays out: the page, or spread, or image frame, and the host's padding around it. Read
+ * from the boxes rather than the scroll size: `scrollWidth`/`scrollHeight` follow a translate only on the next frame, so right after a page
+ * has been slid, or put back, they still describe the other state.
+ */
+function fitsAround(host: HTMLElement): Axes<boolean> {
+  const content = host.querySelector(CONTENT)?.getBoundingClientRect(), style = getComputedStyle(host);
+  if (!content) return fitsOf(host);
+  const [x, y] = [content.width + (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0), content.height + (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0)];
+  return { x: x - host.clientWidth <= 1, y: y - host.clientHeight <= 1 };
+}
+const fitsOf = (scroller: Scrollable): Axes<boolean> => { const over = overflowAxes(scroller); return { x: !over.x, y: !over.y }; };
 
 export class Panner {
   private scroller?: HTMLElement;
@@ -179,14 +194,13 @@ export class Panner {
     const lifted = [MOVED, MOVED_X, MOVED_Y].filter(name => surface.classList.contains(name));
     for (const name of lifted) surface.classList.remove(name);
     try {
-      const over = overflowAxes(scroller);
       const rects = [...this.frames].filter(doc => this.live(doc)).map(doc => doc.defaultView!.frameElement!.getBoundingClientRect());
       if (!rects.length) { const page = surface.querySelector(PAGE); if (page) rects.push(page.getBoundingClientRect()); }
       const shown = rects.filter(rect => rect.width > 0 && rect.height > 0);
       if (!shown.length) return undefined;
       const panel = surface.getBoundingClientRect();
       return {
-        fits: { x: !over.x, y: !over.y },
+        fits: this.frames.size ? fitsOf(scroller) : fitsAround(surface),
         page: { left: Math.min(...shown.map(r => r.left)), top: Math.min(...shown.map(r => r.top)), right: Math.max(...shown.map(r => r.right)), bottom: Math.max(...shown.map(r => r.bottom)) },
         panel: { left: panel.left + surface.clientLeft, top: panel.top + surface.clientTop, right: panel.left + surface.clientLeft + surface.clientWidth, bottom: panel.top + surface.clientTop + surface.clientHeight },
       };

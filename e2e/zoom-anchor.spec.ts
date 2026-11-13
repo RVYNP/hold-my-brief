@@ -244,7 +244,7 @@ function expectNoSnap(shown: Shown, note: string) {
   const { before, scaling, settled, later, after } = shown;
   for (const axis of ['x', 'y'] as const) {
     const f = axis === 'x' ? 'fx' : 'fy', size = axis === 'x' ? settled.w : settled.h, rounding = .005 * size + 1.5;
-    expect(Math.abs(settled[f] - scaling[f]) * size, `${note}: ${axis} jumped when the page settled`).toBeLessThanOrEqual(rounding);
+    expect(Math.abs(settled[f] - scaling[f]) * size, `${note}: ${axis} jumped when the page settled (scaling ${scaling[f].toFixed(4)}, settled ${settled[f].toFixed(4)}, size ${size.toFixed(0)})`).toBeLessThanOrEqual(rounding);
     expect(Math.abs(later[f] - settled[f]) * size, `${note}: ${axis} drifted after settling`).toBeLessThanOrEqual(1);
     const [scroll, max] = axis === 'x' ? [after.sl, after.maxX] : [after.st, after.maxY];
     // The scroll that would put the point back under the pointer: out of reach of the scroll range, the page rests against its end instead.
@@ -407,7 +407,8 @@ for (const layout of ['single', 'spread'] as const) {
     state = await keys('after zooming in');
     // Shift + wheel scrolls (sideways on Windows, vertically on a Mac): the page moves by exactly what it scrolled, and is never recentred.
     const [left, top] = await scroll(), natural = await box();
-    await page.keyboard.down('Shift'); await page.mouse.wheel(0, 120); await page.keyboard.up('Shift'); await page.waitForTimeout(300);
+    // Upwards, so that a page resting against the far end (a zoom at its right edge does) can still scroll that way.
+    await page.keyboard.down('Shift'); await page.mouse.wheel(0, -120); await page.keyboard.up('Shift'); await page.waitForTimeout(300);
     const [leftNow, topNow] = await scroll(), now = await box();
     expect(Math.abs(leftNow - left) + Math.abs(topNow - top), 'the wheel scrolled the page').toBeGreaterThan(20);
     expect(now!.x - natural!.x).toBeCloseTo(-(leftNow - left), 1); expect(now!.y - natural!.y).toBeCloseTo(-(topNow - top), 1);
