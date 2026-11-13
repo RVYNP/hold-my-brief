@@ -545,7 +545,9 @@ fn open_external(url: String) -> Result<(), String> {
 /// Files named before the reading state exists (see `route_open`), in order.
 struct EarlyOpens(Mutex<Vec<PathBuf>>);
 
-/// The files a list of URLs names. macOS delivers `open -a`, Finder's Open With and a drop on the Dock icon as `file://` URLs.
+/// The files a list of URLs names. macOS delivers `open -a`, Finder's Open With and a drop on the Dock icon as `file://` URLs;
+/// no other system sends open events, so elsewhere this is only exercised by its test.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn paths_from_urls(urls: &[tauri::Url]) -> Vec<PathBuf> {
     urls.iter()
         .filter(|url| url.scheme() == "file")
@@ -808,6 +810,8 @@ mod tests {
         assert!(store.pending_taken && store.pending.is_empty());
     }
 
+    // `file:///Users/...` is a path only where paths start with a slash; Windows reads that as a missing drive.
+    #[cfg(unix)]
     #[test]
     fn macos_open_events_become_paths_in_order() {
         let urls: Vec<tauri::Url> = ["file:///Users/me/Books/Dune.epub", "file:///Users/me/My%20Docs/a%20b.pdf", "https://example.com/x.pdf", "file:///tmp/c.txt"]
@@ -816,7 +820,6 @@ mod tests {
             .collect();
         let paths = paths_from_urls(&urls);
         // Only file URLs are files; spaces and other escapes are decoded.
-        #[cfg(unix)]
         assert_eq!(paths, vec![PathBuf::from("/Users/me/Books/Dune.epub"), PathBuf::from("/Users/me/My Docs/a b.pdf"), PathBuf::from("/tmp/c.txt")]);
         assert_eq!(paths.len(), 3);
         assert!(paths_from_urls(&[]).is_empty());
