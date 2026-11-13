@@ -9,7 +9,7 @@ import { createLibraryRail, openedOrder, railItems } from './library-rail';
 import { ImageAdapter } from './adapters/image';
 import { createPalette } from './palette';
 import { createFindBar } from './find-bar';
-import { COMMANDS, shortcutFor, shortcutReference, unavailableReason } from './commands';
+import { COMMANDS, shortcutFor, shortcutReference, tabDigit, unavailableReason } from './commands';
 import { appearance, initAppearance, onAppearanceChange, allPalettes, pageTones, saveAppearance, scheme, type AppearanceMode } from './theme';
 import { appearanceSummary, createAppearanceSheet, paletteIcon } from './appearance';
 import { createAssistantPanel } from './assistant-panel';
@@ -682,6 +682,8 @@ $('tab-state-primary').onclick = () => {
 $('tab-state-close').onclick = () => { if (tabs.active) closeTab(tabs.active.path); };
 
 /** Shows a tab, or Home for none. A tab with no page yet starts opening; opening something else meanwhile is given up. */
+/** Tab 1…8, or 9 for the last one: reached by Alt+digit and ⌘+digit as keys and, on macOS, by the Window menu's items. No such tab: nothing happens. */
+function selectTabNumber(digit: number) { const tab = tabs.byNumber(digit); if (tab) selectTab(tab.path); }
 function selectTab(path: string | undefined) {
   const tab = path === undefined ? undefined : tabs.find(path);
   if (path !== undefined && !tab) return;
@@ -938,7 +940,8 @@ document.addEventListener('keydown', event => {
   const inStrip = target instanceof Node && pageStrip.element.contains(target);
   // Catalog shortcuts go through the same dispatcher as the menu and the palette.
   const shortcut = shortcutFor(event);
-  if (shortcut?.startsWith('select-tab-')) operation = () => { const tab = tabs.byNumber(Number(shortcut.slice('select-tab-'.length))); if (tab) selectTab(tab.path); };
+  const digit = tabDigit(shortcut);
+  if (digit) operation = () => selectTabNumber(digit);
   else if (shortcut === 'back') operation = () => void navigate('back');
   else if (shortcut === 'page-strip' && reader && !reader.setPreviews) return; // Only a PDF has previews; for any other document the key is not ours.
   else if (shortcut) operation = () => void command(shortcut).catch(fail);
@@ -1019,6 +1022,8 @@ async function initialize() {
     await listen<string[]>('open-request', event => openRequested(event.payload));
     await listen<WindowState>('window-state', event => updateWindow(event.payload));
     // macOS routes ⌘W through its menu (see install_menu in main.rs). With no tab to close, it closes the window as it always did.
+    // macOS also routes ⌘1…⌘9 through its menu; the number arrives here instead of as a key event.
+    await listen<number>('select-tab-request', event => { if (!document.querySelector('dialog[open]')) selectTabNumber(event.payload); });
     await listen('close-tab-request', () => { if (shown) closeTab(shown.path); else void getCurrentWindow().close(); });
     await listen<string | null>('reader-warning', event => { if (event.payload) notify(event.payload); });
     const appWindow = getCurrentWindow();

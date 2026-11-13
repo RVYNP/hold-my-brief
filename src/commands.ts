@@ -95,9 +95,14 @@ export type Shortcut = {
 
 /** A binding for Ctrl and the same one for ⌘, where the platform's modifier is the natural one. */
 const orCommand = (shortcut: Shortcut): Shortcut[] => [{ ...shortcut, ctrl: true }, { ...shortcut, ctrl: false, meta: true }];
-/** Select tab 1…8 and, with 9, the last one: Alt+digit everywhere, ⌘+digit on macOS. (Ctrl+2…4 are the fit, spread and preview commands.) */
+/** Select tab 1…8 and, with 9, the last one: Alt+digit everywhere, ⌘+digit on macOS (there the native Window menu takes ⌘+digit first and emits `select-tab-request`; see install_menu in main.rs). (Ctrl+2…4 are the fit, spread and preview commands.) */
 export const TAB_DIGITS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
 export const tabShortcutId = (digit: number) => `select-tab-${digit}`;
+/** The digit a `select-tab-N` id stands for, or undefined for any other id. */
+export const tabDigit = (id: string | undefined): number | undefined => {
+  const digit = id?.startsWith('select-tab-') ? Number(id.slice('select-tab-'.length)) : NaN;
+  return (TAB_DIGITS as readonly number[]).includes(digit) ? digit : undefined;
+};
 
 /**
  * Shortcuts handled by the global keydown listener. `key` is compared lower-cased against

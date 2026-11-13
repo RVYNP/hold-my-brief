@@ -40,7 +40,7 @@ opens a menu with Home, every document (with its format and place, and a close �
 | Go to tab 1–8, last tab | Alt+1…8, Alt+9 (⌘1…8, ⌘9 on macOS) |
 
 Ctrl+2, Ctrl+3 and Ctrl+4 stay fit width, two-page spread and page previews, which is why tab numbers use Alt on Windows and
-⌘ on macOS rather than Ctrl.
+⌘ on macOS rather than Ctrl. On macOS the same ⌘ shortcuts are the Window menu's Show Tab 1…8 and Show Last Tab items.
 
 Each tab keeps its own position, zoom and fit, text settings, hand tool, page-preview scroll and find text. The pin, size lock,
 appearance, library and the position of the view controls are shared by the whole window. At most three tabs keep their page in memory (the three
