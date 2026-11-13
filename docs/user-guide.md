@@ -52,22 +52,26 @@ browser's storage). Only the tab that was showing opens at once; the others open
 **File not found** with **Locate…** and **Close tab**, rather than failing the launch.
 
 With nothing saved, the window opens on **Hand it over.** Once documents have been opened, it opens
-on **Home**, a page of covers that wraps to the window's width, with tall and short pictures kept in their
-own proportions. **Recently opened** shows what you looked at last, most recent first. **Favorites** appears
-once you have starred something (it may repeat a recent). **Library** is a small selection of everything
-else, most recently opened first; **View all** opens the full Favorites or Library view, and
-**Browse library** in the header opens all references; edits made in the library refresh Home. A section with
-nothing in it is left out. Click a cover to open it. A thin bar along the foot of a cover in **Recently opened**
-shows how far you got.
-A picture fills in when its thumbnail is ready, and tiles keep their columns as pictures arrive; a
-book without a picture keeps the generated cover it has on its shelf. An EPUB shows the title from its own
-metadata once it has been read, and its file name cleaned up until then. A cover looks the same here as in
-the library. **Open files** is in the header. Removing a recent (the × on its cover) leaves the library
-entry. A file whose original has gone is dimmed and marked **Missing**.
+on **Home**:
 
-Use **File type** on Home to show PDFs, EPUBs, Markdown, Text, or Images separately. **All formats**
-restores the mixed view. The selection filters every section before its display limit is applied; if
-there are no files of that type, the selector stays available so you can switch back.
+- **Jump back in** is the eight documents you looked at last, most recent first: four across in a wide window, two
+  in a narrower one, one in the compact window. Each card has the cover, the title and, if you got part of the way
+  through, a thin line showing how far. Click one to open it (or switch to its tab).
+- **Continue reading** shelves what you have started and not finished, most recent first, with where you got to
+  (`PDF · p. 40 / 146`). **Favorites** shelves what you starred. **Collections** has one card per top-level
+  collection that holds something, a 2 × 2 mosaic of its first covers with the number of references.
+- A shelf scrolls sideways with the trackpad or a horizontal wheel, by dragging it sideways, with the **‹** and
+  **›** buttons that appear at its ends when you point at it, or with the arrow keys (one Tab stop per shelf). It snaps to
+  cards. **Show all** opens the library on that selection (**Continue reading**, **Favorites**, or all references for
+  Collections); a collection card opens the library on that collection. A section with nothing in it is left out.
+- The chips under the title (**All**, **PDF**, **EPUB**, **Markdown**, **Text**, **Images**, only the types you have) filter every
+  section; **All** restores the mixed view.
+
+**Browse library** and **Open files** are in the header. Edits made in the library refresh Home. A picture fills in when its
+thumbnail is ready; a book without a picture keeps the generated cover it has on its shelf. An EPUB shows the title from its
+own metadata once it has been read, and its file name cleaned up until then. A cover looks the same here as in the library.
+In the desktop app, the × on a Jump back in card removes it from the recent list and leaves the library entry. A file whose
+original has gone is dimmed.
 
 The library offers the same choices under **Choose collection and filters → Filter by format**,
 combined with the selected collection, search, availability, and colour. These are view filters, not

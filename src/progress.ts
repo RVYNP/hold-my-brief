@@ -40,3 +40,8 @@ export function formatProgress(progress: Progress | undefined): string | undefin
   const percent = Math.round(progress.fraction * 100);
   return percent > 0 ? `${percent} %` : undefined;
 }
+
+/** Past the start and short of Finished: what "Continue reading" lists, and the library's scope of the same name. */
+export function inProgress(progress: Progress | undefined): progress is Progress {
+  return Boolean(progress) && Number.isFinite(progress!.fraction) && progress!.fraction > 0 && formatProgress(progress) !== undefined && !isFinished(progress!);
+}

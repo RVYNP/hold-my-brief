@@ -864,34 +864,78 @@ h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 1px 0 
 .recent button:first-child { overflow: hidden; text-overflow: ellipsis; text-align: left; flex: 1; padding: 6px 8px; font-size: 12px; min-width: 0; }
 .recent button:last-child { flex: 0; padding: 4px 8px; color: var(--muted); opacity: 0; }
 .recent:hover button:last-child, .recent:focus-within button:last-child { opacity: 1; }
-/* Once there is something to return to, the opening page is a shelf, not a centred slogan.
-   Sections wrap into masonry like the library grid. */
-#empty.is-home { max-width: none; width: 100%; align-items: stretch; padding: 18px 16px 28px; }
+/* Once there is something to return to, the opening page is a media-player home: file type chips, a "Jump back in" grid and
+   horizontal shelves. Its width, not the window's, decides the grid's columns (4 / 2 / 1), so the rail and the drawer count. */
+#empty.is-home { max-width: none; width: 100%; align-items: stretch; padding: 18px 16px 28px; container-type: inline-size; --home-card: var(--hover); }
+/* Over a glow the cards are the opaque card colour: --hover is a translucent white there and would show the glow through. */
+:is([data-palette='aurora'], [data-palette='dusk'], [data-palette='nebula'], [data-palette='solar'], [data-palette='ember'], [data-palette='orchid'], [data-palette='glacier'], [data-palette='peach'], [data-palette='lagoon'], [data-palette='moss']) #empty.is-home { --home-card: var(--card); }
 #empty.is-home::before, #empty.is-home::after { display: none; }
 #empty.is-home h1 { font-size: 22px; margin: 0; }
-.home-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+.home-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .home-file { padding: 6px 10px; border-radius: 6px; color: var(--muted); font-size: 12px; }
 .home-file:hover { color: var(--fg); background: var(--hover-subtle); }
-.home-format { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; color: var(--muted); font-size: 12px; }
-.home-format select { max-width: 100%; font-size: 12px; }
+/* #empty-open is also the splash's large button; in the header it is a peer of Browse library. */
+#empty.is-home #empty-open { margin-top: 0; display: block; padding: 6px 10px; }
+.home-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+.home-chip { padding: 5px 13px; border-radius: 999px; background: var(--hover); color: var(--fg); font-size: 12px; font-weight: 600; line-height: 1.4; }
+.home-chip:hover { background: color-mix(in srgb, var(--hover) 82%, var(--fg)); }
+.home-chip[aria-pressed=true], .home-chip[aria-pressed=true]:hover { background: var(--fg); border-color: transparent; color: var(--surface); }
 .home-no-matches { color: var(--muted); font-size: 13px; line-height: 1.6; }
-.home-section { align-self: stretch; min-width: 0; margin: 0 0 22px; }
-.home-section h2 { margin: 0; font: 11px/1.35 var(--font-mono); letter-spacing: .8px; text-transform: uppercase; color: var(--muted); }
-.home-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.home-section { align-self: stretch; min-width: 0; margin: 0 0 26px; }
+.home-section h2 { margin: 0; font: 700 17px/1.3 var(--font-ui); letter-spacing: 0; color: var(--fg); }
+.home-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .home-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
-.home-all { padding: 2px 6px; border-radius: 4px; color: var(--muted); font-size: 12px; }
+.home-all { padding: 2px 6px; border-radius: 4px; color: var(--muted); font-size: 12px; font-weight: 600; }
 .home-all:hover { color: var(--fg); background: var(--hover-subtle); }
-/* Tiles are the library grid's (.library-tile, absolutely placed by src/cards.ts); the section only reserves their height and never scrolls sideways. */
-.home-grid { position: relative; min-width: 0; }
-.home-open { position: relative; display: block; width: 100%; padding: 0; border-radius: 4px; }
-/* How far the reader got: a 3 px bar along the foot of a recently opened tile. */
-.home-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; overflow: hidden; border-radius: 0 0 4px 4px; background: #00000059; pointer-events: none; }
-.home-progress > i { display: block; height: 100%; background: var(--accent); }
+.home-open { position: relative; border: 0; text-align: left; white-space: normal; }
 .home-open:hover { background: transparent; }
-.home-tile.is-missing { opacity: .55; }
-.home-remove { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; padding: 0; border-radius: 999px; background: var(--card); color: var(--muted); opacity: 0; }
-.home-tile:hover .home-remove, .home-tile:focus-within .home-remove { opacity: 1; }
+.home-card-title { display: block; min-width: 0; font-size: 12px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.is-missing .home-open { opacity: .55; }
+/* The covers are the library's (src/cards.ts); at this size only the picture or the generated art shows. */
+.home-jump-open .library-tile-scrim, .home-jump-open .library-cover-text, .home-jump-open .library-tile-format, .home-jump-open .library-tile-note,
+.home-mosaic .library-tile-scrim, .home-mosaic .library-cover-text, .home-mosaic .library-tile-format, .home-mosaic .library-tile-note,
+.home-card-cover .library-tile-scrim { display: none; }
+.home-jump-open .library-cover-art, .home-mosaic .library-cover-art { height: 100%; }
+/* Jump back in: 52 px cards, the cover 39 x 52 flush left, the title and a 3 px progress line beside it. */
+.home-jump-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+@container (min-width: 480px) { .home-jump-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (min-width: 860px) { .home-jump-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.home-jump { position: relative; min-width: 0; }
+.home-jump-open { display: flex; align-items: center; gap: 10px; width: 100%; height: 52px; padding: 0 12px 0 0; border-radius: 6px; background: var(--home-card); overflow: hidden; }
+.home-jump-open:hover { background: color-mix(in srgb, var(--home-card) 88%, var(--fg)); }
+.home-jump-open .library-tile-media { flex: none; width: 39px; height: 52px; aspect-ratio: auto; border-radius: 0; }
+.home-jump-text { display: flex; flex: 1 1 0; flex-direction: column; justify-content: center; gap: 5px; min-width: 0; }
+.home-jump-text .home-card-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* How far the reader got: --accent on --hairline. */
+.home-progress { display: block; height: 3px; overflow: hidden; border-radius: 2px; background: var(--hairline); }
+.home-progress > i { display: block; height: 100%; background: var(--accent); }
+.home-remove { position: absolute; top: 50%; right: 6px; width: 22px; height: 22px; padding: 0; border-radius: 999px; background: var(--card); color: var(--muted); opacity: 0; transform: translateY(-50%); }
+.home-jump:hover .home-remove, .home-jump:focus-within .home-remove { opacity: 1; }
 .home-remove:hover { color: var(--fg); }
+/* Shelves: one row of 124 px cards that scrolls sideways and snaps to cards, with no scrollbar; ‹ › show on hover where there is more. */
+.home-shelf-frame { position: relative; min-width: 0; }
+.home-shelf-track { display: flex; gap: 14px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scrollbar-width: none; }
+.home-shelf-track::-webkit-scrollbar { display: none; }
+.home-shelf-track.is-dragging { scroll-snap-type: none; cursor: grabbing; user-select: none; }
+.home-card { flex: none; width: 124px; scroll-snap-align: start; }
+.home-card-open { display: block; width: 100%; padding: 0; border-radius: 6px; }
+.home-card-open:focus-visible { outline: none; }
+.home-card-cover { display: flex; align-items: flex-end; height: 165px; }
+.home-card-cover .library-tile-media { flex: none; width: 124px; border-radius: 6px; }
+.home-card-open:focus-visible .library-tile-media::after, .home-card-open:focus-visible .home-mosaic::after { box-shadow: inset 0 0 0 2px var(--accent); }
+.home-card .home-card-title { display: -webkit-box; margin-top: 8px; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.home-card-meta { display: block; margin-top: 2px; overflow: hidden; color: var(--muted); font: 11px/1.4 var(--font-mono); letter-spacing: 0; text-overflow: ellipsis; white-space: nowrap; }
+/* Collections: a 124 x 124 mosaic of the first four covers; an empty cell is the quiet fill. */
+.home-collection .home-card-cover { align-items: flex-start; height: 124px; }
+.home-mosaic { position: relative; display: grid; grid: 1fr 1fr / 1fr 1fr; gap: 2px; width: 124px; height: 124px; overflow: hidden; border-radius: 6px; background: var(--hairline); }
+.home-mosaic::after { content: ''; position: absolute; inset: 0; z-index: 1; border-radius: inherit; pointer-events: none; }
+.home-mosaic-cell { position: relative; min-width: 0; min-height: 0; background: var(--hover); }
+.home-mosaic .library-tile-media { position: absolute; inset: 0; width: 100%; height: 100%; aspect-ratio: auto; border-radius: 0; }
+.home-shelf-nav { position: absolute; z-index: 2; top: 66px; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1px solid var(--border); border-radius: 999px; background: var(--card); box-shadow: var(--shadow-popover); color: var(--fg); font-size: 20px; line-height: 1; opacity: 0; transition: opacity .12s; }
+.home-shelf-nav[hidden] { display: none; }
+.home-shelf-nav.is-previous { left: 4px; }
+.home-shelf-nav.is-next { right: 4px; }
+.home-shelf-frame:hover .home-shelf-nav, .home-shelf-nav:focus-visible { opacity: 1; }
 
 /* The footer is the window's bottom edge: while reading only the progress hairline shows. Hovering the
    last 12 px of the page (a band just above the edge) or focusing a footer control slides the arrows
