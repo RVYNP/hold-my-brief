@@ -373,7 +373,9 @@ async fn add_documents(app: AppHandle, collection_id: Option<String>) -> Result<
 /// Files that arrived before the page was listening (a launch with a file, or an Apple Event while the webview loads), in order.
 #[tauri::command]
 fn pending_open(state: State<'_, Shared>) -> Result<Vec<String>, String> {
-    Ok(std::mem::take(&mut state.lock().map_err(|_| "Reading state is unavailable")?.pending))
+    let mut store = state.lock().map_err(|_| "Reading state is unavailable")?;
+    store.pending_taken = true;
+    Ok(std::mem::take(&mut store.pending))
 }
 
 #[tauri::command]
@@ -540,6 +542,9 @@ fn open_external(url: String) -> Result<(), String> {
     webbrowser::open(parsed.as_str()).map_err(|e| e.to_string())
 }
 
+/// Files named before the reading state exists (see `route_open`), in order.
+struct EarlyOpens(Mutex<Vec<PathBuf>>);
+
 /// The files a list of URLs names. macOS delivers `open -a`, Finder's Open With and a drop on the Dock icon as `file://` URLs.
 fn paths_from_urls(urls: &[tauri::Url]) -> Vec<PathBuf> {
     urls.iter()
@@ -567,11 +572,19 @@ fn authorize_paths(store: &mut Store, paths: Vec<PathBuf>) -> (Vec<String>, Vec<
 /// Asks the page to open `paths`, each in a new tab, in this order: the command line, a second instance and the macOS open events
 /// all come here. The paths are also queued for a page that is not listening yet (see `pending_open`).
 fn route_open(app: &AppHandle, paths: Vec<PathBuf>) {
-    let shared = app.state::<Shared>();
+    let Some(shared) = app.try_state::<Shared>() else {
+        // The state is created in `setup`, which an Apple Event can beat at a cold launch: keep the files until it exists.
+        if let Ok(mut early) = app.state::<EarlyOpens>().0.lock() {
+            early.extend(paths);
+        }
+        return;
+    };
     let (opened, unsupported) = match shared.lock() {
         Ok(mut store) => {
             let (opened, unsupported) = authorize_paths(&mut store, paths);
-            store.pending.extend(opened.iter().cloned());
+            if !store.pending_taken {
+                store.pending.extend(opened.iter().cloned());
+            }
             (opened, unsupported)
         }
         Err(_) => return,
@@ -612,6 +625,7 @@ fn install_menu(app: &tauri::App) -> tauri::Result<()> {
 
 fn main() {
     tauri::Builder::default()
+        .manage(EarlyOpens(Mutex::new(Vec::new())))
         .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
             if let Some(path) = argument_file(args, Path::new(&cwd)) {
                 route_open(app, vec![path]);
@@ -662,6 +676,11 @@ fn main() {
             let directory = app.path().app_local_data_dir()?;
             let shared = Arc::new(Mutex::new(Store::load(directory.join("state.json"))));
             app.manage(shared.clone());
+            // Files the OS named before this point.
+            let early = std::mem::take(&mut *app.state::<EarlyOpens>().0.lock().map_err(|_| "Early open queue is unavailable")?);
+            if !early.is_empty() {
+                route_open(app.handle(), early);
+            }
             app.manage(thumbnails::ThumbnailCache::new(app.path().app_cache_dir()?.join("thumbs")));
             #[cfg(target_os = "macos")]
             install_menu(app)?;
@@ -774,6 +793,19 @@ mod tests {
         assert_eq!(store.authorized.len(), 2);
         // Authorizing queues nothing: only `route_open` does.
         assert!(store.pending.is_empty());
+    }
+
+    #[test]
+    fn opened_files_are_queued_only_until_the_page_has_taken_the_queue() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = Store::load(dir.path().join("state.json"));
+        store.pending.push("/a.pdf".into());
+        // What `pending_open` does: hand the queue over once, for good.
+        store.pending_taken = true;
+        let first = std::mem::take(&mut store.pending);
+        assert_eq!(first, vec!["/a.pdf".to_string()]);
+        // Later files are announced live only, so a page reload finds nothing to replay.
+        assert!(store.pending_taken && store.pending.is_empty());
     }
 
     #[test]

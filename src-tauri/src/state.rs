@@ -422,6 +422,8 @@ pub struct Store {
     pub opened_aliases: HashMap<(String, String), Recent>,
     /// Files the OS asked to open before the page was listening, in order.
     pub pending: Vec<String>,
+    /// Set once the page has taken `pending`: from then on files are only announced live, never queued, so a reload cannot replay them.
+    pub pending_taken: bool,
     pub catalog: Option<crate::catalog::Catalog>,
     pub catalog_error: Option<String>,
 }
@@ -494,6 +496,7 @@ impl Store {
             opened: HashMap::new(),
             opened_aliases: HashMap::new(),
             pending: Vec::new(),
+            pending_taken: false,
             catalog,
             catalog_error,
         }
