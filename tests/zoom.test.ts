@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampZoom, migrateLegacyZoom, pageFraction, parseZoomInput, roundZoom, scrollToHold, stepZoom, wheelFactor, ZOOM_MAX, ZOOM_MIN, ZOOM_MODEL, ZOOM_PRESETS, ZOOM_STEPS, zoomAbout, zoomPercent } from '../src/zoom';
+import { clampZoom, migrateLegacyZoom, pageFraction, parseZoomInput, roundZoom, stepZoom, wheelFactor, ZOOM_MAX, ZOOM_MIN, ZOOM_MODEL, ZOOM_PRESETS, ZOOM_STEPS, zoomAbout, zoomPercent } from '../src/zoom';
 import { defaultOptions } from '../src/types';
 
 describe('zoom ladder', () => {
@@ -205,16 +205,11 @@ describe('zooming about the pointer', () => {
     expect(zoomAbout(identity, .001, at, .25, 4).scale).toBe(.25);
   });
 
-  it('finds the page fraction under the pointer and the scroll that holds it after a re-render', () => {
+  it('finds the page fraction under the pointer after the page is scaled about it', () => {
     // A 400 x 500 page laid out with its corner at (50, 30); scaled 2x about the pointer at (250, 280).
     const origin = { x: 50, y: 30 }, pointer = { x: 250, y: 280 };
     const pose = zoomAbout(identity, 2, { x: pointer.x - origin.x, y: pointer.y - origin.y }, .25, 4);
     const held = pageFraction(pose, { x: pointer.x - origin.x, y: pointer.y - origin.y }, { width: 400, height: 500 });
     expect(held).toEqual({ x: .5, y: .5 });
-    // Re-rendered at 2x (800 x 1000), in a scroller whose content starts the page 16 px in and which has not scrolled:
-    // the page centre must end up under the pointer.
-    const scrollLeft = scrollToHold(16, held.x, 800, 200), scrollTop = scrollToHold(16, held.y, 1000, 250);
-    expect(16 + held.x * 800 - scrollLeft).toBe(200);
-    expect(16 + held.y * 1000 - scrollTop).toBe(250);
   });
 });

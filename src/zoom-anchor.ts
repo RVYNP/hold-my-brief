@@ -1,18 +1,20 @@
-import { scrollToHold } from './zoom';
+import type { Offset } from './pan';
 import { SURFACE } from './zoom-gesture';
 
 /**
  * Which point of the view a zoom or fit change holds still: the centre of the viewport (a zoom, as in Figma: the
  * document point you are looking at stays where you are looking at it) or the line at its top edge (fit width,
- * which keeps your reading position). Horizontally it is always the centre.
+ * which keeps your reading position and lets the page centre sideways).
  */
 export type Hold = 'centre' | 'top';
 
-/** A document point, as a fraction of the page box on each axis, to be put back where it was after the page is redrawn at another size. */
-export type Anchor = { host: HTMLElement; hold: Hold; fx: number; fy: number };
+/** One axis of a held point: the fraction of the page it sits at, and where in the panel it is to stay (from the panel's inner edge). */
+export type Axis = { f: number; at: number };
+/** A document point to hold still while the page is redrawn at another size; an axis left out is not held. */
+export type Spot = { x?: Axis; y?: Axis };
+/** A spot, with the scroll container it is in and the way to slide a page that fits (`Panner.slideTo`); without it the page only scrolls. */
+export type Anchor = Spot & { host: HTMLElement; slide?: (offset: Offset) => void };
 
-/** Where the held point sits in the panel, from the scroll container's inner edge. */
-const heldAt = (host: HTMLElement, hold: Hold) => ({ x: host.clientWidth / 2, y: hold === 'centre' ? host.clientHeight / 2 : 0 });
 /** The page's start and size in scroll-content coordinates. */
 function pageBox(host: HTMLElement) {
   const surface = host.querySelector<HTMLElement>(SURFACE);
@@ -23,25 +25,38 @@ function pageBox(host: HTMLElement) {
 }
 
 /**
- * Notes which document point `hold` names in the page now on screen, or returns nothing when the scroller shows no
- * page box this can follow (reflowable text, a fixed-layout book that scrolls inside its own renderer).
+ * The document point `hold` names in the page now on screen (slid or not: the page's box is where it is drawn), or nothing when
+ * the scroller shows no page box this can follow (reflowable text, a fixed-layout book that scrolls inside its own renderer).
  * The fraction may lie outside the page: a page smaller than the panel is centred in it by the layout.
  */
-export function holdView(host: HTMLElement | undefined, hold: Hold): Anchor | undefined {
+export function holdView(host: HTMLElement | undefined, hold: Hold): Spot | undefined {
   const page = host && pageBox(host);
   if (!host || !page) return undefined;
-  const at = heldAt(host, hold);
-  return { host, hold, fx: (host.scrollLeft + at.x - page.x) / page.width, fy: (host.scrollTop + at.y - page.y) / page.height };
+  const x = { at: host.clientWidth / 2 }, y = { at: hold === 'centre' ? host.clientHeight / 2 : 0 };
+  const spot: Spot = { y: { f: (host.scrollTop + y.at - page.y) / page.height, at: y.at } };
+  if (hold === 'centre') spot.x = { f: (host.scrollLeft + x.at - page.x) / page.width, at: x.at };
+  return spot;
 }
 
 /**
- * Scrolls the redrawn page so the noted point is back where it was in the panel. The scroll container limits it: against an
- * edge the page stays against that edge, and an axis on which the page now fits is not scrolled (the layout centres it there).
+ * Puts the held point back where it was in the panel, now the page is redrawn. Where the page overflows it scrolls there as far as
+ * the scroll range reaches (the point cannot be held past the end of the page: the page then rests against that end, as the scaled
+ * preview of a gesture already showed). Where the page fits, the layout centres it, so the whole move is a slide, which never takes
+ * the page more than KEEP px out of view (see `Panner.slideTo`).
  */
 export function restoreView(anchor: Anchor) {
-  const { host, hold, fx, fy } = anchor, page = pageBox(host);
+  const { host } = anchor, page = pageBox(host);
   if (!page) return;
-  const at = heldAt(host, hold);
-  host.scrollLeft = scrollToHold(page.x, fx, page.width, at.x);
-  host.scrollTop = scrollToHold(page.y, fy, page.height, at.y);
+  const slide = { x: 0, y: 0 };
+  for (const [axis, spot, origin, size, max, scroll] of [
+    ['x', anchor.x, page.x, page.width, host.scrollWidth - host.clientWidth, 'scrollLeft'],
+    ['y', anchor.y, page.y, page.height, host.scrollHeight - host.clientHeight, 'scrollTop'],
+  ] as const) {
+    if (!spot) continue;
+    const wanted = origin + spot.f * size - spot.at;
+    if (max > 1) host[scroll] = Math.max(0, Math.min(max, wanted));
+    else { host[scroll] = 0; slide[axis] = -wanted; }
+  }
+  // An image is centred inside a frame at least as large as the panel, so the frame's fractions say nothing about where the picture is: it only scrolls.
+  if (!host.querySelector(':scope > .image-frame') && (Math.abs(slide.x) > .25 || Math.abs(slide.y) > .25)) anchor.slide?.(slide);
 }

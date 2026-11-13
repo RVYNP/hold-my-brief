@@ -1,0 +1,7 @@
+{
+  "base": "main",
+  "ciOptionalPaths": [],
+  "reviewNotes": ".github/loop/review-notes.md",
+  "workerNotes": ".github/loop/worker-notes.md",
+  "maxWorkers": 1
+}

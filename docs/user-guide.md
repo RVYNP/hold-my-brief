@@ -176,8 +176,9 @@ also get **Page previews**, below), and stays in step with Ctrl+−/+ and Ctrl+0
 Hand button) and drag. When a zoomed page is larger than the panel, the drag pans it 1:1. When the
 page or spread fits the panel (a fit, or zoomed out far enough), the drag slides the whole page, or both pages
 of a spread, around the panel 1:1, like a sheet across a desk; at least 64 pixels of it always stay
-inside. The page keeps its place when you turn pages and goes back to the middle when you change the
-zoom or fit (Ctrl+0 included), switch between one and two pages, or open another document. Text
+inside. The page keeps its place when you turn pages and goes back to the middle on a fit (Ctrl+0 or Ctrl+2, even
+when it is already fitted), when you switch between one and two pages, or when you open another document. A zoom holds the
+spot at the centre of the panel instead and may keep the page slid (see "Where a zoom stays", below). Text
 selection pauses while the hand is on, and a click without movement still follows links. Middle-button
 drag pans or slides in any mode. The hand turns off when a new document opens (and, in a fixed-layout EPUB, when switching between one and two pages rebuilds the view). Markdown, TXT and
 reflowable EPUB reflow instead of zooming, so they have no pill and no panning.
@@ -195,8 +196,9 @@ scale whatever the window does; the next double-click or Ctrl+0 / Ctrl+2 returns
 **Where a zoom stays.** A zoom does not snap the view to the page's centre or top. Zooming with the buttons, Ctrl +/−,
 a rung, a typed percentage, a preset, or Actual size (Ctrl 1) holds the spot at the centre of the reading panel, as in
 a design tool: scroll to a corner, zoom, and you are still at that corner. From a fit, the page's middle stays in the
-middle. The scroll limits still apply: a page stays against an edge it was against, and a page that becomes smaller than
-the panel on an axis is centred on it. **Fit width** keeps the line at the top of the panel, so you stay where you were
+middle. A page that now fits the panel on an axis is slid there (the same slide as the hand tool's, kept within 64 pixels of
+the panel's edge, and cleared by the next zoom or fit) so the spot stays at the centre; a page that overflows is scrolled, and
+against the end of its scroll range it rests against that end instead. **Fit width** keeps the line at the top of the panel, so you stay where you were
 reading instead of going back to the top of the page; **Fit page** shows the whole page, centred. Page turns and
 switching between one and two pages work as before. This applies to PDFs and images; a fixed-layout EPUB zooms inside its own viewer and is unchanged.
 
@@ -219,8 +221,11 @@ at, and looks softer.
 
 **Wheel and pinch.** Hold Ctrl (⌘ on a Mac) and turn the mouse wheel, or pinch on a trackpad, to zoom
 smoothly toward the pointer: the spot on the page under the pointer stays under it. The page is scaled
-while you gesture and drawn sharply once you pause. A page that is smaller than the panel on an axis cannot
-hold the spot on that axis, so it stays centred there. In a fixed-layout EPUB the wheel and pinch zoom too,
+while you gesture and drawn sharply once you pause, in the same place: nothing moves when you stop, and pressing
+Control or Shift moves nothing either. A page that is smaller than the panel on an axis is slid there so the spot stays under
+the pointer (the page may end up off-centre; Ctrl+0 centres it again), and a page that overflows is scrolled. The page cannot
+be pulled past its own end: if the spot is nearer the edge of the page than the panel's edge allows, the page rests against
+that end while you zoom, and stays there. In a fixed-layout EPUB the wheel and pinch zoom too,
 but the page is resized once you pause rather than scaled while you gesture, and the spot is not held.
 
 **Documents opened from an older version.** Before this version a saved zoom was a multiple of the fit

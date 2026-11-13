@@ -1062,8 +1062,10 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
 .progress-preview-pages canvas.is-blank { width: 66px; height: 88px; background: var(--hover-subtle); }
 .progress-preview-label { color: var(--fg); font: 11px/1.3 var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* A page that fits is slid by the hand tool (src/pan.ts) with `translate`: a paint-time move that never changes the host's size,
-   so nothing refits. The host stops scrolling meanwhile, because a translated page would grow its scrollable area and raise a scrollbar. */
-.reader-host.page-moved { overflow: hidden; }
+   so nothing refits. The host stops scrolling on each axis that is moved, because a translated page would grow its scrollable area and raise a scrollbar;
+   a page slid on one axis only (it fits sideways, not vertically) still scrolls on the other. */
+.reader-host.page-moved-x { overflow-x: hidden; }
+.reader-host.page-moved-y { overflow-y: hidden; }
 .reader-host.page-moved > .pdf-page, .reader-host.page-moved > .pdf-spread, .reader-host.page-moved .image-frame, .reader-host.page-moved > foliate-view { translate: var(--pan-x, 0) var(--pan-y, 0); }
 /* A zoom gesture (Ctrl + wheel, pinch) scales the committed page with a transform until the input pauses, then renders it crisply.
    The host stops scrolling meanwhile for the same reason as above: a scaled page would grow the scrollable area and raise a scrollbar. */
