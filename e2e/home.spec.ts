@@ -344,7 +344,8 @@ test('the chips stay on one row at every width and scroll sideways with a fade, 
   const oneRow = () => row.evaluate(node => new Set([...node.children].map(chip => Math.round(chip.getBoundingClientRect().top))).size === 1);
   expect(await oneRow()).toBe(true);
   expect(await row.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true); // Wide: all fit, no fade.
-  expect(await row.evaluate(node => node.style.getPropertyValue('--fade-end'))).toBe('0px');
+  // The fade is written in the first animation frame after the row is laid out: wait for it instead of reading it before it exists.
+  await expect.poll(() => row.evaluate(node => node.style.getPropertyValue('--fade-end'))).toBe('0px');
   await page.setViewportSize({ width: 420, height: 620 });
   expect(await oneRow()).toBe(true);
   expect(await row.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);

@@ -81,11 +81,12 @@ async function countThumbnailRenders(page: Page) {
   });
 }
 const rendered = (page: Page) => page.evaluate(() => window.thumbnailRenders);
-/** Waits for the render count to stop moving: the queue has gone quiet. */
+/** Waits until every thumbnail the strip has asked for is drawn, so nothing is still rendering for it (it asks only for the items it has put in the DOM). */
+const thumbnailsDrawn = (page: Page) => expect.poll(() => page.evaluate(() => { const canvases = [...document.querySelectorAll<HTMLElement>('#page-strip canvas[data-page]')]; return canvases.length > 0 && canvases.every(canvas => canvas.dataset.drawn); })).toBe(true);
+/** The render count once the strip has drawn everything it asked for: the queue has gone quiet. */
 async function quiet(page: Page) {
-  let last = -1;
-  await expect.poll(async () => { const now = await rendered(page); const same = now === last; last = now; await page.waitForTimeout(250); return same; }, { timeout: 8000 }).toBe(true);
-  return last;
+  await thumbnailsDrawn(page);
+  return rendered(page);
 }
 
 test('the strip is a centred filmstrip of the whole document: the current page in the middle, ringed, earlier pages to its left', async ({ page }) => {
@@ -157,6 +158,8 @@ test('page turns follow in the strip: the middle glides by one page, and jumps w
   await page.keyboard.press('Control+4');
   await expectPainted(page, [1, 2]);
   await expectCentred(page);
+  // The glide lasts 220 ms and counts the frames that fit in it: start it with the page refit and the thumbnails drawn, so no render competes for them.
+  await settledHeight(page); await expect(page.locator('.pdf-render-status')).toHaveCount(0); await thumbnailsDrawn(page);
   const start = await scrollLeft(page);
   await page.evaluate(() => { window.scrolls.length = 0; });
   await page.keyboard.press('PageDown');
