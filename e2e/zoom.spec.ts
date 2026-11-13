@@ -2,6 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { crc32, deflateSync } from 'node:zlib';
 import { pagedPdf } from './paged-pdf';
+import { libraryToggle } from './library-controls';
 
 // pagedPdf pages are 300 x 400 pt, which is 400 x 533.33 CSS px at 100 % (a PDF point is 96/72 CSS px).
 const PAGE_WIDTH = 400, PAGE_HEIGHT = 400 * 96 / 72;
@@ -19,7 +20,7 @@ async function openFile(page: Page, buffer: Buffer) {
   await expect(page.locator('#position')).toContainText('Page 1 of');
   await expect(page.locator('#loading')).toBeHidden();
   await expect(page.locator('#view-controls')).toBeVisible();
-  if (await page.locator('#library-root').isVisible()) await page.locator('#library-toggle').click();
+  if (await page.locator('#library-root').isVisible()) await libraryToggle(page).click();
   await expect(page.locator('#library-root')).toBeHidden();
   await settled(page);
 }

@@ -1,5 +1,5 @@
 /**
- * Dragging a document from inside the app (a library tile or row, a rail cover, a Home tile) to the tab strip or the reading
+ * Dragging a document from inside the app (a library tile, row or tree row, a Home tile) to the tab strip or the reading
  * area, to open it in a new tab there. It uses pointer events and a drag threshold, not HTML5 drag and drop: with Tauri's
  * native drag-drop enabled, WebView2 does not deliver HTML5 drag events inside the page. A press that never travels past
  * the threshold stays an ordinary click, so a click still opens the document where it always did.
@@ -7,8 +7,8 @@
 
 /** A press that travels less than this (CSS px) is a click. */
 export const OPEN_DRAG_SLOP = 5;
-/** The things that can be dragged: a library row or tile, a rail cover, a Home tile. */
-const SOURCES = '[data-doc-path], [data-home-path], [data-rail-path]';
+/** The things that can be dragged: a library row, tile or tree row (`data-doc-path`), a Home tile. */
+const SOURCES = '[data-doc-path], [data-home-path]';
 
 export type OpenDragSource = { path: string; name: string };
 export type OpenDragHandlers = {
@@ -23,7 +23,7 @@ export type OpenDragHandlers = {
 function sourceOf(target: EventTarget | null): { node: HTMLElement; source: OpenDragSource } | undefined {
   const node = target instanceof Element ? target.closest<HTMLElement>(SOURCES) : null;
   if (!node || node.classList.contains('is-missing')) return undefined;
-  const path = node.dataset.docPath ?? node.dataset.homePath ?? node.dataset.railPath;
+  const path = node.dataset.docPath ?? node.dataset.homePath;
   if (!path) return undefined;
   const name = node.dataset.docName ?? node.querySelector<HTMLElement>('[title]')?.title ?? node.getAttribute('aria-label') ?? node.title ?? path.split(/[\\/]/).pop() ?? path;
   return { node, source: { path, name } };

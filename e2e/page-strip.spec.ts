@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { pagedPdf, pageColour } from './paged-pdf';
+import { libraryToggle } from './library-controls';
 
 // Instrumentation the tests attach to the page.
 declare global { interface Window { thumbnailRenders: number; hostSizes: Set<string>; stripFlips: boolean[]; scrolls: string[] } }
@@ -13,7 +14,7 @@ async function openPdf(page: Page, { count = PAGES, labels = '', viewport = { wi
   await page.locator('#file-input').setInputFiles({ name, mimeType: 'application/pdf', buffer: pagedPdf(count, labels) });
   await expect(page.locator('#position')).toContainText(`Page 1 of ${count}`);
   await expect(page.locator('#loading')).toBeHidden();
-  if (await page.locator('#library-root').isVisible()) await page.locator('#library-toggle').click();
+  if (await page.locator('#library-root').isVisible()) await libraryToggle(page).click();
   await expect(page.locator('#library-root')).toBeHidden();
   await page.locator('.pdf-reader').focus();
 }
@@ -646,7 +647,7 @@ test('a rotated document is previewed rotated, and the strip starts beside the l
   await expect.poll(ratio).toBeCloseTo(4 / 3, 1); // Landscape; a thumbnail is whole pixels, so not exactly 4:3.
   await expectPainted(page, [1, 2, 3]);
   const before = (await strip(page).boundingBox())!;
-  await page.locator('#library-toggle').click();
+  await libraryToggle(page).click();
   await expect(page.locator('#library-root')).toBeVisible();
   const drawer = (await page.locator('#library-root').boundingBox())!;
   await expect.poll(async () => (await strip(page).boundingBox())!.x).toBeGreaterThanOrEqual(drawer.x + drawer.width - 1);

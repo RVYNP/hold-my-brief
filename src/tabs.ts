@@ -73,6 +73,13 @@ export class TabList<T extends TabBase> {
     return { tab, created: true };
   }
 
+  /** Adds `tab` at `at` (the end by default) without showing it: a document opened in the background. False when it is already open (nothing changes). */
+  add(tab: T, at?: number): boolean {
+    if (this.find(tab.path)) return false;
+    this.items.splice(at === undefined ? this.items.length : Math.max(0, Math.min(this.items.length, at)), 0, tab);
+    return true;
+  }
+
   /**
    * Closes a tab. Closing the showing tab shows its right neighbour, or its left one when it was last, or Home when none is left;
    * closing any other tab changes nothing about what is showing. Returns the tab now showing.

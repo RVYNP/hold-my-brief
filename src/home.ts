@@ -2,7 +2,7 @@
 // the splash in main.ts. After that this is a main area in the manner of a media player's home: file type
 // chips, a "Jump back in" grid of what was opened last, then horizontal shelves (Continue reading, Favorites,
 // Collections). Empty sections are left out. `homeSections` derives them; `renderHome` paints them.
-import { coverRatio, coverSeedOf, fileTitle, assignCoverSlots, compareCollections, collectionDisplayName } from './shelf';
+import { coverRatio, coverSeedOf, displayTitle, assignCoverSlots, compareCollections, collectionDisplayName } from './shelf';
 import { libraryGrid } from './library-layout';
 import { matchesFileType } from './library-query';
 import { markUnavailable, showPicture, tileMedia, type Appearance } from './cards';
@@ -66,6 +66,11 @@ export function openedAt(value: number | string | undefined): number {
   return 0;
 }
 
+/** What the browser build has for recents (no store keeps a list there): the library's documents that were opened, latest first. */
+export function openedOrder(documents: readonly HomeDocument[]): HomeDocument[] {
+  return documents.filter(doc => openedAt(doc.lastOpened) > 0).sort((a, b) => openedAt(b.lastOpened) - openedAt(a.lastOpened) || a.name.localeCompare(b.name));
+}
+
 type Titles = (item: HomeDocument) => string | undefined;
 export type HomeInput = {
   recents: readonly HomeRecent[];
@@ -85,8 +90,8 @@ function tileOf(item: HomeDocument, known: string | undefined, progress: Progres
     path: item.path,
     name: item.name,
     format: item.format,
-    title: known || fileTitle(item.name),
-    label: known || item.name,
+    title: displayTitle(item, known, true),
+    label: displayTitle(item, known),
     seed: coverSeedOf(item),
     shelfId: item.collectionIds?.[0],
     missing: item.availability === 'missing',
@@ -101,7 +106,7 @@ function recentItems(recents: readonly HomeRecent[], byPath: ReadonlyMap<string,
 
 /**
  * What was opened last: the recents, most recent first, each borrowing the library entry's cover when the path matches.
- * Used by "Jump back in" and by the library rail.
+ * Used by "Jump back in".
  */
 export function recentTiles(recents: readonly HomeRecent[], documents: readonly HomeDocument[], options: { format?: string; titleOf?: Titles; progress?: Readonly<Record<string, Progress>>; limit?: number } = {}): HomeTile[] {
   const { format = '', titleOf = noTitle, progress = {}, limit = jumpLimit } = options;

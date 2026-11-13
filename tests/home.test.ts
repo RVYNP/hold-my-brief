@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { homeIsEmpty, homeSections, homeTypes, jumpLimit, openedAt, recentTiles, shelfLimit, shelfRatio, type HomeCollection, type HomeDocument, type HomeRecent } from '../src/home';
+import { homeIsEmpty, homeSections, homeTypes, jumpLimit, openedAt, openedOrder, recentTiles, shelfLimit, shelfRatio, type HomeCollection, type HomeDocument, type HomeRecent } from '../src/home';
 
 const recent = (path: string, name = path, format = 'pdf'): HomeRecent => ({ path, name, format, lastOpened: 1 });
 const doc = (path: string, lastOpened = 0, extra: Partial<HomeDocument> = {}): HomeDocument => ({ path, name: path, format: 'pdf', lastOpened, ...extra });
@@ -183,5 +183,24 @@ describe('shelfRatio', () => {
     expect(shelfRatio(3 / 4)).toBeCloseTo(.75);
     expect(shelfRatio(2)).toBe(1);
     expect(shelfRatio(Number.NaN)).toBeCloseTo(.75);
+  });
+});
+
+describe('openedOrder', () => {
+  it('keeps only documents that were opened, latest first, reading dates and numeric strings', () => {
+    const ordered = openedOrder([doc('never', undefined), doc('old', 10), { ...doc('new'), lastOpened: '30' }, doc('mid', 20), doc('zero', 0)]);
+    expect(ordered.map(item => item.path)).toEqual(['new', 'mid', 'old']);
+  });
+});
+
+describe('titles of generic file names', () => {
+  it('a card for a generic file name is titled by its folder, and a named file keeps its own name', () => {
+    const [generic, named] = recentTiles([{ path: '/refs/03_wwe_mag/source.pdf', name: 'source.pdf', format: 'pdf' }, { path: '/refs/x/Rust-Book-1.99.epub', name: 'Rust-Book-1.99.epub', format: 'epub' }], []);
+    expect(generic).toMatchObject({ title: '03_wwe_mag', label: '03_wwe_mag', name: 'source.pdf' });
+    expect(named).toMatchObject({ title: 'Rust Book', label: 'Rust-Book-1.99.epub' });
+  });
+  it('an EPUB\'s own title wins over a generic name', () => {
+    const [book] = recentTiles([{ path: '/refs/x/source.epub', name: 'source.epub', format: 'epub' }], [], { titleOf: () => 'A Real Title' });
+    expect(book).toMatchObject({ title: 'A Real Title', label: 'A Real Title' });
   });
 });
