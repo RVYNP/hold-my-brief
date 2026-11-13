@@ -1,10 +1,10 @@
-You run on the Mac Studio (macOS, Apple Silicon). Some work orders were written for the Windows
-workstation (`C:\Users\ruby\…`); read those paths as your worktree.
+You run on macOS (Apple Silicon). Some work orders name paths on another machine (Windows); read
+those paths as your worktree. This repository is public: never post absolute paths from this machine.
 
-- **Ruby's installed Hold My Brief runs on this Mac.** Never `open -a "Hold My Brief"`, never run
+- **The owner's installed Hold My Brief runs on this Mac.** Never `open -a "Hold My Brief"`, never run
   `npm run desktop`, `tauri dev`, `npm run test:native` or a built app with the default identifier
-  `xyz.rpayton.holdmybrief`: the single-instance plugin hands the launch to Ruby's running app, and its
-  data folder is real. Never quit or kill that app, and never read or write
+  `xyz.rpayton.holdmybrief`: the single-instance plugin hands the launch to the owner's running app, and
+  its data folder is real. Never quit or kill that app, and never read or write
   `~/Library/Application Support/xyz.rpayton.holdmybrief*`. Native checks are CI's job: list them under
   **Not run**.
 - Setup, once per worktree: `export TMPDIR=$(realpath "$TMPDIR")`, then `npm ci` (it applies the
