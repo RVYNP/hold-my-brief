@@ -5,7 +5,7 @@ Everything Hold My Brief does, in detail. For a quick tour, see the [README](../
 ## Opening documents
 
 Open a PDF, DRM-free EPUB, Markdown, TXT or image file (PNG, JPEG, WebP, GIF, AVIF, BMP) with
-Ctrl+O, **Open file…** in the command palette, a single-file drop or a command-line file argument; each opens in a new tab. The Windows installer adds
+Ctrl+O, **Open file…** in the command palette, a file drop or a command-line file argument; each opens in a new tab. The Windows installer adds
 Hold My Brief to Explorer's **Open with** list for the document formats without changing the default
 app; clean-account installer behavior has not yet been verified. A second instance routes its file
 request to the running app.
@@ -20,6 +20,13 @@ In a window at least 720 px wide the toolbar carries a strip of tabs: a **Home**
 document with its format, its title (an EPUB's own title once it is known), and a close ×. The tab you are reading also shows
 where you are ("40 / 146"). **+** after the last tab opens the file dialog into a new tab. When there are more tabs than fit, the strip
 scrolls and a **⌄** at its end lists them all. Drag a tab to reorder; middle-click a tab to close it. Empty strip space still drags the window.
+
+**Dropping files.** Drop one or several files anywhere on the window and each opens in its own tab, in the order dropped (a file that
+is already open is shown instead). While files are over the window the reading area dims behind a "Drop to open in a new tab" panel;
+over the tab strip a marker between two tabs and a "+ N files" ghost tab show where they will go, and the tabs open there. Dropped on the
+reading area they open after the tab you are reading (at the end from Home). Files of a type the reader does not open are not opened;
+one notice names them. A document dragged out of the library (a row or tile), the rail or Home onto the strip or the reading area opens
+the same way, with a small copy of its cover following the pointer; a plain click on any of them still opens it, and Escape cancels a drag.
 
 In a compact window (under 720 px) there is no strip. The title shows the open document's name, how many tabs are open and a ⌄; it
 opens a menu with Home, every document (with its format and place, and a close ×), and **New tab…**.

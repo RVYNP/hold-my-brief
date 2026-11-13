@@ -57,14 +57,18 @@ export type TabStrip = {
   openMenu: (anchor: HTMLElement) => void;
   closeMenu: () => void;
   isMenuOpen: () => boolean;
+  /** The slot (an index among the tabs) a drop at this point of the window would open at, or undefined when the point is not over the strip. */
+  dropSlot: (x: number, y: number) => number | undefined;
+  /** Marks where a drop would go, with a ghost tab saying what is coming; `undefined` clears it. */
+  showDrop: (slot: number | undefined, label?: string) => void;
 };
 
 /**
  * `elements` are the static parts of the toolbar markup: the Home button, the scrolling list of tabs, the + button and the
  * overflow button. `newTabKeys` is how the New tab command's shortcut is written on this platform.
  */
-export function createTabStrip(elements: { home: HTMLElement; list: HTMLElement; add: HTMLElement; overflow: HTMLElement }, handlers: TabHandlers, newTabKeys: string): TabStrip {
-  const { home, list, add, overflow } = elements;
+export function createTabStrip(elements: { strip: HTMLElement; home: HTMLElement; list: HTMLElement; add: HTMLElement; overflow: HTMLElement }, handlers: TabHandlers, newTabKeys: string): TabStrip {
+  const { strip, home, list, add, overflow } = elements;
   const nodes = new Map<string, HTMLElement>();
   let views: readonly TabView[] = [], homeActive = true, dragging = false, repaint = false;
 
@@ -227,5 +231,26 @@ export function createTabStrip(elements: { home: HTMLElement; list: HTMLElement;
     else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); (document.activeElement as HTMLElement).click(); }
   });
 
-  return { paint, openMenu, closeMenu, isMenuOpen: () => !menu.hidden };
+  // A drop: an insertion marker between tabs, and a ghost tab beside it saying what is coming.
+  const marker = document.createElement('div'), ghost = document.createElement('div');
+  marker.className = 'tab-drop-marker'; ghost.className = 'tab-drop-ghost';
+  marker.hidden = ghost.hidden = true;
+  strip.append(marker, ghost);
+  const tabRects = () => [...list.querySelectorAll<HTMLElement>('.tab')].map(tab => tab.getBoundingClientRect());
+  function dropSlot(x: number, y: number) {
+    const box = strip.getBoundingClientRect();
+    if (!box.width || x < box.left || x > box.right || y < box.top || y > box.bottom) return undefined;
+    return slotAt(tabRects().map(rect => rect.left + rect.width / 2), x);
+  }
+  function showDrop(slot: number | undefined, label = '') {
+    marker.hidden = ghost.hidden = slot === undefined;
+    if (slot === undefined) return;
+    const box = strip.getBoundingClientRect(), place = list.getBoundingClientRect(), rects = tabRects();
+    const edge = slot < rects.length ? rects[slot].left - 1 : rects.length ? rects[rects.length - 1].right + 1 : place.left;
+    const left = Math.max(place.left, Math.min(place.right, edge)) - box.left;
+    marker.style.left = `${left - 1}px`;
+    ghost.textContent = label; ghost.style.left = `${left + 6}px`;
+  }
+
+  return { paint, openMenu, closeMenu, isMenuOpen: () => !menu.hidden, dropSlot, showDrop };
 }

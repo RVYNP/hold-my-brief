@@ -27,6 +27,8 @@ import { createProgressPreview } from './progress-preview';
 import { TabList, type SavedTab } from './tabs';
 import { createTabStrip, type TabView } from './tab-strip';
 import { titleHints } from './tab-titles';
+import { baseName, ghostLabel, insertionIndex, overlayNames, splitDropped, unsupportedNotice } from './drop';
+import { attachOpenDrag } from './open-drag';
 initAppearance();
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
@@ -35,6 +37,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <div id="reader-layout"><div id="loading" role="status" hidden><span></span><button id="cancel">Cancel</button></div><div id="library-root"></div><nav id="library-rail"></nav>
   <main id="workspace"><section id="empty"><div class="book-mark" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M9 3v18m4-13h3m-3 4h3"/></svg></div><p class="eyebrow">KEEP YOUR PLACE</p><h1>Hand it over.</h1><p>Drop a brief and it stays pinned<br>exactly where you leave it.</p><button id="empty-open" class="primary">Hold a brief <span>↗</span></button><p class="formats">PDF · EPUB · MARKDOWN · TEXT</p><div id="recents"></div><p id="preview-note" hidden>Browser preview · Pin and size lock are available in the desktop app.</p></section>
   <section id="tab-state" hidden><h2 id="tab-state-title"></h2><p id="tab-state-detail"></p><div class="tab-state-actions"><button id="tab-state-primary" class="primary"></button><button id="tab-state-close">Close tab</button></div></section>
+  <div id="drop-overlay" hidden aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 18v-6M9 15h6"/></svg><strong>Drop to open in a new tab</strong><span id="drop-names"></span></div>
   <div id="view-controls" role="group" aria-label="View controls" hidden><button id="view-grip" type="button" aria-label="Move view controls" title="Drag to move · double-click to reset"><svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" aria-hidden="true"><circle cx="2" cy="3" r="1"/><circle cx="6" cy="3" r="1"/><circle cx="2" cy="7" r="1"/><circle cx="6" cy="7" r="1"/><circle cx="2" cy="11" r="1"/><circle cx="6" cy="11" r="1"/></svg></button><button id="zoom-out" aria-label="Zoom out" title="Zoom out (Ctrl −)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button><button id="zoom-level" type="button"><span>Fit</span><svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 3l2.5 2.5L6.5 3"/></svg></button><button id="zoom-in" aria-label="Zoom in" title="Zoom in (Ctrl +)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button><span class="view-sep" aria-hidden="true"></span><button id="hand-tool" aria-label="Hand tool" aria-pressed="false" aria-disabled="false" title="Hand tool: drag to pan (H)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg></button><span id="view-layout" class="view-group" role="group" aria-label="Page layout" hidden><span class="view-sep" aria-hidden="true"></span><button id="view-single" aria-label="Single page" aria-pressed="true" title="Single page"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg></button><button id="view-spread" aria-label="Two pages" aria-pressed="false" title="Two-page spread (Ctrl 3)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></button></span><span id="view-previews" class="view-group" hidden><span class="view-sep" aria-hidden="true"></span><button id="page-strip-toggle" aria-label="Page previews" aria-pressed="false" title="Page previews (Ctrl 4)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="10" rx="2"/><rect x="3" y="17" width="4.5" height="4" rx="1"/><rect x="9.75" y="17" width="4.5" height="4" rx="1"/><rect x="16.5" y="17" width="4.5" height="4" rx="1"/></svg></button></span></div></main>
   </div>
   <footer><button id="previous" aria-label="Previous page" title="Previous page (PgUp)" disabled>←</button><button id="position" title="Go to location (Ctrl+G)" disabled>Ready when you are</button><button id="next" aria-label="Next page" title="Next page (PgDn)" disabled>→</button><input id="progress" type="range" aria-label="Document position" title="Click or drag to jump through the document" min="0" max="100" step="1" value="0" disabled></footer>
@@ -713,7 +716,7 @@ function saveSession() {
 }
 
 const strip = createTabStrip(
-  { home: $('home-tab'), list: $('tab-list'), add: $('tab-add'), overflow: $('tab-overflow') },
+  { strip: $('tab-strip'), home: $('home-tab'), list: $('tab-list'), add: $('tab-add'), overflow: $('tab-overflow') },
   { select: selectTab, close: closeTab, newTab: () => openFile(), move: (path, to) => { tabs.move(path, to); paintTabs(); saveSession(); } },
   platform === 'mac' ? '⌘T' : 'Ctrl T',
 );
@@ -722,14 +725,60 @@ $('title').onclick = () => (strip.isMenuOpen() ? strip.closeMenu() : strip.openM
 /** Opens a library document in a tab, or shows the tab it is already in. */
 function openPath(path: string, name = path.split(/[\\/]/).pop()) { return openTab(path, () => openLibraryDocument(path), name); }
 /** `path` is the document's identity when it is known before it is read (a library path, or the path a request named). */
-async function openTab(path: string | undefined, open: () => Promise<Opened | null>, label?: string) {
+async function openTab(path: string | undefined, open: () => Promise<Opened | null>, label?: string, at?: number) {
   const existing = path ? tabs.find(path) : undefined;
-  if (!existing) return load(open, label);
+  if (!existing) return load(open, label, { at });
   existing.problem = undefined;
   if (shown === existing) { if (!existing.reader) void reopen(existing); } else selectTab(existing.path);
   if (existing.reader) void touch(existing);
   return true;
 }
+/** Something to open: `path` is its identity when that is known before it is read. */
+type Opener = { path?: string; open: () => Promise<Opened | null>; label: string };
+/** Opens each in turn (an open is single-flight), the first at tab index `at`, and each new tab after the one before it. */
+async function openMany(items: readonly Opener[], at: number) {
+  let next = at;
+  for (const item of items) {
+    const before = tabs.size;
+    await openTab(item.path, item.open, item.label, next);
+    if (tabs.size > before && shown) next = tabs.indexOf(shown.path) + 1;
+  }
+}
+
+/** Where a drag at `point` would land: over the tab strip a marked slot, else the reading area. An app-internal drag lands only on those two. */
+function dropPlace(point: { x: number; y: number }, internal: boolean) {
+  const slot = strip.dropSlot(point.x, point.y);
+  const target = document.elementFromPoint(point.x, point.y);
+  const reading = Boolean(target?.closest('#workspace')) && !target?.closest('#library-root, #library-rail');
+  return { slot, accepted: slot !== undefined || !internal || reading, at: insertionIndex(slot, tabs.activeIndex, tabs.size) };
+}
+const overlay = $('drop-overlay');
+/** Shows where a drag would drop: the marker and a ghost tab over the strip, the overlay over the reading area. */
+function dragOver(point: { x: number; y: number }, names: readonly string[], count: number, internal: boolean) {
+  const { slot, accepted } = dropPlace(point, internal);
+  strip.showDrop(accepted ? slot : undefined, ghostLabel(count));
+  overlay.hidden = !accepted || slot !== undefined;
+  $('drop-names').textContent = overlayNames(names);
+}
+function dragEnd() { strip.showDrop(undefined); overlay.hidden = true; }
+/** Opens what was dropped, in drop order, at the tab index the drop chose; what cannot be opened is named in one notice. */
+function dropped<T>(items: readonly T[], nameOf: (item: T) => string, opener: (item: T) => Opener, at: number) {
+  const { openable, unsupported } = splitDropped(items, nameOf);
+  const notice = unsupportedNotice(unsupported);
+  if (notice) notify(notice);
+  void openMany(openable.map(opener), at);
+}
+// A document dragged out of the library, the rail or Home onto the strip or the reading area.
+attachOpenDrag({
+  over: (point, source) => dragOver(point, [source.name], 1, true),
+  drop: (point, source) => {
+    const { accepted, at } = dropPlace(point, true);
+    dragEnd();
+    if (accepted) void openMany([{ path: source.path, open: () => openLibraryDocument(source.path), label: source.name }], at);
+  },
+  cancel: dragEnd,
+});
+
 /** Opening a document that is already open still counts as opening it: it moves to the front of the recents. */
 async function touch(tab: Tab) {
   if (!tab.doc) return;
@@ -889,7 +938,19 @@ document.addEventListener('keydown', event => {
   }
   if (operation) { event.preventDefault(); operation(); }
 });
-if (!desktop) { $('preview-note').hidden = false; document.addEventListener('dragover', event => event.preventDefault()); document.addEventListener('drop', event => { event.preventDefault(); if (event.dataTransfer?.files.length !== 1) return notify('Drop one document at a time.'); const file = event.dataTransfer.files[0]; void openTab(undefined, () => browserFile(file), file.name); }); }
+if (!desktop) {
+  $('preview-note').hidden = false;
+  // Files dragged in from the page's own system: any number, opened in drop order.
+  const carriesFiles = (event: DragEvent) => Boolean(event.dataTransfer?.types.includes('Files'));
+  const dragFiles = (event: DragEvent) => { if (carriesFiles(event)) { event.preventDefault(); dragOver({ x: event.clientX, y: event.clientY }, [], event.dataTransfer?.items.length || 1, false); } };
+  document.addEventListener('dragenter', dragFiles); document.addEventListener('dragover', dragFiles);
+  document.addEventListener('dragleave', event => { if (!event.relatedTarget) dragEnd(); });
+  document.addEventListener('drop', event => {
+    event.preventDefault(); dragEnd();
+    const files = [...(event.dataTransfer?.files ?? [])];
+    if (files.length) dropped(files, file => file.name, file => ({ open: () => browserFile(file), label: file.name }), dropPlace({ x: event.clientX, y: event.clientY }, false).at);
+  });
+}
 function paintHome() {
   const empty = $('empty');
   splashHtml ??= empty.innerHTML;
@@ -951,6 +1012,19 @@ async function initialize() {
       await appWindow.onResized(() => void syncMaximized());
       await syncMaximized();
     }
+    // Files dropped from the OS arrive as the webview's own drag-drop events (position is physical pixels). The native side has already
+    // authorized what was dropped; an unauthorized path would be refused by the open command.
+    const { getCurrentWebview } = await import('@tauri-apps/api/webview');
+    let incoming: string[] = [];
+    await getCurrentWebview().onDragDropEvent(event => {
+      const payload = event.payload;
+      if (payload.type === 'leave') return dragEnd();
+      const point = { x: payload.position.x / devicePixelRatio, y: payload.position.y / devicePixelRatio };
+      if (payload.type === 'enter') incoming = payload.paths.map(baseName);
+      if (payload.type !== 'drop') return dragOver(point, incoming, incoming.length || 1, false);
+      dragEnd();
+      dropped(payload.paths, baseName, path => ({ path, open: () => chooseDocument(path), label: baseName(path) }), dropPlace(point, false).at);
+    });
     // The native focus event, not the page's blur: clicking into an EPUB frame blurs the page too.
     await appWindow.onFocusChanged(({ payload: focused }) => document.documentElement.classList.toggle('window-inactive', !focused));
     if (platform === 'mac') {

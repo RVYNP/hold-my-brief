@@ -562,6 +562,17 @@ fn route_open(app: &AppHandle, path: PathBuf) {
     let _ = app.emit("open-request", value);
 }
 
+/// Authorizes the supported documents among `paths`, which the user just dropped on the window; anything else is left alone.
+fn authorize_dropped(store: &mut Store, paths: &[PathBuf]) {
+    for path in paths {
+        if document_format(path).is_ok() {
+            if let Ok(canonical) = fs::canonicalize(path) {
+                store.authorized.insert(canonical);
+            }
+        }
+    }
+}
+
 fn argument_file(args: impl IntoIterator<Item = String>, cwd: &Path) -> Option<PathBuf> {
     args.into_iter()
         .skip(1)
@@ -678,13 +689,11 @@ fn main() {
             Ok(())
         })
         .on_webview_event(|webview, event| {
+            // The page receives the drop itself (the webview's drag-drop events, see src/main.ts) and decides what to open and where.
+            // The native event stays the authorization boundary: only files the user actually dropped become openable without a dialog.
             if let tauri::WebviewEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
-                if paths.len() == 1 {
-                    route_open(webview.app_handle(), paths[0].clone());
-                } else {
-                    let _ = webview
-                        .app_handle()
-                        .emit("reader-warning", "Drop one document at a time.");
+                if let Ok(mut store) = webview.app_handle().state::<Shared>().lock() {
+                    authorize_dropped(&mut store, paths);
                 }
             }
         })
@@ -727,6 +736,24 @@ mod tests {
         assert!(image_path(&document, "../outside.png").is_err());
         assert!(image_path(&document, "C:\\outside.png").is_err());
         assert!(image_path(&document, "https://example.com/x.png").is_err());
+    }
+    #[test]
+    fn a_drop_authorizes_supported_files_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let book = dir.path().join("book.epub");
+        let note = dir.path().join("note.txt");
+        let archive = dir.path().join("archive.zip");
+        for path in [&book, &note, &archive] {
+            fs::write(path, b"x").unwrap();
+        }
+        let mut store = Store::load(dir.path().join("state.json"));
+        authorize_dropped(&mut store, &[book.clone(), archive.clone(), dir.path().join("gone.pdf"), note.clone()]);
+        assert!(store.authorized.contains(&fs::canonicalize(&book).unwrap()));
+        assert!(store.authorized.contains(&fs::canonicalize(&note).unwrap()));
+        assert!(!store.authorized.contains(&fs::canonicalize(&archive).unwrap()));
+        assert_eq!(store.authorized.len(), 2);
+        // A drop does not queue an open: the page decides.
+        assert!(store.pending.is_none());
     }
     #[test]
     fn file_reads_are_bounded() {
