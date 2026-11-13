@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { openSearch } from './library-controls';
+import { libraryToggle } from './library-controls';
 
 /**
  * The command palette is the keyboard route to the actions the ··· menu lists, so these tests
@@ -20,18 +20,18 @@ test('Ctrl+K opens the palette and Escape restores focus to the reading surface'
   await expect(page.locator('#palette')).toBeHidden();
 });
 
-test('Ctrl+K opens the palette from a text field too (library search, find)', async ({ page }) => {
+test('Ctrl+K opens the palette from a text field too (library filter, find)', async ({ page }) => {
   await page.setViewportSize({ width: 1080, height: 700 });
   await page.goto('/');
   await page.locator('#file-input').setInputFiles(textDocument);
   await expect(page.locator('#filename')).toHaveText('palette.txt');
-  if (!(await page.locator('#library-root').isVisible())) await page.locator('#library-toggle').click();
-  await (await openSearch(page)).fill('beside');
+  await page.locator('#library-rail').getByRole('button', { name: 'Search', exact: true }).click();
+  await page.getByRole('searchbox', { name: 'Filter the library' }).fill('beside');
   await page.keyboard.press('Control+k');
   await expect(page.locator('#palette-input')).toBeFocused();
   // The field keeps what was typed in it; the shortcut is not swallowed as text editing.
   await page.keyboard.press('Escape');
-  await expect(page.locator('.library-search')).toHaveValue('beside');
+  await expect(page.getByRole('searchbox', { name: 'Filter the library' })).toHaveValue('beside');
   // Back on the page (Ctrl+F is typing inside a field), then from the find field.
   await page.locator('.reader-host:not(.staging)').focus();
   await page.keyboard.press('Control+f');
@@ -104,7 +104,7 @@ test('the library command opens the library from the palette', async ({ page }) 
   await page.keyboard.press('Control+k');
   await page.locator('#palette-input').fill('library');
   await page.keyboard.press('Enter');
-  await expect(page.locator('#library-toggle')).toHaveAttribute('aria-expanded', 'true');
+  await expect(libraryToggle(page)).toHaveAttribute('aria-expanded', 'true');
 });
 
 test('no matching query says so instead of showing an empty list', async ({ page }) => {

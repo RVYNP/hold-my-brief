@@ -4,63 +4,46 @@ import { pagedPdf } from './paged-pdf';
 const open = (page: Page, name: string) => page.locator('#file-input').setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from(`${name}\n\nBody of ${name}.\n`) });
 const shown = (page: Page, name: string) => expect(page.locator('#filename')).toHaveText(name);
 
-test('a closed library is a rail of recent covers: titled, ringed on the open one, one click to open, swapped with the drawer, absent when compact, and never moving the page', async ({ page }) => {
+test('the icon rail stands at 720 px and up: 48 px wide, on the saved side, absent when compact, and the info rail beside it opens and collapses without ever moving the page', async ({ page }) => {
   await page.setViewportSize({ width: 1080, height: 680 });
   await page.goto('/');
-  const rail = page.locator('#library-rail'), covers = rail.locator('.library-rail-cover'), drawer = page.locator('#library-root');
-  const toggle = rail.getByRole('button', { name: 'Open library' });
-
-  // The library is open at first at this width; closing it leaves the rail, with nothing to show but the toggle.
-  await page.locator('#library-toggle').click();
-  await expect(drawer).toBeHidden();
+  const rail = page.locator('#library-rail'), info = page.locator('#library-root');
+  const library = rail.getByRole('button', { name: 'Library', exact: true });
   await expect(rail).toBeVisible();
-  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  await expect(covers).toHaveCount(0);
   const box = (await rail.boundingBox())!;
-  expect(Math.round(box.width)).toBe(60);
+  expect([Math.round(box.x), Math.round(box.width)]).toEqual([6, 48]);
 
-  // Opening documents fills the rail, most recent first, each cover named by its document, the open one ringed.
-  for (const name of ['alpha.txt', 'beta.txt', 'gamma.txt']) { await open(page, name); await shown(page, name); }
-  await expect(covers).toHaveCount(3);
-  await expect(covers.nth(0)).toHaveAttribute('aria-label', 'gamma.txt');
-  await expect(covers.nth(1)).toHaveAttribute('aria-label', 'beta.txt');
-  await expect(covers.nth(2)).toHaveAttribute('title', 'alpha.txt');
-  const cover = (await covers.nth(0).boundingBox())!;
-  expect([Math.round(cover.width), Math.round(cover.height)]).toEqual([40, 54]);
-  await expect(covers.nth(0)).toHaveAttribute('aria-current', 'true');
-  await expect(covers.nth(1)).not.toHaveAttribute('aria-current', 'true');
-
-  // The rail overlays the reading panel: the panel and the reading surface keep their boxes whether the rail or the drawer stands there.
+  // The info rail is open at first at this width, beside the icon rail, and its icon is the pressed one; the toolbar's button is the compact window's.
+  await expect(info).toBeVisible();
+  await expect(library).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#library-toggle')).toBeHidden();
+  await page.locator('#file-input').setInputFiles({ name: 'alpha.txt', mimeType: 'text/plain', buffer: Buffer.from('alpha\n\nBody.\n') });
+  await expect(page.locator('#filename')).toHaveText('alpha.txt');
   const geometry = async () => ({ workspace: await page.locator('#workspace').boundingBox(), host: await page.locator('.reader-host:not(.staging):not(.tab-hidden)').boundingBox() });
-  const withRail = await geometry();
-  expect(withRail.workspace!.width).toBe(1080);
+  const open = await geometry();
+  expect(open.workspace!.width).toBe(1080);
+  expect(Math.round((await info.boundingBox())!.x)).toBe(60);
 
-  // A click opens that document, and the ring follows it.
-  await covers.nth(2).click();
-  await shown(page, 'alpha.txt');
-  await expect(covers.nth(0)).toHaveAttribute('aria-label', 'alpha.txt');
-  await expect(covers.nth(0)).toHaveAttribute('aria-current', 'true');
-  expect(await geometry()).toEqual(withRail);
-
-  // The toggle swaps the rail for the drawer and back.
-  await toggle.click();
-  await expect(drawer).toBeVisible();
-  await expect(rail).toBeHidden();
-  await expect(page.locator('#library-toggle')).toHaveAttribute('aria-expanded', 'true');
-  expect(await geometry()).toEqual(withRail);
-  await page.getByRole('button', { name: 'Close library', exact: true }).first().click();
-  await expect(drawer).toBeHidden();
+  // Pressing the active icon collapses the info rail (the icon rail stays); pressing it again, or Ctrl+B, opens it.
+  await library.click();
+  await expect(info).toBeHidden();
   await expect(rail).toBeVisible();
-  expect(await geometry()).toEqual(withRail);
-
-  // The same on the right once the library is docked there, and the view controls stay clear of the rail.
+  await expect(library).toHaveAttribute('aria-pressed', 'false');
+  expect(await geometry()).toEqual(open);
+  await library.click();
+  await expect(info).toBeVisible();
   await page.keyboard.press('Control+b');
-  await page.getByRole('button', { name: 'Move library to the right' }).click();
-  await page.getByRole('button', { name: 'Close library', exact: true }).first().click();
-  await expect(rail).toBeVisible();
+  await expect(info).toBeHidden();
+  await page.keyboard.press('Control+b');
+  await expect(info).toBeVisible();
+  expect(await geometry()).toEqual(open);
+
+  // On the right once the library is docked there, with the view controls and the find bar clear of it.
+  await rail.getByRole('button', { name: 'Move library to the right' }).click();
+  await library.click(); await expect(info).toBeHidden();
   const right = (await rail.boundingBox())!;
-  expect(right.x).toBeGreaterThan(1080 - 6 - 60 - 1);
-  expect(await geometry()).toEqual(withRail);
+  expect(right.x).toBeGreaterThan(1080 - 6 - 48 - 1);
+  expect((await geometry()).workspace).toEqual(open.workspace);
   await page.keyboard.press('Control+f');
   const find = page.locator('#find-bar');
   await expect(find).toBeVisible();
@@ -68,9 +51,10 @@ test('a closed library is a rail of recent covers: titled, ringed on the open on
   expect(bar.x + bar.width).toBeLessThanOrEqual(right.x);
   await page.keyboard.press('Escape');
 
-  // Compact windows have no rail, and keep the sheet.
+  // Compact windows have no icon rail, and keep the sheet.
   await page.setViewportSize({ width: 600, height: 680 });
   await expect(rail).toBeHidden();
+  await expect(page.locator('#library-toggle')).toBeVisible();
 });
 
 type Box = { x: number; y: number; width: number; height: number };
@@ -86,7 +70,8 @@ async function openReading(page: Page, side: 'left' | 'right') {
   await page.locator('#file-input').setInputFiles({ name: 'rail.pdf', mimeType: 'application/pdf', buffer: pagedPdf(9) });
   await expect(page.locator('#position')).toContainText('Page 1 of 9');
   await expect(page.locator('#loading')).toBeHidden();
-  if (await page.locator('#library-root').isVisible()) await page.locator('#library-toggle').click();
+  if (await page.locator('#library-root').isVisible()) await page.locator('#library-rail').getByRole('button', { name: 'Library', exact: true }).click();
+  await expect(page.locator('#library-root')).toBeHidden();
   await expect(page.locator('#library-rail')).toBeVisible();
   await page.locator('.pdf-reader').focus();
   await page.keyboard.press('Control+3');
@@ -97,7 +82,7 @@ async function openReading(page: Page, side: 'left' | 'right') {
 }
 
 for (const side of ['right', 'left'] as const) {
-  test(`with the rail on the ${side}, the rail, the page strip, the footer and the view controls never overlap, and the footer stays whole and clickable`, async ({ page }) => {
+  test(`with the icon rail on the ${side}, the rail, the page strip, the footer and the view controls never overlap, and the footer stays whole and clickable`, async ({ page }) => {
     await openReading(page, side);
     const rail = page.locator('#library-rail'), strip = page.locator('#page-strip'), pill = page.locator('#view-controls'), footer = page.locator('footer');
     await expect(rail).toHaveAttribute('data-library-side', side);
@@ -133,33 +118,31 @@ for (const side of ['right', 'left'] as const) {
       await clear();
     }
     // The saved placement is re-resolved against the other side's rail too.
-    await page.keyboard.press('Control+b');
-    await page.getByRole('button', { name: `Move library to the ${side === 'right' ? 'left' : 'right'}` }).click();
-    await page.getByRole('button', { name: 'Close library', exact: true }).first().click();
+    await rail.getByRole('button', { name: `Move library to the ${side === 'right' ? 'left' : 'right'}` }).click();
     await expect(rail).toBeVisible();
     const other = side === 'right' ? 'left' : 'right';
     await expect(rail).toHaveAttribute('data-library-side', other);
-    const [railBox, pillBox, stripBox] = [await boxOf(rail), await boxOf(pill), await boxOf(strip)];
-    expect(apart(railBox, pillBox) && apart(railBox, stripBox)).toBe(true);
+    // The pill and the strip re-resolve against the rail on its new side (on the next frame).
+    await expect.poll(async () => { const [railBox, pillBox, stripBox] = [await boxOf(rail), await boxOf(pill), await boxOf(strip)]; return apart(railBox, pillBox) && apart(railBox, stripBox); }).toBe(true);
   });
 }
 
 for (const side of ['left', 'right'] as const) {
-  test(`the open drawer docked ${side}, with the page strip, ends above the footer and the strip starts beside it`, async ({ page }) => {
+  test(`the open info rail docked ${side}, beside the icon rail, with the page strip, ends above the footer and the strip and the pill start beside both`, async ({ page }) => {
     await openReading(page, side);
-    await page.locator('#library-toggle').click();
-    const drawer = page.locator('#library-root'), strip = page.locator('#page-strip'), footer = page.locator('footer');
+    await page.locator('#library-rail').getByRole('button', { name: 'Library', exact: true }).click();
+    const drawer = page.locator('#library-root'), rail = page.locator('#library-rail'), strip = page.locator('#page-strip'), footer = page.locator('footer'), pill = page.locator('#view-controls');
     await expect(drawer).toBeVisible();
     await page.mouse.move(486, 855);
     await expect.poll(async () => { const box = await boxOf(footer); return Math.round(box.y + box.height); }).toBe(858);
-    const [d, s, f] = [await boxOf(drawer), await boxOf(strip), await boxOf(footer)];
-    expect(apart(d, s) && apart(d, f) && apart(s, f)).toBe(true);
+    const [d, r, s, f, p] = [await boxOf(drawer), await boxOf(rail), await boxOf(strip), await boxOf(footer), await boxOf(pill)];
+    expect(apart(d, s) && apart(d, f) && apart(s, f) && apart(r, d) && apart(r, s) && apart(r, f) && apart(d, p) && apart(r, p)).toBe(true);
     expect(d.y + d.height).toBeLessThanOrEqual(f.y + .5);
     if (side === 'left') expect(s.x).toBeGreaterThanOrEqual(d.x + d.width); else expect(s.x + s.width).toBeLessThanOrEqual(d.x);
   });
 }
 
-test('a compact window has no rail and its sheet still covers the whole layout', async ({ page }) => {
+test('a compact window has no icon rail and its sheet still covers the whole layout', async ({ page }) => {
   await openReading(page, 'left');
   await page.setViewportSize({ width: 600, height: 700 });
   await expect(page.locator('#library-rail')).toBeHidden();
@@ -169,12 +152,11 @@ test('a compact window has no rail and its sheet still covers the whole layout',
   expect(Math.round(sheet.y + sheet.height)).toBe(Math.round(layout.y + layout.height));
 });
 
-test('the rail has a side button and a context menu; both move the one saved side, which the drawer and the palette share and a reload keeps', async ({ page }) => {
+test('the icon rail has a side button and a context menu; both move the one saved side, which the info rail and the palette share and a reload keeps', async ({ page }) => {
   await page.setViewportSize({ width: 1080, height: 680 });
   await page.goto('/');
   const rail = page.locator('#library-rail'), key = 'hold-my-brief:library-side';
   const side = () => page.evaluate(k => localStorage.getItem(k), key);
-  if (await page.locator('#library-root').isVisible()) await page.locator('#library-toggle').click();
   await expect(rail).toBeVisible();
   await expect(rail).toHaveAttribute('data-library-side', 'left');
 
@@ -182,12 +164,14 @@ test('the rail has a side button and a context menu; both move the one saved sid
   const toRight = rail.getByRole('button', { name: 'Move library to the right' });
   await expect(toRight).toBeVisible();
   const foot = await boxOf(toRight), railBox = await boxOf(rail);
-  expect(foot.y + foot.height).toBeGreaterThan(railBox.y + railBox.height - 16);
+  expect(foot.y + foot.height).toBeGreaterThan(railBox.y + railBox.height - 60);
   await toRight.click();
   expect(await side()).toBe('right');
   await expect(rail).toHaveAttribute('data-library-side', 'right');
-  expect((await boxOf(rail)).x).toBeGreaterThan(1080 - 6 - 60 - 1);
+  expect((await boxOf(rail)).x).toBeGreaterThan(1080 - 6 - 48 - 1);
   await expect(rail.getByRole('button', { name: 'Move library to the left' })).toBeVisible();
+  // The info rail beside it follows to the right.
+  expect((await boxOf(page.locator('#library-root'))).x).toBeGreaterThan(1080 / 2);
 
   // The context menu offers both sides, marks the current one, and Escape closes it without a change.
   await rail.click({ button: 'right', position: { x: 30, y: 200 } });
@@ -204,6 +188,7 @@ test('the rail has a side button and a context menu; both move the one saved sid
   expect(await side()).toBe('left');
   await expect(rail).toHaveAttribute('data-library-side', 'left');
   expect((await boxOf(rail)).x).toBeLessThan(10);
+  expect((await boxOf(page.locator('#library-root'))).x).toBeLessThan(1080 / 2);
   // Choosing the side the library is already on changes nothing.
   await rail.click({ button: 'right', position: { x: 30, y: 200 } });
   await menu.getByRole('menuitemradio', { name: 'Keep library on the left' }).click();
@@ -214,12 +199,9 @@ test('the rail has a side button and a context menu; both move the one saved sid
   await page.mouse.click(600, 300);
   await expect(menu).toBeHidden();
 
-  // The drawer's dock button and the palette command move the same preference, and the rail follows.
-  await page.keyboard.press('Control+b');
-  await page.getByRole('button', { name: 'Move library to the right' }).click();
+  // The palette command moves the same preference, and both rails follow.
+  await rail.getByRole('button', { name: 'Move library to the right' }).click();
   expect(await side()).toBe('right');
-  await page.getByRole('button', { name: 'Close library', exact: true }).first().click();
-  await expect(rail).toBeVisible();
   await expect(rail).toHaveAttribute('data-library-side', 'right');
   await page.keyboard.press('Control+k');
   await page.getByRole('combobox', { name: 'Go to, find or run a command' }).fill('Move library to other side');
@@ -228,14 +210,12 @@ test('the rail has a side button and a context menu; both move the one saved sid
   expect(await side()).toBe('left');
   await rail.getByRole('button', { name: 'Move library to the right' }).click();
 
-  // The side survives a reload, rail and drawer alike.
+  // The side survives a reload, icon rail and info rail alike.
   await page.reload();
-  if (await page.locator('#library-root').isVisible()) await page.locator('#library-toggle').click();
   await expect(rail).toBeVisible();
   await expect(rail).toHaveAttribute('data-library-side', 'right');
-  expect((await boxOf(rail)).x).toBeGreaterThan(1080 - 6 - 60 - 1);
-  await page.locator('#library-toggle').click();
-  await expect(page.getByRole('button', { name: 'Move library to the left' })).toBeVisible();
+  expect((await boxOf(rail)).x).toBeGreaterThan(1080 - 6 - 48 - 1);
+  await expect(page.locator('#library-root')).toBeVisible();
   expect((await boxOf(page.locator('#library-root'))).x).toBeGreaterThan(1080 / 2);
 });
 

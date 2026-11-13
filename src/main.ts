@@ -5,7 +5,7 @@ import { desktop, native, state, browserFile, persist, openExternal, confirmDocu
 import { emptyLibrary, type Library } from './catalog-types';
 import { createLibrary } from './library';
 import { formatProgress, progressOf, type Progress } from './progress';
-import { createLibraryRail, openedOrder, railItems } from './library-rail';
+import { createIconRail } from './icon-rail';
 import { ImageAdapter } from './adapters/image';
 import { createPalette } from './palette';
 import { createFindBar } from './find-bar';
@@ -15,7 +15,8 @@ import { appearanceSummary, createAppearanceSheet, paletteIcon } from './appeara
 import { createAssistantPanel } from './assistant-panel';
 import { DRAG_SLOP, Panner, type Offset } from './pan';
 import { MIN_SPREAD_WIDTH, pagesLabel, spreadPages } from './spread';
-import { assignShelfSlots, closeHome, fillHomePictures, homeSections, homeTypes, renderHome } from './home';
+import { assignShelfSlots, closeHome, fillHomePictures, homeSections, homeTypes, openedOrder, renderHome } from './home';
+import { displayTitle } from './shelf';
 import { repaintCovers } from './cards';
 import { canThumbnail, createThumbnailStore } from './thumbnails';
 import { createPageStrip, MIN_PANEL_HEIGHT } from './page-strip';
@@ -261,10 +262,10 @@ const pillStrip = () => {
   return Math.max(workspace.classList.contains('has-page-strip') ? covered(pageStrip.element) : 0, workspace.classList.contains('has-image-navigation') ? covered(workspace.querySelector('.library-image-navigation')) : 0);
 };
 function drawerBand() {
-  // The compact sheet covers the whole layout over a scrim; only the side-by-side drawer, or the rail that stands in for it, is steered around.
+  // The compact sheet covers the whole layout over a scrim; only the side-by-side info rail, and the icon rail it stands beside, are steered around.
   if (matchMedia('(max-width: 719px)').matches) return null;
-  const drawer = $($('reader-layout').classList.contains('library-open') ? 'library-root' : 'library-rail').getBoundingClientRect(), panel = workspace.getBoundingClientRect();
-  return { left: drawer.left - panel.left - workspace.clientLeft, right: drawer.right - panel.left - workspace.clientLeft };
+  const boxes = [$('library-rail').getBoundingClientRect(), ...($('reader-layout').classList.contains('library-open') ? [$('library-root').getBoundingClientRect()] : [])], panel = workspace.getBoundingClientRect();
+  return { left: Math.min(...boxes.map(box => box.left)) - panel.left - workspace.clientLeft, right: Math.max(...boxes.map(box => box.right)) - panel.left - workspace.clientLeft };
 }
 function showPill(point: Point | null) {
   const values = point ? [`${point.left}px`, `${point.top}px`, 'auto', 'auto', 'none'] : ['', '', '', '', ''];
@@ -388,29 +389,28 @@ document.querySelectorAll<HTMLDialogElement>('dialog.drop').forEach(dialog => di
   const box = dialog.getBoundingClientRect();
   if (event.target === dialog && (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom)) closeDialog(dialog);
 }));
+// The icon rail is the library's door at 720 px and up (the toolbar button is for compact windows): the info rail opens on the view an icon names.
+const rail = createIconRail($('library-rail'), {
+  view: view => library.showView(view),
+  home: () => selectTab(undefined),
+  add: anchor => library.openAddMenu(anchor),
+  appearance: () => appearanceSheet.open(),
+  setSide: side => library.setSide(side),
+});
 const library = createLibrary($('library-root'), {
   open: path => openPath(path),
   error: fail,
-  changed: (next, progress) => { homeLibrary = next; homeProgress = { ...progress }; if ($('empty').classList.contains('is-home')) paintHome(); paintRail(); },
-  progressChanged: progress => { homeProgress = { ...progress }; if ($('empty').classList.contains('is-home')) paintHome(); paintRail(); },
+  openBackground: doc => openInBackground(doc),
+  changed: (next, progress) => { homeLibrary = next; homeProgress = { ...progress }; if ($('empty').classList.contains('is-home')) paintHome(); },
+  progressChanged: progress => { homeProgress = { ...progress }; if ($('empty').classList.contains('is-home')) paintHome(); },
   settle: () => flush(),
   sideChanged: side => rail.setSide(side),
+  viewChanged: view => rail.setView(view),
+  door: view => rail.button(view),
 });
 $('library-toggle').onclick = () => library.toggle();
-// The library closed is a rail of the latest recents. It shares Home's picture store, so a cover made for one is there for the other.
-const rail = createLibraryRail($('library-rail'), {
-  toggle: () => library.toggle(),
-  open: (path, name) => { void openPath(path, name); },
-  picture: (path, format, alive) => homeThumbs.request(path, format, alive),
-  peek: path => homeThumbs.peek(path),
-  epub: (path, alive) => homeThumbs.loadEpub(path, alive),
-  title: path => homeThumbs.epub(path)?.title?.trim() || undefined,
-  failed: path => homeThumbs.failed(path),
-  setSide: side => library.setSide(side),
-});
 rail.setSide(library.side());
 const knownTitle = (item: { path: string; format: string }) => item.format.toLowerCase() === 'epub' ? homeThumbs.epub(item.path)?.title?.trim() || undefined : undefined;
-function paintRail() { rail.paint(railItems(desktop ? homeRecents : openedOrder(homeLibrary.documents), homeLibrary.documents, knownTitle, homeProgress), active?.path, scheme()); }
 
 /**
  * The palette is mounted after the actions it dispatches, since `run` closes over `action`
@@ -502,6 +502,7 @@ async function command(id: string) {
   else if (id === 'close-tab') { if (shown) closeTab(shown.path); }
   else if (id === 'next-tab' || id === 'previous-tab') { const next = tabs.neighbour(id === 'next-tab' ? 1 : -1); if (next) selectTab(next.path); }
   else if (id === 'library') library.toggle();
+  else if (id === 'library-search') library.showView('search');
   else if (id === 'library-board') library.board();
   else if (id === 'library-side') library.setSide(library.side() === 'left' ? 'right' : 'left');
   else if (id === 'find') findBar.open();
@@ -624,7 +625,8 @@ function show(next: Tab | undefined, refreshed = false) {
   if (reader && position) showPosition(position, false); else paintNoDocument();
   activeHost?.focus();
   if (next?.find !== undefined) findBar.open(next.find, false);
-  paintTabState(); paintTabs(); paintRail(); saveSession();
+  lastBackground = undefined; rail.setHome(!next); library.setActive(next?.path);
+  paintTabState(); paintTabs(); saveSession();
   if (!next) paintHome();
   else if (!next.reader && !next.problem) void reopen(next);
 }
@@ -640,7 +642,7 @@ function paintNoDocument() {
 /** Reopens a tab that holds nothing: its place was saved when it hibernated (or by the last session), and the page comes back there. */
 function reopen(tab: Tab) { return load(() => openLibraryDocument(tab.path), tab.name, { target: tab }); }
 
-const tabTitle = (tab: Tab) => tab.format === 'epub' ? homeThumbs.epub(tab.path)?.title?.trim() || tab.name : tab.name;
+const tabTitle = (tab: Tab) => displayTitle(tab, tab.format === 'epub' ? homeThumbs.epub(tab.path)?.title : undefined);
 /** Where a tab is, short: "40 / 146" for pages and lines, a percentage for the rest. */
 function tabWhere(tab: Tab) {
   const place = tab === shown ? position : tab.position;
@@ -726,6 +728,14 @@ $('title').onclick = () => (strip.isMenuOpen() ? strip.closeMenu() : strip.openM
 
 /** Opens a library document in a tab, or shows the tab it is already in. */
 function openPath(path: string, name = path.split(/[\\/]/).pop()) { return openTab(path, () => openLibraryDocument(path), name); }
+/** The tab a background open added last, so the next one lands after it (as a browser's middle clicks do); forgotten when another tab is shown. */
+let lastBackground: string | undefined;
+/** Gives a library document a tab beside the one showing without showing it; it opens when it is first shown. */
+function openInBackground(doc: { path: string; name: string; format: string }) {
+  const at = lastBackground && tabs.find(lastBackground) ? tabs.indexOf(lastBackground) + 1 : insertionIndex(undefined, tabs.activeIndex, tabs.size);
+  if (!tabs.add({ path: doc.path, name: doc.name, format: doc.format, options: { ...defaultOptions }, hand: false, scanNoticeShown: false }, at)) return;
+  lastBackground = doc.path; paintTabs(); saveSession();
+}
 /** `path` is the document's identity when it is known before it is read (a library path, or the path a request named). */
 async function openTab(path: string | undefined, open: () => Promise<Opened | null>, label?: string, at?: number) {
   const existing = path ? tabs.find(path) : undefined;
@@ -867,7 +877,7 @@ async function action(name: string) {
   else if (name === 'outline') { const list = $('outline-list'); list.replaceChildren(); const entries = reader?.outline() ?? []; if (!entries.length) list.textContent = 'No contents outline in this document.'; for (const item of entries) { const button = document.createElement('button'); button.textContent = item.label; button.onclick = () => { void reader?.goTo(item.target).then(() => closeDialog($<HTMLDialogElement>('contents'))).catch(fail); }; list.append(button); } showDialog('contents'); }
   else if (name === 'shortcuts') showDialog('shortcuts');
   else if (name === 'clear-data') showDialog('delete-data');
-  else if (name === 'clear-recents') { if (desktop) await native('clear_recents'); homeRecents = []; paintHome(); paintRail(); notify('Recent-file list cleared. Documents and saved positions are unchanged.'); }
+  else if (name === 'clear-recents') { if (desktop) await native('clear_recents'); homeRecents = []; paintHome(); notify('Recent-file list cleared. Documents and saved positions are unchanged.'); }
   else if (['back', 'start', 'end', 'screen-next', 'screen-previous'].includes(name)) await navigate(name as Parameters<ReaderAdapter['navigate']>[0]);
 }
 document.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(button => button.onclick = () => { closeDialog($<HTMLDialogElement>('menu')); void command(button.dataset.action!).catch(fail); });
@@ -992,7 +1002,7 @@ function paintHome() {
     types,
     format: homeFormat,
     selectFormat: value => { homeFormat = value; paintHome(); empty.querySelector<HTMLElement>(`.home-chip[data-type="${value}"]`)?.focus(); },
-    ...(desktop ? { remove: (path: string) => { void native('remove_recent', { path }).then(() => { homeRecents = homeRecents.filter(item => item.path !== path); paintHome(); paintRail(); }).catch(fail); } } : {}),
+    ...(desktop ? { remove: (path: string) => { void native('remove_recent', { path }).then(() => { homeRecents = homeRecents.filter(item => item.path !== path); paintHome(); }).catch(fail); } } : {}),
   }, scheme());
   fillHomePictures(empty, {
     picture: (path, format) => homeThumbs.request(path, format, () => generation === homePicture && empty.classList.contains('is-home')),
@@ -1006,14 +1016,13 @@ function paintHome() {
 onAppearanceChange(() => {
   const home = $('empty');
   if (home.classList.contains('is-home')) repaintCovers(home, scheme());
-  paintRail();
 });
 async function initialize() {
   const saved = await state(); updateWindow(saved.window); if (saved.warning) notify(saved.warning);
   homeRecents = saved.recents;
   await library.refresh().catch(fail);
   homeLibrary = await getLibrary().catch(() => emptyLibrary());
-  paintHome(); paintRail();
+  paintHome();
   for (const entry of saved.tabs.tabs) tabs.open({ ...entry, options: { ...defaultOptions }, hand: false, scanNoticeShown: false });
   show(saved.tabs.active === null ? undefined : tabs.tabs[saved.tabs.active], true);
   if (desktop) {

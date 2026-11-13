@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { chooseFromViewMenu, openSearch, preferGrid } from './library-controls';
+import { chooseFromViewMenu, openBoard, openSearch, preferGrid, libraryToggle } from './library-controls';
 import { ZipWriter, Uint8ArrayWriter, TextReader } from '@zip.js/zip.js';
 import { createHash } from 'node:crypto';
 import { deflateSync } from 'node:zlib';
@@ -185,7 +185,7 @@ test('the opening strip is chrome: it never takes height from the reading area o
   await strip(true);
   // In a compact window the library covers the reading panel with a scrim and makes it inert, so the
   // strip has to live outside that panel: Cancel is the only way to stop a slow open.
-  await page.locator('#library-toggle').click();
+  await libraryToggle(page).click();
   await expect(page.locator('#library-root')).toBeVisible();
   await strip(false);
   const cancel = await page.evaluate(() => {
@@ -264,7 +264,7 @@ test('library drawer floats over the page and never resizes it, while drag, keyb
   const panel = page.locator('.library-panel'), host = page.locator('.pdf-reader'), workspace = page.locator('#workspace');
   const canvas = page.locator('.pdf-page canvas');
   // The library is open by default at >=720 px, so close it to measure the untouched page first.
-  await page.locator('#library-toggle').click();
+  await libraryToggle(page).click();
   await expect(page.locator('#library-root')).toBeHidden();
   // Everything the drawer must leave alone: the reading panel's box, its client width, the page
   // box and the backing bitmap. Any of those changing when the drawer opens, is dragged or is
@@ -294,7 +294,7 @@ test('library drawer floats over the page and never resizes it, while drag, keyb
   expect(untouched.hostClientWidth).toBe(1080);
 
   // Opening the drawer rolls over the page instead of narrowing it.
-  await page.locator('#library-toggle').click();
+  await libraryToggle(page).click();
   await expect(page.locator('#library-root')).toBeVisible();
   await expect(handle).toHaveAttribute('aria-valuenow', '270');
   expect(await pageGeometry()).toEqual(untouched);
@@ -328,53 +328,32 @@ test('library drawer floats over the page and never resizes it, while drag, keyb
   // Mirroring the drawer is a pure overlay too: the page keeps its box and its bitmap.
   expect(await pageGeometry()).toEqual(untouched);
 
-  // Grid view is a pure overlay as well. Adding six images makes the collection mostly pictures, so it
-  // opens as a grid; widening to 480 px changes the column count, never the page, and the masonry never
-  // scrolls sideways or lets a tile out of the drawer.
-  const documents = page.locator('.library-documents');
+  // The tree is the info rail's content, so adding six images adds rows (Loose files), never a change to the page.
   await page.locator('.library-panel input[type=file]').setInputFiles(pngFiles);
-  await chooseFromViewMenu(page, 'Grid'); // A drawer narrower than 400 px opens on list until the grid is asked for.
-  await expect(page.locator('.library-tile')).toHaveCount(7);
-  await expect(documents).toHaveClass(/library-grid/);
-  const columns = () => tileColumns(page);
-  const contained = () => documents.evaluate(el => {
-    const area = el.getBoundingClientRect();
-    return el.scrollWidth <= el.clientWidth && Array.from(el.querySelectorAll('.library-tile')).every(tile => { const box = tile.getBoundingClientRect(); return box.left >= area.left - 1 && box.right <= area.right + 1; });
-  });
-  expect(await columns()).toBe(2);
-  expect(await contained()).toBe(true);
+  await expect(page.locator('.library-title-count')).toHaveText('7');
+  await expect(page.locator('.library-tree .tree-row.is-document')).toHaveCount(7);
   expect(await pageGeometry()).toEqual(untouched);
-  // Right-docked, so dragging the handle left widens the drawer (334 -> 480) and right narrows it again.
-  const drag = async (delta: number) => {
-    const grip = (await handle.boundingBox())!, y = grip.y + grip.height / 2;
-    await page.mouse.move(grip.x + 5, y); await page.mouse.down(); await page.mouse.move(grip.x + 5 + delta, y, { steps: 6 }); await page.mouse.up();
-  };
-  await drag(-146); await expect(handle).toHaveAttribute('aria-valuenow', '480');
-  await expect.poll(columns).toBe(3);
-  expect(await contained()).toBe(true);
+  // A wider rail and a narrower one never touch the page either, and no row runs past the rail.
+  const tree = page.locator('.library-tree');
+  await handle.focus(); await page.keyboard.press('End'); await expect(handle).toHaveAttribute('aria-valuenow', '520');
+  expect(await tree.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
   expect(await pageGeometry()).toEqual(untouched);
-  await drag(146); await expect(handle).toHaveAttribute('aria-valuenow', '334');
-  await expect.poll(columns).toBe(2);
+  await page.keyboard.press('Home'); await expect(handle).toHaveAttribute('aria-valuenow', '240');
+  expect(await tree.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
   expect(await pageGeometry()).toEqual(untouched);
-  await chooseFromViewMenu(page, 'List');
-  await expect(documents).toHaveClass(/library-list/);
-  await expect(page.locator('.library-document')).toHaveCount(7);
-  expect(await pageGeometry()).toEqual(untouched);
-  await chooseFromViewMenu(page, 'Grid');
-  await expect(documents).toHaveClass(/library-grid/);
-  expect(await pageGeometry()).toEqual(untouched);
+  await page.keyboard.press('Enter'); await page.keyboard.press('Shift+ArrowLeft'); await expect(handle).toHaveAttribute('aria-valuenow', '334'); // docked right: Left widens
 
-  // Board: the drawer opened across the whole reading panel. It is still out of flow, so the page is covered
-  // and inert but never resized or refitted, the drawer width is not rewritten, and Escape or the back button
-  // returns to the drawer exactly as it was.
+  // Board: the info rail opened across the whole reading panel (beside the icon rail). It is still out of flow, so the page is covered
+  // and inert but never resized or refitted, the rail width is not rewritten, and Escape or the back button
+  // returns to the info rail exactly as it was.
   await page.getByRole('button', { name: 'Open library board' }).click();
   const root = page.locator('#library-root');
   await expect(root).toHaveClass(/is-board/);
   await expect(handle).toBeHidden();
   await expect(workspace).toHaveJSProperty('inert', true);
-  expect(Math.round((await panel.boundingBox())!.width)).toBe(1080 - 12);
-  await expect.poll(columns).toBe(5);
-  expect(await contained()).toBe(true);
+  expect(Math.round((await panel.boundingBox())!.width)).toBe(1080 - 66);
+  const columns = () => tileColumns(page);
+  await expect.poll(columns).toBeGreaterThanOrEqual(4);
   expect(await pageGeometry()).toEqual(untouched);
   await expect(page.locator('.library-detail')).toBeHidden();
   // The board pre-selects the document being read, and pressing a selected tile opens it, so select another one.
@@ -395,32 +374,17 @@ test('library drawer floats over the page and never resizes it, while drag, keyb
   expect(await pageGeometry()).toEqual(untouched);
   // A reload reopens the document, and the library refresh that follows redraws the drawer and may move focus: a key or a menu used before it
   // lands goes nowhere. It has landed once the drawer marks the document that is open.
-  const reopened = async () => { await expect(page.locator('#position')).toContainText('Page 1 of 3'); await expect(page.locator('.library-panel [aria-current="true"]')).toHaveCount(1); };
+  const reopened = async () => { await expect(page.locator('#position')).toContainText('Page 1 of 3'); await expect(page.locator('.library-tree [aria-current="true"]')).toHaveCount(1); };
   await page.reload(); await reopened();
   await expect(handle).toHaveAttribute('aria-valuenow', '334');
   expect(await docked()).toBe(true);
   // Arrows move the separator visually, so Left widens a right-docked library.
   await handle.focus(); await page.keyboard.press('ArrowLeft'); await expect(handle).toHaveAttribute('aria-valuenow', '350');
-  // A narrower window re-clamps (55% of 800 px) without forgetting the preferred width.
+  // A narrower window re-clamps without forgetting the preferred width: 55% of 800 px is 440, but the reading panel keeps 320 px clear beside both rails (800 - 76 - 320).
   await page.keyboard.press('End'); await expect(handle).toHaveAttribute('aria-valuenow', '520');
   await page.setViewportSize({ width: 800, height: 680 });
-  await expect(handle).toHaveAttribute('aria-valuenow', '440'); await expect(handle).toHaveAttribute('aria-valuemax', '440');
+  await expect(handle).toHaveAttribute('aria-valuenow', '404'); await expect(handle).toHaveAttribute('aria-valuemax', '404');
   await page.setViewportSize({ width: 1080, height: 680 }); await expect(handle).toHaveAttribute('aria-valuenow', '520');
-
-  // Every width keeps the masonry inside the drawer, and the view is remembered for the collection.
-  // Count only drawer tiles: Home uses the same card classes and can have a different column count.
-  await handle.focus(); await page.keyboard.press('End');
-  expect(await columns()).toBeGreaterThanOrEqual(3);
-  expect(await contained()).toBe(true);
-  await handle.focus(); await page.keyboard.press('Home'); await expect(handle).toHaveAttribute('aria-valuenow', '240');
-  await expect.poll(columns).toBe(2);
-  expect(await contained()).toBe(true);
-  await chooseFromViewMenu(page, 'List');
-  await expect(documents).toHaveClass(/library-list/);
-  await page.reload(); await reopened();
-  await expect(documents).toHaveClass(/library-list/);
-  await chooseFromViewMenu(page, 'Grid');
-  await expect(documents).toHaveClass(/library-grid/);
 });
 
 test('library thumbnails are made once and survive searching, sorting and switching view', async ({ page }) => {
@@ -435,6 +399,7 @@ test('library thumbnails are made once and survive searching, sorting and switch
   await page.goto('/');
   await expect(page.locator('#library-root')).toBeVisible();
   await page.locator('.library-panel input[type=file]').setInputFiles(pngFiles);
+  await openBoard(page); // the grid is the board's
   const loaded = page.locator('.library-tile-media.is-loaded');
   await expect(loaded).toHaveCount(6);
   const made = () => page.evaluate(() => Reflect.get(window, 'objectUrlCount') as number);
@@ -475,6 +440,7 @@ test('a PDF whose page is one huge image gets a real thumbnail, not a blank page
   await page.setViewportSize({ width: 1080, height: 680 });
   await page.goto('/');
   await page.locator('.library-panel input[type=file]').setInputFiles({ name: 'huge-scan.pdf', mimeType: 'application/pdf', buffer: Buffer.concat(parts) });
+  await openBoard(page);
   const media = page.locator('.library-tile-media.is-loaded');
   await expect(media).toHaveCount(1, { timeout: 60000 });
   const mean = await media.locator('img').evaluate(async (image: HTMLImageElement) => {
@@ -493,16 +459,17 @@ test('the grid keeps the sort order for Tab and screen readers even though tiles
   await preferGrid(page);
   await page.goto('/');
   await page.locator('.library-panel input[type=file]').setInputFiles([...pngFiles].reverse());
+  await openBoard(page);
   await expect(page.locator('.library-tile')).toHaveCount(6);
   await chooseFromViewMenu(page, 'Name A–Z');
-  const order = () => page.locator('.library-tile-open').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label')));
+  const order = () => page.locator('.library-tile-open').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label')?.replace(/^(Open|Select) /, '')));
   // DOM (and so Tab) order is the sorted list, not column by column.
-  await expect.poll(order).toEqual([1, 2, 3, 4, 5, 6].map(n => `Open plate-${n}.png`));
+  await expect.poll(order).toEqual([1, 2, 3, 4, 5, 6].map(n => `plate-${n}.png`));
   // ...while the tiles really are spread over several columns, each starting a column in reading order.
   expect(await tileColumns(page)).toBeGreaterThan(1);
   await page.locator('.library-tile-open').first().focus();
   await page.keyboard.press('Tab'); await page.keyboard.press('Tab'); await page.keyboard.press('Tab');
-  await expect(page.locator('.library-tile-open:focus')).toHaveAttribute('aria-label', 'Open plate-2.png');
+  await expect(page.locator('.library-tile-open:focus')).toHaveAttribute('aria-label', /^(Open|Select) plate-2\.png$/);
 });
 
 test('in the board a tile is a toggle: pressing selects it, pressing the selected one opens it', async ({ page }) => {
@@ -510,8 +477,8 @@ test('in the board a tile is a toggle: pressing selects it, pressing the selecte
   await preferGrid(page);
   await page.goto('/');
   await page.locator('.library-panel input[type=file]').setInputFiles(pngFiles);
+  await openBoard(page);
   await expect(page.locator('.library-tile')).toHaveCount(6);
-  await page.getByRole('button', { name: 'Open library board' }).click();
   const selected = page.locator('.library-tile-open[aria-pressed=true]');
   await expect(selected).toHaveCount(1);
   const other = page.locator('.library-tile-open[aria-pressed=false]').first();
@@ -526,44 +493,20 @@ test('in the board a tile is a toggle: pressing selects it, pressing the selecte
   await expect(page.locator('#library-root')).not.toHaveClass(/is-board/);
 });
 
-test('tiles built while the library is hidden still load their pictures once it opens', async ({ page }) => {
-  // Compact window: the library is closed, so the grid is built with no width and its tiles are attached
-  // only when the window grows and the drawer opens.
+test('tiles built while the library is closed still load their pictures once the board opens', async ({ page }) => {
+  // Compact window: the library is closed, so the board's grid is built with no width and its tiles are attached
+  // only when the window grows and the board opens.
   await preferGrid(page);
   await page.goto('/');
   await expect(page.locator('#library-root')).toBeHidden();
   await page.locator('.library-panel input[type=file]').setInputFiles(pngFiles);
-  // The tiles exist in the sorted list but have no width to be seen in, so nothing is loaded yet.
-  await expect(page.locator('.library-tile')).toHaveCount(6);
+  await expect(page.locator('.library-title-count')).toHaveText('6');
   await expect(page.locator('.library-tile-media.is-loaded')).toHaveCount(0);
   await page.setViewportSize({ width: 1080, height: 680 });
   await expect(page.locator('#library-root')).toBeVisible();
+  await openBoard(page);
   await expect(page.locator('.library-tile')).toHaveCount(6);
   await expect(page.locator('.library-tile-media.is-loaded')).toHaveCount(6);
-});
-
-test('compact library sheet shows the grid in two columns without sideways overflow', async ({ page }) => {
-  await preferGrid(page);
-  await page.goto('/');
-  await page.locator('#library-toggle').click();
-  await expect(page.locator('#library-root')).toBeVisible();
-  await page.locator('.library-panel input[type=file]').setInputFiles(pngFiles);
-  const documents = page.locator('.library-documents');
-  await expect(documents).toHaveClass(/library-grid/);
-  await expect(page.locator('.library-tile')).toHaveCount(6);
-  await expect.poll(() => tileColumns(page)).toBe(2);
-  const fit = await page.evaluate(() => {
-    const area = document.querySelector('.library-documents')!, panel = document.querySelector('.library-panel')!;
-    const inside = Array.from(area.querySelectorAll('.library-tile')).every(tile => { const box = tile.getBoundingClientRect(), edge = panel.getBoundingClientRect(); return box.left >= edge.left && box.right <= edge.right; });
-    return { scrolls: area.scrollWidth > area.clientWidth, panelScrolls: panel.scrollWidth > panel.clientWidth, inside, sheet: Math.round(panel.getBoundingClientRect().width) };
-  });
-  expect(fit).toEqual({ scrolls: false, panelScrolls: false, inside: true, sheet: 306 });
-  // The scope popover opens inside the sheet and the Escape key closes it before the sheet itself.
-  await page.getByRole('button', { name: /Choose collection and filters/ }).click();
-  await expect(page.locator('#library-scope-menu')).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(page.locator('#library-scope-menu')).toBeHidden();
-  await expect(page.locator('#library-root')).toBeVisible();
 });
 
 test('the colour filter narrows the library to a named hue with a removable chip, on top of search, and swatches set it', async ({ page }) => {
@@ -573,16 +516,15 @@ test('the colour filter narrows the library to a named hue with a removable chip
   await page.goto('/');
   await page.locator('.library-panel input[type=file]').setInputFiles([solid('green-one', [46, 139, 58]), solid('green-two', [60, 160, 70]), solid('red-one', [192, 48, 32]), solid('blue-one', [48, 80, 192]), solid('grey-one', [128, 128, 128])]);
   // A picture's colours are measured when its thumbnail is made.
+  await openBoard(page);
   await expect(page.locator('.library-tile-media.is-loaded')).toHaveCount(5);
   const chip = page.locator('.library-colour-chip'), tiles = page.locator('.library-tile');
   await expect(chip).toBeHidden();
-  await page.getByRole('button', { name: /Choose collection and filters/ }).click();
   await page.getByLabel('Filter by colour').selectOption('green');
   await expect(chip).toHaveText(/Green/);
   await expect(tiles).toHaveCount(2);
   await expect(page.locator('.library-result-count')).toHaveText('2 references');
   // It sits on top of the search: the same hue with a title that matches only one of them.
-  await page.keyboard.press('Escape'); // The collection menu covers the search button until it is closed.
   const search = await openSearch(page);
   await search.fill('green-two');
   await expect(tiles).toHaveCount(1);
@@ -595,8 +537,7 @@ test('the colour filter narrows the library to a named hue with a removable chip
   await expect(chip).toBeHidden();
   await expect(tiles).toHaveCount(5);
   await expect(page.getByLabel('Filter by colour')).toHaveValue('');
-  // In the board, a swatch of the selected reference sets the filter to its hue.
-  await page.getByRole('button', { name: 'Open library board' }).click();
+  // A swatch of the selected reference (the detail strip) sets the filter to its hue.
   await page.locator('.library-tile', { has: page.getByLabel('Select red-one.png') }).click();
   await expect(page.locator('.library-detail-name')).toHaveText('red-one.png');
   await page.getByRole('button', { name: 'Filter the library by red' }).first().click();
@@ -609,8 +550,8 @@ test('the library board browses at full width and a detail strip joins from 1200
   await preferGrid(page);
   await page.goto('/');
   await page.locator('.library-panel input[type=file]').setInputFiles(pngFiles);
-  await expect(page.locator('.library-tile')).toHaveCount(6);
-  // The palette command opens the board (and the drawer if it was closed).
+  await expect(page.locator('.library-title-count')).toHaveText('6');
+  // The palette command opens the board (and the info rail if it was closed).
   await page.mouse.click(1100, 450); // Shortcuts belong to the reading panel, not the library's own fields.
   await page.keyboard.press('Control+k');
   await page.locator('#palette-input').fill('library board');
@@ -633,33 +574,33 @@ test('the library board browses at full width and a detail strip joins from 1200
   await expect(page.locator('#library-root')).not.toHaveClass(/is-board/);
   // Below 720 px there is no board: the sheet is all there is.
   await page.setViewportSize({ width: 420, height: 620 });
-  await page.locator('#library-toggle').click();
+  await libraryToggle(page).click();
   await expect(page.locator('.library-board-toggle')).toBeHidden();
 });
 
 test('browser library lists one document per file however it is added or opened', async ({ page }) => {
   const plate = pngFiles[0];
-  const openButtons = page.locator('.library-document-open');
+  const rows = page.locator('.library-tree .tree-row.is-document');
   await page.goto('/');
   // Added to the library, then the same file opened directly.
   await page.locator('.library-panel input[type=file]').setInputFiles(plate);
-  await expect(page.locator('.library-document')).toHaveCount(1);
+  await expect(rows).toHaveCount(1);
   await page.locator('#file-input').setInputFiles(plate);
   await expect(page.locator('#filename')).toHaveText(plate.name);
-  await expect(page.locator('.library-document')).toHaveCount(1);
+  await expect(rows).toHaveCount(1);
   // One pick holding the same file again plus a different one commits in a single step: only the different one is new.
   await page.locator('.library-panel input[type=file]').setInputFiles([plate, pngFiles[1]]);
-  await expect(page.locator('.library-document')).toHaveCount(2);
-  expect(await openButtons.evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label')))).toEqual(expect.arrayContaining([`Open ${plate.name}`, `Open ${pngFiles[1].name}`]));
-  expect(new Set(await openButtons.evaluateAll(nodes => nodes.map(node => (node as HTMLElement).title))).size).toBe(2);
+  await expect(rows).toHaveCount(2);
+  expect(await rows.evaluateAll(nodes => nodes.map(node => node.querySelector('.tree-label')?.textContent))).toEqual(expect.arrayContaining([plate.name, pngFiles[1].name]));
+  expect(new Set(await rows.evaluateAll(nodes => nodes.map(node => (node as HTMLElement).title))).size).toBe(2);
   // Opened first (a fresh browser context has an empty library), then added.
   const fresh = await page.context().browser()!.newContext();
   const other = await fresh.newPage();
   await other.goto(page.url());
   await other.locator('#file-input').setInputFiles(plate);
-  await expect(other.locator('.library-document')).toHaveCount(1);
+  await expect(other.locator('.library-tree .tree-row.is-document')).toHaveCount(1);
   await other.locator('.library-panel input[type=file]').setInputFiles([plate, pngFiles[1]]);
-  await expect(other.locator('.library-document')).toHaveCount(2);
+  await expect(other.locator('.library-tree .tree-row.is-document')).toHaveCount(2);
   await fresh.close();
 });
 
@@ -1052,9 +993,7 @@ for (const side of ['left', 'right'] as const) for (const layout of ['single', '
     const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
     await openPdfForPill(page, { width: 1080, height: 680 });
     if (side === 'right') {
-      await page.keyboard.press('Control+b');
-      await page.getByRole('button', { name: 'Move library to the right' }).click();
-      await page.getByRole('button', { name: 'Close library', exact: true }).first().click();
+      await page.locator('#library-rail').getByRole('button', { name: 'Move library to the right' }).click();
       await expect(page.locator('#library-rail')).toHaveAttribute('data-library-side', 'right');
     }
     const host = page.locator('.pdf-reader'), sheet = page.locator(layout === 'spread' ? '.pdf-spread' : '.pdf-page').first();
@@ -1347,7 +1286,7 @@ async function openPdfForPill(page: Page, viewport: { width: number; height: num
   await expect(page.locator('#position')).toContainText('Page 1 of 3');
   await expect(page.locator('#loading')).toBeHidden();
   await expect(page.locator('#view-controls')).toBeVisible();
-  if (await page.locator('#library-root').isVisible()) await page.locator('#library-toggle').click();
+  if (await page.locator('#library-root').isVisible()) await libraryToggle(page).click();
   await expect(page.locator('#library-root')).toBeHidden();
 }
 
@@ -1384,8 +1323,8 @@ test('view controls pill moves by its grip, stays inside the panel, persists, re
   await page.mouse.move(panel.x + 200, panel.y + 120, { steps: 6 });
   await page.mouse.move(panel.x + 1, panel.y + 1, { steps: 6 }); await page.mouse.up();
   const moved = await inside();
-  // The rail stands at the panel's left edge, so the pill stops beside it (6 px margin + 60 px rail) rather than at the 8 px margin.
-  expect(moved.x).toBeCloseTo(panel.x + 66 + 8, 0); expect(moved.y).toBeCloseTo(panel.y + 1 + 8, 0);
+  // The icon rail stands at the panel's left edge, so the pill stops beside it (6 px margin + 48 px rail) rather than at the 8 px margin.
+  expect(moved.x).toBeCloseTo(panel.x + 54 + 8, 0); expect(moved.y).toBeCloseTo(panel.y + 1 + 8, 0);
   expect(await geometry()).toEqual(untouched);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('hold-my-brief:view-controls')!))).toEqual({ x: expect.any(Number), y: expect.any(Number) });
 
@@ -1435,16 +1374,16 @@ test('view controls pill moves by its grip, stays inside the panel, persists, re
   expect(errors).toEqual([]);
 });
 
-test('a moved view-controls pill steps out from under the library drawer and returns when it closes', async ({ page }) => {
+test('a moved view-controls pill steps out from under the info rail and returns when it closes', async ({ page }) => {
   await openPdfForPill(page, { width: 1080, height: 700 });
   const pill = page.locator('#view-controls'), grip = page.getByRole('button', { name: 'Move view controls' }), workspace = page.locator('#workspace');
   const panel = (await workspace.boundingBox())!, handle = (await grip.boundingBox())!;
   await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2); await page.mouse.down();
   await page.mouse.move(panel.x + 1, panel.y + 1, { steps: 8 }); await page.mouse.up();
   const corner = (await pill.boundingBox())!;
-  expect(corner.x).toBeCloseTo(panel.x + 66 + 8, 0); // beside the rail
+  expect(corner.x).toBeCloseTo(panel.x + 54 + 8, 0); // beside the icon rail
 
-  await page.locator('#library-toggle').click();
+  await libraryToggle(page).click();
   await expect(page.locator('#library-root')).toBeVisible();
   const drawer = (await page.locator('#library-root').boundingBox())!;
   await expect.poll(async () => (await pill.boundingBox())!.x >= drawer.x + drawer.width + 8 - .5).toBe(true);
@@ -1456,7 +1395,7 @@ test('a moved view-controls pill steps out from under the library drawer and ret
   await page.getByRole('button', { name: 'Move library to the left' }).click();
   await expect.poll(async () => (await pill.boundingBox())!.x >= drawer.x + drawer.width + 8 - .5).toBe(true);
 
-  await page.locator('#library-toggle').click();
+  await libraryToggle(page).click();
   await expect(page.locator('#library-root')).toBeHidden();
   await expect.poll(async () => Math.abs((await pill.boundingBox())!.x - corner.x) < 1.5).toBe(true);
 });

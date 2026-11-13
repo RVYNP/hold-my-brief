@@ -3,12 +3,12 @@ import { assignMasonry, clampLibraryWidth, defaultLibraryView, gridDrawerWidth, 
 
 // Bounds for the floating drawer's width: the drawer overlays the page, but these limits still
 // guarantee the reading panel keeps a usable strip of page visible.
-describe('library drawer width', () => {
+describe('info rail width', () => {
   it('caps at 520 px, then 55% of the window, then a 320 px reading panel', () => {
     expect(libraryWidthBounds(1400)).toEqual({ min: 240, max: 520 });
-    expect(libraryWidthBounds(800)).toEqual({ min: 240, max: 440 });
-    // At the 720 px breakpoint the reading-panel floor (720 - 22 - 320) is tighter than 55%.
-    expect(libraryWidthBounds(720)).toEqual({ min: 240, max: 378 });
+    // Beside both rails (6 + 48 + 6 + the 10 px handle + 6 = 76 px) the reading panel floor (800 - 76 - 320) is tighter than 55% (440).
+    expect(libraryWidthBounds(800)).toEqual({ min: 240, max: 404 });
+    expect(libraryWidthBounds(720)).toEqual({ min: 240, max: 324 });
   });
 
   it('never lets the maximum fall below the minimum in a window narrower than both limits', () => {

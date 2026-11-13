@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { crc32, deflateSync } from 'node:zlib';
 import { pagedPdf } from './paged-pdf';
+import { libraryToggle } from './library-controls';
 
 /**
  * A zoom must not snap the view to the page's centre or top. Discrete zooms (buttons, shortcuts, a typed percentage, the presets,
@@ -23,11 +24,8 @@ async function open(page: Page, layout: Layout, side: Side) {
   await expect(page.locator('#position')).toContainText('Page 1 of');
   await expect(page.locator('#loading')).toBeHidden();
   await expect(page.locator('#view-controls')).toBeVisible();
-  if (side === 'right') {
-    if (!(await page.locator('#library-root').isVisible())) await page.keyboard.press('Control+b');
-    await page.getByRole('button', { name: 'Move library to the right' }).click();
-  }
-  if (await page.locator('#library-root').isVisible()) await page.getByRole('button', { name: 'Close library', exact: true }).first().click();
+  if (side === 'right') await page.locator('#library-rail').getByRole('button', { name: 'Move library to the right' }).click();
+  if (await page.locator('#library-root').isVisible()) await libraryToggle(page).click();
   await expect(page.locator('#library-root')).toBeHidden();
   await expect(page.locator('#library-rail')).toHaveAttribute('data-library-side', side);
   if (layout === 'spread') {
@@ -490,7 +488,7 @@ test('an image holds the viewport centre through a zoom too', async ({ page }) =
   await expect(page.locator('#filename')).toHaveText('plate.png');
   await expect(page.locator('#view-controls')).toBeVisible();
   await expect(level(page)).toHaveAttribute('data-fit', 'page');
-  if (await page.locator('#library-root').isVisible()) await page.locator('#library-toggle').click();
+  if (await page.locator('#library-root').isVisible()) await libraryToggle(page).click();
   await typeZoom(page, 300); await settled(page, 'image'); await page.locator('.image-reader').focus(); // 1800 x 1200: past the panel both ways.
   await scrollTo(page, 'image', .8, .7);
   const before = await view(page, 'image');

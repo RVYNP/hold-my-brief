@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { ZipWriter, Uint8ArrayWriter, TextReader } from '@zip.js/zip.js';
 import { pagedPdf } from './paged-pdf';
+import { libraryToggle } from './library-controls';
 
 const PAGES = 30;
 /** A reflowable EPUB long enough to scroll through, so a position partway in is a real percentage. */
@@ -30,13 +31,13 @@ async function goTo(page: Page, target: string) {
 /** Closes the library and opens it again, which is when it reads what was saved. */
 async function reopenLibrary(page: Page) {
   const drawer = page.locator('#library-root');
-  if (await drawer.isVisible()) await page.locator('#library-toggle').click();
+  if (await drawer.isVisible()) await libraryToggle(page).click();
   await expect(drawer).toBeHidden();
-  await page.locator('#library-toggle').click();
+  await libraryToggle(page).click();
   await expect(drawer).toBeVisible();
 }
 
-test('a PDF row says which page the reader got to, the rail cover repeats it, and the last page is Finished', async ({ page }) => {
+test('a PDF row says which page the reader got to, and the last page is Finished', async ({ page }) => {
   await start(page);
   await page.locator('#file-input').setInputFiles({ name: 'progress.pdf', mimeType: 'application/pdf', buffer: pagedPdf(PAGES) });
   await expect(page.locator('#position')).toContainText(`Page 1 of ${PAGES}`);
@@ -45,17 +46,15 @@ test('a PDF row says which page the reader got to, the rail cover repeats it, an
   await expect(page.locator('#position')).toContainText(`Page 12 of ${PAGES}`);
 
   await reopenLibrary(page);
-  const meta = page.locator('.library-document[data-doc-path] .library-row-meta');
-  await expect(meta).toHaveText(`PDF · p. 12 / ${PAGES} · Reading`);
-
-  // The closed library's cover is named with it.
-  await page.locator('#library-toggle').click();
-  await expect(page.locator('.library-rail-cover')).toHaveAttribute('title', `progress.pdf · p. 12 / ${PAGES}`);
+  const meta = page.locator('#library-root .tree-row.is-document[data-doc-path] .tree-meta');
+  await expect(meta).toHaveText(`p. 12 / ${PAGES}`);
+  await expect(page.locator('#library-root .tree-row.is-active')).toHaveCount(1);
+  await libraryToggle(page).click(); // focus is back on the page for the shortcut below
 
   await goTo(page, String(PAGES));
   await expect(page.locator('#position')).toContainText(`Page ${PAGES} of ${PAGES}`);
   await reopenLibrary(page);
-  await expect(meta).toHaveText('PDF · Finished · Reading');
+  await expect(meta).toHaveText('Finished');
 });
 
 test('an EPUB row shows a percentage, and a text file does too', async ({ page }) => {
@@ -68,15 +67,15 @@ test('an EPUB row shows a percentage, and a text file does too', async ({ page }
   const shown = Number(/≈(\d+)%/.exec(await page.locator('#position').innerText())![1]);
 
   await reopenLibrary(page);
-  const epub = page.locator('.library-document[data-doc-path$="progress.epub"] .library-row-meta');
-  await expect(epub).toHaveText(`EPUB · ${shown} % · Reading · progress.epub`);
+  const epub = page.locator('#library-root .tree-row.is-document[data-doc-path$="progress.epub"] .tree-meta');
+  await expect(epub).toHaveText(`${shown} %`);
 
   // A text file, jumped to a line in its middle.
   await page.locator('#file-input').setInputFiles({ name: 'long.txt', mimeType: 'text/plain', buffer: Buffer.from(Array.from({ length: 200 }, (_, n) => `Line number ${n + 1}.`).join('\n')) });
   await expect(page.locator('#filename')).toHaveText('long.txt');
   await goTo(page, '100');
   await reopenLibrary(page);
-  await expect(page.locator('.library-document[data-doc-path$="long.txt"] .library-row-meta')).toHaveText(/^TXT · (4\d|5\d) % · Reading$/);
+  await expect(page.locator('#library-root .tree-row.is-document[data-doc-path$="long.txt"] .tree-meta')).toHaveText(/^(4\d|5\d) %$/);
 });
 
 test('progress for the browser build survives a reload', async ({ page }) => {
@@ -87,5 +86,5 @@ test('progress for the browser build survives a reload', async ({ page }) => {
   await expect(page.locator('#position')).toContainText(`Page 7 of ${PAGES}`);
   await expect.poll(() => page.evaluate(() => Object.entries(localStorage).some(([key, value]) => key.startsWith('hold-my-brief:') && value.includes('"pages":30')))).toBe(true);
   await page.reload();
-  await expect(page.locator('.library-document[data-doc-path] .library-row-meta')).toHaveText(`PDF · p. 7 / ${PAGES}`);
+  await expect(page.locator('#library-root .tree-row.is-document[data-doc-path] .tree-meta')).toHaveText(`p. 7 / ${PAGES}`);
 });

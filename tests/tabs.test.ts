@@ -47,6 +47,21 @@ describe('opening', () => {
   });
 });
 
+describe('adding without showing', () => {
+  it('puts a tab at the index without changing what is showing, and does nothing for one that is open', () => {
+    const list = listOf('a', 'b');
+    list.activate('a');
+    expect(list.add(tab('c'), 1)).toBe(true);
+    expect(paths(list)).toEqual(['a', 'c', 'b']);
+    expect(list.active?.path).toBe('a');
+    expect(list.add(tab('b'), 0)).toBe(false);
+    expect(paths(list)).toEqual(['a', 'c', 'b']);
+    list.add(tab('d'));
+    expect(paths(list)).toEqual(['a', 'c', 'b', 'd']);
+    expect(list.isLive('c')).toBe(false);
+  });
+});
+
 describe('closing', () => {
   it('shows the right neighbour when the showing tab closes', () => {
     const list = listOf('a', 'b', 'c');

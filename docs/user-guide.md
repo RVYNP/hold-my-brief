@@ -13,7 +13,7 @@ Finder's Open With and files dropped on the Dock icon (several files open as sev
 
 ## Tabs
 
-Every document opens in its own tab, from every way of opening one: the file dialog, the library, the rail's covers, Home,
+Every document opens in its own tab, from every way of opening one: the file dialog, the library, Home,
 recents, the assistant, a command-line argument or a second instance, and a drop. A document that is already open is not opened
 twice; its tab is shown instead. Closing the last document tab shows **Home**.
 
@@ -26,7 +26,7 @@ scrolls and a **⌄** at its end lists them all. Drag a tab to reorder; middle-c
 is already open is shown instead). While files are over the window the reading area dims behind a "Drop to open in a new tab" panel;
 over the tab strip a marker between two tabs and a "+ N files" ghost tab show where they will go, and the tabs open there. Dropped on the
 reading area they open after the tab you are reading (at the end from Home). Files of a type the reader does not open are not opened;
-one notice names them. A document dragged out of the library (a row or tile), the rail or Home onto the strip or the reading area opens
+one notice names them. A document dragged out of the library (a tree row, row or tile) or Home onto the strip or the reading area opens
 the same way, with a small copy of its cover following the pointer; a plain click on any of them still opens it, and Escape cancels a drag.
 
 In a compact window (under 720 px) there is no strip. The title shows the open document's name, how many tabs are open and a ⌄; it
@@ -401,55 +401,73 @@ can show it; positions saved before this version have none until you read the do
 
 ## Document library
 
-Use the sidebar button at the left of the toolbar, or **Ctrl+B**, to open the library. It opens as a
-drawer that floats over the reading panel at every width, so opening, closing, resizing or moving it
-never changes the page's size, zoom or place. Escape closes the drawer while focus is inside it. Wide
-and compact visibility preferences are remembered separately.
+In windows 720 pixels wide and up, a 48-pixel **icon rail** stands on the side the library is docked to, and the
+library's **info rail** opens beside it. The icon rail has, from the top: **Library**, **Home**, **Favorites**,
+**Collections**, **Search** and **Add files**; at its foot, the button that moves the library to the other side
+and **Appearance**. Hover an icon for its name and shortcut. The icon of the view the info rail is showing is
+filled with the accent tone; press it again to collapse the info rail (the icon rail stays). **Ctrl+B** does the same
+for the Library view, and **Ctrl+Shift+F** opens Search. The info rail floats over the reading panel at every
+width, so opening, closing, resizing or moving it never changes the page's size, zoom or place. Escape closes it
+while focus is inside it. Wide and compact visibility preferences are remembered separately. In compact windows
+(below 720 pixels) there is no icon rail: the sidebar button at the left of the toolbar opens the library as a sheet.
 
-Closed, in windows 720 pixels wide and up, the library is a thin rail on the side it is docked to: the
-library button at the top, then the covers of up to eight recently opened documents, most recent first
-(40 × 54 pixels, with the generated cover or picture Home shows). The document you are reading has an
-accent ring, hovering a cover names its document (with how far you got, for example `Moby-Dick.epub · 38 %`), and a click opens it. The rail floats over the
-reading panel like the drawer, so the page is never resized; the view controls, page previews, find bar and
-image navigation sit beside it. The rail and the drawer end above the footer's strip along the bottom edge,
-so the footer is never under them. Opening the library swaps the rail for the drawer, and closing it brings
-the rail back. With nothing opened yet the rail is just the library button; compact windows have no rail.
+**Library** shows the library as nested folders, with the documents inside them, in three sections:
+
+- **Folders**: one bold root for each folder you indexed, its subfolders (with a chevron, a folder icon and how many
+  documents are beneath), and the documents as rows with their file name, their format icon and, at the right, how far
+  you got (`p. 62 / 88`, `37 %`, `Finished`). Files that share a name (many are called `source.pdf`) sit under their own
+  folders, which is how you tell them apart here. Elsewhere (Home, tabs, the board, Favorites) a file with a generic
+  name (`source`, `document`, `scan`, `file`, `untitled`, or only digits) is shown by its folder's name instead.
+- **Collections**: your own collections, nested as you made them, with their documents. (A collection that only mirrors an
+  indexed folder is not listed twice.)
+- **Loose files**: documents added by hand that are not in an indexed folder.
+
+Click a row to open a document (a document that is already open shows its tab), **⌘-click** (Ctrl-click on Windows and
+Linux) or middle-click to give it a tab in the background, or right-click for **Open in new tab**, **Add to / Remove
+from favorites**, **Details**, **Organize…** (collections), **Remove from library…** and, on the desktop, **Locate
+original…**. Click a folder to open or close it; double-click it to browse it in the board. What is open is remembered
+for each folder, and the folders above the document you are reading open by themselves, so it is always in view. The tree
+is a keyboard tree: one Tab stop, Up and Down move, Right opens a folder or enters it, Left closes it or goes to its
+parent, Home and End jump, Enter opens a document or toggles a folder, and typing a name jumps to it. The search button in
+the header opens a filter that narrows the tree as you type (every word must match the name or a folder above it, the
+matches are highlighted and their folders open); Esc clears it.
+
+**Favorites** is a flat list of the documents you starred, with their covers. **Collections** is the Collections section
+alone, with **+ New** to make a collection. **Search** is the Library view with the filter field open and focused.
+**Add files** opens a menu with **Add files…** and **Sources…** (indexing folders), even when the info rail is closed.
+**Home** shows the Home tab, and **Appearance** opens the appearance sheet.
+
+The icon rail and the info rail end above the footer's strip along the bottom edge, so the footer is never under them;
+the view controls, page previews, find bar and image navigation sit beside them.
 
 An image opened from a collection shows a small **previous / next** pill at the bottom of the reading panel, just
 above the footer's strip, so the footer never covers it when it opens. The view controls stand directly above it
-(and a view-controls pill you drag stays clear of it), beside the rail or drawer, at any window width.
+(and a view-controls pill you drag stays clear of it), beside the rails, at any window width.
 
-The rail can be kept on either side. The button at the foot of the rail (its glyph shows the side it will
+The library can be kept on either side. The button near the foot of the icon rail (its glyph shows the side it will
 move to, and it is named *Move library to the left* or *…right*) moves it across; so does right-clicking
-the rail, which offers **Keep library on the left** and **Keep library on the right**, and
-**Move library to other side** in the command palette (**Ctrl+K**). It is one setting: the rail and the
-drawer always stand on the same side, the drawer's own header button changes the same setting, and the
-side is remembered.
+the icon rail, which offers **Keep library on the left** and **Keep library on the right**, and
+**Move library to other side** in the command palette (**Ctrl+K**). It is one setting: the icon rail and the
+info rail always stand on the same side, and the side is remembered.
 
-Drag the divider between the drawer and the page to resize the drawer (240–520 pixels, and never more
+Drag the divider between the info rail and the page to resize it (240–520 pixels, and never more
 than 55% of the window, which keeps at least 320 pixels of the reading panel clear beside it). Because
-the drawer floats over the page, a wider drawer covers more of the page. Double-click the divider to
+the info rail floats over the page, a wider one covers more of the page. Double-click the divider to
 reset it to 270 pixels. The divider is also focusable: Left and Right resize by 16 pixels
-(Shift: 64), Home and End jump to the narrowest and widest sizes, and Enter resets. The header button
-beside **×** moves the drawer (and the rail) to the other side of the reading panel; compact windows follow the same
-side. Width and side are remembered, and the width is re-fitted when the window shrinks.
+(Shift: 64), Home and End jump to the narrowest and widest sizes, and Enter resets. Width and side are remembered,
+and the width is re-fitted when the window shrinks.
 
-In compact windows (below 720 pixels) the drawer covers the reading panel behind a scrim, cannot be
-resized, and closes on a click outside it or after you open a document from it. Escape closes it
-while focus is inside the drawer.
+In compact windows the sheet covers the reading panel behind a scrim, cannot be resized, and closes on a click
+outside it or after you open a document from it. Escape closes it while focus is inside.
 
-The drawer has three rows of controls above the documents. The **header** has the library name and, on
-the right, **+** (a menu with **Add files…** and **Sources…**), **→** (open the library board across the
-reading panel), the move-to-the-other-side button and **×**. Under it a row of chips: the first names the
-collection you are looking at (**All references**, **Favorites**, a collection or a source) and opens
-the list of them, with the colour filter; after it come one chip for each file type the library holds
-(PDF, EPUB, Markdown, Text, Images). Click a type to show only those, click it again to clear it. The row
-scrolls sideways when it is longer than the drawer. The last row is a search button that opens into the
-search field (Esc clears what you typed, and a second Esc, or leaving an empty field, folds it back; a field
-that opened with the drawer is left alone, so Esc closes the drawer as before),
-the number of references shown, and **Recent ☰**, one menu for **Sort by** (Recent, Name A–Z),
-**View as** (List, Grid), **Show** (any availability, ready, missing) and, with the grid on, a **Size**
-slider for the tiles. The board keeps the collection tree in its own left column.
+The **board** (the **→** button in the info rail's header, or **Library board** in the palette) opens the library across
+the reading panel, beside the icon rail. Its header has the library name and **+** (a menu with **Add files…** and
+**Sources…**); under it a row of chips: the name of what you are looking at (**All references**, **Favorites**, a
+collection, a source or a folder) and one chip for each file type the library holds (PDF, EPUB, Markdown, Text,
+Images). Click a type to show only those, click it again to clear it. The row scrolls sideways when it is longer than the
+board. Under it are the search field, the number of references shown, and **Recent ☰**, one menu for **Sort by**
+(Recent, Name A–Z), **View as** (List, Grid), **Show** (any availability, ready, missing) and, with the grid on, a
+**Size** slider for the tiles. The board keeps the collection tree in its own left column.
 
 - **Add files** (in the **+** menu) selects several documents or images at once without opening them. Select a
   collection first to add new entries directly to it. New references with no picture of their own

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { libraryToggle } from './library-controls';
 
 /**
  * Find in document. Each format stores its text differently, so every test drives the same
@@ -53,7 +54,7 @@ test('Ctrl+F counts matches, Enter steps through them and marks the current one'
 test('beside the library the find field is never under the drawer, on either side', async ({ page }) => {
   await page.setViewportSize({ width: 1080, height: 680 });
   await openMarkdown(page);
-  if (!(await page.locator('#library-root').isVisible())) await page.locator('#library-toggle').click();
+  if (!(await page.locator('#library-root').isVisible())) await libraryToggle(page).click();
   await expect(page.locator('#library-root')).toBeVisible();
   await page.keyboard.press('Control+f');
   await page.locator('#find-query').fill('harbour');
