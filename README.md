@@ -11,7 +11,7 @@
 
 <p align="center">
   <img alt="Windows and macOS" src="https://img.shields.io/badge/Windows%20%C2%B7%20macOS-desktop-1A1815?style=flat-square">
-  <img alt="Light and dark themes" src="https://img.shields.io/badge/themes-light%20%C2%B7%20dark-1A1815?style=flat-square">
+  <img alt="17 themes: seven in light and dark, ten glow" src="https://img.shields.io/badge/themes-17%20%C2%B7%20light%20%C2%B7%20dark%20%C2%B7%20glow-1A1815?style=flat-square">
   <img alt="No accounts, no tracking" src="https://img.shields.io/badge/private-no%20accounts%20%C2%B7%20no%20tracking-1A1815?style=flat-square">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-FA4848?style=flat-square"></a>
 </p>
@@ -53,12 +53,26 @@ where you stopped. PDF, EPUB, Markdown, text and images. Your files never leave 
   </tr>
   <tr>
     <td valign="top">
+      <h3>One tab per document</h3>
+      Everything opens in its own tab. Switch with ⌘1–9 on a Mac or Alt+1–9 on Windows (9 is the last
+      tab), close with ⌘W or Ctrl+W. Drop files on the window or the tab bar to open them as tabs.
+    </td>
+    <td valign="top">
+      <h3>Your folders, as a tree</h3>
+      A slim icon rail and a nested folder tree: watched folders, subfolders, documents, each with how
+      far you got (<code>p. 62 / 88</code>, <code>37 %</code>, <code>Finished</code>). Type to filter.
+      A scan called <code>source.pdf</code> goes by its folder's name.
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
       <h3>Reads what you read</h3>
       Faithful PDF pages, reflowing books. Press Ctrl+K to jump to a page, a phrase or a command.
     </td>
     <td valign="top">
       <h3>Opens like a book</h3>
-      Two pages side by side. Zoom in and drag the page by hand; move the zoom controls anywhere.
+      Two pages side by side, a strip of page previews, and zoom in true size: 100% is actual size.
+      Ctrl+scroll or pinch zooms toward the pointer; drag the page by hand.
     </td>
   </tr>
   <tr>
@@ -70,8 +84,9 @@ where you stopped. PDF, EPUB, Markdown, text and images. Your files never leave 
     </td>
     <td valign="top">
       <h3>Fits your space</h3>
-      One slim toolbar and a progress line leave the page 94% of the window. Seven themes in light
-      and dark, your own accent, AA contrast throughout.
+      One slim toolbar and a progress line leave the page 94% of the window. Seventeen themes: seven
+      in light and dark, ten glow themes with a mood of their own. Your own accent, AA contrast
+      throughout.
     </td>
   </tr>
   <tr>
@@ -84,28 +99,42 @@ where you stopped. PDF, EPUB, Markdown, text and images. Your files never leave 
   </tr>
 </table>
 
-**Home** is laid out like a media player's front page: **Jump back in** (your eight latest documents),
-then shelves that scroll sideways: **Continue reading**, **Favorites** and **Collections**. **Show all**
-opens the library on that selection. Chips filter PDFs, EPUBs, Markdown, text and images separately;
-opening a reference keeps its original format.
+**Home** is a tab, always first, laid out like a media player's front page: **Jump back in** (your eight
+latest documents), then shelves that scroll sideways: **Continue reading**, **Favorites** and
+**Collections**. **Show all** opens the library on that selection. Chips filter PDFs, EPUBs, Markdown,
+text and images separately; opening a reference keeps its original format.
+
+<p align="center">
+  <img src="docs/media/home.png" alt="The Home tab: Jump back in as two rows of cards with progress lines, then Continue reading with the half-tone manual, Pride and Prejudice and three generated covers, each showing its page or percentage" width="880">
+  <br><sub><b>Home</b>: what you looked at last, with how far you got</sub>
+</p>
 
 ## A closer look
 
+<p align="center">
+  <img src="docs/media/tabs.png" alt="Five tabs along the top, Home first, then Pride and Prejudice, Moby-Dick.md, two Haeckel plates (one open, with its zoom controls and an image navigation strip) and the print manual, named after its folder, 02_half_tone" width="880">
+  <br><sub><b>Tabs</b>: one per document, ⌘1–9 or Alt+1–9 to switch, a drop opens a new one</sub>
+</p>
+
+<p align="center">
+  <img src="docs/media/tree.png" alt="The icon rail and the info rail's folder tree beside a PDF page: two watched folders (Classics and Print history) with nested subfolders, progress such as p. 48 / 146, 62 % and Finished at the right of each row, and the open document highlighted" width="880">
+  <br><sub><b>The folder tree</b>: your watched folders, how far you got in each file, the open one highlighted. Click opens or focuses a tab; ⌘-click or Ctrl-click opens it in the background</sub>
+</p>
+
 <table>
   <tr>
-    <td align="center" width="50%"><img src="docs/media/hand-tool.png" alt="A PDF page zoomed to 120% with the hand tool switched on in the floating zoom controls"><br><sub><b>Zoom in</b>, then drag the page with the hand tool</sub></td>
-    <td align="center" width="50%"><img src="docs/media/appearance.png" alt="The Appearance panel's Colour tab, with seven theme cards (Brief, Lilac, Birch, Graphite, Arctic, Blossom and Peony) in two rows, over a book"><br><sub><b>Appearance</b>: hover to preview, click to keep</sub></td>
+    <td align="center" valign="top" width="50%"><img src="docs/media/zoom.png" alt="A PDF page at 85% with the zoom menu open above the floating controls: a field to type a percentage, Zoom in, Zoom out, Fit page (checked), Fit width, Actual size, 50% and 200%"><br><sub><b>Zoom</b>: type a percentage, fit the page or the width, or go to actual size with Shift+0</sub></td>
+    <td align="center" valign="top" width="50%"><img src="docs/media/hand-tool.png" alt="A Haeckel plate of corals zoomed to 50% in the compact window, filling it, with the hand tool switched on in the floating zoom controls"><br><sub><b>Zoom in</b>, then drag the page with the hand tool</sub></td>
+  </tr>
+  <tr>
+    <td align="center" valign="top"><img src="docs/media/filmstrip.png" alt="A PDF page above a strip of page previews, the current page, 48, ringed, and a card over the progress bar previewing page 110, a half-tone portrait"><br><sub><b>Page previews</b>: a filmstrip under the page, and a preview of wherever you point on the progress bar</sub></td>
+    <td align="center" valign="top"><img src="docs/media/appearance.png" alt="The Appearance panel's Colour tab: seven theme cards in two rows (Brief, Lilac, Birch, Graphite, Arctic, Blossom and Peony), then ten glow themes (Aurora, Dusk, Nebula, Solar, Ember, Orchid, Glacier, Peach, Lagoon and Moss) in two rows of five"><br><sub><b>Appearance</b>: hover to preview, click to keep</sub></td>
   </tr>
 </table>
 
 <p align="center">
-  <img src="docs/media/library.png" alt="The library drawer as a grid of thumbnails at their real proportions (a print manual marked Reading, Hokusai's Great Wave, Haeckel plates and a book) floating over a PDF page" width="880">
-  <br><sub><b>The library</b> floats over the page, on either side</sub>
-</p>
-
-<p align="center">
   <img src="docs/media/shelf.png" alt="The library board showing a Classics collection as three shelves, Novels, Poetry and Science, with generated dithered covers in one colour per shelf, Pride and Prejudice with its real cover and a print manual's first page" width="880">
-  <br><sub><b>Shelves</b>, with a generated cover for every book that lacks one</sub>
+  <br><sub><b>Shelves</b>, with a generated cover for every book that lacks one. The board is one click from the tree</sub>
 </p>
 
 <p align="center">
@@ -114,13 +143,13 @@ opening a reference keeps its original format.
 </p>
 
 <p align="center">
-  <img src="docs/media/library-resize.gif" alt="The library opens over the page, is dragged wider, reset with a double-click and closed, and the page never moves" width="880">
-  <br><sub><b>Make it wider</b>: drag the divider, double-click to reset</sub>
+  <img src="docs/media/themes.png" alt="The opening of Pride and Prejudice in the Brief, Lilac, Birch, Graphite, Arctic, Blossom and Peony themes" width="880">
+  <br><sub><b>Seven themes</b>, light and dark. Brief is the default</sub>
 </p>
 
 <p align="center">
-  <img src="docs/media/themes.png" alt="The opening of Pride and Prejudice in the Brief, Lilac, Birch, Graphite, Arctic, Blossom and Peony themes" width="880">
-  <br><sub><b>Seven themes</b>, light and dark. Brief is the default</sub>
+  <img src="docs/media/glow.png" alt="A page of the print manual in the ten glow themes: Aurora, Dusk, Nebula, Solar, Ember and Orchid (dark) in the first row, Glacier, Peach, Lagoon and Moss (light) in the second, each with soft colour glowing behind the toolbar and around the page" width="880">
+  <br><sub><b>Ten glow themes</b>, each in its own mode, with soft colour behind the toolbar and around the page</sub>
 </p>
 
 ## Private by design
@@ -228,12 +257,12 @@ License 1.1 (`src/fonts/OFL-*.txt`).
 
 The screenshots read public-domain documents: *The Half-Tone Process* (1895), a print manual
 scanned by the [Internet Archive](https://archive.org/details/halftoneprocessp00verf_0), and
-Jane Austen's *Pride and Prejudice*. The library shots also show Hokusai's *The Great Wave off
-Kanagawa* and two plates from Ernst Haeckel's *Kunstformen der Natur* (1904), from
-[Wikimedia Commons](https://commons.wikimedia.org/). The shelf shot adds generated covers for
-Markdown files named after public-domain works (*Moby-Dick*, *Middlemarch*, *Frankenstein*,
-*Dracula*, *The Odyssey*, *Leaves of Grass*, *The Origin of Species* and *Principia*), each holding
-only an opening line. No in-copyright scans are committed to this
+Jane Austen's *Pride and Prejudice*. The tabs and the folder tree also show two plates from Ernst
+Haeckel's *Kunstformen der Natur* (1904), from [Wikimedia Commons](https://commons.wikimedia.org/).
+Home, the tree and the shelf shot add generated covers for Markdown files named after public-domain
+works (*Moby-Dick*, *Middlemarch*, *Frankenstein*, *Dracula*, *The Odyssey*, *Leaves of Grass*,
+*The Origin of Species*, *Principia*, *Great Expectations*, *A Tale of Two Cities* and *Walden*),
+each holding only an opening line. No in-copyright scans are committed to this
 repository. `scripts/reshoot-media.mjs` regenerates every still, the hero included, from documents
 you supply.
 
