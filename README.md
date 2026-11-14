@@ -72,7 +72,7 @@ where you stopped. PDF, EPUB, Markdown, text and images. Your files never leave 
     <td valign="top">
       <h3>Opens like a book</h3>
       Two pages side by side, a strip of page previews, and zoom in true size: 100% is actual size.
-      Ctrl+scroll or pinch zooms toward the pointer; drag the page by hand.
+      Ctrl+scroll (⌘+scroll on a Mac) or a pinch zooms toward the pointer; drag the page by hand.
     </td>
   </tr>
   <tr>
