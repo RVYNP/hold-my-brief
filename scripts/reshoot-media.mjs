@@ -7,7 +7,6 @@
 //        appearance, themes, glow, desktop). Needs public/pdfjs, which `npm ci` creates (postinstall); without it JPX scans render blank.
 //        With sharp installed (`npm i --no-save sharp`) the PNGs are palette-quantised at the end, to about a third of their size.
 import { createRequire } from 'node:module';
-import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';

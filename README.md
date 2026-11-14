@@ -257,7 +257,7 @@ License 1.1 (`src/fonts/OFL-*.txt`).
 
 The screenshots read public-domain documents: *The Half-Tone Process* (1895), a print manual
 scanned by the [Internet Archive](https://archive.org/details/halftoneprocessp00verf_0), and
-Jane Austen's *Pride and Prejudice*. The tabs and the folder tree also show two plates from Ernst
+Jane Austen's *Pride and Prejudice*. Several shots also show two plates from Ernst
 Haeckel's *Kunstformen der Natur* (1904), from [Wikimedia Commons](https://commons.wikimedia.org/).
 Home, the tree and the shelf shot add generated covers for Markdown files named after public-domain
 works (*Moby-Dick*, *Middlemarch*, *Frankenstein*, *Dracula*, *The Odyssey*, *Leaves of Grass*,
