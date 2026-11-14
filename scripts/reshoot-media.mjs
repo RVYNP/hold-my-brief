@@ -5,9 +5,10 @@
 //        The dev server must be running; the script reads its address from HMB_URL (default http://127.0.0.1:1420/).
 //        HMB_ONLY=tree,tabs reshoots just those stills (hero, home, tree, tabs, zoom, hand-tool, filmstrip, shelf, intake,
 //        appearance, themes, glow, desktop). Needs public/pdfjs, which `npm ci` creates (postinstall); without it JPX scans render blank.
-//        With sharp installed (`npm i --no-save sharp`) the PNGs are palette-quantised at the end, to about a third of their size.
+//        With sharp installed (`npm i --no-save sharp`) the PNGs written by the run are palette-quantised at the end, to about a third of their size.
 import { createRequire } from 'node:module';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +33,7 @@ const want = (...names) => ONLY.size === 0 || names.some(name => ONLY.has(name))
 //  - public-domain images (e.g. Haeckel's plates from Wikimedia Commons), optional.
 // In-copyright magazine scans are intentionally NOT committed.
 // Pass the documents as arguments; the README documents the sources used.
+const STARTED = Date.now();
 const [PDF = '', BOOK = '', ...IMAGES] = process.argv.slice(2);
 if (!PDF || !BOOK) {
   console.error('usage: node scripts/reshoot-media.mjs <page-document.pdf> <book.epub> [public-domain-image ...]');
@@ -561,12 +563,13 @@ if (want('desktop')) {
 }
 
 
-// The stills are palette-quantised (about a third of their size, no visible loss) when sharp is installed: `npm i --no-save sharp`.
+// The stills this run wrote are palette-quantised (about a third of their size, no visible loss) when sharp is installed: `npm i --no-save sharp`.
+// Stills left from an earlier run are not touched, so a partial reshoot never quantises a file twice.
 {
   let sharp;
   try { sharp = require('sharp'); } catch { console.log('sharp is not installed: the PNGs are left as captured'); }
   if (sharp) {
-    for (const name of readdirSync(OUT).filter(file => file.endsWith('.png'))) {
+    for (const name of readdirSync(OUT).filter(file => file.endsWith('.png') && statSync(join(OUT, file)).mtimeMs >= STARTED)) {
       const path = join(OUT, name);
       writeFileSync(path, await sharp(readFileSync(path)).png({ compressionLevel: 9, effort: 10, palette: true, quality: 92, colours: 256, dither: 0.8 }).toBuffer());
     }
