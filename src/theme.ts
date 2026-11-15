@@ -35,7 +35,7 @@ export const allPalettes: readonly Palette[] = [...palettes, ...glows];
 export const isGlow = (palette: Palette): palette is Glow => palette in glowSchemes;
 export const pageTones: readonly PageTone[] = ['theme', 'white', 'sepia', 'dim'];
 export const defaultAppearance: Appearance = { mode: 'system', palette: 'brief', accent: null, page: 'theme' };
-const accentTokens = ['--accent', '--accent-ink', '--accent-fill', '--accent-fill-hover', '--accent-soft', '--accent-soft-hover', '--accent-border'] as const;
+const accentTokens = ['--accent', '--accent-ink', '--accent-fill', '--accent-fill-hover', '--accent-soft', '--accent-soft-hover', '--accent-border', '--sheen-a', '--sheen-b', '--sheen-mix-light', '--sheen-mix-dark'] as const;
 const hexColor = /^#[0-9a-f]{6}$/i;
 
 let current: Appearance = defaultAppearance;
@@ -51,7 +51,7 @@ export const rgbToHex = (rgb: Rgb) => `#${rgb.map(c => Math.round(c).toString(16
 function luminance([r, g, b]: Rgb) { return 0.2126 * toLinear(r / 255) + 0.7152 * toLinear(g / 255) + 0.0722 * toLinear(b / 255); }
 export function contrast(a: Rgb, b: Rgb) { const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); }
 
-function toOklch([r8, g8, b8]: Rgb): Rgb {
+export function toOklch([r8, g8, b8]: Rgb): Rgb {
   const [r, g, b] = [r8, g8, b8].map(c => toLinear(c / 255));
   const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
   const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
@@ -96,6 +96,41 @@ export const isDark = (color: Rgb) => luminance(color) < 0.18;
 const white: Rgb = [255, 255, 255];
 /** Reference dark reading surface for dark-mode accent contrast (the darkest palette surface would only raise it). */
 const darkSurface: Rgb = [0x22, 0x21, 0x27];
+/** Reference light card for the active wash: a little darker than the darkest card of any light theme (the tint over it is what ink must read on), so a custom accent holds in all of them. */
+const lightCard: Rgb = [0xfc, 0xfc, 0xfc];
+
+/** A color's hue turned 30° in OKLCH at the same lightness (chroma only reduced to fit sRGB): the far stop of a custom accent's sheen. */
+const sheenFar = (color: Rgb): Rgb => { const [L, C, H] = toOklch(color); return fromOklch([L, C, H + Math.PI / 6]); };
+/** The most of `far`, in whole percent up to 60, the primary button's gradient may take at its far end while `on` stays at 4.5:1 along the whole fill. */
+export function sheenMix(fill: Rgb, far: Rgb, on: Rgb): number {
+  for (let percent = 60; percent > 0; percent--) {
+    let reads = true;
+    for (let step = 0; step <= 10 && reads; step++) {
+      const along = fill.map((channel, i) => channel + (far[i] - channel) * percent * step / 1000) as Rgb;
+      reads = contrast(on, along) >= 4.5 && contrast(on, along.map(Math.round) as Rgb) >= 4.5;
+    }
+    if (reads) return percent;
+  }
+  return 0;
+}
+
+/** Mirrors style.css and the tokens below: the weights of --accent-soft, --accent-soft-hover and --accent-border (percent of the mark over the card or surface), and the 15 % of --sheen-wash. */
+const tint = { light: { soft: 11, hover: 19, border: 38 }, dark: { soft: 15, hover: 22, border: 40 } };
+const washWeight = 0.15;
+const blend = (top: Rgb, bottom: Rgb, weight: number): Rgb => top.map((channel, i) => channel * weight + bottom[i] * (1 - weight)) as Rgb;
+/** The colors --accent-ink text sits on in the active washes: --accent-soft and --accent-soft-hover under --sheen-wash, at eleven points from --sheen-a to --sheen-b. */
+function washBackdrops(mark: Rgb, far: Rgb, backing: Rgb, scheme: Scheme): Rgb[] {
+  const [soft, hover] = [tint[scheme].soft, tint[scheme].hover].map(percent => blend(mark, backing, percent / 100));
+  return [soft, hover].flatMap(base => Array.from({ length: 11 }, (_, step) => blend(blend(mark, far, 1 - step / 10), base, washWeight)));
+}
+/** Moves ink's lightness (hue kept, chroma kept as far as it fits) by `step` until it reads at 4.5:1 on every backdrop, exactly and rounded to 8 bits; ink that already reads is returned as it is. */
+function readOnWash(ink: Rgb, backdrops: Rgb[], step: number): Rgb {
+  const reads = (color: Rgb) => backdrops.every(backdrop => contrast(color, backdrop) >= 4.5 && contrast(color, backdrop.map(Math.round) as Rgb) >= 4.5);
+  const [L, C, H] = toOklch(ink);
+  let next = ink;
+  for (let l = L; !reads(next) && l >= 0 && l <= 1; l += step) next = fromOklch([l, C, H]);
+  return next;
+}
 
 /**
  * Expands one accent into the token set for both modes. Marks need 3.5:1, text 5.5:1 on
@@ -106,11 +141,13 @@ export function accentVars(hex: string): Record<(typeof accentTokens)[number], s
   const base = hexToRgb(hex);
   const fill = reach(base, white, 4.5, -0.01);
   const markLight = reach(base, white, 3.5, -0.01);
-  const inkLight = reach(shift(base, -0.06), white, 5.5, -0.01);
   const [L, C, H] = toOklch(base);
   // Dark surfaces make saturated light tints glow; cap chroma so the accent stays quiet at night.
   const markDark = reach(fromOklch([Math.max(L, 0.68), Math.min(C, 0.15), H]), darkSurface, 4.5, 0.01);
-  const inkDark = reach(fromOklch([Math.max(L, 0.8), Math.min(C, 0.11), H]), darkSurface, 7, 0.01);
+  const [farLight, farDark] = [sheenFar(markLight), sheenFar(markDark)];
+  // The ink also reads on the active wash (see washBackdrops), over a card darker, and a dark surface lighter, than any theme's.
+  const inkLight = readOnWash(reach(shift(base, -0.06), white, 5.5, -0.01), washBackdrops(markLight, farLight, lightCard, 'light'), -0.001);
+  const inkDark = readOnWash(reach(fromOklch([Math.max(L, 0.8), Math.min(C, 0.11), H]), darkSurface, 7, 0.01), washBackdrops(markDark, farDark, darkSurface, 'dark'), 0.001);
   const pair = (light: string, dark: string) => `light-dark(${light}, ${dark})`;
   const [lightMark, darkMark] = [rgbToHex(markLight), rgbToHex(markDark)];
   return {
@@ -118,9 +155,13 @@ export function accentVars(hex: string): Record<(typeof accentTokens)[number], s
     '--accent-ink': pair(rgbToHex(inkLight), rgbToHex(inkDark)),
     '--accent-fill': pair(rgbToHex(fill), rgbToHex(fill)),
     '--accent-fill-hover': pair(rgbToHex(shift(fill, -0.06)), rgbToHex(shift(fill, 0.05))),
-    '--accent-soft': pair(`color-mix(in srgb, ${lightMark} 11%, var(--card))`, `color-mix(in srgb, ${darkMark} 15%, var(--surface))`),
-    '--accent-soft-hover': pair(`color-mix(in srgb, ${lightMark} 19%, var(--card))`, `color-mix(in srgb, ${darkMark} 22%, var(--surface))`),
-    '--accent-border': pair(`color-mix(in srgb, ${lightMark} 38%, var(--card))`, `color-mix(in srgb, ${darkMark} 40%, var(--surface))`),
+    '--accent-soft': pair(`color-mix(in srgb, ${lightMark} ${tint.light.soft}%, var(--card))`, `color-mix(in srgb, ${darkMark} ${tint.dark.soft}%, var(--surface))`),
+    '--accent-soft-hover': pair(`color-mix(in srgb, ${lightMark} ${tint.light.hover}%, var(--card))`, `color-mix(in srgb, ${darkMark} ${tint.dark.hover}%, var(--surface))`),
+    '--accent-border': pair(`color-mix(in srgb, ${lightMark} ${tint.light.border}%, var(--card))`, `color-mix(in srgb, ${darkMark} ${tint.dark.border}%, var(--surface))`),
+    '--sheen-a': pair(lightMark, darkMark),
+    '--sheen-b': pair(rgbToHex(farLight), rgbToHex(farDark)),
+    '--sheen-mix-light': `${sheenMix(fill, farLight, white)}%`,
+    '--sheen-mix-dark': `${sheenMix(fill, farDark, white)}%`,
   };
 }
 

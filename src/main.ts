@@ -49,7 +49,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     <div class="menu-group"><button id="menu-palette"><span class="menu-label">All commands…</span><kbd>Ctrl K</kbd></button></div>
     <div class="menu-group"><button data-action="goto">Go to… <kbd>Ctrl G</kbd></button><button data-action="outline">Contents</button><button data-action="back">Back after jump <kbd>Alt ←</kbd></button></div>
     <div class="menu-group" id="menu-page"><button id="rotate-toggle" data-action="rotate" hidden>Rotate page 90°</button><button id="spread-toggle" data-action="spread" aria-pressed="false" disabled hidden>Two-page spread <kbd>Ctrl 3</kbd></button><button id="cover-toggle" data-action="cover" aria-pressed="true" disabled hidden>Cover page alone</button></div>
-    <div class="menu-group"><button data-action="appearance"><span class="menu-label">${paletteIcon}Appearance and text…</span><span class="menu-value" id="appearance-summary"></span></button><button data-action="assistant" data-desktop hidden>AI assistant…</button><button data-action="compact" data-desktop hidden>Compact window <span class="menu-value">420 × 620</span></button><button data-action="reading" data-desktop hidden>Reading window <span class="menu-value">760 × 900</span></button></div>
+    <div class="menu-group"><button data-action="appearance"><span class="menu-label">${paletteIcon}Appearance and text…</span><span class="menu-value" id="appearance-summary"></span></button><button data-action="assistant" data-desktop hidden>AI assistant…</button><button data-action="compact" data-desktop hidden>Compact window <span class="menu-value">420 × 620</span></button><button data-action="reading" data-desktop hidden>Reading window <span class="menu-value">760 × 900</span></button><button id="library-side-item" data-action="library-side" role="menuitemcheckbox" aria-checked="false">Library on the right</button></div>
     <div class="menu-group"><button data-action="shortcuts">Keyboard shortcuts</button><button data-action="clear-recents">Clear recent files</button><button data-action="clear-data">Delete saved reading data…</button></div>
   </div></dialog>
   <dialog id="jump" class="drop" aria-labelledby="jump-label"><form><label id="jump-label" for="target">Location</label><div class="jump-row"><input id="target" required autocomplete="off"><button class="primary" type="submit" aria-label="Go to location">Go</button></div><p id="jump-error" role="alert"></p></form></dialog>
@@ -84,7 +84,7 @@ $('shortcut-list').replaceChildren(...shortcutReference({ desktop }).map(section
 const appearanceSheet = createAppearanceSheet($<HTMLDialogElement>('appearance'), {
   current: () => reader && active && reader.mode !== 'fixed' ? { fontSize: options.fontSize, lineHeight: options.lineHeight, margin: options.margin, wrap: options.wrap, wraps: active.format === 'txt' } : undefined,
   change: next => changeOptions(next),
-}, { side: () => library.side(), setSide: side => library.setSide(side) });
+});
 const scrubber = $<HTMLInputElement>('progress');
 let scrubbing = false, scrubRequest = 0;
 let reader: ReaderAdapter | undefined;
@@ -417,6 +417,7 @@ const rail = createIconRail($('library-rail'), {
   view: view => library.showView(view),
   add: anchor => library.openAddMenu(anchor),
   settings: () => appearanceSheet.open(),
+  moveSide: () => library.setSide(library.side() === 'left' ? 'right' : 'left'),
 });
 const library = createLibrary($('library-root'), {
   open: path => openPath(path),
@@ -425,14 +426,16 @@ const library = createLibrary($('library-root'), {
   changed: (next, progress) => { homeLibrary = next; homeProgress = { ...progress }; if ($('empty').classList.contains('is-home')) paintHome(); },
   progressChanged: progress => { homeProgress = { ...progress }; if ($('empty').classList.contains('is-home')) paintHome(); },
   settle: () => flush(),
-  sideChanged: side => rail.setSide(side),
+  sideChanged: showSide,
   openChanged: open => rail.setOpen(open),
   door: () => rail.button('library'),
   openPage: place => openLibraryTab(place),
   pageChanged: place => retargetLibraryTab(place),
 });
 $('library-toggle').onclick = () => library.toggle();
-rail.setSide(library.side());
+showSide(library.side());
+/** The side is one preference: the rail's tooltips and context menu, and the ⋯ menu's checkable item, follow it. */
+function showSide(side: 'left' | 'right') { rail.setSide(side); $('library-side-item').setAttribute('aria-checked', String(side === 'right')); }
 const knownTitle = (item: { path: string; format: string }) => item.format.toLowerCase() === 'epub' ? homeThumbs.epub(item.path)?.title?.trim() || undefined : undefined;
 
 /**
@@ -935,7 +938,7 @@ async function action(name: string) {
     if (!reader?.flow?.()) return notify('Pages and Scroll views are for reflowable books.');
     await changeOptions({ flow: name === 'pages-view' ? 'paginated' : 'scrolled' });
   }
-  else if (name === 'type') appearanceSheet.open('text');
+  else if (name === 'type') appearanceSheet.open('size');
   else if (name === 'outline') openContents();
   else if (name === 'shortcuts') showDialog('shortcuts');
   else if (name === 'clear-data') showDialog('delete-data');

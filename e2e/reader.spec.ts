@@ -1,4 +1,5 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator } from '@playwright/test';
+import { pagedPdf } from './paged-pdf';
 test('compact text workflow, semantic resume, invalid replacement preserves document', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Hand it over.' })).toBeVisible();
@@ -67,23 +68,92 @@ test('text settings live in the appearance sheet, apply to the open text and kee
   await page.locator('#palette-input').fill('text size');
   await page.keyboard.press('Enter');
   const sheet = page.locator('#appearance');
-  await expect(sheet.getByRole('tab', { name: 'Text' })).toHaveAttribute('aria-selected', 'true');
+  // One page: no tabs, and "Text size & spacing" only moves focus to the size stepper.
+  await expect(sheet.getByRole('tab')).toHaveCount(0);
+  await expect(sheet.getByRole('button', { name: 'Smaller text' })).toBeFocused();
   await sheet.getByRole('button', { name: 'Larger text' }).click();
   await expect(content).toHaveCSS('font-size', '20px');
+  await expect(sheet.locator('.appearance-preview')).toHaveCSS('font-size', '20px');
   await sheet.getByRole('radio', { name: 'Loose' }).click();
   await expect(content).toHaveCSS('line-height', '44px');
+  await expect(sheet.locator('.appearance-preview')).toHaveCSS('line-height', '44px');
+  await sheet.getByRole('radio', { name: 'Wide' }).click();
+  await expect(sheet.locator('.appearance-preview')).toHaveCSS('padding-left', '40px');
   // Markdown always wraps, so the plain-text wrap choice is not offered.
   await expect(sheet.getByRole('radio', { name: 'Keep as written' })).toBeHidden();
   await page.keyboard.press('Escape');
 
-  // Page-based documents zoom instead: the Text tab explains rather than offering controls that do nothing.
-  await page.locator('#file-input').setInputFiles({ name: 'flat.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64') });
-  await expect(page.locator('#filename')).toHaveText('flat.png');
+  // Page-based documents zoom instead: one note stands in for the preview and the text rows, and the colour rows stay (a PDF or image still has a page tone to reach).
+  const pageDocuments = [
+    { name: 'flat.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64') },
+    { name: 'paged.pdf', mimeType: 'application/pdf', buffer: pagedPdf(2) },
+  ];
+  for (const file of pageDocuments) {
+    await page.locator('#file-input').setInputFiles(file);
+    await expect(page.locator('#filename')).toHaveText(file.name);
+    await page.getByRole('button', { name: 'Reader menu' }).click();
+    await page.getByRole('button', { name: /Appearance and text/ }).click();
+    await expect(sheet.locator('.appearance-note')).toHaveText('Page tone and text settings apply to Markdown, plain text and reflowable books. PDF pages, fixed-layout books and images keep their colors and zoom instead (Ctrl + and Ctrl −).');
+    await expect(sheet.locator('.appearance-preview')).toBeHidden();
+    await expect(sheet.getByRole('button', { name: 'Larger text' })).toBeHidden();
+    await expect(sheet.getByRole('radiogroup', { name: 'PAGE' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(sheet).toBeHidden();
+  }
+});
+test('appearance is one page: no tabs, seven themes and ten glows named by their buttons, a status line that follows the preview, and it fits the compact window', async ({ page }) => {
+  await page.setViewportSize({ width: 420, height: 620 });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.goto('/');
+  // Plain text shows every row, LINES included: the tallest the sheet gets.
+  await page.locator('#file-input').setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('A line of text.\n'.repeat(60)) });
+  await expect(page.locator('#filename')).toHaveText('notes.txt');
   await page.getByRole('button', { name: 'Reader menu' }).click();
   await page.getByRole('button', { name: /Appearance and text/ }).click();
-  await sheet.getByRole('tab', { name: 'Text' }).click();
-  await expect(sheet.getByRole('button', { name: 'Larger text' })).toBeHidden();
-  await expect(sheet.locator('.appearance-text-note')).toBeVisible();
+  const sheet = page.locator('#appearance');
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByRole('tab')).toHaveCount(0);
+  const families = sheet.locator('.theme-row:not(.theme-row-glow) .theme-card'), glows = sheet.locator('.theme-row-glow .theme-card');
+  await expect(families).toHaveCount(7);
+  await expect(glows).toHaveCount(10);
+  // Swatches carry no visible names: the button's label and title are the name.
+  for (const card of [...await families.all(), ...await glows.all()]) {
+    const name = await card.getAttribute('aria-label');
+    expect(name).toBeTruthy();
+    await expect(card).toHaveAttribute('title', name!);
+    expect((await card.innerText()).trim()).toBe('');
+  }
+  await expect(sheet.getByRole('radio', { name: 'Orchid' })).toBeVisible();
+
+  const hint = sheet.locator('.appearance-hint'), brief = sheet.getByRole('radio', { name: 'Brief' });
+  const ring = (card: Locator) => card.locator('.theme-disc').evaluate(disc => getComputedStyle(disc).boxShadow);
+  await expect(hint).toHaveText('Brief · Hover to preview, click to keep.');
+  expect(await ring(brief)).toContain('3.5px');
+  await sheet.getByRole('radio', { name: 'Nebula' }).hover();
+  await expect(hint).toHaveText('Nebula · Click to keep, or move away for Brief.');
+  // The kept ring steps aside for the swatch being previewed.
+  await expect.poll(() => ring(brief)).not.toContain('3.5px');
+  await page.mouse.move(10, 10);
+  await expect(hint).toHaveText('Brief · Hover to preview, click to keep.');
+  await expect.poll(() => ring(brief)).toContain('3.5px');
+
+  // A glow theme has one mode: the mode control is disabled, and the line says so.
+  await sheet.getByRole('radio', { name: 'Aurora' }).click();
+  await page.mouse.move(10, 10);
+  const modes = sheet.getByRole('radiogroup', { name: 'Mode' });
+  await expect(modes.getByRole('radio', { name: 'Dark' })).toHaveAttribute('aria-checked', 'true');
+  for (const mode of await modes.getByRole('radio').all()) await expect(mode).toBeDisabled();
+  await expect(sheet.locator('.appearance-mode-note')).toHaveText('Glow themes have one mode.');
+  await expect(hint).toHaveText('Aurora · Glow themes have one mode.');
+
+  // Everything fits at 420 × 620: no inner scrolling, and within the window less 40 px.
+  const fit = await sheet.evaluate(element => {
+    const overflows = (selector: string) => { const node = element.querySelector<HTMLElement>(selector)!; return node.scrollWidth > node.clientWidth; };
+    return { scrolls: element.scrollHeight > element.clientHeight, height: element.getBoundingClientRect().height, hint: overflows('.appearance-hint'), glows: overflows('.theme-row-glow'), accents: overflows('.swatches') };
+  });
+  expect(fit).toEqual({ scrolls: false, height: expect.any(Number), hint: false, glows: false, accents: false });
+  expect(fit.height).toBeLessThanOrEqual(620 - 40);
+  await expect(sheet.getByRole('radio', { name: 'Keep as written' })).toBeVisible();
 });
 test('a glow theme fixes the scheme, disables the mode control, and a normal family brings the mode back', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' });

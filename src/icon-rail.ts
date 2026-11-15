@@ -9,8 +9,10 @@ export type IconRailHost = {
   view: (view: RailView) => void;
   /** Add files was pressed; `anchor` is the button, for the menu it opens. */
   add: (anchor: HTMLElement) => void;
-  /** Settings was pressed: it opens Appearance, where the library's side is chosen too. */
+  /** Settings was pressed: it opens Appearance. */
   settings: () => void;
+  /** The rail's context menu asked for the library on its other side. */
+  moveSide: () => void;
 };
 
 const icon = (paths: string) => `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
@@ -59,6 +61,28 @@ export function createIconRail(root: HTMLElement, host: IconRailHost) {
     event.preventDefault();
     const next = event.key === 'Home' ? 0 : event.key === 'End' ? all.length - 1 : (at + (event.key === 'ArrowDown' ? 1 : all.length - 1)) % all.length;
     all[next]!.focus();
+  });
+  // Right-click anywhere on the rail: one item, to move the library (and the rail with it) to the other side.
+  let menu: HTMLElement | undefined;
+  const closeMenu = (refocus = false) => {
+    if (!menu) return;
+    menu.remove(); menu = undefined; document.removeEventListener('pointerdown', dismiss, true); window.removeEventListener('blur', away); window.removeEventListener('resize', away);
+    if (refocus) root.querySelector<HTMLElement>('.icon-rail-button')?.focus();
+  };
+  const away = () => closeMenu();
+  const dismiss = (event: Event) => { if (!menu?.contains(event.target as Node)) closeMenu(); };
+  root.addEventListener('contextmenu', event => {
+    event.preventDefault(); closeMenu();
+    const item = document.createElement('button'); item.type = 'button'; item.setAttribute('role', 'menuitem');
+    item.textContent = root.dataset.librarySide === 'right' ? 'Move to the left side' : 'Move to the right side';
+    item.onclick = () => { closeMenu(true); host.moveSide(); };
+    menu = document.createElement('div'); menu.className = 'icon-rail-menu'; menu.setAttribute('role', 'menu'); menu.append(item);
+    menu.addEventListener('keydown', key => { if (key.key === 'Escape') { key.preventDefault(); key.stopPropagation(); closeMenu(true); } else if (key.key === 'Tab') closeMenu(); });
+    document.body.append(menu);
+    menu.style.left = `${Math.max(4, Math.min(event.clientX, window.innerWidth - menu.offsetWidth - 4))}px`;
+    menu.style.top = `${Math.max(4, Math.min(event.clientY, window.innerHeight - menu.offsetHeight - 4))}px`;
+    document.addEventListener('pointerdown', dismiss, true); window.addEventListener('blur', away); window.addEventListener('resize', away);
+    item.focus();
   });
   root.replaceChildren(group, foot);
   return {
