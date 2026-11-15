@@ -332,7 +332,6 @@ export function openCodeSheet({ host, block, fontSize, restore, copy }: SheetOpt
     },
   };
   const onKey = (event: KeyboardEvent) => {
-    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); self.close(); return; }
     if (event.key === 'Tab' && sheet.contains(document.activeElement)) {
       // Focus stays in the sheet: Tab runs round its three stops.
       const stops: HTMLElement[] = [copyButton.element, body, closeButton.element], at = stops.indexOf(document.activeElement as HTMLElement);
@@ -342,7 +341,11 @@ export function openCodeSheet({ host, block, fontSize, restore, copy }: SheetOpt
   };
   document.addEventListener('keydown', onKey, true);
   // Keys that are not shortcuts belong to the sheet: arrows and space scroll the code, and must not turn the page behind it.
-  sheet.addEventListener('keydown', event => { if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key !== 'Escape') event.stopPropagation(); });
+  sheet.addEventListener('keydown', event => {
+    // Esc closes the sheet only when it comes from inside it: the palette, find bar and menus keep their own Esc.
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); self.close(); return; }
+    if (!event.ctrlKey && !event.metaKey && !event.altKey) event.stopPropagation();
+  });
   // A press and release both outside the sheet close it. It waits for the release because a press moves focus, and focus must end on the Open button.
   let outside = false;
   scrim.addEventListener('pointerdown', event => { outside = event.target === scrim; });

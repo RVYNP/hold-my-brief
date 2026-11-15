@@ -86,6 +86,20 @@ test('keyboard: Tab reaches Open, Enter opens the sheet, Esc closes it and focus
   await expect(frameOf(page).getByRole('button', { name: 'Open code' })).toBeVisible();
 });
 
+test('Esc belongs to the palette while it is open over the sheet, and closes the sheet afterwards', async ({ page }) => {
+  await open(page, 1080, 760, 'light', 'scroll');
+  await frameOf(page).locator('div.sourceCode#cb2').hover();
+  await frameOf(page).getByRole('button', { name: 'Open code' }).click();
+  await expect(sheetOf(page)).toBeVisible();
+  await page.keyboard.press('Control+k');
+  await expect(page.locator('#palette')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#palette')).toBeHidden();
+  await expect(sheetOf(page)).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(sheetOf(page)).toHaveCount(0);
+});
+
 test('copy puts the block\'s exact text on the clipboard and says Copied for a moment', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await open(page, 1080, 760, 'light', 'scroll');
