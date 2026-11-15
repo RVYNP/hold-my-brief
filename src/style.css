@@ -207,7 +207,7 @@
   --shadow-drawer: 8px 0 30px light-dark(#25203524, transparent);
   --shadow-page: 0 2px 12px light-dark(#25203518, transparent);
   color: var(--fg);
-  /* The window: --chrome under the two glows (transparent outside the glow families), fixed to the window in a glow family. */
+  /* The window: --chrome under the two glows, fixed to the window (every family and glow theme set --glow-paint, see after the defaults below). */
   background-color: var(--chrome);
   background-image: var(--glow-paint);
   background-attachment: var(--glow-attach);
@@ -225,7 +225,7 @@
   }
 }
 /*
- * Glow themes: ten families with ONE scheme each (Aurora, Dusk, Nebula, Solar, Ember, Orchid dark;
+ * Glow themes (the strong glow; the seven families carry a soft one, set after the defaults below): ten families with ONE scheme each (Aurora, Dusk, Nebula, Solar, Ember, Orchid dark;
  * Glacier, Peach, Lagoon, Moss light), ported from Tracks (docs/GLOW_THEMES_PLAN.md and
  * docs/design/glow-themes-2026-11.json there). Their tokens are plain colours, not light-dark()
  * pairs; `color-scheme` is fixed per family and src/theme.ts keeps data-theme equal to it.
@@ -240,7 +240,7 @@
  *   card (alpha)      --glass-raise                  library rail and drawer (over the window's own glow, never over the document)
  *   card (opaque)     --card                         card composited over page: menus, sheets, popovers
  *   raise             --raise                        find bar, page strip, loading bar
- *   (page, no fill)   --glass-chrome, --glass-host, --glass-stage   toolbar; the page-based reader host and the PDF stage (the workspace's panel shows)
+ *   (page, no fill)   --glass-host, --glass-stage   the page-based reader host and the PDF stage (the workspace's panel shows); --glass-chrome (toolbar) too in the glow themes, while the seven families keep it opaque
  *   l1 / l2 / l3      --hairline / --border / --hover, --track (= l3)
  *   t1 / t2 / t4      --fg and --ink / --muted / --faint   (t3 has no HMB role: two text tiers above faint)
  *   accent            --accent, --accent-ink; accent-fill --accent-fill; on-accent --on-accent
@@ -271,6 +271,30 @@
   --glass-raise-base: var(--raise);
   --glass-raise-paint: none;
   --glass-raise-attach: scroll;
+}
+/*
+ * The seven families get the soft version of the window glow: the same two radial glows and glass surfaces as the glow themes,
+ * with one light/dark pair each, set here (after the defaults above) because a family's colour block comes before them. The
+ * unset root is Brief. The glow themes' own blocks below come later and win on a root that carries one of their palettes.
+ */
+:root:not([data-palette]), [data-palette='brief'] { --grad-a: light-dark(#e13a3a4e, #ff6a5e47); --grad-b: light-dark(#f08a3c42, #ffb37a38); }
+[data-palette='lilac'] { --grad-a: light-dark(#6358d857, #8b80f247); --grad-b: light-dark(#c04fd842, #d58bf238); }
+[data-palette='birch'] { --grad-a: light-dark(#b4613a57, #e08b5f47); --grad-b: light-dark(#d49a3a42, #f0c07038); }
+[data-palette='graphite'] { --grad-a: light-dark(#3d6fff40, #5a8cff47); --grad-b: light-dark(#7b5cff3f, #9d7bff38); }
+[data-palette='arctic'] { --grad-a: light-dark(#2b7fa857, #5db2d847); --grad-b: light-dark(#2fb5a042, #6ee7c838); }
+[data-palette='blossom'] { --grad-a: light-dark(#c0315357, #e1647947); --grad-b: light-dark(#e0704a42, #f09a7a38); }
+[data-palette='peony'] { --grad-a: light-dark(#c5038157, #ee45a647); --grad-b: light-dark(#8e3fd842, #b47bff38); }
+:is(:root:not([data-palette]), [data-palette='brief'], [data-palette='lilac'], [data-palette='birch'], [data-palette='graphite'], [data-palette='arctic'], [data-palette='blossom'], [data-palette='peony']) {
+  --glow-paint: var(--glow-image);
+  --glow-attach: fixed;
+  --glass-chrome: var(--chrome);
+  --glass-surface: color-mix(in srgb, var(--surface) 70%, transparent);
+  --glass-host: transparent;
+  --glass-stage: transparent;
+  --glass-raise: color-mix(in srgb, var(--raise) 78%, transparent);
+  --glass-raise-base: var(--chrome);
+  --glass-raise-paint: linear-gradient(var(--glass-raise), var(--glass-raise)), var(--glow-paint);
+  --glass-raise-attach: scroll, fixed, fixed;
 }
 [data-palette='aurora'] {
   color-scheme: dark;
@@ -701,6 +725,19 @@
     --glass-host: var(--surface);
     --glass-stage: var(--stage);
     --glass-raise-base: var(--card);
+    --glass-raise-paint: none;
+    --glass-raise-attach: scroll;
+  }
+  :is(:root:not([data-palette]), [data-palette='brief'], [data-palette='lilac'], [data-palette='birch'], [data-palette='graphite'], [data-palette='arctic'], [data-palette='blossom'], [data-palette='peony']) {
+    --grad-a: transparent;
+    --grad-b: transparent;
+    --glow-paint: none;
+    --glow-attach: scroll;
+    --glass-chrome: var(--chrome);
+    --glass-surface: var(--surface);
+    --glass-host: var(--surface);
+    --glass-stage: var(--stage);
+    --glass-raise-base: var(--raise);
     --glass-raise-paint: none;
     --glass-raise-attach: scroll;
   }

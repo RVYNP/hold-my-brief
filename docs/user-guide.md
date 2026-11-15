@@ -122,6 +122,7 @@ tooltip and accessible name. One ring marks the kept choice in all three rows.
 - **Theme:** Brief (default), Lilac, Birch, Graphite, Arctic, and two pinks: Blossom (soft blush with a
   rose accent) and Peony (bold, magenta-tinted, deep aubergine in dark mode). A disc is the theme's window tone
   against its accent. Each has a light and a dark version, and every one keeps its text at WCAG AA contrast or better.
+  Every theme has a soft window glow behind the library and the area around PDF pages, with the toolbar kept solid; the glow themes below are the strong version.
   Hover over or focus a theme to preview it on the whole window, click or press Enter to keep it, and
   move away or press Escape to go back to the theme you kept. The line under the glows says which theme is kept,
   or, while you preview another, which one you are seeing and how to keep it or return.

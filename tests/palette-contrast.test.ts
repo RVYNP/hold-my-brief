@@ -109,6 +109,12 @@ function glowBlock(name: Glow) {
   return { raw, get: resolve, scheme: /color-scheme: (\w+);/.exec(block[1])?.[1] };
 }
 
+/** A family's two glow stops as [light, dark] pairs: [[grad-a light, grad-a dark], [grad-b light, grad-b dark]]. */
+function familyGlow(name: string): [Rgba, Rgba][] | null {
+  const match = new RegExp(`\\[data-palette='${name}'\\] \\{ --grad-a: light-dark\\((#[0-9a-f]{8}), (#[0-9a-f]{8})\\); --grad-b: light-dark\\((#[0-9a-f]{8}), (#[0-9a-f]{8})\\); \\}`, 'i').exec(css);
+  return match && [[rgbaOf(match[1]), rgbaOf(match[2])], [rgbaOf(match[3]), rgbaOf(match[4])]];
+}
+
 const glowCases = glows.map(name => ({ name, ...glowBlock(name) }));
 const textTokens = ['fg', 'muted', 'accent-ink', 'accent', 'error', 'notice-ink'] as const;
 
@@ -164,24 +170,92 @@ describe('the glow', () => {
     const root = /\r?\n  background-color: var\(--chrome\);\r?\n  background-image: var\(--glow-paint\);\r?\n  background-attachment: var\(--glow-attach\);/;
     expect(css).toMatch(root);
   });
-  it('is fixed to the window in every glow family and in no other', () => {
+  it('is fixed to the window in every glow family, and so in every normal family', () => {
     for (const { raw } of glowCases) { expect(raw['glow-attach']).toBe('fixed'); expect(raw['glow-paint']).toBe('var(--glow-image)'); }
     expect(/:root, \[data-palette\] \{[^}]*--glow-paint: none;\s*--glow-attach: scroll;/.test(css)).toBe(true);
+    const shared = /:is\(:root:not\(\[data-palette\]\), ([^)]*)\) \{([^}]*)\}/.exec(css);
+    expect(shared, 'the shared family glow rule').not.toBeNull();
+    for (const name of palettes) expect(shared![1]).toContain(`[data-palette='${name}']`);
+    expect(shared![2].replace(/\s+/g, ' ').trim()).toBe('--glow-paint: var(--glow-image); --glow-attach: fixed; --glass-chrome: var(--chrome); --glass-surface: color-mix(in srgb, var(--surface) 70%, transparent); --glass-host: transparent; --glass-stage: transparent; --glass-raise: color-mix(in srgb, var(--raise) 78%, transparent); --glass-raise-base: var(--chrome); --glass-raise-paint: linear-gradient(var(--glass-raise), var(--glass-raise)), var(--glow-paint); --glass-raise-attach: scroll, fixed, fixed;');
   });
-  it('is transparent in every other family, so they paint exactly their own chrome', () => {
-    expect(/:root, \[data-palette\] \{\s*--grad-a: transparent;\s*--grad-b: transparent;/.test(css)).toBe(true);
-    for (const name of palettes) expect(family(name), name).not.toHaveProperty('grad-a');
-    for (const name of palettes) expect(new RegExp(`\\[data-palette='${name}'\\] \\{[^}]*--(grad|glass)-`).test(css), name).toBe(false);
+  it('gives every family its own light/dark pair of translucent glow stops, and keeps them out of the colour blocks', () => {
+    for (const name of palettes) {
+      expect(familyGlow(name), name).not.toBeNull();
+      expect(new RegExp(`\\[data-palette='${name}'\\] \\{[^}]*--(grad|glass)-`).test(css.replace(/\[data-palette='[a-z]+'\] \{ --grad-a[^}]*\}/g, '')), name).toBe(false);
+      for (const stop of familyGlow(name)!.flat()) { expect(stop.a, name).toBeGreaterThan(0); expect(stop.a, name).toBeLessThan(0.5); }
+    }
   });
   it('is not drawn, and the panel and card are opaque, under reduced transparency, more contrast and forced colours', () => {
     const query = /@media \(prefers-reduced-transparency: reduce\), \(prefers-contrast: more\), \(forced-colors: active\) \{\s*:is\(([^)]*(?:\)[^)]*)*?)\) \{([^}]*)\}/.exec(css);
     expect(query, 'the accessibility block').not.toBeNull();
     for (const name of glows) expect(query![1]).toContain(`[data-palette='${name}']`);
     expect(query![2].replace(/\s+/g, ' ').trim()).toBe('--grad-a: transparent; --grad-b: transparent; --glass-chrome: var(--chrome); --glass-surface: var(--surface); --glass-host: var(--surface); --glass-stage: var(--stage); --glass-raise-base: var(--card); --glass-raise-paint: none; --glass-raise-attach: scroll;');
+    // The families drop back to the opaque layout they had before the glow, the unset root (Brief) included.
+    const families = /@media \(prefers-reduced-transparency: reduce\), \(prefers-contrast: more\), \(forced-colors: active\) \{[^@]*?:is\(:root:not\(\[data-palette\]\), ([^)]*)\) \{([^}]*)\}/.exec(css);
+    expect(families, 'the accessibility block for the families').not.toBeNull();
+    for (const name of palettes) expect(families![1]).toContain(`[data-palette='${name}']`);
+    expect(families![2].replace(/\s+/g, ' ').trim()).toBe('--grad-a: transparent; --grad-b: transparent; --glow-paint: none; --glow-attach: scroll; --glass-chrome: var(--chrome); --glass-surface: var(--surface); --glass-host: var(--surface); --glass-stage: var(--stage); --glass-raise-base: var(--raise); --glass-raise-paint: none; --glass-raise-attach: scroll;');
   });
   it('is applied before first paint from the same scheme table', () => {
     const table = /const glows = \{([^}]*)\};/.exec(themeBoot)![1];
     const boot = Object.fromEntries([...table.matchAll(/(\w+): '(light|dark)'/g)].map(([, name, scheme]) => [name, scheme]));
     expect(boot).toEqual(glowSchemes);
+  });
+});
+
+/**
+ * The seven families sit over the soft glow, held to the glow themes' method (see above). The toolbar and footer stay
+ * opaque --chrome (--glass-chrome), so the page is read with no glow; panel (--surface at 70 %) and card (--raise at 78 %)
+ * are composited over --chrome with each of the family's two stops at its full alpha, exactly and rounded to 8 bits.
+ * Text tokens are the five a family sets or shares: --fg, --muted, --accent-ink, --error, --notice-ink. --accent is the
+ * favourite star and the bookmark mark, not text, so it is held to the 3:1 non-text line on the glass instead.
+ * The two stops are never added: their full stops are a window height apart.
+ */
+const familyTextTokens = ['fg', 'muted', 'accent-ink', 'error', 'notice-ink'] as const;
+const sharedColour = (token: string): [Rgb, Rgb] => {
+  const match = new RegExp(`--${token}: light-dark\\((#[0-9a-f]{6}), (#[0-9a-f]{6})\\)`, 'i').exec(css);
+  if (!match) throw new Error(`No light-dark --${token} in style.css`);
+  return [hex(match[1]), hex(match[2])];
+};
+const sharedRule = /:is\(:root:not\(\[data-palette\]\), [^)]*\) \{([^}]*)\}/.exec(css)![1];
+const glassAlpha = (token: string) => Number(new RegExp(`--glass-${token}: color-mix\\(in srgb, var\\(--\\w+\\) (\\d+)%, transparent\\)`).exec(sharedRule)![1]) / 100;
+
+describe.each(palettes.flatMap(name => (['light', 'dark'] as const).map((mode, column) => ({ name, mode, column }))))('$name $mode on the glass surfaces', ({ name, column }) => {
+  const own = family(name);
+  const get = (token: string): Rgb => (own[token] ?? sharedColour(token))[column];
+  const colour = (token: string, a = 1): Rgba => ({ r: get(token)[0], g: get(token)[1], b: get(token)[2], a });
+  const page = colour('chrome');
+  const panel = colour('surface', glassAlpha('surface'));
+  const [cardR, cardG, cardB] = mix(get('surface'), get('chrome'), 0.75);
+  const card: Rgba = { r: cardR, g: cardG, b: cardB, a: glassAlpha('raise') };
+  const stops = familyGlow(name)!.map(pair => pair[column]);
+
+  it('reads every text token at 4.5:1 on page, panel, card and card over panel, with no glow and with each stop at full strength', () => {
+    const failures: string[] = [];
+    for (const round of [false, true]) for (const [label, glow] of [['no glow', null], ['grad-a', stops[0]], ['grad-b', stops[1]]] as const) {
+      const base = glow ? over(glow, page, round) : page;
+      // The page is the opaque toolbar and footer: no glow reaches it.
+      const backgrounds = { page, panel: over(panel, base, round), card: over(card, base, round), 'card over panel': over(card, over(panel, base, round), round) };
+      for (const [where, background] of Object.entries(backgrounds)) for (const token of familyTextTokens) {
+        const ratio = contrast(get(token), asRgb(background));
+        if (ratio < 4.5) failures.push(`${token} on ${where}, ${label}${round ? ' (8-bit)' : ''}: ${ratio.toFixed(2)}`);
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+  it('keeps --accent, a mark and not text, at 3:1 on the glass with each stop at full strength', () => {
+    for (const round of [false, true]) for (const glow of [null, ...stops]) {
+      const base = glow ? over(glow, page, round) : page;
+      for (const background of [over(panel, base, round), over(card, base, round)]) expect(contrast(get('accent'), asRgb(background))).toBeGreaterThanOrEqual(3);
+    }
+  });
+});
+
+describe('the family glow', () => {
+  it('can fail the readability check: a full-strength Brief stop washes --muted out on the panel', () => {
+    const { get } = cases.find(entry => entry.name === 'brief light')!;
+    const sample = (token: string): Rgba => ({ r: get(token)[0], g: get(token)[1], b: get(token)[2], a: 1 });
+    const washed = over({ ...sample('surface'), a: glassAlpha('surface') }, over({ ...familyGlow('brief')![0][0], a: 1 }, sample('chrome'), false), false);
+    expect(contrast(get('muted'), asRgb(washed))).toBeLessThan(4.5);
   });
 });
