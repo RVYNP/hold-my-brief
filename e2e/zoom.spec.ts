@@ -13,6 +13,9 @@ const LADDER = [10, 25, 33, 50, 67, 75, 90, 100, 110, 125, 150, 175, 200, 250, 3
 async function openPdf(page: Page, buffer = pagedPdf(3)) {
   await page.setViewportSize({ width: 1080, height: 680 });
   await page.goto('/');
+  // Closed before the document opens: a library closed after it hands the page its width back, and the page is fitted again.
+  if (await page.locator('#library-root').isVisible()) await libraryToggle(page).click();
+  await expect(page.locator('#library-root')).toBeHidden();
   await openFile(page, buffer);
 }
 async function openFile(page: Page, buffer: Buffer) {
@@ -20,8 +23,6 @@ async function openFile(page: Page, buffer: Buffer) {
   await expect(page.locator('#position')).toContainText('Page 1 of');
   await expect(page.locator('#loading')).toBeHidden();
   await expect(page.locator('#view-controls')).toBeVisible();
-  if (await page.locator('#library-root').isVisible()) await libraryToggle(page).click();
-  await expect(page.locator('#library-root')).toBeHidden();
   await settled(page);
 }
 const level = (page: Page) => page.locator('#zoom-level');

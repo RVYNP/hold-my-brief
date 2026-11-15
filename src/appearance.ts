@@ -1,3 +1,4 @@
+import type { LibrarySide } from './library-layout';
 import { FONT_MAX, FONT_MIN } from './text-size';
 import { appearance, applyAppearance, glows, glowSchemes, isGlow, palettes, readingColors, rgbToHex, saveAppearance, schemeOf, type Appearance, type AppearanceMode, type PageTone, type Palette } from './theme';
 
@@ -23,6 +24,10 @@ export type TextControls = {
   current: () => (TextSettings & { wraps: boolean }) | undefined;
   change: (next: Partial<TextSettings>) => Promise<void>;
 };
+
+/** Supplied by the reader: the side the library panel is kept on, and the way to change it. */
+export type LibraryControls = { side: () => LibrarySide; setSide: (side: LibrarySide) => void };
+const sides: [LibrarySide, string][] = [['left', 'Left'], ['right', 'Right']];
 
 /** Menu label for the kept appearance, e.g. "Brief · System"; a glow theme has one scheme, so it reads "Aurora · Dark". */
 export function appearanceSummary() {
@@ -52,10 +57,10 @@ function check(group: HTMLElement, chosen: (item: HTMLElement) => boolean) {
 /**
  * Fills the Appearance bottom sheet. Hovering or focusing a theme previews it on the whole
  * window; click or Enter keeps it; leaving the cards, blur or Escape restores the kept theme.
- * Below the colours, a Text section edits size, spacing, margins and wrapping of the open text
+ * Below the colours, a Library row chooses the side the library panel stands on; a Text section edits size, spacing, margins and wrapping of the open text
  * document, live, so the change is judged on the page above the sheet.
  */
-export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextControls) {
+export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextControls, library: LibraryControls) {
   dialog.setAttribute('aria-labelledby', 'appearance-title');
   dialog.innerHTML = `
     <div class="sheet-head"><h2 id="appearance-title">Appearance</h2><div class="sheet-tabs" role="tablist" aria-label="Appearance sections"><button role="tab" id="appearance-tab-colour" data-tab="colour" aria-controls="appearance-colour">Colour</button><button role="tab" id="appearance-tab-text" data-tab="text" aria-controls="appearance-text">Text</button></div><button class="sheet-close" data-close aria-label="Close appearance">${icon(15, '<path d="M18 6 6 18M6 6l12 12"/>')}</button></div>
@@ -78,6 +83,8 @@ export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextContr
     <div class="appearance-row"><span class="sheet-label" id="appearance-page-label">PAGE</span>
       <div class="choices" role="radiogroup" aria-labelledby="appearance-page-label">${tones.map(([tone, label]) => `<button role="radio" data-tone="${tone}">${label}</button>`).join('')}</div></div>
     <p class="appearance-note">PDF pages and images keep their original colors.</p>
+    <div class="appearance-row"><span class="sheet-label" id="appearance-side-label">LIBRARY</span>
+      <div class="choices" role="radiogroup" aria-labelledby="appearance-side-label">${sides.map(([side, label]) => `<button role="radio" data-side="${side}" aria-label="Library on the ${side}">${label}</button>`).join('')}</div></div>
     </div>
     <div class="sheet-panel" id="appearance-text" role="tabpanel" aria-labelledby="appearance-tab-text" hidden>
     <div class="appearance-text">
@@ -97,7 +104,7 @@ export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextContr
   const themeRows = Array.from(dialog.querySelectorAll<HTMLElement>('.theme-row'));
   const swatches = dialog.querySelector<HTMLElement>('.swatches')!, themeSwatch = dialog.querySelector<HTMLElement>('.swatch-theme')!;
   const custom = dialog.querySelector<HTMLButtonElement>('.swatch-custom')!, picker = dialog.querySelector<HTMLInputElement>('.swatch-input')!;
-  const toneGroup = dialog.querySelector<HTMLElement>('[aria-labelledby=appearance-page-label]')!;
+  const toneGroup = dialog.querySelector<HTMLElement>('[aria-labelledby=appearance-page-label]')!, sideGroup = dialog.querySelector<HTMLElement>('[aria-labelledby=appearance-side-label]')!;
   const textSection = dialog.querySelector<HTMLElement>('.appearance-text')!, textNote = dialog.querySelector<HTMLElement>('.appearance-text-note')!;
   const sizeValue = dialog.querySelector<HTMLOutputElement>('.stepper-value')!;
   const spacingGroup = dialog.querySelector<HTMLElement>('[aria-labelledby=appearance-spacing-label]')!, marginGroup = dialog.querySelector<HTMLElement>('[aria-labelledby=appearance-margin-label]')!;
@@ -130,6 +137,7 @@ export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextContr
     custom.style.setProperty('--swatch', kept.accent ?? 'transparent');
     custom.setAttribute('aria-label', preset ? 'Custom accent color…' : `Custom accent ${kept.accent}`);
     check(toneGroup, item => item.dataset.tone === kept.page);
+    check(sideGroup, item => item.dataset.side === library.side());
     hint.toggleAttribute('data-previewing', previewing);
     hint.textContent = previewing ? `Previewing ${names[shown.palette]}. Click to keep it, or move away to return to ${names[kept.palette]}.` : restingHint;
     renderText();
@@ -158,10 +166,11 @@ export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextContr
   }
   function restore() { if (appearance() !== kept) { applyAppearance(kept); render(); } }
 
-  for (const group of [modeGroup, swatches, toneGroup, spacingGroup, marginGroup, wrapGroup]) radioGroup(group, true);
+  for (const group of [modeGroup, swatches, toneGroup, sideGroup, spacingGroup, marginGroup, wrapGroup]) radioGroup(group, true);
   for (const row of themeRows) radioGroup(row, false);
   modeGroup.addEventListener('click', event => { const mode = (event.target as Element).closest<HTMLElement>('[data-mode]')?.dataset.mode as AppearanceMode | undefined; if (mode) keep({ mode }); });
   toneGroup.addEventListener('click', event => { const page = (event.target as Element).closest<HTMLElement>('[data-tone]')?.dataset.tone as PageTone | undefined; if (page) keep({ page }); });
+  sideGroup.addEventListener('click', event => { const side = (event.target as Element).closest<HTMLElement>('[data-side]')?.dataset.side; if (side === 'left' || side === 'right') { library.setSide(side); render(); } });
   spacingGroup.addEventListener('click', event => { const value = (event.target as Element).closest<HTMLElement>('[data-spacing]')?.dataset.spacing; if (value) editText({ lineHeight: Number(value) }); });
   marginGroup.addEventListener('click', event => { const value = (event.target as Element).closest<HTMLElement>('[data-margin]')?.dataset.margin; if (value) editText({ margin: Number(value) }); });
   wrapGroup.addEventListener('click', event => { const value = (event.target as Element).closest<HTMLElement>('[data-wrap]')?.dataset.wrap; if (value) editText({ wrap: value === 'true' }); });

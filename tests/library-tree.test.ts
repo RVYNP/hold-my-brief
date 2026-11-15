@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildLibraryTree, filterTree, highlightRuns, openByDefault, sectionOf, treeRows, type TreeNode } from '../src/library-tree';
+import { buildLibraryTree, filterTree, highlightRuns, openByDefault, sectionId, treeRows, type LibraryTree, type SectionId, type TreeNode } from '../src/library-tree';
 import { emptyLibrary, type Collection, type Library, type LibraryDocument } from '../src/catalog-types';
 
 const doc = (path: string, extra: Partial<LibraryDocument> = {}): LibraryDocument => ({ path, name: path.split('/').pop()!, format: 'pdf', lastOpened: 0, collectionIds: [], favorite: false, tags: [], notes: '', ...extra });
@@ -17,18 +17,19 @@ function library(): Library {
     ],
     documents: [
       inRoot('a', '03_wwe_mag/source.pdf', { collectionIds: ['folder:a:03', 'fashion-90s'] }),
-      inRoot('a', '09_dirtrider/source.pdf', { collectionIds: ['fashion'] }),
+      inRoot('a', '09_dirtrider/source.pdf', { collectionIds: ['fashion'], favorite: true }),
       inRoot('a', '09_dirtrider/issues/may.pdf'),
       inRoot('a', '10_misc/a/b/deep.pdf'),
       inRoot('a', '2_early/source.pdf'),
       inRoot('b', '1-languages/Rust-Book-1.99.epub', { format: 'epub' }),
       inRoot('b', 'top-level.md', { format: 'md' }),
-      doc('/added/loose-one.pdf'), doc('/added/source.pdf'),
+      doc('/added/loose-one.pdf', { favorite: true }), doc('/added/source.pdf'),
     ],
   };
 }
 const find = (nodes: TreeNode[], id: string): TreeNode | undefined => { for (const node of nodes) { if (node.id === id) return node; const inner = find(node.children, id); if (inner) return inner; } return undefined; };
 const labels = (nodes: readonly TreeNode[]) => nodes.map(node => node.label);
+const sectionOf = (tree: LibraryTree, id: SectionId) => tree.sections.find(node => node.id === sectionId(id));
 
 describe('buildLibraryTree', () => {
   const tree = buildLibraryTree(library());
@@ -87,13 +88,29 @@ describe('buildLibraryTree', () => {
     expect(loose.count).toBe(2);
   });
 
-  it('leaves empty sections out, and a lone document with no root is loose', () => {
-    expect(buildLibraryTree(emptyLibrary()).sections).toEqual([]);
-    const only = buildLibraryTree({ ...emptyLibrary(), documents: [doc('/x/one.pdf')] });
-    expect(only.sections.map(node => node.label)).toEqual(['Loose files']);
-    // A document whose root is unknown is loose too: nothing is hidden.
-    const orphan = buildLibraryTree({ ...emptyLibrary(), documents: [inRoot('gone', 'a/b.pdf')] });
-    expect(orphan.sections.map(node => node.label)).toEqual(['Loose files']);
+  it('lists the sections in the order Favorites, Collections, Folders, Loose files', () => {
+    expect(labels(tree.sections)).toEqual(['Favorites', 'Collections', 'Folders', 'Loose files']);
+  });
+
+  it('lists exactly the favorite documents, flat, by title, whatever folder or collection they are in', () => {
+    const favorites = sectionOf(tree, 'favorites')!;
+    expect(favorites.count).toBe(2);
+    expect(favorites.children.every(node => node.kind === 'document' && node.doc!.favorite)).toBe(true);
+    expect(favorites.children.map(node => node.id)).toEqual(['fv:/lib/a/09_dirtrider/source.pdf', 'fv:/added/loose-one.pdf']);
+    // Unfavoriting one takes it out; the same document keeps its place in FOLDERS.
+    const fewer = buildLibraryTree({ ...library(), documents: library().documents.map(item => ({ ...item, favorite: item.path === '/added/loose-one.pdf' })) });
+    expect(sectionOf(fewer, 'favorites')!.children.map(node => node.doc!.path)).toEqual(['/added/loose-one.pdf']);
+    expect(find(fewer.sections, 'd:/lib/a/09_dirtrider/source.pdf')).toBeDefined();
+  });
+
+  it('always shows Favorites and Collections, even empty, and leaves Folders and Loose files out until they have something', () => {
+    const empty = buildLibraryTree(emptyLibrary());
+    expect(labels(empty.sections)).toEqual(['Favorites', 'Collections']);
+    expect(empty.sections.map(node => node.count)).toEqual([0, 0]);
+    expect(empty.sections.every(node => node.children.length === 0)).toBe(true);
+    // A lone document with no root is loose; a document whose root is unknown is loose too: nothing is hidden.
+    expect(labels(buildLibraryTree({ ...emptyLibrary(), documents: [doc('/x/one.pdf')] }).sections)).toEqual(['Favorites', 'Collections', 'Loose files']);
+    expect(labels(buildLibraryTree({ ...emptyLibrary(), documents: [inRoot('gone', 'a/b.pdf')] }).sections)).toEqual(['Favorites', 'Collections', 'Loose files']);
   });
 
   it('shows an empty personal collection, and survives a parent cycle and an unknown parent without hiding anything', () => {
@@ -107,9 +124,9 @@ describe('treeRows', () => {
   const tree = buildLibraryTree(library());
   it('lists only what its open ancestors show, with ARIA levels and positions', () => {
     const rows = treeRows(tree.sections, id => id === 's:folders' || id === 'r:a');
-    expect(rows.map(row => row.node.label)).toEqual(['Folders', 'reference-docs', 'refs', '2_early', '03_wwe_mag', '09_dirtrider', '10_misc', 'Collections', 'Loose files']);
-    expect(rows[0]).toMatchObject({ level: 1, setSize: 3, position: 1 });
-    expect(rows[3]).toMatchObject({ level: 3, setSize: 4, position: 1 });
+    expect(rows.map(row => row.node.label)).toEqual(['Favorites', 'Collections', 'Folders', 'reference-docs', 'refs', '2_early', '03_wwe_mag', '09_dirtrider', '10_misc', 'Loose files']);
+    expect(rows[0]).toMatchObject({ level: 1, setSize: 4, position: 1 });
+    expect(rows[5]).toMatchObject({ level: 3, setSize: 4, position: 1 });
   });
   it('opens sections and roots by default and nothing deeper', () => {
     const folders = sectionOf(tree, 'folders')!;
@@ -134,7 +151,7 @@ describe('filterTree', () => {
   it('matches a folder\'s name for everything inside it, and words split between folder and file', () => {
     const wwe = filterTree(tree.sections, 'wwe');
     expect(wwe.documents).toBe(1); // the one document, found in FOLDERS and in COLLECTIONS' 90s
-    expect(labels(wwe.sections)).toEqual(['Folders', 'Collections']);
+    expect(labels(wwe.sections)).toEqual(['Collections', 'Folders']);
     const split = filterTree(tree.sections, 'wwe source');
     expect(find(split.sections, 'd:/lib/a/03_wwe_mag/source.pdf')).toBeDefined();
     expect(find(split.sections, 'd:/lib/a/09_dirtrider/source.pdf')).toBeUndefined();

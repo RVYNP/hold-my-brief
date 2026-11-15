@@ -265,7 +265,7 @@
   --glass-surface: var(--surface);
   --glass-host: var(--surface);
   --glass-stage: var(--stage);
-  /* The rail and the drawer float over the document, so they must not show it through: in a glow family their
+  /* The rail (and the board) float over the document, so they must not show it through: in a glow family their
      glass is the window's own glow, fixed to the window, beneath a wash of --glass-raise (three image layers:
      wash, glow, glow) on the page colour. Elsewhere it is the plain --raise and no image, so nothing changes. */
   --glass-raise-base: var(--raise);
@@ -865,7 +865,7 @@ h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 1px 0 
 .recent button:last-child { flex: 0; padding: 4px 8px; color: var(--muted); opacity: 0; }
 .recent:hover button:last-child, .recent:focus-within button:last-child { opacity: 1; }
 /* Once there is something to return to, the opening page is a media-player home: file type chips, a "Recently opened" grid and
-   horizontal shelves. Its width, not the window's, decides the grid's columns (4 / 2 / 1), so the rail and the drawer count. */
+   horizontal shelves. Its width, not the window's, decides the grid's columns (4 / 2 / 1), so the rail and the docked panel count. */
 #empty.is-home { max-width: none; width: 100%; align-items: stretch; padding: 18px 16px 28px; container-type: inline-size; --home-card: var(--hover); }
 /* Over a glow the cards are the opaque card colour: --hover is a translucent white there and would show the glow through. */
 :is([data-palette='aurora'], [data-palette='dusk'], [data-palette='nebula'], [data-palette='solar'], [data-palette='ember'], [data-palette='orchid'], [data-palette='glacier'], [data-palette='peach'], [data-palette='lagoon'], [data-palette='moss']) #empty.is-home { --home-card: var(--card); }
@@ -1042,10 +1042,10 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
 #workspace.has-page-strip .reader-host { bottom: var(--page-strip-room); }
 #workspace.has-page-strip #view-controls { bottom: calc(var(--page-strip-room) + 8px); }
 #page-strip { position: absolute; z-index: 4; left: 0; right: 0; bottom: var(--footer-height); height: var(--page-strip-height); background: var(--raise); border-top: 1px solid var(--hairline); box-shadow: 0 var(--footer-height) 0 var(--raise); }
-/* The library drawer, or the rail, floats over the panel's edge, so the strip starts beside it, like the find bar. */
+/* The icon rail floats over the panel's edge while the library is closed, so the strip starts beside it, like the find bar. */
 @media (min-width: 720px) {
-  #reader-layout:not(.library-right) #page-strip { left: var(--library-clear); }
-  #reader-layout.library-right #page-strip { right: var(--library-clear); }
+  #reader-layout:not(.library-right) #page-strip { left: var(--workspace-clear); }
+  #reader-layout.library-right #page-strip { right: var(--workspace-clear); }
 }
 /* The scroller takes the whole band, scrolls sideways without a bar, and fades out at both ends to say there is more. Items are
    placed by src/page-strip.ts, half a viewport in from each end so the first and last page can be centred too. */
@@ -1270,14 +1270,14 @@ dd { margin: 0; color: var(--muted); }
 /* Find in document (Ctrl+F): a strip above the reading surface, which moves down by the strip's
    height so the first line is never covered. It is quiet like the rest of the chrome (one tone and
    a hairline, no card or shadow), the field is sized for a query rather than for the window, and
-   beside the library it starts at the drawer's edge, so the drawer never covers what you typed. */
+   beside the icon rail it starts at the rail's edge, so the rail never covers what you typed. */
 /* The reading surface is absolutely positioned over the whole panel, so the find bar floats
    above it on the stacking axis rather than sharing its layout flow. */
 #find-bar { position: absolute; top: 0; left: 0; right: 0; z-index: 5; height: var(--find-bar-height); display: flex; align-items: center; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--hairline); background: var(--raise); color: var(--muted); }
 #find-bar[hidden] { display: none; }
 @media (min-width: 720px) {
-  #reader-layout:not(.library-right) #find-bar { left: var(--library-clear); }
-  #reader-layout.library-right #find-bar { right: var(--library-clear); }
+  #reader-layout:not(.library-right) #find-bar { left: var(--workspace-clear); }
+  #reader-layout.library-right #find-bar { right: var(--workspace-clear); }
 }
 /* While the bar is open, shift the reading surface down so the first line is never hidden. */
 #workspace:has(#find-bar:not([hidden])) .reader-host { top: var(--find-bar-height); }

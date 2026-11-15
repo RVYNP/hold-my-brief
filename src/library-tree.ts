@@ -1,16 +1,19 @@
-// The info rail's tree: the library as nested folders with the documents inside them. Pure (no DOM), so the shape,
+// The library panel's tree: the library as nested folders with the documents inside them. Pure (no DOM), so the shape,
 // the counts, the filter and the expand rules are unit-tested; `library-tree-view.ts` paints it.
 //
-// Three sections, each a top-level node:
-//   FOLDERS      one root per indexed source folder, subfolders from each document's relative path, documents as leaves.
+// Four sections, each a top-level node, in this order:
+//   FAVORITES    the favorite documents as a flat list. Always shown: it is where a first favorite will appear.
 //   COLLECTIONS  the user's own collections nested by parentId, documents as leaves. A collection that mirrors an
-//                indexed folder (it carries a `sourceId`) is not listed: FOLDERS already shows that structure.
+//                indexed folder (it carries a `sourceId`) is not listed: FOLDERS already shows that structure. Always
+//                shown: its caption is where a collection is created.
+//   FOLDERS      one root per indexed source folder, subfolders from each document's relative path, documents as leaves.
 //   LOOSE FILES  documents that are not under a source root (added by hand).
+// FOLDERS and LOOSE FILES appear only when they have something in them.
 import type { Collection, Library, LibraryDocument } from './catalog-types';
 import { collectionDisplayName, compareCollections, displayTitle } from './shelf';
 
 export type TreeKind = 'section' | 'root' | 'folder' | 'collection' | 'document';
-export type SectionId = 'folders' | 'collections' | 'loose';
+export type SectionId = 'favorites' | 'collections' | 'folders' | 'loose';
 /** What a folder or collection node stands for when the board is scoped to it. */
 export type TreeScope = { kind: 'folder'; rootId: string; path: string } | { kind: 'collection'; id: string };
 export type TreeNode = {
@@ -25,7 +28,7 @@ export type TreeNode = {
   scope?: TreeScope;
 };
 export type LibraryTree = {
-  /** The non-empty sections, in the order they are shown. */
+  /** The sections, in the order they are shown. */
   sections: TreeNode[];
   /** Where each document sits in FOLDERS: the ids of its ancestors, outermost first (section, root, folders). */
   ancestors: Map<string, string[]>;
@@ -34,7 +37,7 @@ export type LibraryTree = {
 };
 
 const natural = (a: string, b: string) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }) || (a < b ? -1 : a > b ? 1 : 0);
-const sectionLabels: Record<SectionId, string> = { folders: 'Folders', collections: 'Collections', loose: 'Loose files' };
+const sectionLabels: Record<SectionId, string> = { favorites: 'Favorites', collections: 'Collections', folders: 'Folders', loose: 'Loose files' };
 export const sectionId = (section: SectionId) => `s:${section}`;
 
 function section(id: SectionId, children: TreeNode[]): TreeNode {
@@ -83,9 +86,8 @@ function foldersSection(library: Library, ancestors: Map<string, string[]>, loos
   return section('folders', nodes);
 }
 
-function collectionsSection(library: Library): TreeNode | undefined {
+function collectionsSection(library: Library): TreeNode {
   const personal = library.collections.filter(collection => !collection.sourceId);
-  if (!personal.length) return undefined;
   const ids = new Set(personal.map(collection => collection.id));
   const byParent = new Map<string | null, Collection[]>();
   for (const collection of personal) {
@@ -109,7 +111,13 @@ function collectionsSection(library: Library): TreeNode | undefined {
   const top = (byParent.get(null) ?? []).sort(compareCollections).map(build).filter((node): node is TreeNode => Boolean(node));
   // Collections left out by a cycle still show, at the top.
   for (const collection of personal) if (!seen.has(collection.id)) { const node = build(collection); if (node) top.push(node); }
-  return top.length ? section('collections', top) : undefined;
+  return section('collections', top);
+}
+
+function favoritesSection(library: Library): TreeNode {
+  const nodes = library.documents.filter(doc => doc.favorite).map(doc => documentNode(`fv:${doc.path}`, displayTitle(doc), doc));
+  sortChildren(nodes);
+  return section('favorites', nodes);
 }
 
 function collect(node: TreeNode, into: Set<string>) {
@@ -122,12 +130,9 @@ export function buildLibraryTree(library: Library): LibraryTree {
   const collections = collectionsSection(library);
   const looseNodes = loose.map(doc => documentNode(`l:${doc.path}`, displayTitle(doc), doc));
   sortChildren(looseNodes);
-  const sections = [folders, collections, looseNodes.length ? section('loose', looseNodes) : undefined].filter((node): node is TreeNode => Boolean(node));
+  const sections = [favoritesSection(library), collections, folders, looseNodes.length ? section('loose', looseNodes) : undefined].filter((node): node is TreeNode => Boolean(node));
   return { sections, ancestors, total: library.documents.length };
 }
-
-/** A section's tree alone (the Collections view). */
-export const sectionOf = (tree: LibraryTree, id: SectionId): TreeNode | undefined => tree.sections.find(node => node.id === sectionId(id));
 
 export type TreeRow = { node: TreeNode; /** 1 for a section caption, 2 for what sits directly in it. */ level: number; setSize: number; position: number };
 

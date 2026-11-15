@@ -1,8 +1,8 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { seedLibrary, treeLibrary } from './home-fixture';
+import { pathOfItem, seedLibrary, treeLibrary } from './home-fixture';
 import { warmDevServer } from './warm';
 
-// The info rail's tree (src/library-tree*.ts) and the icon rail beside it (src/icon-rail.ts), on a library shaped like a real catalog:
+// The library panel's tree (src/library-tree*.ts) and the icon rail beside it (src/icon-rail.ts), on a library shaped like a real catalog:
 // source roots (`refs`, `reference-docs`, `Design materials`) with numbered subfolders, many documents called `source.pdf`, user
 // collections, and loose files.
 test.beforeAll(async ({ browser, baseURL }) => { await warmDevServer(browser, baseURL); });
@@ -30,9 +30,9 @@ test('the library is a nested folder tree: a root per source folder, subfolders 
   await expect(page.locator('#library-root h2')).toContainText('Library');
   await expect(page.locator('.library-title-count')).toHaveText('40');
 
-  // Sections are quiet captions; each source root is a bold top-level row, open at first, its subfolders closed.
+  // Sections are quiet captions, in the order Favorites, Collections, Folders, Loose files; each source root is a bold top-level row, open at first, its subfolders closed.
   const captions = page.locator('#library-root .tree-row.is-section');
-  await expect(captions).toHaveText([/^Folders\s*37$/, /^Collections\s*3$/, /^Loose files\s*3$/]);
+  await expect(captions).toHaveText([/^Favorites\s*\d+$/, /^Collections\s*3$/, /^Folders\s*37$/, /^Loose files\s*3$/]);
   const refs = node(page, root('refs'));
   await expect(refs).toHaveAttribute('aria-expanded', 'true');
   await expect(refs.locator('.tree-label')).toHaveCSS('font-weight', '650');
@@ -145,7 +145,7 @@ test('the tree has an ARIA tree\'s keyboard: arrows, Home/End, Enter, left to th
   await page.keyboard.press('End');
   expect(await focused(page)).toMatch(/^l:/); // the last loose file
   await page.keyboard.press('Home');
-  expect(await focused(page)).toBe('s:folders');
+  expect(await focused(page)).toBe('s:favorites');
 
   // Right opens a closed folder, then enters it; Left leaves it for its parent (closing it first when open).
   await node(page, root('refs')).focus();
@@ -187,19 +187,18 @@ test('the tree has an ARIA tree\'s keyboard: arrows, Home/End, Enter, left to th
   expect(await focused(page)).toBe(folder('refs', '09_motorcycle_catalogues'));
   // A Shift pressed on its own (as for '_' or a capital) keeps the letters typed so far.
   await page.keyboard.press('Home'); // a navigation key starts the next search afresh
-  await page.keyboard.type('re');
-  expect(await focused(page)).toBe(root('reference-docs')); // 'reference-docs' sorts before 'refs'
+  await page.keyboard.type('ref');
+  expect(await focused(page)).toBe(root('reference-docs')); // 'reference-docs' sorts before 'refs'; the "Reading list" collection above it does not start with 'ref'
   await page.keyboard.down('Shift'); await page.keyboard.up('Shift');
-  await page.keyboard.type('fs');
+  await page.keyboard.type('s');
   expect(await focused(page)).toBe(root('refs')); // 'refs', not a fresh search for 'f' or 's'
 });
 
-test('the filter narrows the tree as you type, highlights the matches, opens the folders above them, and clears with Escape', async ({ page }) => {
+test('the filter is always under the header, narrows the tree as you type, highlights the matches, opens the folders above them, and clears with Escape', async ({ page }) => {
   await seed(page);
-  const toggle = page.getByRole('button', { name: 'Filter the library' });
-  await toggle.click();
   const field = page.getByRole('searchbox', { name: 'Filter the library' });
-  await expect(field).toBeFocused();
+  await expect(field).toBeVisible();
+  await expect(field).toHaveAttribute('placeholder', 'Filter 40 documents');
   await field.fill('motorcycle spring');
   // Only the document whose folder and file name say both words is left, with every folder above it open and the words marked.
   await expect(page.locator('#library-root .tree-row.is-document')).toHaveCount(1);
@@ -217,59 +216,50 @@ test('the filter narrows the tree as you type, highlights the matches, opens the
   await field.fill('zzzz');
   await expect(page.getByText('No matching references')).toBeVisible();
   await expect(page.locator('.library-title-count')).toHaveText('0');
-  // Escape clears what was typed; Escape again folds the field and returns to the tree; the saved open state is what it was.
+  // Escape clears what was typed, and the saved open state is what it was; the field stays, and with nothing typed Escape closes the panel as it does anywhere in it.
   await page.keyboard.press('Escape');
   await expect(field).toHaveValue('');
+  await expect(field).toBeVisible();
   await expect(node(page, folder('refs', '03_vintage_magazine'))).toHaveAttribute('aria-expanded', 'false');
   await page.keyboard.press('Escape');
-  await expect(field).toBeHidden();
-  await expect(page.locator('#library-root')).toBeVisible();
-  expect(await focused(page)).not.toBeNull();
+  await expect(page.locator('#library-root')).toBeHidden();
   // Arrow Down from the field moves into the tree.
-  await toggle.click(); await field.fill('rust');
+  await icon(page, 'Library').click(); await field.fill('rust');
   await page.keyboard.press('ArrowDown');
   expect(await focused(page)).toMatch(/^s:/);
 });
 
-test('the icon rail: Library, Home, Favorites, Collections, Search and Add files, with the side switch and Appearance at its foot, tooltips with shortcuts, and the active icon filled', async ({ page }) => {
+test('the icon rail: Library, Search, Add files, a spacer, then Settings; each does one thing, and Library wears the fill while the panel is open', async ({ page }) => {
   await seed(page);
-  const names = ['Library', 'Home', 'Favorites', 'Collections', 'Search', 'Add files', 'Move library to the right', 'Appearance'];
+  const names = ['Library', 'Search', 'Add files', 'Settings'];
   const buttons = iconRail(page).getByRole('button');
   await expect(buttons).toHaveText(names.map(() => ''));
   expect(await buttons.evaluateAll(list => list.map(button => button.getAttribute('aria-label')))).toEqual(names);
-  // Top to bottom, the two foot buttons below the rest.
+  expect(await buttons.evaluateAll(list => list.map(button => button.getAttribute('data-tip')))).toEqual(['Library  Ctrl+B', 'Search  Ctrl+Shift+F', 'Add files', 'Settings']);
+  // Top to bottom, Settings below the rest with room between.
   const ys = await buttons.evaluateAll(list => list.map(button => Math.round(button.getBoundingClientRect().y)));
   expect([...ys].sort((a, b) => a - b)).toEqual(ys);
-  expect(ys[7]! - ys[5]!).toBeGreaterThan(100);
-  expect(await buttons.evaluateAll(list => list.map(button => button.getAttribute('data-tip')))).toEqual(['Library  Ctrl+B', 'Home', 'Favorites', 'Collections', 'Search  Ctrl+Shift+F', 'Add files', 'Move library to the right', 'Appearance']);
+  expect(ys[3]! - ys[2]!).toBeGreaterThan(100);
 
-  // The pressed icon is the one filled with the accent-soft tone; the others are not.
+  // Library is the pressed icon while the panel is open, and collapses it; the filled tone is the accent-soft one.
   const fill = (name: string) => icon(page, name).evaluate(button => getComputedStyle(button).backgroundColor);
   await expect(icon(page, 'Library')).toHaveAttribute('aria-pressed', 'true');
-  const soft = await fill('Library');
-  expect(await fill('Favorites')).not.toBe(soft);
-
-  // Favorites, Collections and Search open the info rail on that view; the active icon collapses it.
-  await icon(page, 'Favorites').click();
-  await expect(page.locator('#library-root h2')).toContainText('Favorites');
-  await expect(icon(page, 'Favorites')).toHaveAttribute('aria-pressed', 'true');
-  await expect(icon(page, 'Library')).toHaveAttribute('aria-pressed', 'false');
-  await icon(page, 'Collections').click();
-  await expect(page.locator('#library-root h2')).toContainText('Collections');
-  await icon(page, 'Search').click();
-  await expect(page.locator('#library-root h2')).toContainText('Search');
-  await expect(page.getByRole('searchbox', { name: 'Filter the library' })).toBeFocused();
-  await icon(page, 'Search').click();
+  expect(await fill('Library')).not.toBe(await fill('Search'));
+  await icon(page, 'Library').click();
   await expect(page.locator('#library-root')).toBeHidden();
-  await expect(icon(page, 'Search')).toHaveAttribute('aria-pressed', 'false');
-  // Ctrl+Shift+F is Search from anywhere.
+  await expect(icon(page, 'Library')).toHaveAttribute('aria-pressed', 'false');
+  // Search opens the panel on its filter field; Ctrl+Shift+F is Search from anywhere.
+  await icon(page, 'Search').click();
+  await expect(page.locator('#library-root')).toBeVisible();
+  await expect(page.getByRole('searchbox', { name: 'Filter the library' })).toBeFocused();
+  await icon(page, 'Library').click();
   await page.keyboard.press('Control+Shift+F');
   await expect(page.getByRole('searchbox', { name: 'Filter the library' })).toBeFocused();
 
-  // Appearance opens the appearance sheet; Add files opens its menu beside the icon, with Sources, even with the info rail closed.
-  await icon(page, 'Search').click();
+  // Settings opens Appearance; Add files opens its menu beside the icon, with Sources, even with the panel closed.
+  await icon(page, 'Library').click();
   await expect(page.locator('#library-root')).toBeHidden();
-  await icon(page, 'Appearance').click();
+  await icon(page, 'Settings').click();
   await expect(page.locator('#appearance')).toBeVisible();
   await page.keyboard.press('Escape');
   await icon(page, 'Add files').click();
@@ -281,45 +271,72 @@ test('the icon rail: Library, Home, Favorites, Collections, Search and Add files
   await expect(page.getByRole('dialog', { name: 'Sources and originals' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(icon(page, 'Add files')).toBeFocused();
-
-  // Home shows the Home tab from a document, and is the pressed icon while nothing else is.
-  await icon(page, 'Library').click();
-  await expand(page, folder('reference-docs', '2-creative-apps'));
-  await expand(page, folder('reference-docs', '2-creative-apps/drafts'));
-  await document_(page, 'reference-docs', '2-creative-apps/Brush-Notes.md').click();
-  await expect(page.locator('#filename')).toHaveText('Brush-Notes.md');
-  await icon(page, 'Library').click();
-  await expect(icon(page, 'Home')).toHaveAttribute('aria-pressed', 'false');
-  await icon(page, 'Home').click();
-  await expect(page.locator('#home-tab')).toHaveAttribute('aria-selected', 'true');
-  await expect(icon(page, 'Home')).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('Favorites is a flat list of rows with covers; Collections is the collections tree alone; both open documents', async ({ page }) => {
+test('FAVORITES lists exactly the favorites, flat, with progress; COLLECTIONS nests; sections keep their own saved open state; every section opens documents', async ({ page }) => {
   await seed(page);
-  await icon(page, 'Favorites').click();
-  const list = page.locator('#library-root .library-documents');
-  await expect(list).toBeVisible();
-  await expect(page.getByRole('tree', { name: 'Library' })).toBeHidden();
-  const favorites = list.locator('.library-document');
-  expect(await favorites.count()).toBeGreaterThanOrEqual(2);
-  await expect(page.locator('.library-title-count')).toHaveText(String(await favorites.count()));
-  await expect(favorites.first().locator('.library-tile-media')).toBeVisible();
-  expect(await favorites.evaluateAll(rowsList => rowsList.map(row => row.querySelector('.library-document-name')?.textContent)))
-    .toContain('01_art_nouveau_posters'); // a generic file name shows its folder
-  await expect(list.locator('.library-favorite[aria-pressed=true]')).toHaveCount(await favorites.count());
-
-  await icon(page, 'Collections').click();
+  const captions = page.locator('#library-root .tree-row.is-section');
+  await expect(captions).toHaveCount(4);
   await expect(page.getByRole('tree', { name: 'Library' })).toBeVisible();
-  await expect(page.locator('#library-root .tree-row.is-section')).toHaveCount(0);
+  const { documents } = treeLibrary(40);
+  const wanted = documents.filter(item => item.favorite).map(item => pathOfItem(item)).sort();
+  expect(wanted.length).toBeGreaterThanOrEqual(2);
+  // Flat: every favorite is a document row directly under the FAVORITES caption (level 2), once.
+  const favorites = page.locator('#library-root .tree-row.is-document[id^="tree:fv:"]');
+  expect(await favorites.evaluateAll(list => list.map(row => (row as HTMLElement).dataset.docPath!).sort())).toEqual(wanted);
+  expect(await favorites.evaluateAll(list => list.every(row => row.getAttribute('aria-level') === '2'))).toBe(true);
+  await expect(captions.first()).toHaveText(new RegExp(`^Favorites\\s*${wanted.length}$`));
+  // The favorite with reading progress shows it, and a generic file name shows its folder.
+  await expect(page.locator('#library-root .tree-row[id^="tree:fv:"] .tree-label', { hasText: '01_art_nouveau_posters' })).toBeVisible();
+  await expect(page.locator('#library-root .tree-row[id^="tree:fv:"][data-doc-path$="Rust-Book-1.99.epub"] .tree-meta')).toHaveText('37 %');
+
+  // COLLECTIONS: the collections tree with documents inside, nested.
   await expect(node(page, 'c:c-Fashion photo and catalogues')).toBeVisible();
   await expect(node(page, 'c:c-Reading list')).toBeVisible();
-  await expect(node(page, root('refs'))).toHaveCount(0);
-  await expect(page.locator('.library-title-count')).toHaveText('3');
   await node(page, 'c:c-Reading list').locator('.tree-chevron').click();
-  await expect(page.locator('#library-root .tree-row.is-document', { hasText: 'Brush-Notes.md' })).toBeVisible();
-  await page.locator('#library-root .tree-row.is-document', { hasText: 'Brush-Notes.md' }).click();
+  const brush = page.locator('#library-root .tree-row.is-document', { hasText: 'Brush-Notes.md' });
+  await expect(brush.first()).toBeVisible();
+
+  // A section folds on its own and the state is saved like a folder's.
+  await node(page, 's:favorites').click();
+  await expect(node(page, 's:favorites')).toHaveAttribute('aria-expanded', 'false');
+  await expect(favorites).toHaveCount(0);
+  await expect(node(page, root('refs'))).toBeVisible();
+  await page.reload();
+  await expect(node(page, 's:favorites')).toHaveAttribute('aria-expanded', 'false');
+  await node(page, 's:favorites').click();
+  await expect(favorites).toHaveCount(wanted.length);
+
+  // A document opens from a favorites row, and ⌘/Ctrl-click opens a background tab from it.
+  const rust = page.locator('#library-root .tree-row[id^="tree:fv:"][data-doc-path$="Rust-Book-1.99.epub"]');
+  await rust.click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });
+  await expect(page.locator('#tab-count')).toHaveText('1');
+  await brush.first().click();
   await expect(page.locator('#filename')).toHaveText('Brush-Notes.md');
+
+  // The keyboard walks across sections: Down from the last favorite reaches the COLLECTIONS caption.
+  await favorites.last().focus();
+  await page.keyboard.press('ArrowDown');
+  expect(await focused(page)).toBe('s:collections');
+  await page.keyboard.type('Fold');
+  expect(await focused(page)).toBe('s:folders'); // type-ahead jumps between sections too
+});
+
+test('a new collection starts from the COLLECTIONS caption: its + and its menu', async ({ page }) => {
+  await seed(page);
+  const caption = node(page, 's:collections');
+  await caption.hover();
+  await caption.locator('.tree-add').click();
+  const dialog = page.getByRole('dialog', { name: 'New collection' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel('Collection name').fill('Shelf from the panel');
+  await dialog.getByRole('button', { name: 'Create collection' }).click();
+  await expect(node(page, 's:collections').locator('.tree-meta')).toHaveText('3');
+  await expect(page.locator('#library-root .tree-row.is-collection', { hasText: 'Shelf from the panel' })).toBeVisible();
+  // From the keyboard, the caption's menu has it too.
+  await node(page, 's:collections').focus();
+  await page.keyboard.press('Shift+F10');
+  await expect(page.locator('#library-root .library-item-menu').getByRole('menuitem')).toHaveText(['New collection…']);
 });
 
 test('a double-click on a folder opens the board scoped to it, and a right-click on a document is the item menu', async ({ page }) => {
@@ -344,9 +361,9 @@ test('a double-click on a folder opens the board scoped to it, and a right-click
   await expect(menu).toBeVisible();
   await expect(menu.getByRole('menuitem')).toContainText(['Open in new tab', 'Remove from favorites', 'Details', 'Organize…', 'Remove from library…']);
   await menu.getByRole('menuitem', { name: 'Remove from favorites' }).click();
-  await icon(page, 'Favorites').click();
-  await expect(page.locator('#library-root .library-document', { hasText: '01_art_nouveau_posters' })).toHaveCount(0);
-  await icon(page, 'Library').click();
+  // It leaves FAVORITES (its row in FOLDERS stays).
+  await expect(page.locator('#library-root .tree-row[id^="tree:fv:"]', { hasText: '01_art_nouveau_posters' })).toHaveCount(0);
+  await expect(target).toBeVisible();
   await expand(page, folder('refs', '01_art_nouveau_posters'));
   await target.click({ button: 'right' });
   await menu.getByRole('menuitem', { name: 'Open in new tab' }).click();
@@ -360,8 +377,7 @@ test('a generic file name is shown by its folder on Home, in the library rows an
   await document_(page, 'refs', '03_vintage_magazine/source.pdf').click();
   await expect(page.locator('#filename')).toHaveText('03_vintage_magazine');
   await expect(page.locator('#tab-list [role=tab]').first()).toContainText('03_vintage_magazine');
-  await icon(page, 'Library').click();
-  await icon(page, 'Home').click();
+  await page.locator('#home-tab').click();
   const card = page.locator('#empty .jump-card, #empty [data-path]').filter({ hasText: '03_vintage_magazine' });
   await expect(card.first()).toBeVisible();
 });
@@ -387,9 +403,8 @@ test('the compact sheet shows the same tree and closes once a document is chosen
 test('a library of 300 nested documents opens, and filters to every folder, with only the open rows in the DOM', async ({ page }) => {
   await seed(page, 300);
   await expect(page.locator('.library-title-count')).toHaveText('300');
-  expect(await rows(page).count()).toBeLessThan(40); // only what is open is in the DOM
+  expect(await rows(page).count()).toBeLessThan(60); // only what is open is in the DOM
   // Filtering opens every folder above the matches: the worst case for the DOM.
-  await page.getByRole('button', { name: 'Filter the library' }).click();
   const took = await page.evaluate(() => {
     const field = document.getElementById('library-tree-filter') as HTMLInputElement;
     field.value = 'e'; field.dispatchEvent(new Event('input', { bubbles: true }));

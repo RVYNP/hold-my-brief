@@ -21,12 +21,12 @@ async function addFiles(page: Page) {
 }
 const names = (page: Page) => page.locator('.library-document-open .library-document-name').allTextContents();
 
-test('the info rail is a one-line header over the tree; the board has the chips, search and sort rows', async ({ page }) => {
+test('the library panel is a one-line header over the tree; the board has the chips, search and sort rows', async ({ page }) => {
   await page.setViewportSize({ width: 1080, height: 680 });
   await page.goto('/');
   await expect(page.locator('.library-header h2')).toContainText('Library');
   // The old drawer chrome is gone, not hidden: the scope popover, the search button, the dock button, the cover rail.
-  for (const gone of ['.library-tools', '.library-sort', '.library-view-toggle', '.library-add', '.library-panel > select', '.library-scope-menu', '.library-search-toggle', '.library-dock', '.library-rail-cover', '.library-header-glyph']) await expect(page.locator(gone)).toHaveCount(0);
+  for (const gone of ['.library-tools', '.library-sort', '.library-view-toggle', '.library-add', '.library-panel > select', '.library-scope-menu', '.library-search-toggle', '.library-dock', '.library-rail-cover', '.library-header-glyph', '.library-filter-toggle', '.library-board-toggle', '.library-new-collection', '.icon-rail-menu']) await expect(page.locator(gone)).toHaveCount(0);
   await addFiles(page);
   const panel = page.locator('.library-panel');
   const y = async (selector: string) => (await page.locator(selector).first().boundingBox())!;
@@ -35,9 +35,9 @@ test('the info rail is a one-line header over the tree; the board has the chips,
   expect(header.y + header.height).toBeLessThanOrEqual(tree.y + 1);
   expect(tree.y - (await panel.boundingBox())!.y).toBeLessThan(80);
   expect(await panel.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-  // The header carries the filter and → (the board); + (add files) is the compact window's and the board's, and the icon rail has Add files.
-  await expect(page.getByRole('button', { name: 'Filter the library' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Open library board' })).toBeVisible();
+  // The header is the title (the button that opens the board) and the count, and the filter field is always under it; + (add files) is the compact window's and the board's, and the icon rail has Add files.
+  await expect(page.locator('.library-header button:visible')).toHaveText(['Library']);
+  await expect(page.getByRole('searchbox', { name: 'Filter the library' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add files or manage sources' })).toBeHidden();
   await expect(page.getByRole('button', { name: 'Close library' }).first()).toBeHidden();
   await page.locator('#library-rail').getByRole('button', { name: 'Add files', exact: true }).click();
@@ -78,7 +78,7 @@ test('the board\'s file-type chips filter, one at a time, for the types the libr
   await expect(count).toHaveText('4 references');
 });
 
-test('the board\'s search field is always there; Escape leaves the board, and Ctrl+B still opens and closes the info rail', async ({ page }) => {
+test('the board\'s search field is always there; Escape leaves the board, and Ctrl+B still opens and closes the panel', async ({ page }) => {
   await page.setViewportSize({ width: 1080, height: 680 });
   await page.goto('/');
   await addFiles(page);
@@ -92,7 +92,7 @@ test('the board\'s search field is always there; Escape leaves the board, and Ct
   await page.keyboard.press('Escape');
   await expect(page.locator('#library-root')).not.toHaveClass(/is-board/);
   await expect(page.locator('#library-root')).toBeVisible();
-  // Ctrl+B closes and opens the info rail from the page, and focus lands on the tree.
+  // Ctrl+B closes and opens the panel from the page, and focus lands on the tree.
   await page.locator('#workspace').click({ position: { x: 600, y: 300 } });
   await page.keyboard.press('Control+b'); await expect(page.locator('#library-root')).toBeHidden();
   await page.keyboard.press('Control+b');

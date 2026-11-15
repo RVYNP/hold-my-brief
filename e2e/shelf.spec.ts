@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { addMenuItem, chooseFromViewMenu } from './library-controls';
+import { addMenuItem, chooseFromViewMenu, openBoard } from './library-controls';
 
 /**
  * The reference shelf: EPUB titles and covers read from the files themselves, generated covers for what has no
@@ -37,7 +37,7 @@ async function newCollection(page: Page, name: string, parent?: string) {
 async function buildShelves(page: Page) {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Open library board' }).click();
+  await openBoard(page);
   await expect(page.locator('#library-root')).toHaveClass(/is-board/);
   await newCollection(page, 'reference');
   await newCollection(page, '1-languages', 'Reference');
