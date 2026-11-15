@@ -11,11 +11,12 @@ const PAGES = 9;
 async function openPdf(page: Page, { count = PAGES, labels = '', viewport = { width: 1080, height: 700 }, name = 'strip.pdf' } = {}) {
   await page.setViewportSize(viewport);
   await page.goto('/');
+  // Closed before the document opens: a library closed after it hands the page its width back, and the page is fitted again.
+  if (await page.locator('#library-root').isVisible()) await libraryToggle(page).click();
+  await expect(page.locator('#library-root')).toBeHidden();
   await page.locator('#file-input').setInputFiles({ name, mimeType: 'application/pdf', buffer: pagedPdf(count, labels) });
   await expect(page.locator('#position')).toContainText(`Page 1 of ${count}`);
   await expect(page.locator('#loading')).toBeHidden();
-  if (await page.locator('#library-root').isVisible()) await libraryToggle(page).click();
-  await expect(page.locator('#library-root')).toBeHidden();
   await page.locator('.pdf-reader').focus();
 }
 

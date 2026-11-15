@@ -58,10 +58,10 @@ test('text settings live in the appearance sheet, apply to the open text and kee
   await page.locator('#file-input').setInputFiles({ name: 'notes.md', mimeType: 'text/markdown', buffer: Buffer.from(prose) });
   await expect(page.locator('#filename')).toHaveText('notes.md');
   const content = page.locator('.reader-text-content');
-  // In a wide window prose stops at a readable measure and centres instead of spanning the window.
-  const box = (await content.boundingBox())!;
+  // In a wide window prose stops at a readable measure and centres in the reading panel (beside the docked library panel) instead of spanning it.
+  const box = (await content.boundingBox())!, work = (await page.locator('#workspace').boundingBox())!;
   expect(box.width).toBeLessThan(760);
-  expect(Math.abs(box.x + box.width / 2 - 720)).toBeLessThan(40);
+  expect(Math.abs(box.x + box.width / 2 - (work.x + work.width / 2))).toBeLessThan(40);
 
   await page.keyboard.press('Control+k');
   await page.locator('#palette-input').fill('text size');

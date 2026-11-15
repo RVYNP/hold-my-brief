@@ -17,15 +17,29 @@ async function turn(page: Page) {
 }
 const percent = async (page: Page) => Number(/·\s*(\d+(?:\.\d+)?)%/.exec(await footer(page).innerText())![1]);
 
-/** The horizontal extent of the text on the page now, in window pixels, from the range Foliate reports as visible. */
-const textSpan = (page: Page) => page.evaluate(() => {
-  const range: Range = (document.querySelector('foliate-view') as unknown as { lastLocation: { range: Range } }).lastLocation.range;
-  const frame = range.startContainer.ownerDocument!.defaultView!.frameElement!.getBoundingClientRect();
-  const sides = Array.from(range.getClientRects()).filter(rect => rect.width > 0).map(rect => [rect.left + frame.left, rect.right + frame.left]);
-  const left = Math.min(...sides.map(side => side[0])), right = Math.max(...sides.map(side => side[1]));
-  const host = document.querySelector('.reader-host')!.getBoundingClientRect();
-  return { width: right - left, left, right, centre: (left + right) / 2, hostCentre: host.left + host.width / 2, hostWidth: host.width };
-});
+/**
+ * The horizontal extent of the text on the page now, in window pixels, from the range Foliate reports as visible.
+ * Foliate replaces a section's frame while the page settles (and when columns change); until it reports again the last range belongs to a
+ * frame that is gone, so this waits for a range whose frame is live and has text.
+ */
+async function textSpan(page: Page) {
+  type Span = { width: number; left: number; right: number; centre: number; hostCentre: number; hostWidth: number };
+  let span: Span | null = null;
+  await expect.poll(async () => {
+    span = await page.evaluate(() => {
+      const range = (document.querySelector('foliate-view') as unknown as { lastLocation?: { range?: Range } }).lastLocation?.range;
+      const frame = range?.startContainer.ownerDocument?.defaultView?.frameElement?.getBoundingClientRect();
+      if (!range || !frame) return null;
+      const sides = Array.from(range.getClientRects()).filter(rect => rect.width > 0).map(rect => [rect.left + frame.left, rect.right + frame.left]);
+      if (!sides.length) return null;
+      const left = Math.min(...sides.map(side => side[0])), right = Math.max(...sides.map(side => side[1]));
+      const host = document.querySelector('.reader-host')!.getBoundingClientRect();
+      return { width: right - left, left, right, centre: (left + right) / 2, hostCentre: host.left + host.width / 2, hostWidth: host.width };
+    });
+    return span !== null;
+  }).toBe(true);
+  return span as unknown as Span;
+}
 
 for (const width of [1440, 900]) {
   test(`reflowed text sits in the middle of the reading area at ${width} px, at a readable measure`, async ({ page }) => {

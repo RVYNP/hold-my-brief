@@ -94,7 +94,7 @@ test('a lone file with a real cover is simply added, with no sheet', async ({ pa
 test('a shelf header moves its books to another collection, which then covers them', async ({ page }) => {
   await open(page);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.getByRole('button', { name: 'Open library board' }).click();
+  await openBoard(page);
   await page.getByRole('button', { name: 'New personal collection' }).click();
   await page.getByLabel('Collection name').fill('2-creative-apps');
   await page.getByRole('button', { name: 'Create collection' }).click();

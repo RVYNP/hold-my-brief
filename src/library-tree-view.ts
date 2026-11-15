@@ -1,15 +1,17 @@
-// Paints the info rail's tree (see library-tree.ts) and gives it the keyboard of an ARIA tree: one tab stop, arrows move and
+// Paints the library panel's tree (see library-tree.ts) and gives it the keyboard of an ARIA tree: one tab stop, arrows move and
 // open, Home/End jump, Enter opens a document or toggles a folder, typing jumps to the next name that starts with it.
 // A tree is a flat list of `treeitem`s carrying their level, so only the rows that are showing exist in the DOM.
 import type { LibraryDocument } from './catalog-types';
-import { highlightRuns, openByDefault, treeRows, type TreeNode, type TreeRow } from './library-tree';
+import { highlightRuns, openByDefault, sectionId, treeRows, type TreeNode, type TreeRow } from './library-tree';
 import { isImage } from './library-query';
 
 export type TreeHost = {
   /** A document was chosen: shown now, or (`background`) only given a tab. `siblings` are the images next to it, for the image pager. */
   open: (doc: LibraryDocument, background: boolean, siblings: readonly LibraryDocument[]) => void;
-  /** The context menu of a document, folder or collection row was asked for, at a point or (from the keyboard) beside `anchor`. */
+  /** The context menu of a document, folder, collection or the COLLECTIONS caption was asked for, at a point or (from the keyboard) beside `anchor`. */
   menu: (node: TreeNode, anchor: HTMLElement, at: { x: number; y: number } | undefined) => void;
+  /** The + on the COLLECTIONS caption was pressed: a new collection, with `anchor` where focus returns. */
+  create: (anchor: HTMLElement) => void;
   /** A folder or collection was double-clicked: the board scoped to it. */
   scope: (node: TreeNode) => void;
 };
@@ -101,12 +103,16 @@ export function createTreeView(root: HTMLElement, host: TreeHost) {
     const expandable = node.children.length > 0;
     const open = expandable && isOpen(node);
     if (expandable) item.setAttribute('aria-expanded', String(open));
+    const lead = document.createElement('span'); lead.className = 'tree-chevron'; if (expandable) lead.innerHTML = chevron; item.append(lead);
     if (node.kind === 'section') {
-      item.append(label(node));
-      const count = document.createElement('span'); count.className = 'tree-meta'; count.textContent = String(node.count); item.append(count);
+      const count = document.createElement('span'); count.className = 'tree-meta'; count.textContent = String(node.count); item.append(label(node), count);
+      if (node.id === sectionId('collections')) {
+        const create = document.createElement('button'); create.type = 'button'; create.className = 'tree-add'; create.tabIndex = -1;
+        // The keyboard and assistive technology reach it through the caption's menu (New collection…), so the pointer's + is hidden from them.
+        create.setAttribute('aria-hidden', 'true'); create.title = 'New collection'; item.append(create);
+      }
       return item;
     }
-    const lead = document.createElement('span'); lead.className = 'tree-chevron'; if (expandable) lead.innerHTML = chevron; item.append(lead);
     const glyph = document.createElement('span'); glyph.className = 'tree-icon';
     const doc = node.doc;
     glyph.innerHTML = doc ? formatIcon(doc.format) : node.kind === 'collection' ? treeIcons.collection : open ? treeIcons.folderOpen : treeIcons.folder;
@@ -156,6 +162,8 @@ export function createTreeView(root: HTMLElement, host: TreeHost) {
     for (const child of parent.node.children) if (child.doc && isImage(child.doc)) out.push(child.doc);
     return out;
   }
+  /** A document, folder or collection has a menu, and so has the COLLECTIONS caption (New collection…); the other captions have none. */
+  const hasMenu = (node: TreeNode) => node.kind !== 'section' || node.id === sectionId('collections');
   function activate(index: number, background: boolean) {
     const row = rows[index]; if (!row) return;
     const { node } = row;
@@ -164,6 +172,8 @@ export function createTreeView(root: HTMLElement, host: TreeHost) {
   }
 
   root.addEventListener('click', event => {
+    const add = (event.target as HTMLElement).closest<HTMLElement>('.tree-add');
+    if (add && root.contains(add)) { event.stopPropagation(); host.create(add); return; }
     const target = (event.target as HTMLElement).closest<HTMLElement>('.tree-row'); if (!target || !root.contains(target)) return;
     const index = rowIndex(target.dataset.node); if (index < 0) return;
     const { node } = rows[index]!;
@@ -180,7 +190,7 @@ export function createTreeView(root: HTMLElement, host: TreeHost) {
   root.addEventListener('contextmenu', event => {
     const target = (event.target as HTMLElement).closest<HTMLElement>('.tree-row'); const index = target ? rowIndex(target.dataset.node) : -1;
     const node = index >= 0 ? rows[index]!.node : undefined;
-    if (!target || !node || node.kind === 'section') return;
+    if (!target || !node || !hasMenu(node)) return;
     event.preventDefault(); focusRow(node.id, false);
     host.menu(node, target, event.clientX || event.clientY ? { x: event.clientX, y: event.clientY } : undefined);
   });
@@ -215,7 +225,7 @@ export function createTreeView(root: HTMLElement, host: TreeHost) {
         event.preventDefault(); activate(index, node.doc !== undefined && (event.metaKey || event.ctrlKey)); return;
       case 'ContextMenu': case 'F10':
         if (event.key === 'F10' && !event.shiftKey) return;
-        if (node.kind !== 'section') { event.preventDefault(); host.menu(node, target, undefined); }
+        if (hasMenu(node)) { event.preventDefault(); host.menu(node, target, undefined); }
         return;
     }
     // Type-ahead: letters typed in quick succession jump to the next row whose name starts with them.
