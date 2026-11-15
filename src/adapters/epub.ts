@@ -6,6 +6,7 @@ import { isDark, liftInk, onAppearanceChange, parseRgb, readingColors, rgbToHex,
 import { MIN_SPREAD_WIDTH, pagesLabel, pairedSides } from '../spread';
 import { clampZoom } from '../zoom';
 import { DEFAULT_WPM, chapterMap, contentsLabel, estimatedPage, footerLabel, formatPageShort, numberedChapters, readingMeasure, type PageInfo } from '../epub-position';
+import { calloutBackground, liftRule, NOT_CALLOUTS, SIDES } from '../epub-callouts';
 import { CODE_BACKGROUND, CODE_BLOCKS, CODE_WRAPPERS, codeSafeAnchor, codeStyles, mappedBackground, markLines, scrollRoom } from '../epub-code';
 import { SAMPLE_SECTIONS, codeHeavy, sectionMix, type SectionMix } from '../epub-flow';
 import { excerpt, findMatches, type DocumentSearch, type SearchHit, type SearchOptions, type UnitText } from '../search';
@@ -688,7 +689,8 @@ export class EpubAdapter implements ReaderAdapter {
   }
   /**
    * Dark pages keep publication colors but lift text that would be illegible on them; light pages get the originals back. A code block's
-   * background that is light on a dark page (or dark on a light one) becomes a tint of the page, and its text is lifted to read on that.
+   * background that is light on a dark page (or dark on a light one) becomes a tint of the page, and so does any other box set against the
+   * page that way (a callout, a shaded table cell), with its rules lifted; the text on a mapped background is lifted to read on that.
    */
   private adaptInk(doc: Document) {
     for (const [element, property, value, priority] of this.lifted.get(doc) ?? []) element.style.setProperty(property, value, priority);
@@ -709,25 +711,32 @@ export class EpubAdapter implements ReaderAdapter {
       if (parseRgb(frame.backgroundColor) && parseRgb(code.backgroundColor)) set(wrapper, 'background-color', 'transparent');
       if (rule(frame) && rule(code)) set(wrapper, 'border-left', 'none');
     }
-    // A dark page is walked whole; a light one only inside its code blocks, which are the only place anything is changed there.
-    const roots = dark ? [body] : Array.from(body.querySelectorAll<HTMLElement>(CODE_BLOCKS)).filter(block => !block.parentElement?.closest(CODE_BLOCKS));
-    for (const root of roots) {
-      const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, { acceptNode: node => (node as Element).namespaceURI === XHTML ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT });
-      for (let node: Node | null = root; node; node = walker.nextNode()) {
-        const element = node as HTMLElement, style = view.getComputedStyle(element);
-        // Foliate moves the body background behind the frame, where --theme-bg-color replaces it.
-        let own = element !== body ? parseRgb(style.backgroundColor) : null;
-        const tint = own && element.closest(CODE_BLOCKS) && mappedBackground(own, paper, ink);
-        if (tint) { set(element, 'background-color', CODE_BACKGROUND); own = tint; mapped.add(element); }
-        else if (!own && element.parentNode && mapped.has(element.parentNode)) mapped.add(element);
-        const background = own || (element.parentNode && backgrounds.get(element.parentNode)) || paper;
-        backgrounds.set(element, background);
-        if (!dark && !mapped.has(element)) continue;
-        if (!Array.from(element.childNodes).some(child => child.nodeType === Node.TEXT_NODE && child.textContent?.trim())) continue;
-        const color = parseRgb(style.color), legible = color && liftInk(color, background, ink);
-        if (!legible) continue;
-        set(element, 'color', rgbToHex(legible));
+    // Both tones are walked whole: a box set against the page's tone is mapped into it, and on a light page only text on a mapped box (or in code) is lifted.
+    const walker = doc.createTreeWalker(body, NodeFilter.SHOW_ELEMENT, { acceptNode: node => (node as Element).namespaceURI === XHTML ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT });
+    for (let node: Node | null = body; node; node = walker.nextNode()) {
+      const element = node as HTMLElement, style = view.getComputedStyle(element), inCode = !!element.closest(CODE_BLOCKS);
+      // Foliate moves the body background behind the frame, where --theme-bg-color replaces it.
+      let own = element !== body ? parseRgb(style.backgroundColor) : null;
+      const tint = own && inCode && mappedBackground(own, paper, ink);
+      // Images, SVG and code keep their own mapping; a callout is any other box with a plain background colour.
+      const callout = own && !inCode && style.backgroundImage === 'none' && !element.matches(NOT_CALLOUTS) ? calloutBackground(own, paper) : null;
+      if (tint) { set(element, 'background-color', CODE_BACKGROUND); own = tint; mapped.add(element); }
+      else if (callout) {
+        set(element, 'background-color', callout.css); own = callout.rgb; mapped.add(element);
+        for (const side of SIDES) {
+          const edge = parseFloat(style.getPropertyValue(`border-${side}-width`)) > 0 && style.getPropertyValue(`border-${side}-style`) !== 'none' && parseRgb(style.getPropertyValue(`border-${side}-color`));
+          const lifted = edge && liftRule(edge, own);
+          if (lifted) set(element, `border-${side}-color`, rgbToHex(lifted));
+        }
       }
+      else if (!own && element.parentNode && mapped.has(element.parentNode)) mapped.add(element);
+      const background = own || (element.parentNode && backgrounds.get(element.parentNode)) || paper;
+      backgrounds.set(element, background);
+      if (!dark && !mapped.has(element)) continue;
+      if (!Array.from(element.childNodes).some(child => child.nodeType === Node.TEXT_NODE && child.textContent?.trim())) continue;
+      const color = parseRgb(style.color), legible = color && liftInk(color, background, ink);
+      if (!legible) continue;
+      set(element, 'color', rgbToHex(legible));
     }
     if (changed.length) this.lifted.set(doc, changed);
   }

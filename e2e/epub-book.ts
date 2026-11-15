@@ -97,3 +97,31 @@ div.sourceCode.dark code span.st { color: #f8f8f2; }
     'OPS/c1.xhtml': chapter,
   });
 }
+
+/**
+ * A synthetic reflowable EPUB shaped like pandoc's and Sphinx's output, with publisher boxes that paint their own light background: `div.note`
+ * on `#f1f6fb` and `div.warning` on `#fff5ee`, each with a coloured left border (the note inherits its text colour, the warning sets a dark one),
+ * a table whose header cells are shaded, an `<aside>`, and a link inside the note. `night` adds `div.night`, a publisher-dark box with dark text
+ * of its own, which is what a light page has to map the other way.
+ */
+export async function calloutBook({ night = false } = {}) {
+  const css = `div.note { background-color: #f1f6fb; border-left: 4px solid #2f6db5; padding: 0.5em 1em; margin: 1em 0; }
+div.warning { background-color: #fff5ee; border-left: 4px solid #c4561a; color: #5a2a00; padding: 0.5em 1em; margin: 1em 0; }
+div.note p, div.warning p { margin: 0.4em 0; }
+div.note .title, div.warning .title { font-weight: bold; }
+table.reference { border-collapse: collapse; margin: 1em 0; }
+table.reference th { background-color: #e8edf3; border: 1px solid #9aa7b5; padding: 0.3em 0.6em; }
+table.reference td { border: 1px solid #9aa7b5; padding: 0.3em 0.6em; }
+aside { background-color: #f6f3e8; border: 1px solid #b8ab7c; border-left: 4px solid #8a7a2f; padding: 0.5em 1em; margin: 1em 0; }
+div.night { background-color: #1f2933; border-left: 4px solid #2a3f5f; color: #243447; padding: 0.5em 1em; margin: 1em 0; }`;
+  const prose = (n: number) => `<p>Paragraph ${n}: the reader keeps a stable place beside your work, and this synthetic paragraph supplies ordinary flowing text between the boxes of the generated book.</p>`;
+  const chapter = `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>Callouts</title><link rel="stylesheet" type="text/css" href="style.css"/></head><body><h1 id="callouts">Callouts</h1>${prose(1)}<div class="note"><p class="title">Note</p><p>A note keeps its own pale blue box. See <a href="https://example.invalid/docs">the documentation</a> for the details of every setting.</p></div>${prose(2)}<div class="warning"><p class="title">Warning</p><p>A warning keeps its own pale warm box, and its own dark text colour, whatever the page around it is.</p></div>${prose(3)}<table class="reference"><tr><th>Name</th><th>Meaning</th></tr><tr><td>total</td><td>a running sum</td></tr></table>${prose(4)}<aside><p>An aside sits in its own pale box beside the main text, and says one more thing.</p></aside>${prose(5)}${night ? '<div class="night"><p>A publisher-dark box with dark text of its own, which a light page maps to a light box.</p></div>' + prose(6) : ''}</body></html>`;
+  return pack({
+    mimetype: 'application/epub+zip',
+    'META-INF/container.xml': '<?xml version="1.0"?><container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0"><rootfiles><rootfile full-path="OPS/book.opf" media-type="application/oebps-package+xml"/></rootfiles></container>',
+    'OPS/book.opf': `<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="id">callout-book-${night}</dc:identifier><dc:title>THE CALLOUT BOOK</dc:title><dc:language>en</dc:language></metadata><manifest><item id="c1" href="c1.xhtml" media-type="application/xhtml+xml"/><item id="css" href="style.css" media-type="text/css"/><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/></manifest><spine><itemref idref="c1"/></spine></package>`,
+    'OPS/nav.xhtml': '<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Contents</title></head><body><nav epub:type="toc"><ol><li><a href="c1.xhtml">Callouts</a></li></ol></nav></body></html>',
+    'OPS/style.css': css,
+    'OPS/c1.xhtml': chapter,
+  });
+}
