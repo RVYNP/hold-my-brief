@@ -6,6 +6,7 @@ import { isDark, liftInk, onAppearanceChange, parseRgb, readingColors, rgbToHex,
 import { MIN_SPREAD_WIDTH, pagesLabel, pairedSides } from '../spread';
 import { clampZoom } from '../zoom';
 import { DEFAULT_WPM, chapterMap, contentsLabel, estimatedPage, footerLabel, formatPageShort, numberedChapters, readingMeasure, type PageInfo } from '../epub-position';
+import { CODE_BACKGROUND, CODE_BLOCKS, codeStyles, mappedBackground, scrollRoom } from '../epub-code';
 import { SAMPLE_SECTIONS, codeHeavy, sectionMix, type SectionMix } from '../epub-flow';
 import { excerpt, findMatches, type DocumentSearch, type SearchHit, type SearchOptions, type UnitText } from '../search';
 
@@ -155,7 +156,8 @@ export class EpubAdapter implements ReaderAdapter {
   private explicitEnd = false;
   private unsubscribe?: () => void;
   /** Inline colors replaced to keep publication text legible on a dark page, restored on light pages. */
-  private lifted = new WeakMap<Document, [element: HTMLElement, value: string, priority: string][]>();
+  private lifted = new WeakMap<Document, [element: HTMLElement, property: string, value: string, priority: string][]>();
+  private styles = '';
 
   async open(source: ReaderSource, host: HTMLElement, context: ReaderContext, options: ReaderOptions) {
     this.host = host; this.context = context; this.options = { ...options };
@@ -290,7 +292,7 @@ export class EpubAdapter implements ReaderAdapter {
       this.resizeTimer = setTimeout(() => {
         if (this.disposed) return;
         if (this.options.spread && (this.spreadState() === 'active') !== this.layoutSpread) void this.enqueue(() => this.relayout()).catch(context.onError);
-        else if (this.mode === 'paginated') this.applyLayout();
+        else if (this.mode === 'paginated') { this.applyLayout(); this.applyStyles(true); }
         // Foliate refits a fixed-layout page by itself; the level it comes to is reported once it has.
         else if (this.mode === 'fixed' && this.options.fitted) this.updatePosition(0);
       }, 150);
@@ -650,11 +652,13 @@ export class EpubAdapter implements ReaderAdapter {
   private applyLayout() {
     const renderer = this.view?.renderer;
     if (!renderer || this.mode !== 'paginated') return;
-    const margin = `${this.options.margin}px`, share = Math.max(2, this.options.margin / Math.max(1, this.host.clientWidth) * 200), gap = `${share}%`;
+    const margin = `${this.options.margin}px`, share = this.gapShare(), gap = `${share}%`;
     if (renderer.getAttribute('margin') !== margin) renderer.setAttribute('margin', margin);
     if (renderer.getAttribute('gap') !== gap) renderer.setAttribute('gap', gap);
     this.applyMeasure(share / 100);
   }
+  /** The `gap` attribute, in percent: Foliate turns it into the document's side padding, which is also what a Scroll-flow code block may not widen into. */
+  private gapShare() { return Math.max(2, this.options.margin / Math.max(1, this.host.clientWidth) * 200); }
   private applyOptions() {
     if (!this.view) return;
     const renderer = this.view.renderer, options = this.options;
@@ -664,29 +668,53 @@ export class EpubAdapter implements ReaderAdapter {
       const scrolled = this.flowNow === 'scrolled';
       renderer.setAttribute('flow', this.flowNow); renderer.setAttribute('max-column-count', this.layoutSpread && !scrolled ? '2' : '1');
       this.applyLayout();
-      // The frame's color-scheme must match the app's or Chromium paints it opaque; Foliate paints --theme-bg-color behind each column.
-      const { scheme, ink, paper, accent } = readingColors();
-      renderer.setStyles?.(`html { color-scheme: ${scheme}; color: ${rgbToHex(ink)}; --theme-bg-color: ${rgbToHex(paper)}; } html, body { font-size: ${options.fontSize}px !important; line-height: ${options.lineHeight} !important; } img, svg { max-width: 100%; } a:focus-visible { outline: 2px solid ${rgbToHex(accent)}; }`);
+      this.applyStyles(false);
     }
   }
-  /** Dark pages keep publication colors but lift text that would be illegible on them; light pages get the originals back. */
+  /** The reader's stylesheet for the frame. A resize only changes it in Scroll flow, where the code width follows the side padding; `changed` skips an identical one. */
+  private applyStyles(changed: boolean) {
+    const renderer = this.view?.renderer;
+    if (!renderer || this.mode !== 'paginated') return;
+    // The frame's color-scheme must match the app's or Chromium paints it opaque; Foliate paints --theme-bg-color behind each column.
+    const { scheme, ink, paper, accent } = readingColors(), options = this.options;
+    const styles = `html { color-scheme: ${scheme}; color: ${rgbToHex(ink)}; --theme-bg-color: ${rgbToHex(paper)}; --hmb-paper: ${rgbToHex(paper)}; --hmb-ink: ${rgbToHex(ink)}; } html, body { font-size: ${options.fontSize}px !important; line-height: ${options.lineHeight} !important; } img, svg { max-width: 100%; } a:focus-visible { outline: 2px solid ${rgbToHex(accent)}; } ${codeStyles(this.flowNow === 'scrolled' ? scrollRoom(this.gapShare() / 100) : undefined)}`;
+    if (changed && styles === this.styles) return;
+    this.styles = styles;
+    renderer.setStyles?.(styles);
+  }
+  /**
+   * Dark pages keep publication colors but lift text that would be illegible on them; light pages get the originals back. A code block's
+   * background that is light on a dark page (or dark on a light one) becomes a tint of the page, and its text is lifted to read on that.
+   */
   private adaptInk(doc: Document) {
-    for (const [element, value, priority] of this.lifted.get(doc) ?? []) element.style.setProperty('color', value, priority);
+    for (const [element, property, value, priority] of this.lifted.get(doc) ?? []) element.style.setProperty(property, value, priority);
     this.lifted.delete(doc);
     const { paper, ink } = readingColors(), view = doc.defaultView, body = doc.body;
-    if (!view || !body || !isDark(paper)) return;
-    const changed: [HTMLElement, string, string][] = [], backgrounds = new Map<Node, Rgb>();
-    const walker = doc.createTreeWalker(body, NodeFilter.SHOW_ELEMENT, { acceptNode: node => (node as Element).namespaceURI === XHTML ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT });
-    for (let node: Node | null = body; node; node = walker.nextNode()) {
-      const element = node as HTMLElement, style = view.getComputedStyle(element);
-      // Foliate moves the body background behind the frame, where --theme-bg-color replaces it.
-      const background = (element !== body && parseRgb(style.backgroundColor)) || (element.parentNode && backgrounds.get(element.parentNode)) || paper;
-      backgrounds.set(element, background);
-      if (!Array.from(element.childNodes).some(child => child.nodeType === Node.TEXT_NODE && child.textContent?.trim())) continue;
-      const color = parseRgb(style.color), legible = color && liftInk(color, background, ink);
-      if (!legible) continue;
-      changed.push([element, element.style.getPropertyValue('color'), element.style.getPropertyPriority('color')]);
-      element.style.setProperty('color', rgbToHex(legible), 'important');
+    if (!view || !body) return;
+    const dark = isDark(paper), changed: [HTMLElement, string, string, string][] = [], backgrounds = new Map<Node, Rgb>(), mapped = new Set<Node>();
+    const set = (element: HTMLElement, property: string, value: string) => {
+      changed.push([element, property, element.style.getPropertyValue(property), element.style.getPropertyPriority(property)]);
+      element.style.setProperty(property, value, 'important');
+    };
+    // A dark page is walked whole; a light one only inside its code blocks, which are the only place anything is changed there.
+    const roots = dark ? [body] : Array.from(body.querySelectorAll<HTMLElement>(CODE_BLOCKS)).filter(block => !block.parentElement?.closest(CODE_BLOCKS));
+    for (const root of roots) {
+      const walker = doc.createTreeWalker(root, NodeFilter.SHOW_ELEMENT, { acceptNode: node => (node as Element).namespaceURI === XHTML ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT });
+      for (let node: Node | null = root; node; node = walker.nextNode()) {
+        const element = node as HTMLElement, style = view.getComputedStyle(element);
+        // Foliate moves the body background behind the frame, where --theme-bg-color replaces it.
+        let own = element !== body ? parseRgb(style.backgroundColor) : null;
+        const tint = own && element.closest(CODE_BLOCKS) && mappedBackground(own, paper, ink);
+        if (tint) { set(element, 'background-color', CODE_BACKGROUND); own = tint; mapped.add(element); }
+        else if (!own && element.parentNode && mapped.has(element.parentNode)) mapped.add(element);
+        const background = own || (element.parentNode && backgrounds.get(element.parentNode)) || paper;
+        backgrounds.set(element, background);
+        if (!dark && !mapped.has(element)) continue;
+        if (!Array.from(element.childNodes).some(child => child.nodeType === Node.TEXT_NODE && child.textContent?.trim())) continue;
+        const color = parseRgb(style.color), legible = color && liftInk(color, background, ink);
+        if (!legible) continue;
+        set(element, 'color', rgbToHex(legible));
+      }
     }
     if (changed.length) this.lifted.set(doc, changed);
   }
