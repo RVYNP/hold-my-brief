@@ -73,14 +73,15 @@ export type Placed = { node: HTMLElement; ratio: number; column: number; /** Fix
  * and returns the height used. A tile's column is only reassigned when `reassign` is set, so a picture that arrives
  * and changes a ratio moves what is below it and never reshuffles the grid. A tile's `caption` (the library grid's title,
  * under pictures only) is reserved whether or not it is drawn yet, so a tile that swaps its cover for a picture never
- * overlaps its neighbours.
+ * overlaps its neighbours. `resume` places only the tiles from `from` on, continuing from the column bottoms a previous
+ * call left in `bottoms` (all zero to start): what a later batch added, without touching the tiles before it.
  */
-export function placeTiles(tiles: readonly Placed[], layout: { columns: number; tileWidth: number; gap: number; left: number; top: number; reassign: boolean }): number {
+export function placeTiles(tiles: readonly Placed[], layout: { columns: number; tileWidth: number; gap: number; left: number; top: number; reassign: boolean; resume?: { from: number; bottoms: number[] } }): number {
   const { columns, tileWidth, gap, left, top } = layout;
   if (layout.reassign) assignMasonry(tiles.map(tile => 1 / tile.ratio + (tile.caption ?? 0) / tileWidth), columns, gap / tileWidth).forEach((indices, column) => { for (const at of indices) tiles[at].column = column; });
-  const bottoms = new Array<number>(columns).fill(0);
-  for (const tile of tiles) {
-    const offset = bottoms[tile.column]; bottoms[tile.column] = offset + tileWidth / tile.ratio + (tile.caption ?? 0) + gap;
+  const bottoms = layout.resume?.bottoms ?? new Array<number>(columns).fill(0);
+  for (let at = layout.resume?.from ?? 0; at < tiles.length; at++) {
+    const tile = tiles[at]; const offset = bottoms[tile.column]; bottoms[tile.column] = offset + tileWidth / tile.ratio + (tile.caption ?? 0) + gap;
     tile.node.dataset.column = String(tile.column); tile.node.style.width = `${tileWidth}px`; tile.node.style.left = `${left + tile.column * (tileWidth + gap)}px`; tile.node.style.top = `${top + offset}px`;
   }
   return Math.max(...bottoms) - gap;
