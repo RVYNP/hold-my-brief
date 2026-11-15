@@ -123,6 +123,14 @@ async function settledPercent(page: Page) {
   await expect.poll(async () => { const now = await percent(page), same = now === last; last = now; return same; }).toBe(true);
   return last;
 }
+/** One wheel step, sent again a second later if the place has not moved: a wheel that lands while the chapter is still laying out is dropped. */
+async function wheelPast(page: Page, from: number) {
+  await expect.poll(async () => {
+    await page.mouse.wheel(0, 400);
+    await expect.poll(() => percent(page), { timeout: 1000 }).toBeGreaterThan(from).catch(() => undefined);
+    return percent(page);
+  }, { timeout: 15000 }).toBeGreaterThan(from);
+}
 async function goToSection(page: Page, section: number) {
   await page.keyboard.press('Control+g');
   await page.locator('#target').fill(String(section));
@@ -138,11 +146,9 @@ test('Scroll scrolls continuously, and switching back to Pages keeps the place',
   await expect(footer(page)).toContainText('Chapter 2 of 4');
   await page.mouse.move(720, 450);
   const start = await settledPercent(page);
-  await page.mouse.wheel(0, 400);
-  await expect.poll(() => percent(page)).toBeGreaterThan(start);
+  await wheelPast(page, start);
   const first = await settledPercent(page);
-  await page.mouse.wheel(0, 400);
-  await expect.poll(() => percent(page)).toBeGreaterThan(first);
+  await wheelPast(page, first);
   const scrolled = await settledPercent(page);
   // Continuous: two wheel steps of the same size moved the place by about the same amount, not a page at a time.
   expect(Math.abs((scrolled - first) - (first - start))).toBeLessThan(0.6 * (first - start));
