@@ -119,6 +119,7 @@ window. Its **Colour** tab holds:
 - **Theme:** Brief (default), Lilac, Birch, Graphite, Arctic, and two pinks: Blossom (soft blush with a
   rose accent) and Peony (bold, magenta-tinted, deep aubergine in dark mode). Each has a light and a
   dark version, and every one keeps its text at WCAG AA contrast or better.
+  Every theme has a soft window glow behind the toolbar, the library and the area around PDF pages; the glow themes below are the strong version.
   Hover over or focus a theme to preview it on the whole window, click or press Enter to keep it, and
   move away or press Escape to go back to the theme you kept.
 - **Glow:** ten themes with one mode each: Aurora, Dusk, Nebula, Solar, Ember and Orchid (dark), Glacier,
