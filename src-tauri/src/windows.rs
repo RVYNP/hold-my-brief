@@ -164,6 +164,46 @@ fn constrain(
     Ok((old_size.0 - saved.width).abs() > 1.0 || (old_size.1 - saved.height).abs() > 1.0)
 }
 
+/// macOS: the reader draws its own close, minimize and zoom controls at the toolbar's left end
+/// (src/main.ts), so AppKit's three standard buttons stay hidden. AppKit can show them again when
+/// a window leaves full screen or its style changes, so this runs after launch and after each such
+/// event (`handle_event`, `reapply_window_chrome`). Hiding changes no window behaviour: the window
+/// stays closable, minimizable and zoomable, and the ⌘W / ⌘M menu items keep working.
+#[cfg(target_os = "macos")]
+pub fn hide_native_buttons(window: &Window) {
+    use objc2_app_kit::{NSWindow, NSWindowButton};
+    let target = window.clone();
+    let _ = window.run_on_main_thread(move || {
+        // Resolved here, on the main thread, so a window destroyed meanwhile is an Err, not a dangling pointer.
+        let Ok(ns_window) = target.ns_window() else {
+            return;
+        };
+        // SAFETY: `ns_window` is the live NSWindow of `target`, and this runs on the main thread.
+        let ns_window = unsafe { &*(ns_window as *const NSWindow) };
+        for kind in [
+            NSWindowButton::CloseButton,
+            NSWindowButton::MiniaturizeButton,
+            NSWindowButton::ZoomButton,
+        ] {
+            if let Some(button) = ns_window.standardWindowButton(kind) {
+                if !button.isHidden() {
+                    button.setHidden(true);
+                }
+            }
+        }
+    });
+}
+
+/// The page asks for this after it sees the window leave or enter full screen, which is later than
+/// the native resize event and so catches AppKit putting the buttons back.
+#[tauri::command]
+pub fn reapply_window_chrome(window: WebviewWindow) {
+    #[cfg(target_os = "macos")]
+    hide_native_buttons(&window.as_ref().window());
+    #[cfg(not(target_os = "macos"))]
+    let _ = window;
+}
+
 pub fn restore(window: &WebviewWindow) -> Result<(), String> {
     // Windows: the reader draws its own minimize, maximize and close buttons at the right end of
     // its toolbar (src/main.ts), so the native caption goes. The window keeps its resize border and
@@ -171,6 +211,8 @@ pub fn restore(window: &WebviewWindow) -> Result<(), String> {
     // frame below already reflects the undecorated window.
     #[cfg(target_os = "windows")]
     window.set_decorations(false).map_err(err)?;
+    #[cfg(target_os = "macos")]
+    hide_native_buttons(&window.as_ref().window());
     let shared = window.state::<Shared>();
     let mut saved = shared
         .lock()
@@ -285,6 +327,16 @@ pub fn set_preset(
 pub fn handle_event(window: &Window, event: &WindowEvent) {
     if window.label() != "main" {
         return;
+    }
+    #[cfg(target_os = "macos")]
+    if matches!(
+        event,
+        WindowEvent::Resized(_)
+            | WindowEvent::Focused(_)
+            | WindowEvent::ScaleFactorChanged { .. }
+            | WindowEvent::ThemeChanged(_)
+    ) {
+        hide_native_buttons(window);
     }
     if !matches!(
         event,
