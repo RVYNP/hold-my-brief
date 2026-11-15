@@ -15,7 +15,7 @@ import { appearanceSummary, createAppearanceSheet, paletteIcon } from './appeara
 import { createAssistantPanel } from './assistant-panel';
 import { DRAG_SLOP, Panner, type Offset } from './pan';
 import { MIN_SPREAD_WIDTH, pagesLabel, spreadPages } from './spread';
-import { assignShelfSlots, closeHome, fillHomePictures, homeSections, homeTypes, openedOrder, renderHome } from './home';
+import { assignShelfSlots, closeHome, fillHomePictures, homeSections, homeTypes, openedOrder, renderHome, repaintBanner } from './home';
 import { displayTitle } from './shelf';
 import { repaintCovers } from './cards';
 import { canThumbnail, createThumbnailStore } from './thumbnails';
@@ -1068,6 +1068,7 @@ function paintHome() {
     viewCollection: id => library.browse({ collection: id }),
     picture: { can: canThumbnail, ratio: path => homeThumbs.ratio(path), peek: path => homeThumbs.peek(path) },
     types,
+    banner: appearance().banner,
     format: homeFormat,
     selectFormat: value => { homeFormat = value; paintHome(); empty.querySelector<HTMLElement>(`.home-chip[data-type="${value}"]`)?.focus(); },
     ...(desktop ? { remove: (path: string) => { void native('remove_recent', { path }).then(() => { homeRecents = homeRecents.filter(item => item.path !== path); paintHome(); }).catch(fail); } } : {}),
@@ -1081,9 +1082,12 @@ function paintHome() {
     ratio: path => homeThumbs.ratio(path),
   }, () => generation === homePicture);
 }
-onAppearanceChange(() => {
+onAppearanceChange(next => {
   const home = $('empty');
-  if (home.classList.contains('is-home')) repaintCovers(home, scheme());
+  if (!home.classList.contains('is-home')) return;
+  repaintCovers(home, scheme());
+  // The banner repaints itself; choosing none or a pattern after the other changes the page's shape, so Home is painted again.
+  if (!repaintBanner(next.banner)) paintHome();
 });
 async function initialize() {
   const saved = await state(); updateWindow(saved.window); if (saved.warning) notify(saved.warning);
