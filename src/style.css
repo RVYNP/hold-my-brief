@@ -23,10 +23,14 @@
   --stage: light-dark(#ede9df, #191613);
   --track: light-dark(#cfc8b8, #453f36);
   --accent: light-dark(#e13a3a, #ff6a5e);
-  --accent-ink: light-dark(#c62f2f, #ff8a80);
+  --accent-ink: light-dark(#b0111c, #ff9288);
   --accent-soft: light-dark(#fde9e4, #3a1e1a);
   --accent-border: light-dark(#f3b3a8, #6e2b24);
   --accent-fill: light-dark(#db3435, #d93a3a);
+  --sheen-a: light-dark(#e13a3a, #ff6a5e);
+  --sheen-b: light-dark(#f08a3c, #ffb37a);
+  --sheen-mix-light: 4%;
+  --sheen-mix-dark: 1%;
   --scrim: light-dark(#1a18153d, #0000008c);
   --search-hit: light-dark(#f2dfa0, #6b5620);
 }
@@ -45,10 +49,14 @@
   --stage: light-dark(#efedf2, #1a1920);
   --track: light-dark(#cac6d4, #3a3745);
   --accent: light-dark(#6358d8, #8b80f2);
-  --accent-ink: light-dark(#5347c3, #b4acff);
+  --accent-ink: light-dark(#5144c0, #b4acff);
   --accent-soft: light-dark(#eeebff, #272442);
   --accent-border: light-dark(#c4bcf1, #4a4385);
   --accent-fill: light-dark(#6358d8, #6a5fd8);
+  --sheen-a: light-dark(#6358d8, #8b80f2);
+  --sheen-b: light-dark(#c04fd8, #d58bf2);
+  --sheen-mix-light: 60%;
+  --sheen-mix-dark: 12%;
   --scrim: light-dark(#2823333d, #0000008c);
   --search-hit: light-dark(#ffe08a, #6f5a1e);
 }
@@ -67,10 +75,14 @@
   --stage: light-dark(#f1eee7, #1c1a16);
   --track: light-dark(#cfc9bb, #3d3830);
   --accent: light-dark(#b4613a, #e08b5f);
-  --accent-ink: light-dark(#9a4f2c, #f0ae8a);
+  --accent-ink: light-dark(#8f4522, #f3b18c);
   --accent-soft: light-dark(#f7eae2, #3a2a20);
   --accent-border: light-dark(#e3c2af, #6e4a35);
   --accent-fill: light-dark(#a85632, #b0603a);
+  --sheen-a: light-dark(#b4613a, #e08b5f);
+  --sheen-b: light-dark(#d49a3a, #f0c070);
+  --sheen-mix-light: 18%;
+  --sheen-mix-dark: 1%;
   --scrim: light-dark(#2a24183d, #0000008c);
   --search-hit: light-dark(#f6dfa6, #6a5426);
 }
@@ -93,6 +105,10 @@
   --accent-soft: light-dark(#eaf0ff, #15203a);
   --accent-border: light-dark(#bccbfa, #2c4580);
   --accent-fill: light-dark(#2f63f0, #2a5fe0);
+  --sheen-a: light-dark(#3d6fff, #5a8cff);
+  --sheen-b: light-dark(#7b5cff, #9d7bff);
+  --sheen-mix-light: 60%;
+  --sheen-mix-dark: 37%;
   --scrim: light-dark(#f4f4f180, #0000008c);
   --search-hit: light-dark(#d9d68a, #55542a);
 }
@@ -111,10 +127,14 @@
   --stage: light-dark(#eef2f6, #11171c);
   --track: light-dark(#c3cdd8, #2e3a45);
   --accent: light-dark(#2b7fa8, #5db2d8);
-  --accent-ink: light-dark(#1f6589, #93d0ea);
+  --accent-ink: light-dark(#1c6286, #93d0ea);
   --accent-soft: light-dark(#e3f1f8, #152a36);
   --accent-border: light-dark(#b2d4e6, #285468);
   --accent-fill: light-dark(#22729a, #2a7499);
+  --sheen-a: light-dark(#2b7fa8, #5db2d8);
+  --sheen-b: light-dark(#2fb5a0, #6ee7c8);
+  --sheen-mix-light: 21%;
+  --sheen-mix-dark: 9%;
   --scrim: light-dark(#1a26333d, #0000008c);
   --search-hit: light-dark(#c9e0a8, #3d5230);
 }
@@ -136,10 +156,14 @@
   --stage: light-dark(#f5ebec, #231618);
   --track: light-dark(#dbc1c4, #4a3135);
   --accent: light-dark(#c03153, #e16479);
-  --accent-ink: light-dark(#ab1c44, #f899a5);
+  --accent-ink: light-dark(#a81741, #f899a5);
   --accent-soft: light-dark(#ffe7e9, #3e1d22);
   --accent-border: light-dark(#eeb2b8, #7b333f);
   --accent-fill: light-dark(#c03153, #c33d59);
+  --sheen-a: light-dark(#c03153, #e16479);
+  --sheen-b: light-dark(#e0704a, #f09a7a);
+  --sheen-mix-light: 39%;
+  --sheen-mix-dark: 14%;
   --scrim: light-dark(#2a181c3d, #0000008c);
   --search-hit: light-dark(#ffe08a, #6f5a1e);
 }
@@ -158,10 +182,14 @@
   --stage: light-dark(#f7eaf1, #25141e);
   --track: light-dark(#e0bdd0, #4f2c40);
   --accent: light-dark(#c50381, #ee45a6);
-  --accent-ink: light-dark(#a9036f, #fe8dc6);
+  --accent-ink: light-dark(#a2006a, #fe8dc6);
   --accent-soft: light-dark(#ffe6f1, #42172e);
   --accent-border: light-dark(#f6a9cd, #832159);
   --accent-fill: light-dark(#c50381, #cd0087);
+  --sheen-a: light-dark(#c50381, #ee45a6);
+  --sheen-b: light-dark(#8e3fd8, #b47bff);
+  --sheen-mix-light: 60%;
+  --sheen-mix-dark: 48%;
   --scrim: light-dark(#2a16203d, #0000008c);
   --search-hit: light-dark(#ffe08a, #6f5a1e);
 }
@@ -271,6 +299,14 @@
   --glass-raise-base: var(--raise);
   --glass-raise-paint: none;
   --glass-raise-attach: scroll;
+  /* The sheen: each theme's two-stop accent gradient (--sheen-a to --sheen-b), drawn in six places and nowhere else (see the end of this
+     file). --sheen-mix-light and --sheen-mix-dark are how much of --sheen-b the primary button's far end takes, the most that keeps
+     --on-accent at 4.5:1 along the whole fill; tests/palette-contrast.test.ts holds them to it. Text, icons, borders and chips stay flat. */
+  --sheen: linear-gradient(90deg, var(--sheen-a), var(--sheen-b));
+  --sheen-wash: linear-gradient(90deg, color-mix(in srgb, var(--sheen-a) 15%, transparent), color-mix(in srgb, var(--sheen-b) 15%, transparent));
+  --sheen-edge: linear-gradient(90deg, color-mix(in srgb, var(--sheen-a) 60%, transparent), color-mix(in srgb, var(--sheen-b) 60%, transparent));
+  --sheen-primary: linear-gradient(90deg, var(--accent-fill), light-dark(color-mix(in srgb, var(--sheen-b) var(--sheen-mix-light), var(--accent-fill)), color-mix(in srgb, var(--sheen-b) var(--sheen-mix-dark), var(--accent-fill))));
+  --sheen-primary-hover: linear-gradient(90deg, var(--accent-fill-hover), light-dark(color-mix(in srgb, var(--sheen-b) var(--sheen-mix-light), var(--accent-fill-hover)), color-mix(in srgb, var(--sheen-b) var(--sheen-mix-dark), var(--accent-fill-hover))));
 }
 /*
  * The seven families get the soft version of the window glow: the same two radial glows and glass surfaces as the glow themes,
@@ -315,6 +351,10 @@
   --accent: #6ee7c8;
   --accent-ink: #6ee7c8;
   --accent-fill: #6ee7c8;
+  --sheen-a: #2bd9a3;
+  --sheen-b: #8b5cf6;
+  --sheen-mix-light: 60%;
+  --sheen-mix-dark: 60%;
   --on-accent: #04130f;
   --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--card));
   --accent-border: color-mix(in srgb, var(--accent) 40%, var(--card));
@@ -357,6 +397,10 @@
   --accent: #ffb37a;
   --accent-ink: #ffb37a;
   --accent-fill: #ffb37a;
+  --sheen-a: #ff7a59;
+  --sheen-b: #b45ae0;
+  --sheen-mix-light: 60%;
+  --sheen-mix-dark: 60%;
   --on-accent: #1a0e06;
   --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--card));
   --accent-border: color-mix(in srgb, var(--accent) 40%, var(--card));
@@ -399,6 +443,10 @@
   --accent: #9db4ff;
   --accent-ink: #9db4ff;
   --accent-fill: #9db4ff;
+  --sheen-a: #e040fb;
+  --sheen-b: #5b7bff;
+  --sheen-mix-light: 60%;
+  --sheen-mix-dark: 60%;
   --on-accent: #0b0b1f;
   --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--card));
   --accent-border: color-mix(in srgb, var(--accent) 40%, var(--card));
@@ -439,8 +487,12 @@
   --hover: #ffffff29;
   --track: #ffffff29;
   --accent: #ffb547;
-  --accent-ink: #ffb547;
+  --accent-ink: #ffba57;
   --accent-fill: #ffb547;
+  --sheen-a: #ff8a00;
+  --sheen-b: #ffd166;
+  --sheen-mix-light: 60%;
+  --sheen-mix-dark: 60%;
   --on-accent: #1a1104;
   --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--card));
   --accent-border: color-mix(in srgb, var(--accent) 40%, var(--card));
@@ -481,8 +533,12 @@
   --hover: #ffffff29;
   --track: #ffffff29;
   --accent: #ff9a55;
-  --accent-ink: #ff9a55;
+  --accent-ink: #ffa76e;
   --accent-fill: #ff9a55;
+  --sheen-a: #ff5a3c;
+  --sheen-b: #ffa000;
+  --sheen-mix-light: 60%;
+  --sheen-mix-dark: 60%;
   --on-accent: #1a0c04;
   --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--card));
   --accent-border: color-mix(in srgb, var(--accent) 40%, var(--card));
@@ -525,6 +581,10 @@
   --accent: #f08ce0;
   --accent-ink: #f08ce0;
   --accent-fill: #f08ce0;
+  --sheen-a: #e040b8;
+  --sheen-b: #9b5cff;
+  --sheen-mix-light: 60%;
+  --sheen-mix-dark: 60%;
   --on-accent: #1a0716;
   --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--card));
   --accent-border: color-mix(in srgb, var(--accent) 40%, var(--card));
@@ -565,8 +625,12 @@
   --hover: #12304a29;
   --track: #12304a29;
   --accent: #1a5db0;
-  --accent-ink: #1a5db0;
+  --accent-ink: #0951a3;
   --accent-fill: #1a5db0;
+  --sheen-a: #1a5db0;
+  --sheen-b: #2fc4a8;
+  --sheen-mix-light: 32%;
+  --sheen-mix-dark: 32%;
   --on-accent: #ffffff;
   --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--card));
   --accent-border: color-mix(in srgb, var(--accent) 40%, var(--card));
@@ -607,8 +671,12 @@
   --hover: #3a1f1229;
   --track: #3a1f1229;
   --accent: #a63409;
-  --accent-ink: #a63409;
+  --accent-ink: #952a00;
   --accent-fill: #a63409;
+  --sheen-a: #a63409;
+  --sheen-b: #d9467a;
+  --sheen-mix-light: 60%;
+  --sheen-mix-dark: 60%;
   --on-accent: #ffffff;
   --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--card));
   --accent-border: color-mix(in srgb, var(--accent) 40%, var(--card));
@@ -649,8 +717,12 @@
   --hover: #0e3a4429;
   --track: #0e3a4429;
   --accent: #095f7b;
-  --accent-ink: #095f7b;
+  --accent-ink: #005874;
   --accent-fill: #095f7b;
+  --sheen-a: #095f7b;
+  --sheen-b: #3b7be8;
+  --sheen-mix-light: 60%;
+  --sheen-mix-dark: 60%;
   --on-accent: #ffffff;
   --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--card));
   --accent-border: color-mix(in srgb, var(--accent) 40%, var(--card));
@@ -691,8 +763,12 @@
   --hover: #2a3a1429;
   --track: #2a3a1429;
   --accent: #4b680a;
-  --accent-ink: #4b680a;
+  --accent-ink: #415c00;
   --accent-fill: #4b680a;
+  --sheen-a: #4b680a;
+  --sheen-b: #9a9a1e;
+  --sheen-mix-light: 44%;
+  --sheen-mix-dark: 44%;
   --on-accent: #ffffff;
   --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--card));
   --accent-border: color-mix(in srgb, var(--accent) 40%, var(--card));
@@ -814,6 +890,9 @@ select:hover { border-color: var(--accent-border); }
 .tab:hover { background: var(--hover); }
 .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .tab.is-active { background: var(--card); border-color: var(--border); box-shadow: 0 1px 3px #1e1a2e12; color: var(--fg); }
+.tab, #home-tab { position: relative; }
+/* The active tab's sheen: a 2 px line on its top edge, inset 8 px, at most 120 px wide and centred. Drawn out of flow: no layout shift. */
+.tab.is-active::before, #home-tab.is-active::before { content: ''; position: absolute; top: -1px; left: 8px; right: 8px; max-width: 120px; height: 2px; margin-inline: auto; border-radius: 1px; background: var(--sheen); pointer-events: none; }
 .tab.is-dragging { z-index: 1; opacity: .92; box-shadow: 0 4px 12px #1e1a2e26; transition: none; }
 .tab-format { font: 600 11px/1 var(--font-mono); letter-spacing: .02em; color: var(--muted); }
 .tab.is-active .tab-format { color: var(--accent-ink); }
@@ -889,8 +968,8 @@ select:hover { border-color: var(--accent-border); }
 /* Headings are titles: Geist Serif at its one weight, which a display serif carries without bold. */
 h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 1px 0 5px; color: var(--fg); }
 #empty > p { color: var(--muted); font-size: 13px; line-height: 1.65; }
-.primary { background: var(--accent-fill); color: var(--on-accent); padding: 11px 15px; font-weight: 600; }
-.primary:hover { background: var(--accent-fill-hover); }
+.primary { background: var(--accent-fill); background-image: var(--sheen-primary); color: var(--on-accent); padding: 11px 15px; font-weight: 600; }
+.primary:hover { background: var(--accent-fill-hover); background-image: var(--sheen-primary-hover); }
 #empty-open { margin-top: 6px; display: inline-flex; align-items: center; gap: 10px; padding: 9px 14px; border-radius: 6px; }
 #empty .formats { font: 11px/1.25 var(--font-mono); letter-spacing: .2px; margin-top: 14px; color: var(--muted); }
 #preview-note { font-size: 11px !important; margin-top: 28px; color: var(--muted) !important; }
@@ -946,9 +1025,9 @@ h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 1px 0 
 .home-recent-open .library-tile-media { flex: none; width: 39px; height: 52px; aspect-ratio: auto; border-radius: 0; }
 .home-recent-text { display: flex; flex: 1 1 0; flex-direction: column; justify-content: center; gap: 5px; min-width: 0; }
 .home-recent-text .home-card-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* How far the reader got: --accent on --hairline. */
+/* How far the reader got: --sheen on --hairline. */
 .home-progress { display: block; height: 3px; overflow: hidden; border-radius: 2px; background: var(--hairline); }
-.home-progress > i { display: block; height: 100%; background: var(--accent); }
+.home-progress > i { display: block; height: 100%; background: var(--accent); background-image: var(--sheen); }
 .home-remove { position: absolute; top: 50%; right: 6px; width: 22px; height: 22px; padding: 0; border-radius: 999px; background: var(--card); color: var(--muted); opacity: 0; transform: translateY(-50%); }
 .home-recent:hover .home-remove, .home-recent:focus-within .home-remove { opacity: 1; }
 .home-remove:hover { color: var(--fg); }
@@ -996,7 +1075,7 @@ footer:hover::before, footer:focus-within::before { height: 0; }
 /* The scrubber is the hairline along the window's bottom edge; its thumb appears while the footer is
    open or the slider has focus. The 12 px input straddles the edge so it stays easy to grab. */
 #progress { position: absolute; top: -5px; left: 0; width: 100%; height: 12px; margin: 0; padding: 0; appearance: none; background: transparent; cursor: pointer; --scrub-fill: 0%; }
-#progress::-webkit-slider-runnable-track { height: 2px; background: linear-gradient(to right, var(--accent) var(--scrub-fill), var(--track) var(--scrub-fill)); }
+#progress::-webkit-slider-runnable-track { height: 2px; background: linear-gradient(to right, transparent var(--scrub-fill), var(--track) var(--scrub-fill)), var(--sheen); }
 #progress::-webkit-slider-thumb { appearance: none; width: 12px; height: 12px; margin-top: -5px; border-radius: 50%; border: 2px solid var(--surface); background: var(--accent); box-shadow: 0 0 0 1px var(--accent); opacity: 0; transition: opacity .15s; }
 footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-webkit-slider-thumb, #progress:active::-webkit-slider-thumb { opacity: 1; }
 #progress:disabled { opacity: .4; cursor: default; }
@@ -1044,7 +1123,8 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
 #view-controls > * { opacity: var(--idle); transition: opacity .15s; }
 @container workspace (min-width: 720px) { #view-controls { left: auto; right: 16px; translate: none; } }
 #view-controls button { display: grid; place-items: center; width: 28px; height: 26px; padding: 0; border-radius: 6px; color: var(--muted); }
-#view-controls button[aria-pressed=true] { color: var(--accent-ink); }
+#view-controls button[aria-pressed=true] { color: var(--accent-ink); background-color: var(--accent-soft); background-image: var(--sheen-wash); }
+#view-controls button[aria-pressed=true]:hover { background-color: var(--accent-soft-hover); }
 #view-controls > button:disabled, #view-controls > button[aria-disabled=true] { opacity: calc(var(--idle) * .45); cursor: default; background: transparent; }
 #view-controls #zoom-level { display: flex; align-items: center; justify-content: center; gap: 4px; width: 56px; color: var(--fg); font: 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
 #view-controls #zoom-level svg { flex-shrink: 0; color: var(--muted); }
@@ -1058,7 +1138,8 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
 #view-controls #view-contents { display: flex; align-items: center; gap: 6px; color: var(--fg); }
 #view-controls .view-segmented { display: flex; gap: 2px; padding: 2px; border-radius: 7px; background: var(--hover-subtle); }
 #view-controls .view-segmented button { height: 22px; border-radius: 5px; }
-#view-controls .view-segmented button[aria-pressed=true] { background: var(--card); box-shadow: 0 0 0 1px var(--hairline); }
+#view-controls .view-segmented button[aria-pressed=true] { background-color: var(--accent-soft); background-image: var(--sheen-wash); box-shadow: 0 0 0 1px var(--hairline); }
+#view-controls .view-segmented button[aria-pressed=true]:hover { background-color: var(--accent-soft-hover); }
 #view-controls .view-size { display: flex; align-items: center; }
 #view-controls .view-size output { min-width: 22px; color: var(--fg); font: 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; text-align: center; }
 #view-controls .view-size button:disabled { opacity: .45; cursor: default; background: transparent; }
@@ -1357,3 +1438,13 @@ dd { margin: 0; color: var(--muted); }
 .link-button { margin-right: auto; padding-left: 0; padding-right: 0; color: var(--accent-ink); }
 .link-button:hover { background: transparent; text-decoration: underline; }
 .danger-text { color: var(--error); }
+/* The sheen, placement 6: a 1 px hairline at 60 % inside the top edge of sheets, dialogs and popovers (the docked library panel and
+   the library's own menus are in library.css). The long ids are there for specificity: their rules set `background` as a shorthand. */
+dialog, dialog.drop, #menu, #appearance, .tab-menu, .zoom-menu { background-image: var(--sheen-edge); background-size: 100% 1px; background-position: top; background-repeat: no-repeat; }
+/* Under forced colours and more contrast every sheen placement is today's flat token: the bars keep --accent on --track and --hairline,
+   the washes and the primary button their flat fill, the sheets their plain edge, and the tab no line. Keep this block last. */
+@media (forced-colors: active), (prefers-contrast: more) {
+  :root, [data-palette] { --sheen: none; --sheen-wash: none; --sheen-edge: none; --sheen-primary: none; --sheen-primary-hover: none; }
+  #progress::-webkit-slider-runnable-track { background: linear-gradient(to right, var(--accent) var(--scrub-fill), var(--track) var(--scrub-fill)); }
+  .tab.is-active::before, #home-tab.is-active::before { display: none; }
+}
