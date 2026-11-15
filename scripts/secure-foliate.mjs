@@ -29,13 +29,13 @@ for (const filename of ['paginator.js', 'fixed-layout.js']) {
 // Foliate lays the section on show out again whenever flow, margin, gap or size change (Paginator.render), and its content observer and font
 // callbacks resize it (View.expand). They take the frame's documentElement and body unchecked, so a call that lands while that frame has no root or
 // no body (between two navigations, or as it is torn down) throws "Cannot destructure property 'style' of 'el' as it is null" from setStylesImportant,
-// and the scroll that follows would read the same missing root. A frame without a body has nothing to lay out, and its load handler lays it out when it has one.
+// and the scroll that follows (#scrollToAnchor, via getVisibleRange) walks the same missing body, so Paginator.render and View.expand check the body too. A frame without a body has nothing to lay out, and its load handler lays it out when it has one.
 {
   const path = resolve('node_modules/foliate-js', 'paginator.js');
   const original = await readFile(path, 'utf8');
   const edits = [
-    ['    render() {\n        if (!this.#view) return\n', '    render() {\n        if (!this.#view?.document?.documentElement) return\n'],
-    ['    expand() {\n        const { documentElement } = this.document\n', '    expand() {\n        const documentElement = this.document?.documentElement\n        if (!documentElement) return\n'],
+    ['    render() {\n        if (!this.#view) return\n', '    render() {\n        if (!this.#view?.document?.body) return\n'],
+    ['    expand() {\n        const { documentElement } = this.document\n', '    expand() {\n        const documentElement = this.document?.documentElement\n        if (!documentElement || !this.document.body) return\n'],
     ['    scrolled({ margin, gap, columnWidth }) {\n        const vertical = this.#vertical\n        const doc = this.document\n', '    scrolled({ margin, gap, columnWidth }) {\n        if (!this.document?.body) return\n        const vertical = this.#vertical\n        const doc = this.document\n'],
     ['    columnize({ width, height, margin, gap, columnWidth }) {\n        const vertical = this.#vertical\n', '    columnize({ width, height, margin, gap, columnWidth }) {\n        if (!this.document?.body) return\n        const vertical = this.#vertical\n'],
   ];
