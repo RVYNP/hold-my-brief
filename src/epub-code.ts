@@ -111,3 +111,19 @@ export function codeStyles(room?: number): string {
   );
   return rules.join(' ');
 }
+
+/**
+ * Anchor for a saved position. `markLines` rebuilds the children of a `pre`, and EPUB CFIs count children, so a CFI saved before it ran
+ * can throw or land on another node inside a listing. There the text offset is used, which `markLines` leaves exact.
+ */
+export function codeSafeAnchor<T extends Range | Element | number>(cfiAnchor: (doc: Document) => T, offsetAnchor: (doc: Document) => Range): (doc: Document) => T | Range {
+  return doc => {
+    try {
+      const found = cfiAnchor(doc);
+      if (!(found instanceof (doc.defaultView?.Range ?? Range))) return found;
+      const node = found.startContainer;
+      if (!(node instanceof (doc.defaultView?.Element ?? Element) ? node : node.parentElement)?.closest('pre')) return found;
+    } catch { /* a stale CFI */ }
+    return offsetAnchor(doc);
+  };
+}

@@ -6,7 +6,7 @@ import { isDark, liftInk, onAppearanceChange, parseRgb, readingColors, rgbToHex,
 import { MIN_SPREAD_WIDTH, pagesLabel, pairedSides } from '../spread';
 import { clampZoom } from '../zoom';
 import { DEFAULT_WPM, chapterMap, contentsLabel, estimatedPage, footerLabel, formatPageShort, numberedChapters, readingMeasure, type PageInfo } from '../epub-position';
-import { CODE_BACKGROUND, CODE_BLOCKS, CODE_WRAPPERS, codeStyles, mappedBackground, markLines, scrollRoom } from '../epub-code';
+import { CODE_BACKGROUND, CODE_BLOCKS, CODE_WRAPPERS, codeSafeAnchor, codeStyles, mappedBackground, markLines, scrollRoom } from '../epub-code';
 import { SAMPLE_SECTIONS, codeHeavy, sectionMix, type SectionMix } from '../epub-flow';
 import { excerpt, findMatches, type DocumentSearch, type SearchHit, type SearchOptions, type UnitText } from '../search';
 
@@ -642,6 +642,10 @@ export class EpubAdapter implements ReaderAdapter {
     if (index < 0) index = Math.max(0, Math.min(this.book.sections.length - 1, Number(locator.index) || 0));
     if (typeof locator.cfi === 'string' && this.mode !== 'fixed') {
       const resolved = this.view.resolveNavigation(locator.cfi);
+      if (typeof resolved?.anchor === 'function' && resolved.index === index) {
+        await this.view.renderer.goTo({ index, anchor: codeSafeAnchor(resolved.anchor, doc => rangeAtOffset(doc, Number(locator.offset) || 0)) });
+        return;
+      }
       if (resolved && resolved.index === index) { await this.view.renderer.goTo(resolved); return; }
     }
     await this.view.renderer.goTo({ index, anchor: doc => rangeAtOffset(doc, Number(locator.offset) || 0) });
