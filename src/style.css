@@ -207,7 +207,7 @@
   --shadow-drawer: 8px 0 30px light-dark(#25203524, transparent);
   --shadow-page: 0 2px 12px light-dark(#25203518, transparent);
   color: var(--fg);
-  /* The window: --chrome under the two glows (transparent outside the glow families), fixed to the window in a glow family. */
+  /* The window: --chrome under the two glows, fixed to the window (every family and glow theme set --glow-paint, see after the defaults below). */
   background-color: var(--chrome);
   background-image: var(--glow-paint);
   background-attachment: var(--glow-attach);
@@ -225,7 +225,7 @@
   }
 }
 /*
- * Glow themes: ten families with ONE scheme each (Aurora, Dusk, Nebula, Solar, Ember, Orchid dark;
+ * Glow themes (the strong glow; the seven families carry a soft one, set after the defaults below): ten families with ONE scheme each (Aurora, Dusk, Nebula, Solar, Ember, Orchid dark;
  * Glacier, Peach, Lagoon, Moss light), ported from Tracks (docs/GLOW_THEMES_PLAN.md and
  * docs/design/glow-themes-2026-11.json there). Their tokens are plain colours, not light-dark()
  * pairs; `color-scheme` is fixed per family and src/theme.ts keeps data-theme equal to it.
@@ -240,7 +240,7 @@
  *   card (alpha)      --glass-raise                  library rail and drawer (over the window's own glow, never over the document)
  *   card (opaque)     --card                         card composited over page: menus, sheets, popovers
  *   raise             --raise                        find bar, page strip, loading bar
- *   (page, no fill)   --glass-chrome, --glass-host, --glass-stage   toolbar; the page-based reader host and the PDF stage (the workspace's panel shows)
+ *   (page, no fill)   --glass-host, --glass-stage   the page-based reader host and the PDF stage (the workspace's panel shows); --glass-chrome (toolbar) too in the glow themes, while the seven families keep it opaque
  *   l1 / l2 / l3      --hairline / --border / --hover, --track (= l3)
  *   t1 / t2 / t4      --fg and --ink / --muted / --faint   (t3 has no HMB role: two text tiers above faint)
  *   accent            --accent, --accent-ink; accent-fill --accent-fill; on-accent --on-accent
@@ -271,6 +271,30 @@
   --glass-raise-base: var(--raise);
   --glass-raise-paint: none;
   --glass-raise-attach: scroll;
+}
+/*
+ * The seven families get the soft version of the window glow: the same two radial glows and glass surfaces as the glow themes,
+ * with one light/dark pair each, set here (after the defaults above) because a family's colour block comes before them. The
+ * unset root is Brief. The glow themes' own blocks below come later and win on a root that carries one of their palettes.
+ */
+:root:not([data-palette]), [data-palette='brief'] { --grad-a: light-dark(#e13a3a4e, #ff6a5e47); --grad-b: light-dark(#f08a3c42, #ffb37a38); }
+[data-palette='lilac'] { --grad-a: light-dark(#6358d857, #8b80f247); --grad-b: light-dark(#c04fd842, #d58bf238); }
+[data-palette='birch'] { --grad-a: light-dark(#b4613a57, #e08b5f47); --grad-b: light-dark(#d49a3a42, #f0c07038); }
+[data-palette='graphite'] { --grad-a: light-dark(#3d6fff40, #5a8cff47); --grad-b: light-dark(#7b5cff3f, #9d7bff38); }
+[data-palette='arctic'] { --grad-a: light-dark(#2b7fa857, #5db2d847); --grad-b: light-dark(#2fb5a042, #6ee7c838); }
+[data-palette='blossom'] { --grad-a: light-dark(#c0315357, #e1647947); --grad-b: light-dark(#e0704a42, #f09a7a38); }
+[data-palette='peony'] { --grad-a: light-dark(#c5038157, #ee45a647); --grad-b: light-dark(#8e3fd842, #b47bff38); }
+:is(:root:not([data-palette]), [data-palette='brief'], [data-palette='lilac'], [data-palette='birch'], [data-palette='graphite'], [data-palette='arctic'], [data-palette='blossom'], [data-palette='peony']) {
+  --glow-paint: var(--glow-image);
+  --glow-attach: fixed;
+  --glass-chrome: var(--chrome);
+  --glass-surface: color-mix(in srgb, var(--surface) 70%, transparent);
+  --glass-host: transparent;
+  --glass-stage: transparent;
+  --glass-raise: color-mix(in srgb, var(--raise) 78%, transparent);
+  --glass-raise-base: var(--chrome);
+  --glass-raise-paint: linear-gradient(var(--glass-raise), var(--glass-raise)), var(--glow-paint);
+  --glass-raise-attach: scroll, fixed, fixed;
 }
 [data-palette='aurora'] {
   color-scheme: dark;
@@ -704,6 +728,19 @@
     --glass-raise-paint: none;
     --glass-raise-attach: scroll;
   }
+  :is(:root:not([data-palette]), [data-palette='brief'], [data-palette='lilac'], [data-palette='birch'], [data-palette='graphite'], [data-palette='arctic'], [data-palette='blossom'], [data-palette='peony']) {
+    --grad-a: transparent;
+    --grad-b: transparent;
+    --glow-paint: none;
+    --glow-attach: scroll;
+    --glass-chrome: var(--chrome);
+    --glass-surface: var(--surface);
+    --glass-host: var(--surface);
+    --glass-stage: var(--stage);
+    --glass-raise-base: var(--raise);
+    --glass-raise-paint: none;
+    --glass-raise-attach: scroll;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after { animation-duration: 0s !important; transition-duration: 0s !important; scroll-behavior: auto !important; }
@@ -1128,7 +1165,7 @@ dialog select { padding-right: 28px; }
 .menu-group + .menu-group { border-top: 1px solid var(--hairline); }
 .menu-group:not(:has(button:not([hidden]))) { display: none; }
 .menu-grid button { display: flex; justify-content: space-between; align-items: center; text-align: left; gap: 8px; padding: 6px 10px; font-size: 12px; white-space: nowrap; }
-.menu-grid button[aria-pressed=true] { background: transparent; border-color: transparent; color: var(--accent-ink); }
+.menu-grid button[aria-pressed=true], .menu-grid button[aria-checked=true] { background: transparent; border-color: transparent; color: var(--accent-ink); }
 .menu-grid kbd { padding: 0; border: 0; background: none; color: var(--muted); }
 /* A dialog focuses its first item when it opens, which WebKit rings even after a click; the ring is
    kept for Tab navigation, as for the page. */
@@ -1165,68 +1202,67 @@ dd { margin: 0; color: var(--muted); }
 .jump-row .primary { padding: 7px 14px; }
 #jump-error { margin: 6px 0 0; color: var(--error); font-size: 12px; }
 #jump-error:empty { display: none; }
-/* Appearance: a bottom sheet over the document, so theme previews stay visible above it. Inside, nothing
-   is boxed: every row is a label column and its control, choices are words that take the accent tint
-   when chosen (no track around them), and theme tiles are set apart by their own tone, not a border. */
+/* Appearance: a bottom sheet over the document, so theme previews stay visible above it. One page, nothing boxed: every row is a label
+   column and its control; themes, glows and accents are plain discs with one selection ring, and choices are words that take the
+   accent tint when chosen (no track around them). */
 #appearance { margin: auto 0 0; width: 100%; max-width: none; max-height: calc(100dvh - 40px); padding: 14px 20px 18px; border: 0; border-top: 1px solid var(--border); border-radius: 14px 14px 0 0; background: var(--card); box-shadow: var(--shadow-sheet); }
-#appearance[open] { display: flex; flex-direction: column; gap: 16px; }
-.sheet-panel { display: flex; flex-direction: column; gap: 14px; }
-/* Tabs are words with an accent rule under the chosen one. */
-.sheet-tabs { display: flex; gap: 14px; margin-left: auto; align-self: stretch; }
-.sheet-tabs button { padding: 4px 0; border: 0; border-radius: 0; color: var(--muted); font-size: 12px; }
-.sheet-tabs button:hover { background: transparent; color: var(--fg); }
-.sheet-tabs button[aria-selected=true] { color: var(--fg); box-shadow: inset 0 -2px 0 var(--accent); }
+#appearance[open] { display: flex; flex-direction: column; gap: 14px; }
+#appearance [hidden] { display: none; }
 #appearance::backdrop { background: transparent; }
 .sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
 .sheet-head h2 { margin: 0; }
+.sheet-head .appearance-modes { flex: 0 0 auto; margin-left: auto; }
 .sheet-close { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; color: var(--muted); }
 /* A sheet opened with the mouse rings nothing; Tab brings focus rings back (as for the menu and page). */
 :root:not(.keyboard-focus) #appearance :focus-visible { outline: none; }
-#appearance .appearance-hint { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
-#appearance .appearance-mode-note { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+/* The one status line: the kept theme, and how to preview or keep another. It lines up under the swatches. */
+#appearance .appearance-hint { min-height: 16px; margin: 0 0 0 72px; color: var(--muted); font-size: 11px; line-height: 1.45; white-space: nowrap; }
+#appearance .appearance-name { color: var(--fg); }
 #appearance .appearance-hint[data-previewing] { color: var(--accent-ink); }
+#appearance .appearance-hint[data-previewing] .appearance-name { color: inherit; }
 .sheet-label { color: var(--muted); font: 11px/1.3 var(--font-mono); letter-spacing: .2px; }
 .choices { flex: 1; display: flex; gap: 2px; min-width: 0; }
 .choices button { flex: 0 1 auto; display: flex; align-items: center; gap: 6px; min-width: 0; padding: 5px 9px; border: 0; border-radius: 6px; color: var(--muted); font-size: 12px; }
 .choices button:hover { background: var(--hover-subtle); color: var(--fg); }
 .choices button[aria-checked=true] { background: var(--accent-soft); color: var(--accent-ink); }
-.theme-group { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
-/* Seven families in rows of four (4 + 3): seven across would not fit the sheet, and 5 + 2 orphans two. */
-.theme-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 8px; }
-.theme-row-glow { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-.theme-card { display: flex; flex-direction: column; gap: 5px; min-width: 0; padding: 0; border: 0; text-align: left; white-space: normal; }
-.theme-card:hover { background: transparent; }
-/* Each tile is its own family's window tone (its chrome), with its page ink and accent: no border. */
-.theme-tile { display: flex; flex-direction: column; gap: 7px; padding: 8px 9px; background-color: var(--chrome); background-image: var(--glow-paint); border-radius: 7px; transition: box-shadow .12s; }
-.theme-card:hover .theme-tile { box-shadow: 0 0 0 1px var(--track); }
-.theme-card[aria-checked=true] .theme-tile, .theme-card[data-previewing] .theme-tile { box-shadow: 0 0 0 2px var(--accent); }
-.theme-row:has([data-previewing]) .theme-card[aria-checked=true]:not([data-previewing]) .theme-tile { box-shadow: none; }
-.theme-sample { color: var(--ink); font: 16px/1.2 var(--font-read); }
-.theme-dots { display: flex; gap: 4px; }
-.theme-dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
-.theme-dots span:nth-child(2) { background: var(--fg); }
-.theme-dots span:nth-child(3) { background: var(--muted); }
-.theme-name { padding: 0 1px; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 11px; }
-.theme-card[aria-checked=true] .theme-name, .theme-card[data-previewing] .theme-name { color: var(--fg); }
-.appearance-row { display: flex; align-items: center; gap: 12px; min-height: 28px; }
-.appearance-row-top { align-items: flex-start; }
-.appearance-row-top > .sheet-label { padding-top: 4px; }
+.appearance-themes { display: flex; flex-direction: column; gap: 8px; }
+/* Themes, glows and accents share one box (a 24 px button around a 20 px disc), one gap and one selection ring. The ring is drawn on the
+   disc from the sheet's own colors, resolved here on the button (outside the disc's data-palette scope). */
+.theme-card, .swatch { --ring: 0 0 0 2px var(--card), 0 0 0 3.5px var(--accent); --ring-hover: 0 0 0 2px var(--card), 0 0 0 3.5px var(--track); display: grid; place-items: center; flex: none; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; }
+.theme-card:hover, .swatch:hover { background: transparent; }
+.theme-disc, .swatch > span { width: 20px; height: 20px; border-radius: 50%; transition: box-shadow .12s; }
+.theme-row, .swatches { display: flex; align-items: center; gap: 6px; min-width: 0; }
+/* Six dark glows, then four light ones: a wider gap between Orchid and Glacier. */
+.theme-card[data-choice=glacier] { margin-left: 6px; }
+/* A family disc is its window tone against its accent; a glow disc is its own glow over its window tone, with its accent as a dot. */
+.theme-disc { --edge: 0 0 0 0 transparent; box-shadow: var(--edge); }
+.theme-row:not(.theme-row-glow) .theme-disc { --edge: inset 0 0 0 1px var(--track); background: linear-gradient(45deg, var(--chrome) 50%, var(--accent) 50%); }
+.theme-row-glow .theme-disc { position: relative; background-color: var(--chrome); background-image: var(--glow-paint); }
+.theme-row-glow .theme-disc::after { content: ''; position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: var(--accent); }
+.theme-card:hover .theme-disc { box-shadow: var(--edge), var(--ring-hover); }
+.theme-card[aria-checked=true] .theme-disc, .theme-card[data-previewing] .theme-disc { box-shadow: var(--edge), var(--ring); }
+/* While another theme is previewed, the kept one gives up its ring. */
+#appearance:has(.theme-card[data-previewing]) .theme-card[aria-checked=true]:not([data-previewing]) .theme-disc { box-shadow: var(--edge); }
+.appearance-row { display: flex; align-items: center; gap: 12px; min-height: 24px; }
 .appearance-row > .sheet-label { flex-shrink: 0; width: 60px; }
+.appearance-rule { height: 1px; margin: 0; border: 0; background: var(--hairline); }
 .appearance-text { display: flex; flex-direction: column; gap: 14px; }
+/* The preview is the open document's page in miniature: the reading font, with the size, spacing and margins being edited, on the page tone. */
+.appearance-preview { width: 100%; height: 104px; padding-block: 12px; overflow: hidden; border-radius: 6px; background: var(--paper); color: var(--ink); box-shadow: inset 0 0 0 1px var(--hairline); font-family: var(--font-read); }
 .stepper { display: flex; align-items: center; gap: 2px; }
-.stepper button { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; color: var(--muted); }
+.stepper button { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; color: var(--muted); font-size: 12px; font-weight: 500; }
 .stepper button:hover { color: var(--fg); }
 .stepper-value { min-width: 44px; text-align: center; color: var(--fg); font: 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
-.swatches { position: relative; flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
+.swatches { position: relative; flex: 1; flex-wrap: wrap; }
 .swatch-theme { --swatch: var(--accent); }
 .swatch-input { position: absolute; right: 0; bottom: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }
-.swatch { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 1.5px solid transparent; border-radius: 50%; }
-.swatch:hover { background: transparent; border-color: var(--track); }
-.swatch > span { width: 16px; height: 16px; border-radius: 50%; background: var(--swatch); }
-.swatch[aria-checked=true] { border-color: var(--swatch); }
+.swatch > span { background: var(--swatch); }
+.swatch:hover > span { box-shadow: var(--ring-hover); }
+.swatch[aria-checked=true] > span { box-shadow: var(--ring); }
 .swatch-custom { color: var(--muted); }
-.swatch-custom:not([aria-checked=true]) { border: 1px dashed var(--track); }
-.swatch-custom[aria-checked=true] svg, .swatch-custom:not([aria-checked=true]) > span { display: none; }
+.swatch-custom > span, .swatch-custom > svg { grid-area: 1 / 1; }
+.swatch-custom:not([aria-checked=true]) > span { border: 1px dashed var(--track); background: transparent; }
+.swatch-custom[aria-checked=true] > svg { display: none; }
 #appearance .appearance-note { margin: 0; color: var(--muted); font: 11px/1.35 var(--font-mono); letter-spacing: 0; }
 @media (min-width: 720px) {
   #appearance { width: 460px; margin-inline: auto; border: 1px solid var(--border); border-bottom: 0; }
