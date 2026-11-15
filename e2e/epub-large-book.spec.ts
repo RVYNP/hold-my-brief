@@ -40,19 +40,28 @@ test('jumping about a large Scroll book with code listings raises no page error'
   expect(errors).toEqual([]);
 });
 
-test('a frame that has lost its root is not laid out again', async ({ page }) => {
-  const errors: string[] = [];
-  page.on('pageerror', error => errors.push(`${error.message}\n${error.stack ?? ''}`));
-  await openInScroll(page, 40);
-  await goToPercent(page, 50);
-  await expect.poll(() => settledPercent(page)).toBeGreaterThan(45);
+for (const flow of ['scroll', 'pages'] as const) {
+  test(`a frame with a root but no body is not laid out again in ${flow}`, async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(`${error.message}\n${error.stack ?? ''}`));
+    await openInScroll(page, 40);
+    if (flow === 'pages') {
+      await page.locator('#flow-pages').click();
+      await expect(page.locator('#flow-pages')).toHaveAttribute('aria-pressed', 'true');
+    }
+    await goToPercent(page, 50);
+    await expect.poll(() => settledPercent(page)).toBeGreaterThan(45);
 
-  // Foliate lays the section on show out again whenever margin, gap or size change; a frame between two navigations or being torn down has no root then.
-  await page.evaluate(() => {
-    const renderer = (document.querySelector('.reader-host:not(.staging):not(.tab-hidden) foliate-view') as unknown as { renderer: HTMLElement & { getContents(): { doc: Document }[] } }).renderer;
-    renderer.getContents()[0].doc.documentElement.remove();
-    renderer.setAttribute('margin', '41px');
+    // Foliate lays the section on show out again whenever margin, gap or size change (Paginator.render, also from its ResizeObserver); a frame between
+    // two navigations or being torn down can have a documentElement and no body then, and setStylesImportant(doc.body, ...) destructures null.
+    await page.evaluate(() => {
+      const renderer = (document.querySelector('.reader-host:not(.staging):not(.tab-hidden) foliate-view') as unknown as { renderer: HTMLElement & { getContents(): { doc: Document }[] } }).renderer;
+      const doc = renderer.getContents()[0].doc;
+      if (!doc.documentElement) throw new Error('the frame has no root');
+      doc.body.remove();
+      renderer.setAttribute('margin', '41px');
+    });
+    await page.waitForTimeout(300);
+    expect(errors).toEqual([]);
   });
-  await page.waitForTimeout(300);
-  expect(errors).toEqual([]);
-});
+}
