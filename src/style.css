@@ -841,10 +841,24 @@ select:hover { border-color: var(--accent-border); }
 #app { --footer-height: 30px; position: relative; height: 100dvh; min-width: 300px; display: flex; flex-direction: column; overflow: clip; }
 /* One 40 px row. Empty toolbar space drags the window (data-tauri-drag-region), so it never selects text. */
 .toolbar { display: flex; align-items: center; gap: 2px; height: 40px; padding: 0 6px; background: var(--glass-chrome); flex-shrink: 0; -webkit-user-select: none; user-select: none; }
-/* macOS draws the traffic lights over the toolbar's left end (titleBarStyle Overlay). */
-.mac-titlebar .toolbar { padding-left: 78px; }
-/* In full screen macOS hides the traffic lights, so their room goes too. */
-.mac-titlebar.window-fullscreen .toolbar { padding-left: 6px; }
+/* macOS: the native traffic lights are hidden (windows::hide_native_buttons) and the reader draws its own at the toolbar's left end
+   (src/window-controls.ts): 12 px circles, 8 px apart, 14 px from the window edge, 12 px before the first tab, centred on the 40 px row.
+   At rest they are one quiet colour, outlined instead while the window is inactive; the standard colours and glyphs show on hover of the group,
+   all three together, as macOS does. In full screen the controls go, and their room with them. */
+.mac-controls { display: none; }
+.mac-titlebar .mac-controls { display: flex; flex: none; gap: 8px; margin: 0 10px 0 8px; }
+.mac-titlebar.window-fullscreen .mac-controls { display: none; }
+.mac-control { display: grid; place-items: center; box-sizing: border-box; width: 12px; height: 12px; padding: 0; border: 1px solid transparent; border-radius: 50%; background: var(--faint); color: rgb(0 0 0 / .6); }
+.window-inactive .mac-control { background: transparent; border-color: var(--hairline); }
+.mac-control svg, .mac-control span { grid-area: 1 / 1; }
+.mac-control svg { display: block; overflow: visible; opacity: 0; }
+.mac-glyph-zoom, .mac-controls.option .mac-glyph-full { display: none; }
+.mac-controls.option .mac-glyph-zoom { display: grid; }
+.mac-controls:hover .mac-control, .mac-controls:has(:focus-visible) .mac-control { border-color: rgb(0 0 0 / .12); }
+.mac-controls:hover .mac-control svg, .mac-controls:has(:focus-visible) .mac-control svg { opacity: 1; }
+.mac-controls:hover #mac-close, .mac-controls:has(:focus-visible) #mac-close { background: #ff5f57; }
+.mac-controls:hover #mac-minimize, .mac-controls:has(:focus-visible) #mac-minimize { background: #febc2e; }
+.mac-controls:hover #mac-zoom, .mac-controls:has(:focus-visible) #mac-zoom { background: #28c840; }
 /* While another app has focus, the controls fade so a pinned reader stays quiet beside your work;
    the title, the position and the page keep full strength. */
 .toolbar > .icon-button, .tab-strip, .title, .caption, footer { transition: opacity .2s; }
@@ -854,12 +868,12 @@ select:hover { border-color: var(--accent-border); }
    way Windows 11 draws them; close turns red on hover. Hidden everywhere else. */
 .caption { display: none; }
 .windows-titlebar .toolbar { padding-right: 0; }
-.windows-titlebar .caption { display: flex; align-self: stretch; margin-left: 4px; }
+.windows-titlebar .caption { display: flex; align-self: stretch; margin-left: 10px; } /* the toolbar's 2 px gap makes 12 px between it and the last item */
 /* Without a native caption the toolbar's empty space is the only grab handle, so a strip before the
    pin always stays free; in a narrow window with nothing open the tagline gives way to the name. */
 .windows-titlebar #pin { margin-left: 24px; }
-.caption button { display: grid; place-items: center; width: 44px; height: 100%; padding: 0; border: 0; border-radius: 0; color: var(--fg); }
-.caption button:hover { background: var(--hover); }
+.caption button { display: grid; place-items: center; width: 44px; height: 100%; padding: 0; border: 0; border-radius: 0; color: var(--muted); }
+.caption button:hover { background: var(--hover); color: var(--fg); }
 .caption button:disabled { opacity: .35; background: transparent; }
 #caption-close:hover { background: #c42b1c; color: #fff; }
 .caption-restore, .window-maximized .caption-max { display: none; }
@@ -989,6 +1003,20 @@ h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 1px 0 
 #empty.is-home::before, #empty.is-home::after { display: none; }
 #empty.is-home h1 { font-size: 22px; margin: 0; }
 .home-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+/* The banner replaces the bar: a sheen base at 22 %, the dithered window glow over it (multiply in light, screen in dark), and a ground plate along the
+   lower edge with the title and the buttons. It is outside any backdrop-filter, and nothing in it animates on its own: a changed picture cross-fades by a transition. */
+.home-banner { --banner-alpha: .6; --banner-blend: multiply; position: relative; isolation: isolate; contain: paint; overflow: hidden; height: 64px; margin-bottom: 12px; border-radius: 9px; background: var(--home-card); }
+:root[data-theme='dark'] .home-banner { --banner-alpha: .85; --banner-blend: screen; }
+@media (min-width: 720px) { .home-banner { height: 140px; } }
+.home-banner-sheen { position: absolute; inset: 0; background: var(--sheen); opacity: .22; pointer-events: none; }
+.home-banner-art { position: absolute; inset: 0; pointer-events: none; }
+.home-banner-art canvas { position: absolute; top: 0; left: 0; image-rendering: pixelated; mix-blend-mode: var(--banner-blend); opacity: var(--banner-alpha); transition: opacity 600ms linear; }
+.home-banner-art canvas.is-entering, .home-banner-art canvas.is-leaving { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .home-banner-art canvas { transition: none; } }
+.home-banner-plate { position: absolute; inset: auto 0 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 48px; padding: 0 10px 0 16px; background: color-mix(in srgb, var(--home-card) 94%, transparent); }
+@media (max-width: 719.98px) { .home-banner-plate { height: 100%; } }
+.home-reshuffle { display: grid; place-items: center; flex: none; width: 28px; height: 28px; padding: 0; border-radius: 6px; color: var(--muted); }
+.home-reshuffle:hover { color: var(--fg); background: var(--hover-subtle); }
 .home-file { padding: 6px 10px; border-radius: 6px; color: var(--muted); font-size: 12px; }
 .home-file:hover { color: var(--fg); background: var(--hover-subtle); }
 /* #empty-open is also the splash's large button; in the header it is a peer of Browse library. */

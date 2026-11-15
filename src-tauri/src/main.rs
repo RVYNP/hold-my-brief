@@ -691,7 +691,8 @@ fn main() {
             assistant::assistant_send,
             windows::set_pin,
             windows::set_lock,
-            windows::set_preset
+            windows::set_preset,
+            windows::reapply_window_chrome
         ])
         .setup(|app| {
             let directory = app.path().app_local_data_dir()?;

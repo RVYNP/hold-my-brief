@@ -1673,6 +1673,7 @@ version = "0.1.0"
 dependencies = [
  "image",
  "keyring",
+ "objc2-app-kit",
  "reqwest",
  "rfd",
  "rusqlite",
