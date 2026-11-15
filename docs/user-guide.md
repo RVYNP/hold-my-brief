@@ -270,8 +270,9 @@ both move it sideways without changing where you are reading. Click a page, or T
 arrow keys to move along it (Home and End go to the ends) and press Enter or Space, to go there as if you
 had turned the pages; the strip then glides back to the middle (it jumps if your system asks for reduced
 motion, or when the page is far away). PgDn and PgUp keep turning pages from anywhere, and the strip
-follows. Thumbnails are drawn only for the pages in or near view, after the page itself, so a long
-document costs no more than a short one and they never delay the page.
+follows. Thumbnails are drawn for the pages in or near view, after the page itself, and, once the strip has
+rested, for a screenful on each side of it, so a scroll finds them ready. They never delay the page or a
+page turn, and a long document costs no more than a short one.
 
 Hovering the progress bar along the footer shows a small card above the pointer with the page that spot
 would go to ("Page 12 of 146", or the spread, in two-page view); dragging the bar moves the card with it,

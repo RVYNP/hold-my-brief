@@ -60,7 +60,7 @@ export function createProgressPreview(scrubber: HTMLInputElement, container: HTM
       if (missing.length) {
         const controller = request = new AbortController();
         dwell = setTimeout(() => {
-          for (const page of missing) void now.source.render(page, controller.signal, true).then(bitmap => {
+          for (const page of missing) void now.source.render(page, controller.signal, 'urgent').then(bitmap => {
             const canvas = bitmap && !controller.signal.aborted ? pages.querySelector<HTMLCanvasElement>(`canvas[data-page="${page}"]`) : null;
             if (canvas && bitmap) { drawThumbnail(canvas, bitmap); canvas.classList.remove('is-blank'); follow(clientX); }
           });

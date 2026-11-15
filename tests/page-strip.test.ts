@@ -41,4 +41,40 @@ describe('thumbnail bitmap cache', () => {
     expect(cache.bytes).toBe(0);
     expect(cache.get('a')).toBeUndefined();
   });
+
+  it('evicts the unheld first, then look-ahead, and what is shown last', () => {
+    const cache = new BitmapCache(3 * MB);
+    for (const key of 'abc') cache.set(key, bitmap(1)); // a is the least recently used.
+    cache.hold(new Set(['a']), new Set(['b']));
+    cache.set('d', bitmap(1)); cache.set('e', bitmap(1)); // c goes, then d: the oldest bitmaps nobody holds.
+    cache.hold(new Set(['a', 'e']), new Set(['b']));
+    cache.set('f', bitmap(1)); // Nothing unheld is left: the look-ahead b goes before the shown a.
+    expect(['a', 'b', 'e', 'f'].map(key => cache.get(key) !== undefined)).toEqual([true, false, true, true]);
+    cache.hold(new Set(['a', 'e', 'f']));
+    cache.set('g', bitmap(1)); // Only now does a shown bitmap go, the least recently used of them.
+    expect(['a', 'e', 'f', 'g'].map(key => cache.get(key) !== undefined)).toEqual([false, true, true, true]);
+  });
+
+  it('refuses look-ahead rather than evict what is shown or looked ahead to, and stores it over what is stale', () => {
+    const cache = new BitmapCache(4 * MB);
+    for (const key of 'abcd') cache.set(key, bitmap(1));
+    cache.hold(new Set(['a', 'b']), new Set(['c']));
+    // Only d is unheld: one look-ahead bitmap replaces it, and a second finds nothing it may replace.
+    expect(cache.fits(bitmap(1), 0)).toBe(true);
+    expect(cache.set('e', bitmap(1), 0)).toBe(true);
+    cache.hold(new Set(['a', 'b']), new Set(['c', 'e']));
+    expect(cache.fits(bitmap(1), 0)).toBe(false);
+    expect(cache.set('f', bitmap(1), 0)).toBe(false);
+    expect(['a', 'b', 'c', 'e'].map(key => cache.get(key) !== undefined)).toEqual([true, true, true, true]);
+    expect(['d', 'f'].map(key => cache.get(key) !== undefined)).toEqual([false, false]);
+    expect(cache.bytes).toBe(4 * MB);
+  });
+
+  it('lets a shown bitmap take the room of look-ahead when the budget cannot hold both', () => {
+    const cache = new BitmapCache(2 * MB);
+    cache.set('a', bitmap(1)); cache.set('b', bitmap(1));
+    cache.hold(new Set(['c']), new Set(['a', 'b']));
+    expect(cache.set('c', bitmap(1))).toBe(true);
+    expect(['a', 'b', 'c'].map(key => cache.get(key) !== undefined)).toEqual([false, true, true]);
+  });
 });
