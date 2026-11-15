@@ -719,7 +719,7 @@ export class EpubAdapter implements ReaderAdapter {
       let own = element !== body ? parseRgb(style.backgroundColor) : null;
       const tint = own && inCode && mappedBackground(own, paper, ink);
       // Images, SVG and code keep their own mapping; a callout is any other box with a plain background colour.
-      const callout = own && !inCode && style.backgroundImage === 'none' && !element.matches(NOT_CALLOUTS) ? calloutBackground(own, paper) : null;
+      const callout = own && !inCode && style.backgroundImage === 'none' && !element.matches(NOT_CALLOUTS) && !!element.textContent?.trim() ? calloutBackground(own, paper) : null;
       if (tint) { set(element, 'background-color', CODE_BACKGROUND); own = tint; mapped.add(element); }
       else if (callout) {
         set(element, 'background-color', callout.css); own = callout.rgb; mapped.add(element);
