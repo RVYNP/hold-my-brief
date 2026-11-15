@@ -5,7 +5,7 @@ import type { Locator, OutlineItem, Position, ReaderAdapter, ReaderContext, Read
 import { isDark, liftInk, onAppearanceChange, parseRgb, readingColors, rgbToHex, type Rgb } from '../theme';
 import { MIN_SPREAD_WIDTH, pagesLabel, pairedSides } from '../spread';
 import { clampZoom } from '../zoom';
-import { DEFAULT_WPM, estimatedPage, footerLabel, numberedChapters, readingMeasure, type PageInfo } from '../epub-position';
+import { DEFAULT_WPM, chapterMap, estimatedPage, footerLabel, numberedChapters, readingMeasure, type PageInfo } from '../epub-position';
 import { excerpt, findMatches, type DocumentSearch, type SearchHit, type SearchOptions, type UnitText } from '../search';
 
 const RESOURCE_LIMIT = 64 * 1024 * 1024;
@@ -17,7 +17,7 @@ const clamp = (n: number) => Math.max(0, Math.min(1, Number.isFinite(n) ? n : 0)
 type Section = { id: string; size: number; linear?: string; pageSpread?: string; createDocument: () => Promise<Document>; unload: () => void };
 type FoliateBook = { sections: Section[]; dir?: string; rendition: { layout?: string; spread?: string }; toc?: TocNode[]; pageList?: { label?: string }[]; metadata?: { title?: string | Record<string, string> }; splitTOCHref?: (href: string) => string[]; transformTarget: EventTarget; destroy: () => void };
 type TocNode = { label: string; href: string; subitems?: TocNode[] };
-type ChapterEntry = { label: string; section: number; node: TocNode };
+type ChapterEntry = { label: string; section: number; node: TocNode; parent?: ChapterEntry };
 type Target = { index: number; anchor?: number | ((doc: Document) => Range | Element | number) };
 type FoliateView = HTMLElement & {
   open: (book: FoliateBook) => Promise<void>; close: () => void;
@@ -279,16 +279,18 @@ export class EpubAdapter implements ReaderAdapter {
     if (!book) return;
     const title = book.metadata?.title, bookTitle = typeof title === 'string' ? title : title ? Object.values(title)[0] : undefined;
     const entries: ChapterEntry[] = [];
-    const walk = (nodes: TocNode[]) => { for (const node of nodes) {
+    const walk = (nodes: TocNode[], parent?: ChapterEntry) => { for (const node of nodes) {
       const section = node.href ? book.sections.findIndex(candidate => candidate.id === book.splitTOCHref?.(node.href)[0]) : -1;
-      if (section >= 0) entries.push({ label: node.label, section, node });
-      walk(node.subitems ?? []);
+      const entry: ChapterEntry | undefined = section >= 0 ? { label: node.label, section, node, parent } : undefined;
+      if (entry) entries.push(entry);
+      walk(node.subitems ?? [], entry ?? parent);
     } };
     walk(book.toc ?? []);
     // Stable: entries that share a section keep their contents order.
     entries.sort((a, b) => a.section - b.section);
     this.chapters = numberedChapters(entries, bookTitle);
-    this.chapterOf = new Map(this.chapters.map((entry, i) => [entry.node, { n: i + 1, total: this.chapters.length }]));
+    const byEntry = chapterMap(entries, bookTitle);
+    this.chapterOf = new Map(entries.flatMap(entry => { const found = byEntry.get(entry); return found ? [[entry.node, found] as const] : []; }));
     this.pageLabels = (book.pageList ?? []).map(item => String(item.label ?? '').trim()).filter(Boolean);
   }
   /** Two-page state for the current options and panel size. Foliate's paginator only sets two columns in a landscape box. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chapterNumber, cleanChapterLabel, estimatedPage, footerLabel, formatPage, formatPercent, formatTimeLeft, numberedChapters, readingMeasure } from '../src/epub-position';
+import { chapterMap, chapterNumber, cleanChapterLabel, estimatedPage, footerLabel, formatPage, formatPercent, formatTimeLeft, numberedChapters, readingMeasure } from '../src/epub-position';
 
 describe('cleanChapterLabel', () => {
   it('keeps the chapter a "CHAPTER <roman>" token names and drops the rest', () => {
@@ -39,6 +39,28 @@ describe('numberedChapters', () => {
   it('counts every entry but the title page when the book never says "chapter"', () => {
     const entries = ['Title', 'Opening', 'Second'].map(entry);
     expect(numberedChapters(entries, 'Title').map(e => e.label)).toEqual(['Opening', 'Second']);
+  });
+});
+
+describe('chapterMap', () => {
+  type Node = { label: string; parent?: Node };
+  const node = (label: string, parent?: Node): Node => ({ label, parent });
+  it('maps a subsection to the chapter above it when labels name chapters', () => {
+    const one = node('CHAPTER I.'), section = node('Section A', one), two = node('CHAPTER II.');
+    const map = chapterMap([one, section, two]);
+    expect(map.get(section)).toEqual({ n: 1, total: 2 });
+    expect(map.get(one)).toEqual({ n: 1, total: 2 });
+    expect(map.get(two)).toEqual({ n: 2, total: 2 });
+  });
+  it('counts top-level entries only when no label names a chapter, and maps their children to them', () => {
+    const title = node('The Book'), intro = node('Introduction'), background = node('Background', intro), scope = node('Scope', intro), methods = node('Methods');
+    const entries = [title, intro, background, scope, methods];
+    expect(numberedChapters(entries, 'The Book')).toEqual([intro, methods]);
+    const map = chapterMap(entries, 'The Book');
+    expect(map.get(background)).toEqual({ n: 1, total: 2 });
+    expect(map.get(scope)).toEqual({ n: 1, total: 2 });
+    expect(map.get(methods)).toEqual({ n: 2, total: 2 });
+    expect(map.has(title)).toBe(false);
   });
 });
 

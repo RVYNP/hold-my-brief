@@ -46,14 +46,38 @@ export function cleanChapterLabel(label: string | null | undefined, bookTitle?: 
   return clean;
 }
 
+/** A contents entry as the chapter functions see it: its label and the nearest ancestor entry that resolved to a section. */
+export type ChapterNode<T> = { label: string; parent?: T };
+
 /**
  * Which contents entries are the book's numbered chapters, in the order given. When any entry names a chapter, only those count
- * (a preface or a part title is not "Chapter 1"); a book that never says "chapter" counts every entry that is not its title page.
+ * (a preface or a part title is not "Chapter 1"); a book that never says "chapter" counts every entry that is not its title page
+ * and is not nested under another counted entry (a subsection belongs to the chapter above it).
  */
-export function numberedChapters<T extends { label: string }>(entries: readonly T[], bookTitle?: string): T[] {
+export function numberedChapters<T extends ChapterNode<T>>(entries: readonly T[], bookTitle?: string): T[] {
   const kept = entries.filter(entry => cleanChapterLabel(entry.label, bookTitle));
   const named = kept.filter(entry => labelChapterNumber(entry.label));
-  return named.length ? named : kept;
+  if (named.length) return named;
+  const keptSet = new Set(kept);
+  const nested = (entry: T) => { for (let up = entry.parent; up; up = up.parent) if (keptSet.has(up)) return true; return false; };
+  return kept.filter(entry => !nested(entry));
+}
+
+/**
+ * The chapter each contents entry belongs to: its own number, or that of its nearest ancestor that is a numbered chapter.
+ * Entries with neither (the title page, a preface, a part title) are absent.
+ */
+export function chapterMap<T extends ChapterNode<T>>(entries: readonly T[], bookTitle?: string): Map<T, { n: number; total: number }> {
+  const chapters = numberedChapters(entries, bookTitle), total = chapters.length;
+  const numbered = new Map(chapters.map((entry, i) => [entry, { n: i + 1, total }]));
+  const map = new Map<T, { n: number; total: number }>();
+  for (const entry of entries) {
+    for (let at: T | undefined = entry; at; at = at.parent) {
+      const found = numbered.get(at);
+      if (found) { map.set(entry, found); break; }
+    }
+  }
+  return map;
 }
 
 /** `Chapter 3 of 61`. */
