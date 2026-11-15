@@ -103,7 +103,7 @@ dimensions while allowing movement. Each is highlighted while on. Ctrl+Shift+T t
 Ctrl+Shift+L toggles lock. The ··· menu opens just under its button and holds what has no other
 home: **All commands…** (the palette), Go to, Contents, Back, page rotation and spreads when the
 document has pages, **Appearance and text…**, the AI assistant, the window presets (Compact
-420 × 620, Reading 760 × 900), the shortcut reference and the data commands. Everything else, such as
+420 × 620, Reading 760 × 900), **Library on the right** (a checkable item), the shortcut reference and the data commands. Everything else, such as
 fit and zoom, is on the page's floating controls, on its keys, and in the palette.
 
 While another app has focus, the reader's buttons and progress line fade so a pinned window stays
@@ -113,28 +113,36 @@ reader and everything returns.
 ## Appearance
 
 Open the menu and choose **Appearance and text…** to open the Appearance panel at the bottom of the
-window. Its **Colour** tab holds:
+window. Colour and text are on one page, top to bottom: **Mode** is at the top, beside the title; every other
+setting is a labelled row below it. Themes, glows and accents are plain color discs with no names under them;
+hover over one (or focus it) and its name is on the line beneath the glows, and it is also the disc's tooltip and
+accessible name. One ring marks the kept choice in all three rows.
 
 - **Mode:** System (default; follows the operating system as it changes), Light or Dark.
 - **Theme:** Brief (default), Lilac, Birch, Graphite, Arctic, and two pinks: Blossom (soft blush with a
-  rose accent) and Peony (bold, magenta-tinted, deep aubergine in dark mode). Each has a light and a
-  dark version, and every one keeps its text at WCAG AA contrast or better.
+  rose accent) and Peony (bold, magenta-tinted, deep aubergine in dark mode). A disc is the theme's window tone
+  against its accent. Each has a light and a dark version, and every one keeps its text at WCAG AA contrast or better.
   Hover over or focus a theme to preview it on the whole window, click or press Enter to keep it, and
-  move away or press Escape to go back to the theme you kept.
-- **Glow:** ten themes with one mode each: Aurora, Dusk, Nebula, Solar, Ember and Orchid (dark), Glacier,
-  Peach, Lagoon and Moss (light), ported from Tracks. Two soft glows of colour sit behind the toolbar, the
-  library and the area around PDF pages; text documents keep an opaque page. Choosing one fixes the mode
-  (the Mode control shows it, disabled), and choosing a normal theme again brings your earlier mode back.
-  With reduced transparency, more contrast or forced colours on, the glow is not drawn.
+  move away or press Escape to go back to the theme you kept. The line under the glows says which theme is kept,
+  or, while you preview another, which one you are seeing and how to keep it or return.
+- **Glow:** ten themes with one mode each: Aurora, Dusk, Nebula, Solar, Ember and Orchid (dark), then
+  Glacier, Peach, Lagoon and Moss (light), ported from Tracks. A disc shows the theme's glow with its accent
+  as a dot. Two soft glows of colour sit behind the toolbar, the library and the area around PDF pages;
+  text documents keep an opaque page. Choosing one fixes the mode (the Mode control shows it, disabled, and the
+  line under the glows says "Glow themes have one mode."), and choosing a normal theme again brings your earlier
+  mode back. With reduced transparency, more contrast or forced colours on, the glow is not drawn.
 - **Accent:** the theme's own accent, one of seven presets, or a custom color. Contrast is adjusted
   automatically so text and controls stay readable.
 - **Page:** Match theme, White, Sepia or Dim for text documents (Markdown, TXT and reflowable EPUB).
   PDF pages, fixed-layout EPUB pages and images always keep their original colors.
 
-The **Text** tab (also **Text size & spacing…** in the palette) sets the open document's text size
-(12–40 px), line spacing (Tight, Normal, Relaxed, Loose) and margins (Narrow, Medium, Wide), and for
-plain text whether long lines wrap. Changes show on the page above the panel as you make them and are
-saved with the document. PDF pages, fixed-layout books and images zoom instead (Ctrl + and Ctrl −).
+Below a hairline, a **preview** of a page of text in the reading font shows the settings the open document uses, live,
+and under it are **Size**, **Spacing**, **Margins** and, for plain text, **Lines**. **Text size & spacing…** in the palette
+opens the panel with the size stepper focused. Size (**A−** and **A+**, 12–40 px), spacing (Tight, Normal, Relaxed, Loose),
+margins (Narrow, Medium, Wide) and, for plain text, whether long lines wrap are saved with the document, and changes show
+on the page above the panel as you make them. For a PDF, a fixed-layout book, an image or when nothing is open, the preview
+and these rows give way to one note: PDF pages, fixed-layout books and images keep their colors and zoom instead
+(Ctrl + and Ctrl −); the color rows stay.
 
 In a wide window, Markdown and plain text stop at a comfortable line length (about 70 characters) and
 centre on the page instead of running edge to edge. Plain text with wrapping turned off keeps every
@@ -473,9 +481,10 @@ An image opened from a collection shows a small **previous / next** pill at the 
 above the footer's strip, so the footer never covers it when it opens. The view controls stand directly above it
 (and a view-controls pill you drag stays clear of it), beside the panel, at any window width.
 
-The library can be kept on either side. Choose it in **Settings › Appearance** (the **Library** row: **Left** or
-**Right**), or with **Move library to other side** in the command palette (**Ctrl+K**). It is one setting: the icon rail and
-the panel always stand on the same side, and the side is remembered.
+The library can be kept on either side. Check **Library on the right** in the ··· menu (next to the window presets),
+right-click the icon rail and choose **Move to the right side** (or **Move to the left side**), or use **Move library to
+other side** in the command palette (**Ctrl+K**). It is one setting: the icon rail and the panel always stand on the same
+side, and the side is remembered. Appearance no longer has a row for it.
 
 Drag the divider between the panel and the page to resize it (240–520 pixels, and never more
 than 55% of the window, which keeps at least 320 pixels of the reading panel clear beside it). The panel is docked, so a
