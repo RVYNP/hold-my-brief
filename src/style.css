@@ -1123,7 +1123,8 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
 #view-controls > * { opacity: var(--idle); transition: opacity .15s; }
 @container workspace (min-width: 720px) { #view-controls { left: auto; right: 16px; translate: none; } }
 #view-controls button { display: grid; place-items: center; width: 28px; height: 26px; padding: 0; border-radius: 6px; color: var(--muted); }
-#view-controls button[aria-pressed=true] { color: var(--accent-ink); background-image: var(--sheen-wash); }
+#view-controls button[aria-pressed=true] { color: var(--accent-ink); background-color: var(--accent-soft); background-image: var(--sheen-wash); }
+#view-controls button[aria-pressed=true]:hover { background-color: var(--accent-soft-hover); }
 #view-controls > button:disabled, #view-controls > button[aria-disabled=true] { opacity: calc(var(--idle) * .45); cursor: default; background: transparent; }
 #view-controls #zoom-level { display: flex; align-items: center; justify-content: center; gap: 4px; width: 56px; color: var(--fg); font: 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
 #view-controls #zoom-level svg { flex-shrink: 0; color: var(--muted); }
