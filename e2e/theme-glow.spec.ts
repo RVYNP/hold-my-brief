@@ -95,7 +95,8 @@ for (const [palette, mode] of [['brief', 'light'], ['aurora', 'dark']] as const)
     await expect.poll(async () => { const at = (await workspace.boundingBox())!; return Math.round(side === 'left' ? at.x : 1080 - at.x - at.width); }).toBeGreaterThan(300);
     await page.mouse.move(540, 400);
     const panelBox = (await panel.boundingBox())!, workspaceBox = (await workspace.boundingBox())!;
-    const y = Math.round(760 * 0.25);
+    // One row high up, one near the panel's bottom (below its rounded corner), where the gap must still carry the glass.
+    const rows = [Math.round(760 * 0.25), Math.round(panelBox.y + panelBox.height - 15)];
     const [edge, gapStart, gapEnd] = side === 'left'
       ? [panelBox.x + panelBox.width - 4, panelBox.x + panelBox.width, workspaceBox.x]
       : [panelBox.x + 4, workspaceBox.x + workspaceBox.width, panelBox.x];
@@ -104,8 +105,10 @@ for (const [palette, mode] of [['brief', 'light'], ['aurora', 'dark']] as const)
     // The middle of the gap (the panel's own shadow, which stays, falls across its edge) and the rail's 6 px margin at the window's edge (the one beside the panel is under the panel's own shadow too, on the right), against the panel's wash 4 px inside its edge.
     const railBox = (await page.locator('#library-rail').boundingBox())!;
     const middle = Math.floor(gapStart + 8), margins = [side === 'left' ? railBox.x - 3 : railBox.x + railBox.width + 3].map(Math.floor);
-    const [reference, gap, ...rail] = await pixels(page, shot, [Math.round(edge), middle, ...margins].map(x => [x, y]));
-    expect(deltaE(gap, reference), 'the middle of the gap').toBeLessThan(3);
-    for (const [index, pixel] of rail.entries()) expect(deltaE(pixel, reference), `the rail's margin at x=${margins[index]}`).toBeLessThan(3);
+    for (const y of rows) {
+      const [reference, gap, ...rail] = await pixels(page, shot, [Math.round(edge), middle, ...margins].map(x => [x, y]));
+      expect(deltaE(gap, reference), `the middle of the gap at y=${y}`).toBeLessThan(3);
+      for (const [index, pixel] of rail.entries()) expect(deltaE(pixel, reference), `the rail's margin at x=${margins[index]}, y=${y}`).toBeLessThan(3);
+    }
   });
 }
