@@ -44,10 +44,11 @@ export const preferGrid = (page: Page) => page.addInitScript(() => localStorage.
 /** The library's door at the window's width: the icon rail's Library button from 720 px up, the toolbar's button below it. */
 export const libraryToggle = (page: Page) => page.viewportSize()!.width >= 720 ? page.locator('#library-rail').getByRole('button', { name: 'Library', exact: true }) : page.locator('#library-toggle');
 
-/** Chooses the side the library stands on, in Settings › Appearance (the icon rail's Settings button), and closes the sheet. */
+/** Puts the library on `side` with the ⋯ menu's checkable "Library on the right" item (a no-op when it is already there). */
 export async function chooseLibrarySide(page: Page, side: 'left' | 'right') {
-  await page.locator('#library-rail').getByRole('button', { name: 'Settings', exact: true }).click();
-  await page.getByRole('radio', { name: `Library on the ${side}` }).click();
-  await page.keyboard.press('Escape');
-  await expect(page.locator('#appearance')).toBeHidden();
+  await page.getByRole('button', { name: 'Reader menu' }).click();
+  const item = page.getByRole('menuitemcheckbox', { name: 'Library on the right' });
+  if ((await item.getAttribute('aria-checked')) === String(side === 'left')) await item.click(); else await page.keyboard.press('Escape');
+  await expect(page.locator('#menu')).toBeHidden();
+  await expect(page.locator('#library-rail')).toHaveAttribute('data-library-side', side);
 }

@@ -157,7 +157,7 @@ test('a compact window has no icon rail and its sheet still covers the whole lay
   expect(Math.round(sheet.y + sheet.height)).toBe(Math.round(layout.y + layout.height));
 });
 
-test('the rail has exactly four buttons; the library side is chosen in Settings › Appearance, shared with the palette command, and a reload keeps it', async ({ page }) => {
+test('the rail has exactly four buttons; the library side is moved from the ⋯ menu or the rail\'s right-click menu, shared with the palette command, and a reload keeps it', async ({ page }) => {
   await page.setViewportSize({ width: 1080, height: 680 });
   await page.goto('/');
   const rail = page.locator('#library-rail'), key = 'hold-my-brief:library-side';
@@ -172,50 +172,71 @@ test('the rail has exactly four buttons; the library side is chosen in Settings 
   expect(ys.map(([top]) => top)).toEqual([...ys.map(([top]) => top)].sort((a, b) => a - b));
   expect(ys[3]![0]! - ys[2]![1]!).toBeGreaterThan(100); // the spacer
   expect(await page.getByRole('button', { name: /Move library/ }).count()).toBe(0);
-  // The rail's own context menu is gone with the button: right-clicking it opens nothing.
-  await rail.click({ button: 'right', position: { x: 30, y: 200 } });
-  await expect(page.getByRole('menu')).toHaveCount(0);
 
-  // Settings opens Appearance, where the side is a two-option control that keeps the same saved setting.
+  // Appearance has no LIBRARY row: the side is the ⋯ menu's and the rail's.
   await rail.getByRole('button', { name: 'Settings', exact: true }).click();
   const sheet = page.locator('#appearance');
   await expect(sheet).toBeVisible();
-  const left = sheet.getByRole('radio', { name: 'Library on the left' }), right = sheet.getByRole('radio', { name: 'Library on the right' });
-  await expect(left).toHaveAttribute('aria-checked', 'true');
-  await expect(right).toHaveAttribute('aria-checked', 'false');
-  await right.click();
-  expect(await side()).toBe('right');
-  await expect(right).toHaveAttribute('aria-checked', 'true');
-  await expect(left).toHaveAttribute('aria-checked', 'false');
+  await expect(sheet.getByRole('radio', { name: /^Library on the/ })).toHaveCount(0);
+  await expect(sheet.getByText('LIBRARY', { exact: true })).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(sheet).toBeHidden();
+
+  // Right-click on the rail: one item, named for where it sends the library. Escape closes it and moves nothing.
+  const railMenu = page.getByRole('menu').filter({ has: page.getByRole('menuitem', { name: /^Move to the (left|right) side$/ }) });
+  await rail.click({ button: 'right', position: { x: 30, y: 200 } });
+  await expect(railMenu.getByRole('menuitem')).toHaveCount(1);
+  await expect(railMenu.getByRole('menuitem', { name: 'Move to the right side' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(railMenu).toHaveCount(0);
+  await expect(rail).toHaveAttribute('data-library-side', 'left');
+  await rail.click({ button: 'right', position: { x: 30, y: 200 } });
+  await railMenu.getByRole('menuitem', { name: 'Move to the right side' }).click();
+  await expect(railMenu).toHaveCount(0);
+  expect(await side()).toBe('right');
   await expect(rail).toHaveAttribute('data-library-side', 'right');
   expect((await boxOf(rail)).x).toBeGreaterThan(1080 - 6 - 48 - 1);
   // The panel beside it follows to the right.
   expect((await boxOf(page.locator('#library-root'))).x).toBeGreaterThan(1080 / 2);
 
-  // The palette command moves the same preference, and the rail and the sheet follow.
-  await page.keyboard.press('Control+k');
-  await page.getByRole('combobox', { name: 'Go to, find or run a command' }).fill('Move library to other side');
-  await page.keyboard.press('Enter');
+  // The ⋯ menu's checkable item shows the side, and moves it back.
+  const menuItem = page.getByRole('menuitemcheckbox', { name: 'Library on the right' });
+  await page.getByRole('button', { name: 'Reader menu' }).click();
+  await expect(menuItem).toHaveAttribute('aria-checked', 'true');
+  await menuItem.click();
   await expect(rail).toHaveAttribute('data-library-side', 'left');
   expect(await side()).toBe('left');
   expect((await boxOf(rail)).x).toBeLessThan(10);
   expect((await boxOf(page.locator('#library-root'))).x).toBeLessThan(1080 / 2);
-  await rail.getByRole('button', { name: 'Settings', exact: true }).click();
-  await expect(left).toHaveAttribute('aria-checked', 'true');
-  await right.click();
+  await page.getByRole('button', { name: 'Reader menu' }).click();
+  await expect(menuItem).toHaveAttribute('aria-checked', 'false');
   await page.keyboard.press('Escape');
 
-  // The side survives a reload, rail and panel alike, and Settings shows it.
+  // The palette command moves the same preference, and the menu item follows.
+  await page.keyboard.press('Control+k');
+  await page.getByRole('combobox', { name: 'Go to, find or run a command' }).fill('Move library to other side');
+  await page.keyboard.press('Enter');
+  await expect(rail).toHaveAttribute('data-library-side', 'right');
+  expect(await side()).toBe('right');
+  await page.getByRole('button', { name: 'Reader menu' }).click();
+  await expect(menuItem).toHaveAttribute('aria-checked', 'true');
+  await page.keyboard.press('Escape');
+
+  // The side survives a reload, rail and panel alike, and both routes show it.
   await page.reload();
   await expect(rail).toBeVisible();
   await expect(rail).toHaveAttribute('data-library-side', 'right');
   expect((await boxOf(rail)).x).toBeGreaterThan(1080 - 6 - 48 - 1);
   await expect(page.locator('#library-root')).toBeVisible();
   expect((await boxOf(page.locator('#library-root'))).x).toBeGreaterThan(1080 / 2);
-  await rail.getByRole('button', { name: 'Settings', exact: true }).click();
-  await expect(sheet.getByRole('radio', { name: 'Library on the right' })).toHaveAttribute('aria-checked', 'true');
+  await page.getByRole('button', { name: 'Reader menu' }).click();
+  await expect(menuItem).toHaveAttribute('aria-checked', 'true');
+  await page.keyboard.press('Escape');
+  await rail.click({ button: 'right', position: { x: 30, y: 200 } });
+  await expect(railMenu.getByRole('menuitem', { name: 'Move to the left side' })).toBeVisible();
+  await railMenu.getByRole('menuitem').click();
+  await expect(rail).toHaveAttribute('data-library-side', 'left');
+  expect(await side()).toBe('left');
 });
 
 test('a user with the library kept on the right (the setting stored before Settings had a control) still has it there', async ({ page }) => {
@@ -223,8 +244,8 @@ test('a user with the library kept on the right (the setting stored before Setti
   await page.addInitScript(() => localStorage.setItem('hold-my-brief:library-side', 'right'));
   await page.goto('/');
   await expect(page.locator('#library-rail')).toHaveAttribute('data-library-side', 'right');
-  await page.locator('#library-rail').getByRole('button', { name: 'Settings', exact: true }).click();
-  await expect(page.getByRole('radio', { name: 'Library on the right' })).toHaveAttribute('aria-checked', 'true');
+  await page.getByRole('button', { name: 'Reader menu' }).click();
+  await expect(page.getByRole('menuitemcheckbox', { name: 'Library on the right' })).toHaveAttribute('aria-checked', 'true');
 });
 
 test('rail tooltips show only while the panel is closed: an open panel names the view itself and the tip would sit over its title and filter field', async ({ page }) => {

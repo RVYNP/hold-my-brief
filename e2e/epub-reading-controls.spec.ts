@@ -238,7 +238,7 @@ test('A+ and A− step the text size within the Appearance bounds, in both flows
   // The same option the Appearance text settings edit.
   await page.getByRole('button', { name: 'Reader menu' }).click();
   await page.getByRole('button', { name: /Appearance and text/ }).click();
-  await expect(page.locator('#appearance .stepper-value').first()).toHaveText('18 px');
+  await expect(page.locator('#appearance .stepper-value')).toHaveText('18');
   await page.keyboard.press('Escape');
   for (let n = 0; n < 12; n++) { if (await page.locator('#text-smaller').isDisabled()) break; await page.locator('#text-smaller').click(); }
   await expect(page.locator('#text-size')).toHaveText('12');
@@ -246,6 +246,20 @@ test('A+ and A− step the text size within the Appearance bounds, in both flows
   for (let n = 0; n < 16; n++) { if (await page.locator('#text-larger').isDisabled()) break; await page.locator('#text-larger').click(); }
   await expect(page.locator('#text-size')).toHaveText('40');
   await expect(page.locator('#text-larger')).toBeDisabled();
+});
+
+test('the Appearance preview follows the size stepper: A+ in the sheet sets the book and the preview to the same size', async ({ page }) => {
+  await openBook(page, { chapters: 4, paragraphs: 40 });
+  await page.getByRole('button', { name: 'Reader menu' }).click();
+  await page.getByRole('button', { name: /Appearance and text/ }).click();
+  const sheet = page.locator('#appearance'), preview = sheet.locator('.appearance-preview'), value = sheet.locator('.stepper-value');
+  await expect(value).toHaveText('18');
+  await expect(preview).toHaveCSS('font-size', '18px');
+  await sheet.getByRole('button', { name: 'Larger text' }).click();
+  await expect(value).toHaveText('20');
+  await expect(preview).toHaveCSS('font-size', '20px');
+  await expect.poll(() => renderedFont(page)).toBe(20);
+  expect(await preview.evaluate(element => getComputedStyle(element).fontSize)).toBe(`${await value.textContent()}px`);
 });
 
 /** A fixed-layout EPUB of `pages` one-line pages whose contents list every page. */
