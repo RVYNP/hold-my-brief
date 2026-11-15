@@ -309,9 +309,9 @@ function showBanner(view: BannerView, key: string, picture: HTMLCanvasElement) {
 
 /** Draws what the band should show now, unless it already shows it, is not laid out, or Home is not the tab on show. */
 function drawBanner(view: BannerView) {
-  const { band } = view;
+  const { band, art } = view;
   if (!band.isConnected || band.closest('[hidden]')) return;
-  const width = band.clientWidth, height = band.clientHeight;
+  const width = art.clientWidth, height = art.clientHeight; // the art's box: the whole band, or its top strip below 720 px
   if (!width || !height) return;
   const scheme = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light', grid = bannerGrid(width, height), colours = bannerColours(band), seed = bannerSeedNow().seed;
   const key = [scheme, view.family, seed, grid.width, grid.height, ...colours.map(channels => channels.join(','))].join('|');
@@ -324,7 +324,7 @@ function scheduleBanner(view: BannerView) {
   view.cancel = later(() => { view.cancel = undefined; drawBanner(view); });
 }
 
-/** The band: a sheen base, the art, and over them a ground plate that carries the title and the buttons (and is the whole band where the band is short). */
+/** The band: a sheen base, the art, and over them a ground plate that carries the title and the buttons (below it, a strip of art where the band is short). */
 function bannerBand(family: Banner, buttons: HTMLElement): BannerView {
   const band = element('div', 'home-banner'), art = element('div', 'home-banner-art'), plate = element('div', 'home-banner-plate');
   const view: BannerView = { band, art, family, key: '', resize: new ResizeObserver(() => scheduleBanner(view)) };

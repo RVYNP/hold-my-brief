@@ -72,7 +72,8 @@ on **Home**:
 - The chips under the title (**All**, **PDF**, **EPUB**, **Markdown**, **Text**, **Images**, only the types you have) filter every
   section; **All** restores the mixed view. They stay on one row that scrolls sideways when the window is narrow.
 
-A **banner** heads Home: a dithered picture of the theme's window glow, 140 px tall (64 px in a window under 720 px wide), with
+A **banner** heads Home: a dithered picture of the theme's window glow, 140 px tall (64 px in a window under 720 px wide, where a 14 px strip of the picture runs along the top
+and the plate sits under it), with
 a plate along its lower edge that holds the title, **Open files**, **Browse library** and **New banner pattern**, a shuffle
 button that draws another pattern at once. The pattern also changes once a day (by your local date) and the last one is
 remembered. It takes its colours from the theme and follows theme changes, and it is drawn only while Home is showing, once
