@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { ZipWriter, Uint8ArrayWriter, TextReader } from '@zip.js/zip.js';
 import { chapterBook } from './epub-book';
 
 type Book = Parameters<typeof chapterBook>[0];
@@ -237,4 +238,31 @@ test('A+ and A− step the text size within the Appearance bounds, in both flows
   for (let n = 0; n < 16; n++) { if (await page.locator('#text-larger').isDisabled()) break; await page.locator('#text-larger').click(); }
   await expect(page.locator('#text-size')).toHaveText('40');
   await expect(page.locator('#text-larger')).toBeDisabled();
+});
+
+/** A fixed-layout EPUB of `pages` one-line pages whose contents list every page. */
+async function fixedBook(pages: number) {
+  const writer = new ZipWriter(new Uint8ArrayWriter(), { useWebWorkers: false });
+  const ids = Array.from({ length: pages }, (_, i) => i + 1);
+  const files: Record<string, string> = {
+    mimetype: 'application/epub+zip',
+    'META-INF/container.xml': '<?xml version="1.0"?><container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0"><rootfiles><rootfile full-path="OPS/book.opf" media-type="application/oebps-package+xml"/></rootfiles></container>',
+    'OPS/book.opf': `<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="id">fixed-contents-${pages}</dc:identifier><dc:title>Fixed contents</dc:title><dc:language>en</dc:language><meta property="rendition:layout">pre-paginated</meta></metadata><manifest>${ids.map(n => `<item id="p${n}" href="p${n}.xhtml" media-type="application/xhtml+xml"/>`).join('')}<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/></manifest><spine>${ids.map(n => `<itemref idref="p${n}"/>`).join('')}</spine></package>`,
+    'OPS/nav.xhtml': `<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>Contents</title></head><body><nav epub:type="toc"><ol>${ids.map(n => `<li><a href="p${n}.xhtml">Plate ${n}</a></li>`).join('')}</ol></nav></body></html>`,
+  };
+  for (const n of ids) files[`OPS/p${n}.xhtml`] = `<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Page ${n}</title><meta name="viewport" content="width=600,height=800"/></head><body><h1>Fixed page ${n}</h1></body></html>`;
+  for (const [name, text] of Object.entries(files)) await writer.add(name, new TextReader(text), { level: name === 'mimetype' ? 0 : 6, lastModDate: new Date('2026-01-01T00:00:00Z'), extendedTimestamp: false });
+  return Buffer.from(await writer.close());
+}
+
+test('Contents of a fixed-layout EPUB shows the spine page each entry starts on, not a text-size estimate', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles({ name: 'fixed.epub', mimeType: 'application/epub+zip', buffer: await fixedBook(4) });
+  await expect(page.locator('#position')).toContainText('Page 1 of 4');
+  await page.getByRole('button', { name: 'Reader menu' }).click();
+  await page.getByRole('button', { name: /^Contents/ }).click();
+  const entries = contents(page).locator('.outline-entry');
+  await expect(entries.locator('.outline-label')).toHaveText(['Plate 1', 'Plate 2', 'Plate 3', 'Plate 4']);
+  await expect(entries.locator('.outline-page')).toHaveText(['p. 1', 'p. 2', 'p. 3', 'p. 4']);
 });

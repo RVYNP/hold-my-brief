@@ -371,6 +371,8 @@ export class EpubAdapter implements ReaderAdapter {
     const listed = (book.pageList ?? []).flatMap(item => { const spot = this.spots.get(item), label = String(item.label ?? '').trim(); return spot && label ? [{ at: at(spot), label }] : []; });
     const pageOf = (spot: Spot) => {
       if (listed.length) return { page: (listed.filter(item => item.at <= at(spot)).at(-1) ?? listed[0]).label, estimated: false };
+      // A fixed-layout page is a whole spine item, so its number is the spine position, as in the footer.
+      if (this.mode === 'fixed') return { page: String(spot.section + 1), estimated: false };
       const estimate = estimatedPage({ current: Math.floor(at(spot) / SIZE_PER_LOCATION), total: Math.ceil(total / SIZE_PER_LOCATION) });
       return estimate && { page: estimate.page, estimated: true };
     };
