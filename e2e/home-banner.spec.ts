@@ -8,15 +8,16 @@ const documents: FixtureDocument[] = [
 ];
 const band = (page: Page) => page.locator('.home-banner');
 const canvases = (page: Page) => page.locator('.home-banner-art canvas');
-/** The picture on show once any cross-fade is over: one canvas, and its pixels (read in one step, so a later fade cannot add a canvas between the check and the read). */
+/** The picture on show once any cross-fade is over: one canvas, and its pixels. */
 async function pixels(page: Page) {
-  let url = '';
-  await expect.poll(async () => {
-    url = await canvases(page).evaluateAll(nodes => nodes.length === 1 ? (nodes[0] as HTMLCanvasElement).toDataURL() : '');
-    return url !== '';
-  }).toBe(true);
-  return url;
+  let shown: string | null = null;
+  await expect.poll(async () => (shown = await settled(page))).not.toBeNull();
+  return shown as unknown as string;
 }
+/** The pixels if exactly one canvas is on show, else null; counted and read in one step, so a cross-fade cannot start in between. */
+const settled = (page: Page) => canvases(page).evaluateAll(list => list.length === 1 ? (list[0] as HTMLCanvasElement).toDataURL() : null);
+/** True once a single canvas is on show and its pixels differ from `before`. */
+const repainted = async (page: Page, before: string) => { const now = await settled(page); return now !== null && now !== before; };
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => { localStorage.setItem('hold-my-brief:library-wide', 'closed'); localStorage.setItem('hold-my-brief:library-narrow', 'closed'); });
@@ -85,7 +86,7 @@ test('Reshuffle changes the canvas pixels, and the seed survives a reload', asyn
   const before = await pixels(page);
   await page.getByRole('button', { name: 'New banner pattern' }).click();
   await expect.poll(() => canvases(page).count()).toBeGreaterThan(0);
-  await expect.poll(async () => (await canvases(page).count()) === 1 && await pixels(page) !== before).toBe(true);
+  await expect.poll(() => repainted(page, before)).toBe(true);
   const after = await pixels(page);
   await page.reload();
   await expect(band(page)).toBeVisible();
@@ -120,7 +121,7 @@ test('a pattern choice repaints the band in place', async ({ page }) => {
   const sheet = await openSheet(page);
   await sheet.locator('[data-banner=stripes]').click();
   await expect(sheet.locator('[data-banner=stripes]')).toHaveAttribute('aria-checked', 'true');
-  await expect.poll(async () => (await canvases(page).count()) === 1 && await pixels(page) !== before).toBe(true);
+  await expect.poll(() => repainted(page, before)).toBe(true);
 });
 
 test('below 720 px the band is 64 px tall and its plate fills it', async ({ page }) => {
@@ -140,10 +141,10 @@ test('the band re-renders on a theme change', async ({ page }) => {
   const sheet = await openSheet(page);
   await sheet.locator('[data-mode=dark]').click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  await expect.poll(async () => (await canvases(page).count()) === 1 && await pixels(page) !== before).toBe(true);
+  await expect.poll(() => repainted(page, before)).toBe(true);
   const dark = await pixels(page);
   await sheet.locator('[data-choice=lilac]').click();
-  await expect.poll(async () => (await canvases(page).count()) === 1 && await pixels(page) !== dark).toBe(true);
+  await expect.poll(() => repainted(page, dark)).toBe(true);
 });
 
 test('a changed picture cross-fades two canvases over 600 ms, and skips the fade under reduced motion', async ({ page }) => {

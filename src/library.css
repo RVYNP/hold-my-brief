@@ -32,6 +32,15 @@
    the base `left: 50%; translate: -50% 0` still applies and would over-constrain the pill if this rule only set `right`. The applied
    width is exposed on #reader-layout by applyWidth in library.ts. */
 @media (min-width: 720px) {
+  /* The window glow must not show bare, as a stripe between two glass surfaces, beside the docked panel. Two strips carry the panel's own glass
+     (the same wash over the same fixed glow, so they match it pixel for pixel): the rail's zone (its 6 px margin at the window's edge and
+     the 6 px gap before the panel), under the rail; and the panel's 10 px handle with the 6 px margin after it, over the panel's shadow, which
+     then falls on the reading panel from the gap's edge. The handle, and its hover state, stand above the strip. Neither takes the pointer. */
+  #reader-layout.library-open::before, .library-root::after { content: ''; position: absolute; top: 0; bottom: var(--footer-height); background-color: var(--glass-raise-base); background-image: var(--glass-raise-paint); background-attachment: var(--glass-raise-attach); pointer-events: none; }
+  #reader-layout.library-open::before { z-index: 0; left: 0; width: 60px; }
+  #reader-layout.library-open.library-right::before { left: auto; right: 0; }
+  .library-root::after { bottom: 0; left: calc(100% - 10px); width: 16px; }
+  .library-right > .library-root::after { left: auto; right: calc(100% - 10px); }
   #reader-layout { --library-clear: 60px; --workspace-clear: 60px; }
   #reader-layout.library-open { --library-clear: calc(var(--library-width, 270px) + 76px); --workspace-clear: 0px; }
   #reader-layout.library-open:not(.library-right) > #workspace { margin-left: var(--library-clear); }
