@@ -8,10 +8,14 @@ const documents: FixtureDocument[] = [
 ];
 const band = (page: Page) => page.locator('.home-banner');
 const canvases = (page: Page) => page.locator('.home-banner-art canvas');
-/** The picture on show once any cross-fade is over: one canvas, and its pixels. */
+/** The picture on show once any cross-fade is over: one canvas, and its pixels (read in one step, so a later fade cannot add a canvas between the check and the read). */
 async function pixels(page: Page) {
-  await expect(canvases(page)).toHaveCount(1);
-  return canvases(page).evaluate(canvas => (canvas as HTMLCanvasElement).toDataURL());
+  let url = '';
+  await expect.poll(async () => {
+    url = await canvases(page).evaluateAll(nodes => nodes.length === 1 ? (nodes[0] as HTMLCanvasElement).toDataURL() : '');
+    return url !== '';
+  }).toBe(true);
+  return url;
 }
 
 test.beforeEach(async ({ page }) => {
