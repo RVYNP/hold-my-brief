@@ -309,3 +309,59 @@ describe.each(['#6358d8', '#a86af4', '#ffd400', '#00c2a8', '#e8e8e8', '#141414',
     }
   });
 });
+
+/**
+ * The active washes (rail icon, tree row, pressed view control) lay --sheen-wash over --accent-soft, or --accent-soft-hover when
+ * hovered, and carry --accent-ink text. That text keeps 4.5:1 on both tints under the wash at eleven points along it (the wash
+ * runs --sheen-a to --sheen-b), exactly and rounded to 8 bits. The weights are read from the stylesheet.
+ */
+const washAlpha = Number(/--sheen-wash: linear-gradient\(90deg, color-mix\(in srgb, var\(--sheen-a\) (\d+)%, transparent\), color-mix\(in srgb, var\(--sheen-b\) \1%, transparent\)\);/.exec(css)![1]) / 100;
+const softHoverWeight = Number(/--accent-soft-hover: color-mix\(in srgb, var\(--accent-soft\) (\d+)%, var\(--accent-border\)\);/.exec(css)![1]) / 100;
+const blend = (top: Rgb, bottom: Rgb, weight: number): Rgb => top.map((channel, i) => channel * weight + bottom[i] * (1 - weight)) as Rgb;
+/** The failing stops, as text: `rest@3` is the rested tint a third of the way along the wash, ` (8-bit)` when rounded. */
+function washFailures(ink: Rgb, rest: Rgb, hover: Rgb, a: Rgb, b: Rgb): string[] {
+  const failures: string[] = [];
+  for (const [state, tint] of [['rest', rest], ['hover', hover]] as const) for (let step = 0; step <= 10; step++) {
+    const colour = blend(blend(a, b, 1 - step / 10), tint, washAlpha);
+    for (const round of [false, true]) {
+      const ratio = contrast(ink, round ? colour.map(Math.round) as Rgb : colour);
+      if (ratio < 4.5) failures.push(`${state}@${step}${round ? ' (8-bit)' : ''}: ${ratio.toFixed(2)}`);
+    }
+  }
+  return failures;
+}
+
+describe.each(palettes.flatMap(name => (['light', 'dark'] as const).map((mode, column) => ({ name, mode, column }))))('accent ink on the wash, $name $mode', ({ name, column }) => {
+  it('keeps 4.5:1 on the rested and the hovered tint', () => {
+    const own = family(name), soft = own['accent-soft'][column], border = own['accent-border'][column];
+    expect(washFailures(own['accent-ink'][column], soft, blend(soft, border, softHoverWeight), own['sheen-a'][column], own['sheen-b'][column])).toEqual([]);
+  });
+});
+
+describe.each(glowCases)('accent ink on the wash, $name', ({ get }) => {
+  it('keeps 4.5:1 on the rested and the hovered tint', () => {
+    const [soft, border] = [get('accent-soft'), get('accent-border')].map(asRgb);
+    expect(washFailures(asRgb(get('accent-ink')), soft, blend(soft, border, softHoverWeight), asRgb(get('sheen-a')), asRgb(get('sheen-b')))).toEqual([]);
+  });
+});
+
+describe.each(['#6358d8', '#a86af4', '#ffd400', '#00c2a8', '#e8e8e8', '#141414', '#ff0000', '#2f7d4f'])('accent ink of the custom accent %s on the wash', accent => {
+  const vars = accentVars(accent);
+  const pair = (value: string) => /^light-dark\((#[0-9a-f]{6}), (#[0-9a-f]{6})\)$/.exec(value)!.slice(1).map(hex);
+  /** A `light-dark(color-mix(in srgb, #mark N%, var(--card)), color-mix(in srgb, #mark N%, var(--surface)))` tint: the mark and its weight in one scheme. */
+  const tintOf = (value: string, column: number): [Rgb, number] => {
+    const parts = /^light-dark\(color-mix\(in srgb, (#[0-9a-f]{6}) (\d+)%, var\(--card\)\), color-mix\(in srgb, (#[0-9a-f]{6}) (\d+)%, var\(--surface\)\)\)$/.exec(value)!;
+    return [hex(parts[column ? 3 : 1]), Number(parts[column ? 4 : 2]) / 100];
+  };
+  // The tint lies over the card (light) or the surface (dark) of whatever theme is active, so every theme is tried.
+  const backings = [
+    ...palettes.flatMap(name => { const own = family(name); return [{ name: `${name} light`, column: 0, backing: own.card[0] }, { name: `${name} dark`, column: 1, backing: own.surface[1] }]; }),
+    ...glowCases.map(({ name, get, scheme }) => ({ name, column: scheme === 'dark' ? 1 : 0, backing: asRgb(get(scheme === 'dark' ? 'surface' : 'card')) })),
+  ];
+  it.each(backings)('keeps 4.5:1 over the $name tints', ({ column, backing }) => {
+    const [mark, softWeight] = tintOf(vars['--accent-soft'], column), [, hoverWeight] = tintOf(vars['--accent-soft-hover'], column);
+    const [a, b] = [vars['--sheen-a'], vars['--sheen-b']].map(value => pair(value)[column]);
+    expect(mark).toEqual(a);
+    expect(washFailures(pair(vars['--accent-ink'])[column], blend(mark, backing, softWeight), blend(mark, backing, hoverWeight), a, b)).toEqual([]);
+  });
+});
