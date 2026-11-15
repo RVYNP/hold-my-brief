@@ -20,8 +20,7 @@
       "dragDropEnabled": true,
       "resizable": true,
       "titleBarStyle": "Overlay",
-      "hiddenTitle": true,
-      "trafficLightPosition": { "x": 14, "y": 22 }
+      "hiddenTitle": true
     }],
     "security": {
       "capabilities": ["main"],

@@ -14,7 +14,7 @@ import { desktop } from './bridge';
  * legible in both modes.
  *
  * public/theme-boot.js applies the saved record before first paint; this module owns
- * the record's format (`mode`, `palette`, `accent`, `page`, and the derived `vars`).
+ * the record's format (`mode`, `palette`, `accent`, `page`, `banner`, and the derived `vars`).
  */
 export type AppearanceMode = 'system' | 'light' | 'dark';
 export type Family = 'brief' | 'lilac' | 'birch' | 'graphite' | 'arctic' | 'blossom' | 'peony';
@@ -22,7 +22,9 @@ export type Glow = 'aurora' | 'dusk' | 'nebula' | 'solar' | 'ember' | 'orchid' |
 export type Palette = Family | Glow;
 export type PageTone = 'theme' | 'white' | 'sepia' | 'dim';
 export type Scheme = 'light' | 'dark';
-export type Appearance = { mode: AppearanceMode; palette: Palette; accent: string | null; page: PageTone };
+/** The pattern of Home's banner (a cover family), or none for the plain bar. */
+export type Banner = 'flow' | 'arcs' | 'stripes' | 'contours' | 'truchet' | 'none';
+export type Appearance = { mode: AppearanceMode; palette: Palette; accent: string | null; page: PageTone; banner: Banner };
 export type Rgb = [number, number, number];
 
 export const appearanceKey = 'hold-my-brief:appearance';
@@ -34,7 +36,8 @@ export const glows = Object.keys(glowSchemes) as readonly Glow[];
 export const allPalettes: readonly Palette[] = [...palettes, ...glows];
 export const isGlow = (palette: Palette): palette is Glow => palette in glowSchemes;
 export const pageTones: readonly PageTone[] = ['theme', 'white', 'sepia', 'dim'];
-export const defaultAppearance: Appearance = { mode: 'system', palette: 'brief', accent: null, page: 'theme' };
+export const banners: readonly Banner[] = ['flow', 'arcs', 'stripes', 'contours', 'truchet', 'none'];
+export const defaultAppearance: Appearance = { mode: 'system', palette: 'brief', accent: null, page: 'theme', banner: 'flow' };
 const accentTokens = ['--accent', '--accent-ink', '--accent-fill', '--accent-fill-hover', '--accent-soft', '--accent-soft-hover', '--accent-border', '--sheen-a', '--sheen-b', '--sheen-mix-light', '--sheen-mix-dark'] as const;
 const hexColor = /^#[0-9a-f]{6}$/i;
 
@@ -176,6 +179,7 @@ function parse(raw: string | null): Appearance {
       palette: allPalettes.includes(saved.palette as Palette) ? saved.palette as Palette : defaultAppearance.palette,
       accent: typeof saved.accent === 'string' && hexColor.test(saved.accent) ? saved.accent.toLowerCase() : null,
       page: pageTones.includes(saved.page as PageTone) ? saved.page as PageTone : defaultAppearance.page,
+      banner: banners.includes(saved.banner as Banner) ? saved.banner as Banner : defaultAppearance.banner,
     };
   } catch { return defaultAppearance; }
 }
