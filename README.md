@@ -129,7 +129,7 @@ text and images separately; opening a reference keeps its original format.
   </tr>
   <tr>
     <td align="center" valign="top"><img src="docs/media/filmstrip.png" alt="A PDF page above a strip of page previews, the current page, 48, ringed, and a card over the progress bar previewing page 110, a half-tone portrait"><br><sub><b>Page previews</b>: a filmstrip under the page, and a preview of wherever you point on the progress bar</sub></td>
-    <td align="center" valign="top"><img src="docs/media/appearance.png" alt="The Appearance panel's Colour tab: seven theme cards in two rows (Brief, Lilac, Birch, Graphite, Arctic, Blossom and Peony), then ten glow themes (Aurora, Dusk, Nebula, Solar, Ember, Orchid, Glacier, Peach, Lagoon and Moss) in two rows of five"><br><sub><b>Appearance</b>: hover to preview, click to keep</sub></td>
+    <td align="center" valign="top"><img src="docs/media/appearance.png" alt="The Appearance panel on one page: seven theme discs in a row (Brief, Lilac, Birch, Graphite, Arctic, Blossom and Peony), ten glow discs (Aurora, Dusk, Nebula, Solar, Ember, Orchid, Glacier, Peach, Lagoon and Moss), a status line, accent swatches, page tones, a live text preview and the size, spacing and margin rows"><br><sub><b>Appearance</b>: hover to preview, click to keep</sub></td>
   </tr>
 </table>
 
