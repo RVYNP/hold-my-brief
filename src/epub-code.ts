@@ -5,11 +5,15 @@
  */
 import { isDark, type Rgb } from './theme';
 
+/** The boxes that wrap a `pre` in publisher markup (pandoc, Sphinx, DocBook); a `pre` in one of them is the code and the wrapper only frames it. */
+export const CODE_WRAPPERS = 'div.sourceCode, div.highlight, .programlisting, .screen, .listing';
 /** Elements that are a code listing, or the box around one. `.example` is only freed from clipping: it can hold prose around the listing. */
-const BLOCKS = 'pre, div.sourceCode, div.highlight, .programlisting, .screen, .listing';
+const BLOCKS = `pre, ${CODE_WRAPPERS}`;
 const BOXES = `${BLOCKS}, pre > code, .example`;
 /** Boxes whose whitespace is the listing: `.programlisting` and friends are `pre` in practice, and a `div` of them would print its source indentation. */
 const WRAPPED = 'pre, pre > code, div.sourceCode, div.highlight';
+/** Marks the box of one source line. */
+const LINE = 'data-hmb-line';
 const WITHIN = `:where(${BLOCKS})`;
 const inBlock = `${WITHIN} *`;
 /** A listing not inside another: the one that carries margin, padding, and the Scroll width. */
@@ -35,6 +39,58 @@ export function scrollRoom(g: number): number {
   return 1 - 2 * share / (1 - share);
 }
 
+/** Longest listing whose lines get a box each: splitting a line off a text node copies what follows it, so the cost grows with the square of the length. */
+const MAX_LINES = 2000;
+/** The column a line's text starts at, counting a tab as a step of 4 like `tab-size`. */
+function indentOf(line: string): number {
+  let column = 0;
+  for (const char of line) {
+    if (char === ' ') column++;
+    else if (char === '\t') column = (Math.floor(column / 4) + 1) * 4;
+    else break;
+  }
+  return column;
+}
+
+/**
+ * Gives every source line of every `pre` its own box, carrying its indent as `--hmb-indent`, so a wrapped line can hang from where its line
+ * begins. Pandoc already sets each line in a `span`. Elsewhere a line is cut out with a range, which copies a token's `span` across the cut
+ * when a string or comment runs over several lines. The text, and so every text offset, is unchanged. Runs once per document.
+ */
+export function markLines(doc: Document) {
+  for (const pre of Array.from(doc.querySelectorAll('pre'))) {
+    if (pre.querySelector(`[${LINE}]`)) continue;
+    const mark = (element: HTMLElement, line: string) => { element.setAttribute(LINE, ''); element.style.setProperty('--hmb-indent', String(indentOf(line))); };
+    const spans = pre.matches('.sourceCode') ? Array.from(pre.querySelectorAll<HTMLElement>(':scope > code > span')) : [];
+    if (spans.length) { for (const span of spans) mark(span, span.textContent ?? ''); continue; }
+    const ranges: Range[] = [];
+    let range: Range | undefined, end: [Text, number] | undefined;
+    const flush = () => {
+      if (range && end) { range.setEnd(...end); if (range.toString().trim()) ranges.push(range); }
+      range = end = undefined;
+    };
+    const walker = doc.createTreeWalker(pre, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null) {
+      for (let from = 0; ;) {
+        const newline = node.data.indexOf('\n', from), stop = newline < 0 ? node.data.length : newline;
+        if (stop > from) { if (!range) { range = doc.createRange(); range.setStart(node, from); } end = [node, stop]; }
+        if (newline < 0) break;
+        flush();
+        from = newline + 1;
+      }
+    }
+    flush();
+    if (ranges.length > MAX_LINES) continue;
+    // Last line first: a cut leaves every earlier boundary where it was.
+    for (const cut of ranges.reverse()) {
+      const line = doc.createElement('span');
+      mark(line, cut.toString());
+      line.append(cut.extractContents());
+      cut.insertNode(line);
+    }
+  }
+}
+
 /** `room` is set in Scroll flow only; Pages keeps blocks in the column. */
 export function codeStyles(room?: number): string {
   const rules = [
@@ -43,12 +99,9 @@ export function codeStyles(room?: number): string {
     `${OUTER} { box-sizing: border-box !important; font-size: max(12px, 0.82em) !important; margin: 0.9em 0 !important; padding: 0.6em 0.9em !important; }`,
     `${WITHIN}, ${inBlock} { line-height: 1.45 !important; }`,
     `${WITHIN} :where(pre, code) { font-size: inherit !important; }`,
-    // A wrapped line hangs 2ch in from the line before it. Pandoc sets each line in its own inline-block span, which then carries the hang.
-    `:where(pre):not(${inBlock}) { padding-left: calc(0.9em + 2ch) !important; text-indent: -2ch !important; }`,
-    `${WITHIN} :where(pre) { margin: 0 !important; padding: 0 0 0 2ch !important; text-indent: -2ch !important; }`,
-    `pre.sourceCode { text-indent: 0 !important; }`,
-    `${WITHIN} pre.sourceCode { padding-left: 0 !important; }`,
-    `pre.sourceCode > code > span { padding-left: 2ch !important; text-indent: -2ch !important; }`,
+    `${WITHIN} :where(pre) { margin: 0 !important; padding: 0 !important; }`,
+    // A wrapped line hangs 2ch in from where its own line begins (its indent, which `markLines` sets), so each line is a box of its own.
+    `${WITHIN} [${LINE}] { display: inline-block !important; padding-left: calc(1ch * (var(--hmb-indent, 0) + 2)) !important; text-indent: calc(-1ch * (var(--hmb-indent, 0) + 2)) !important; }`,
   ];
   if (room !== undefined) rules.push(
     `html { --hmb-code-wide: max(100%, min(calc(100vw * ${Math.max(0, room).toFixed(4)}), 100ch)); }`,

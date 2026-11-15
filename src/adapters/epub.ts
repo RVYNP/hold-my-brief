@@ -6,7 +6,7 @@ import { isDark, liftInk, onAppearanceChange, parseRgb, readingColors, rgbToHex,
 import { MIN_SPREAD_WIDTH, pagesLabel, pairedSides } from '../spread';
 import { clampZoom } from '../zoom';
 import { DEFAULT_WPM, chapterMap, contentsLabel, estimatedPage, footerLabel, formatPageShort, numberedChapters, readingMeasure, type PageInfo } from '../epub-position';
-import { CODE_BACKGROUND, CODE_BLOCKS, codeStyles, mappedBackground, scrollRoom } from '../epub-code';
+import { CODE_BACKGROUND, CODE_BLOCKS, codeStyles, mappedBackground, markLines, scrollRoom } from '../epub-code';
 import { SAMPLE_SECTIONS, codeHeavy, sectionMix, type SectionMix } from '../epub-flow';
 import { excerpt, findMatches, type DocumentSearch, type SearchHit, type SearchOptions, type UnitText } from '../search';
 
@@ -272,7 +272,7 @@ export class EpubAdapter implements ReaderAdapter {
         const forwarded = new KeyboardEvent('keydown', { key: event.key, code: event.code, ctrlKey: event.ctrlKey, altKey: event.altKey, shiftKey: event.shiftKey, metaKey: event.metaKey, bubbles: true, cancelable: true, repeat: event.repeat });
         if (!host.dispatchEvent(forwarded)) event.preventDefault();
       });
-      if (this.mode === 'paginated') { this.adaptInk(doc); doc.addEventListener('wheel', event => this.chainChapter(event, doc), { passive: true }); }
+      if (this.mode === 'paginated') { markLines(doc); this.adaptInk(doc); doc.addEventListener('wheel', event => this.chainChapter(event, doc), { passive: true }); }
     });
     await view.open(this.book);
     this.watchRenderer();

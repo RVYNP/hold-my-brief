@@ -38,13 +38,28 @@ const measure = (page: Page) => page.evaluate(() => {
   };
   const visible = (element: Element) => element.getClientRects().length > 0;
   const box = (element: Element) => ({ name: `${element.tagName.toLowerCase()}.${element.className}`, scroll: element.scrollWidth, client: element.clientWidth});
+  // Where each line of a wrapped listing starts: the left edge of its first row and of its second, in characters of its own font.
+  const hang = [doc.querySelector('#cb1-2'), Array.from(doc.querySelectorAll('.highlight pre [data-hmb-line]')).find(line => line.textContent?.includes('result_3'))].map(line => {
+    if (!line) return null;
+    const probe = doc.createElement('span');
+    probe.style.cssText = 'display: inline-block; width: 10ch';
+    line.append(probe);
+    const ch = probe.getBoundingClientRect().width / 10;
+    probe.remove();
+    const range = doc.createRange();
+    range.selectNodeContents(line);
+    const rows = new Map<number, number>();
+    for (const rect of Array.from(range.getClientRects())) if (rect.width > 0) rows.set(Math.round(rect.top), Math.min(rows.get(Math.round(rect.top)) ?? Infinity, rect.left));
+    const lefts = Array.from(rows).sort((a, b) => a[0] - b[0]).map(([, left]) => left);
+    return { ch, rows: lefts.length, first: lefts[0], second: lefts[1], indent: Number((line as HTMLElement).style.getPropertyValue('--hmb-indent')) };
+  });
   const code = Array.from(doc.querySelectorAll('pre, div.sourceCode, div.highlight')).filter(visible);
   const line = doc.querySelector('pre.sourceCode code > span')!, sphinx = doc.querySelector('.highlight pre')!;
   const type = (element: Element) => { const style = win.getComputedStyle(element); return { lineHeight: parseFloat(style.lineHeight), fontSize: parseFloat(style.fontSize) }; };
   const texts = Array.from(doc.querySelectorAll('pre, pre *')).filter(element => Array.from(element.childNodes).some(child => child.nodeType === Node.TEXT_NODE && child.textContent?.trim()));
   const contrast = texts.map(element => ratio(rgba(win.getComputedStyle(element).color), backdrop(element)));
   return {
-    boxes: code.map(box), pandoc: type(line), sphinx: type(sphinx),
+    boxes: code.map(box), hang, pandoc: type(line), sphinx: type(sphinx),
     prose: doc.querySelector('p')!.getClientRects()[0].width,
     wrapper: doc.querySelector('div.sourceCode')!.getClientRects()[0].width,
     shelf: Math.min(...Array.from(doc.querySelectorAll('div.sourceCode, .highlight')).map(element => luminance(backdrop(element)))),
@@ -69,6 +84,12 @@ for (const flow of ['pages', 'scroll'] as const) for (const [width, height] of [
     for (const type of [m.pandoc, m.sphinx]) {
       expect(type.fontSize).toBeGreaterThanOrEqual(12);
       expect(type.lineHeight).toBeLessThanOrEqual(1.5 * type.fontSize);
+    }
+    for (const line of m.hang) {
+      expect(line, 'wrapped line to measure').not.toBeNull();
+      expect(line!.rows, 'line wraps').toBeGreaterThanOrEqual(2);
+      expect(line!.second, 'continuation starts right of its line').toBeGreaterThanOrEqual(line!.first + line!.ch);
+      expect(line!.second - line!.first, 'continuation hangs 2ch from the line\'s indent').toBeCloseTo((line!.indent + 2) * line!.ch, 0);
     }
     if (flow === 'scroll' && width === 1080) expect(m.wrapper).toBeGreaterThan(m.prose + 1);
     if (flow === 'pages') expect(m.wrapper).toBeLessThanOrEqual(m.prose + 1);
