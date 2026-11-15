@@ -7,6 +7,7 @@ import { MIN_SPREAD_WIDTH, pagesLabel, pairedSides } from '../spread';
 import { clampZoom } from '../zoom';
 import { DEFAULT_WPM, chapterMap, contentsLabel, estimatedPage, footerLabel, formatPageShort, numberedChapters, readingMeasure, type PageInfo } from '../epub-position';
 import { CODE_BACKGROUND, CODE_BLOCKS, CODE_WRAPPERS, codeSafeAnchor, codeStyles, mappedBackground, markLines, scrollRoom } from '../epub-code';
+import { attachCodeControls, copyBlock, openCodeSheet, type Sheet } from '../code-viewer';
 import { SAMPLE_SECTIONS, codeHeavy, sectionMix, type SectionMix } from '../epub-flow';
 import { excerpt, findMatches, type DocumentSearch, type SearchHit, type SearchOptions, type UnitText } from '../search';
 
@@ -156,6 +157,8 @@ export class EpubAdapter implements ReaderAdapter {
   private explicitEnd = false;
   private unsubscribe?: () => void;
   /** Inline colors replaced to keep publication text legible on a dark page, restored on light pages. */
+  /** The code sheet over the reading surface, while one is open. */
+  private sheet?: Sheet;
   private lifted = new WeakMap<Document, [element: HTMLElement, property: string, value: string, priority: string][]>();
   private styles = '';
 
@@ -272,7 +275,16 @@ export class EpubAdapter implements ReaderAdapter {
         const forwarded = new KeyboardEvent('keydown', { key: event.key, code: event.code, ctrlKey: event.ctrlKey, altKey: event.altKey, shiftKey: event.shiftKey, metaKey: event.metaKey, bubbles: true, cancelable: true, repeat: event.repeat });
         if (!host.dispatchEvent(forwarded)) event.preventDefault();
       });
-      if (this.mode === 'paginated') { markLines(doc); this.adaptInk(doc); doc.addEventListener('wheel', event => this.chainChapter(event, doc), { passive: true }); }
+      const copy = (block: HTMLElement) => copyBlock(block).then(() => true, error => { context.onError(error); return false; });
+      if (this.mode === 'paginated') {
+        markLines(doc); this.adaptInk(doc);
+        doc.addEventListener('wheel', event => this.chainChapter(event, doc), { passive: true });
+        attachCodeControls(doc, {
+          area: () => host.getBoundingClientRect(),
+          open: (block, restore) => { this.sheet = openCodeSheet({ host, block, fontSize: this.options.fontSize, restore, copy }); },
+          copy,
+        });
+      }
     });
     await view.open(this.book);
     this.watchRenderer();
@@ -681,7 +693,7 @@ export class EpubAdapter implements ReaderAdapter {
     if (!renderer || this.mode !== 'paginated') return;
     // The frame's color-scheme must match the app's or Chromium paints it opaque; Foliate paints --theme-bg-color behind each column.
     const { scheme, ink, paper, accent } = readingColors(), options = this.options;
-    const styles = `html { color-scheme: ${scheme}; color: ${rgbToHex(ink)}; --theme-bg-color: ${rgbToHex(paper)}; --hmb-paper: ${rgbToHex(paper)}; --hmb-ink: ${rgbToHex(ink)}; } html, body { font-size: ${options.fontSize}px !important; line-height: ${options.lineHeight} !important; } img, svg { max-width: 100%; } a:focus-visible { outline: 2px solid ${rgbToHex(accent)}; } ${codeStyles(this.flowNow === 'scrolled' ? scrollRoom(this.gapShare() / 100) : undefined)}`;
+    const styles = `html { color-scheme: ${scheme}; color: ${rgbToHex(ink)}; --theme-bg-color: ${rgbToHex(paper)}; --hmb-paper: ${rgbToHex(paper)}; --hmb-ink: ${rgbToHex(ink)}; --hmb-accent: ${rgbToHex(accent)}; } html, body { font-size: ${options.fontSize}px !important; line-height: ${options.lineHeight} !important; } img, svg { max-width: 100%; } a:focus-visible { outline: 2px solid ${rgbToHex(accent)}; } ${codeStyles(this.flowNow === 'scrolled' ? scrollRoom(this.gapShare() / 100) : undefined)}`;
     if (changed && styles === this.styles) return;
     this.styles = styles;
     renderer.setStyles?.(styles);
@@ -784,7 +796,7 @@ export class EpubAdapter implements ReaderAdapter {
   /** Fixed-layout zoom was never relative to the fit here: Foliate took the number as a scale of the declared viewport, so a saved value already is a true scale. */
   legacyZoomBase() { return this.mode === 'fixed' ? 1 : undefined; }
   destroy() {
-    this.disposed = true; this.abort.abort(); this.unsubscribe?.(); this.observer?.disconnect(); clearTimeout(this.resizeTimer);
+    this.disposed = true; this.sheet?.close(false); this.abort.abort(); this.unsubscribe?.(); this.observer?.disconnect(); clearTimeout(this.resizeTimer);
     try { this.view?.close(); } catch { /* An opening cancellation may precede Foliate's first page. */ }
     this.view?.remove(); this.book?.destroy(); void this.archive?.close(); this.view = undefined; this.book = undefined;
     this.host?.classList.remove('reflow-reader');

@@ -1467,7 +1467,7 @@ dd { margin: 0; color: var(--muted); }
 .link-button:hover { background: transparent; text-decoration: underline; }
 .danger-text { color: var(--error); }
 /* The sheen, placement 6: a 1 px hairline at 60 % inside the top edge of sheets, dialogs and popovers (the docked library panel and
-   the library's own menus are in library.css). The long ids are there for specificity: their rules set `background` as a shorthand. */
+   the library's own menus are in library.css, the EPUB code sheet's in code-viewer.css). The long ids are there for specificity: their rules set `background` as a shorthand. */
 dialog, dialog.drop, #menu, #appearance, .tab-menu, .zoom-menu { background-image: var(--sheen-edge); background-size: 100% 1px; background-position: top; background-repeat: no-repeat; }
 /* Under forced colours and more contrast every sheen placement is today's flat token: the bars keep --accent on --track and --hairline,
    the washes and the primary button their flat fill, the sheets their plain edge, and the tab no line. Keep this block last. */
