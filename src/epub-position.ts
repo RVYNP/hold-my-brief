@@ -46,6 +46,19 @@ export function cleanChapterLabel(label: string | null | undefined, bookTitle?: 
   return clean;
 }
 
+/**
+ * A contents entry as the Contents list shows it. A label holding "CHAPTER <number>" is "Chapter N", followed by the text after the
+ * token as ": <text>" ("CHAPTER I. Down the Rabbit-Hole" is "Chapter 1: Down the Rabbit-Hole"); text before the token is dropped.
+ * Any other label is cleaned as `cleanChapterLabel` does, and a label that cleans to nothing (the title page) falls back to itself.
+ */
+export function contentsLabel(label: string, bookTitle?: string): string {
+  const text = label.replace(/\s+/g, ' ').trim();
+  const match = /\bchapter\s+([ivxlcdm]+|\d+)\b/i.exec(text), number = match && chapterNumber(match[1]);
+  if (!match || !number) return cleanChapterLabel(text, bookTitle) ?? (text || 'Untitled');
+  const title = text.slice(match.index + match[0].length).replace(/^[\s.:;,\-–—]+/, '').replace(/\.+$/, '').trim();
+  return title ? `Chapter ${number}: ${title}` : `Chapter ${number}`;
+}
+
 /** A contents entry as the chapter functions see it: its label and the nearest ancestor entry that resolved to a section. */
 export type ChapterNode<T> = { label: string; parent?: T };
 

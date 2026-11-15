@@ -184,8 +184,9 @@ drag pans or slides in any mode. The hand turns off when a new document opens (a
 reflow instead of zooming, so they have no pill and no panning; a reflowable EPUB has a pill of its own (next).
 
 **Reflowable EPUB: Contents, Pages or Scroll, text size.** Its pill reads **Contents** · **Pages | Scroll** · **A− 18 A+**.
-**Contents** opens the contents list above the pill (Ctrl+K → Contents opens the same list). Entries use the cleaned chapter
-names ("Chapter 3"; the contents' own label where there is nothing to clean), keep the contents' nesting, show the page each
+**Contents** opens the contents list above the pill (Ctrl+K → Contents opens the same list). A chapter entry reads "Chapter 3:
+Working with Pointers": the number, then the title; text before the chapter number is dropped, and an entry with no chapter
+number keeps its own label. Entries keep the contents' nesting, show the page each
 starts on (`p. ~34` when the page is an estimate, the publisher's own page label when the book has a page list), and mark the
 entry you are in, which is scrolled into view and focused. Up and Down, Home and End move between entries, Enter or a click
 goes there and closes the list, and Escape closes it. **Pages** turns pages; **Scroll** is one continuous column per chapter,

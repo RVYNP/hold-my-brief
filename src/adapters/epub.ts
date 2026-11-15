@@ -5,7 +5,7 @@ import type { Locator, OutlineItem, Position, ReaderAdapter, ReaderContext, Read
 import { isDark, liftInk, onAppearanceChange, parseRgb, readingColors, rgbToHex, type Rgb } from '../theme';
 import { MIN_SPREAD_WIDTH, pagesLabel, pairedSides } from '../spread';
 import { clampZoom } from '../zoom';
-import { DEFAULT_WPM, chapterMap, cleanChapterLabel, estimatedPage, footerLabel, formatPageShort, numberedChapters, readingMeasure, type PageInfo } from '../epub-position';
+import { DEFAULT_WPM, chapterMap, contentsLabel, estimatedPage, footerLabel, formatPageShort, numberedChapters, readingMeasure, type PageInfo } from '../epub-position';
 import { SAMPLE_SECTIONS, codeHeavy, sectionMix, type SectionMix } from '../epub-flow';
 import { excerpt, findMatches, type DocumentSearch, type SearchHit, type SearchOptions, type UnitText } from '../search';
 
@@ -379,7 +379,7 @@ export class EpubAdapter implements ReaderAdapter {
     const walk = (nodes: TocNode[], depth: number) => { for (const node of nodes) {
       if (node.href) {
         const spot = this.spots.get(node), page = spot && pageOf(spot);
-        this.items.push({ label: cleanChapterLabel(node.label, bookTitle) ?? (node.label.trim() || 'Untitled'), target: node.href, depth, ...(page ? { page: formatPageShort(page) } : {}) });
+        this.items.push({ label: contentsLabel(node.label, bookTitle), target: node.href, depth, ...(page ? { page: formatPageShort(page) } : {}) });
         this.nodes.push(node);
       }
       walk(node.subitems ?? [], node.href ? depth + 1 : depth);
