@@ -149,9 +149,13 @@ test('a changed picture cross-fades two canvases over 600 ms, and skips the fade
   await expect(canvases(page)).toHaveCount(2);
   expect(await canvases(page).first().evaluate(node => getComputedStyle(node).transitionDuration)).toBe('0.6s');
   await expect(canvases(page)).toHaveCount(1);
+  const still = await pixels(page);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.getByRole('button', { name: 'New banner pattern' }).click();
-  await expect.poll(() => canvases(page).evaluateAll(nodes => nodes.map(node => (node as HTMLCanvasElement).toDataURL()).length)).toBe(1);
+  const swapped = () => canvases(page).evaluateAll((nodes, old) => ({ count: nodes.length, changed: (nodes.at(-1) as HTMLCanvasElement).toDataURL() !== old }), still);
+  let first = 0;
+  await expect.poll(async () => { const now = await swapped(); if (now.changed && !first) first = now.count; return first; }).toBeGreaterThan(0);
+  expect(first).toBe(1); // without the skip, the old canvas would still be fading out beside the new one
   expect(await canvases(page).evaluate(node => getComputedStyle(node).transitionDuration)).toBe('0s');
 });
 
