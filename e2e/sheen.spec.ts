@@ -1,5 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { seedLibrary } from './home-fixture';
+import { chapterBook } from './epub-book';
+import { pagedPdf } from './paged-pdf';
 
 /**
  * The sheen: each theme's accent gradient, drawn in six places only (src/style.css, src/library.css). Forced colours and more
@@ -46,6 +48,15 @@ const seeded = async (page: Page) => {
   await seedLibrary(page, [{ name: 'Plain.txt', format: 'txt', opened: 1, progress: { fraction: .4 } }]);
 };
 
+/** The pressed #view-controls buttons: Pages in the Pages | Scroll control of a reflowable book, and Single page for a PDF. Opens both and waits on aria-pressed. */
+const pressedViewControls = ['#flow-pages[aria-pressed=true]', '#view-single[aria-pressed=true]'];
+async function openViewControls(page: Page) {
+  await page.locator('#file-input').setInputFiles({ name: 'book.epub', mimeType: 'application/epub+zip', buffer: await chapterBook() });
+  await expect(page.locator(pressedViewControls[0])).toHaveCount(1);
+  await page.locator('#file-input').setInputFiles({ name: 'plain.pdf', mimeType: 'application/pdf', buffer: pagedPdf(3) });
+  await expect(page.locator(pressedViewControls[1])).toHaveCount(1);
+}
+
 test('the active tab, Home included, has a 2 px sheen line on its top edge that takes no room', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#home-tab')).toHaveClass(/is-active/);
@@ -83,10 +94,12 @@ test('the reading progress shows the sheen across the whole bar, and the fill re
   expect(apart(late, unread), 'the unread part is the track').toBeGreaterThan(8);
 });
 
-test('the primary button, the pressed rail icon and the docked library panel carry the sheen', async ({ page }) => {
+test('the primary button, the pressed rail icon, the pressed view controls and the docked library panel carry the sheen', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator('#library-rail').getByRole('button', { name: 'Library', exact: true })).toHaveAttribute('aria-pressed', 'true');
   for (const selector of ['#empty-open', '#library-rail .icon-rail-button[aria-pressed=true]', '.library-panel']) expect((await paint(page, selector)).image, selector).toContain('linear-gradient');
+  await openViewControls(page);
+  for (const selector of pressedViewControls) expect((await paint(page, selector)).image, selector).toContain('linear-gradient');
 });
 
 for (const emulation of flatness) {
@@ -107,10 +120,12 @@ for (const emulation of flatness) {
     if ('contrast' in emulation) expect(apart(late, unread), 'the unread part is the track').toBeGreaterThan(8);
   });
 
-  test(`${Object.keys(emulation)[0]} ${Object.values(emulation)[0]} shows the primary button, the pressed rail icon and the library panel flat`, async ({ page }) => {
+  test(`${Object.keys(emulation)[0]} ${Object.values(emulation)[0]} shows the primary button, the pressed rail icon, the pressed view controls and the library panel flat`, async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('#library-rail').getByRole('button', { name: 'Library', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await page.emulateMedia({ forcedColors: 'none', contrast: 'no-preference', ...emulation });
     for (const selector of ['#empty-open', '#library-rail .icon-rail-button[aria-pressed=true]', '.library-panel']) expect((await paint(page, selector)).image, selector).not.toContain('linear-gradient');
+    await openViewControls(page);
+    for (const selector of pressedViewControls) expect((await paint(page, selector)).image, selector).not.toContain('linear-gradient');
   });
 }
