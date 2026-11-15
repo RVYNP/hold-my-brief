@@ -161,26 +161,32 @@ test('shelf cards: Continue reading carries progress, Favorites the format, Coll
   expect(await empty.evaluate(node => getComputedStyle(node).backgroundColor)).toBe(await page.locator('#empty').evaluate(() => { const probe = document.createElement('i'); probe.style.background = 'var(--hover)'; document.body.append(probe); const color = getComputedStyle(probe).backgroundColor; probe.remove(); return color; }));
 });
 
-test('Open in library and a collection card open the library on that scope', async ({ page }) => {
+test('Open in library and a collection card open the Library tab on that scope, and a second opener retargets the same tab', async ({ page }) => {
   await seedLibrary(page, mixed, mixedCollections);
-  const scope = page.locator('.library-filter[aria-pressed=true] .library-filter-name');
+  const scope = page.locator('#library-page .library-scope-label'), tabs = page.locator('#tab-list .tab[data-kind=library]'), docs = page.locator('#library-page [data-doc-path]');
   await region(page, 'Continue reading').getByRole('button', { name: 'Open in library: Continue reading' }).click();
+  await expect(tabs).toHaveText(/Continue reading/);
   await expect(scope).toHaveText('Continue reading');
-  await expect(page.locator('#library-root.is-board')).toBeVisible(); // The board, where there is room.
-  await expect(page.locator('[data-doc-path]')).toHaveCount(3);
-  await expect(page.locator('[data-doc-path]').filter({ hasText: 'Done.pdf' })).toHaveCount(0);
-  await libraryToggle(page).click(); // Back to Home.
-  await expect(page.locator('#library-root')).toBeHidden();
+  await expect(page.locator('#library-page')).toBeVisible();
+  await expect(docs).toHaveCount(3);
+  await expect(docs.filter({ hasText: 'Done.pdf' })).toHaveCount(0);
+  await page.locator('#home-tab').click(); // Back to Home.
+  await expect(page.locator('#library-page')).toBeHidden();
   await region(page, 'Favorites').getByRole('button', { name: 'Open in library: Favorites' }).click();
+  await expect(tabs).toHaveCount(1);
+  await expect(tabs).toHaveText(/Favorites/);
   await expect(scope).toHaveText('Favorites');
-  await expect(page.locator('[data-doc-path]')).toHaveCount(2);
-  await libraryToggle(page).click();
+  await expect(docs).toHaveCount(2);
+  await page.locator('#home-tab').click();
   await region(page, 'Collections').getByRole('button', { name: 'Open in library: Collections' }).click();
-  await expect(scope).toHaveText('All references');
-  await libraryToggle(page).click();
+  await expect(tabs).toHaveText(/All documents/);
+  await expect(scope).toHaveText('All documents');
+  await page.locator('#home-tab').click();
   await region(page, 'Collections').getByRole('button', { name: /Collection Alpha shelf/ }).click();
+  await expect(tabs).toHaveCount(1);
+  await expect(tabs).toHaveText(/Alpha shelf/);
   await expect(scope).toHaveText('Alpha shelf');
-  await expect(page.locator('[data-doc-path]')).toHaveCount(3);
+  await expect(docs).toHaveCount(3);
 });
 
 test.describe('shelf scrolling', () => {

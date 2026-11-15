@@ -134,12 +134,12 @@ text and images separately; opening a reference keeps its original format.
 </table>
 
 <p align="center">
-  <img src="docs/media/shelf.png" alt="The library board showing a Classics collection as three shelves, Novels, Poetry and Science, with generated dithered covers in one colour per shelf, Pride and Prejudice with its real cover and a print manual's first page" width="880">
-  <br><sub><b>Shelves</b>, with a generated cover for every book that lacks one. The board is one click from the tree</sub>
+  <img src="docs/media/shelf.png" alt="The Library tab showing a Classics collection as three shelves, Novels, Poetry and Science, with generated dithered covers in one colour per shelf, Pride and Prejudice with its real cover and a print manual's first page" width="880">
+  <br><sub><b>Shelves</b>, with a generated cover for every book that lacks one. The Library tab is a double-click away in the tree</sub>
 </p>
 
 <p align="center">
-  <img src="docs/media/intake.png" alt="The intake sheet over the library board, titled 5 new references: four generated dithered pink covers for Moby Dick, Middlemarch, Frankenstein and Dracula beside Pride and Prejudice with its real cover, under a Novels shelf header with a shelf menu, and New patterns and Keep all buttons" width="880">
+  <img src="docs/media/intake.png" alt="The intake sheet over the Library tab, titled 5 new references: four generated dithered pink covers for Moby Dick, Middlemarch, Frankenstein and Dracula beside Pride and Prejudice with its real cover, under a Novels shelf header with a shelf menu, and New patterns and Keep all buttons" width="880">
   <br><sub><b>Intake</b>: review new arrivals; ↻ for another pattern</sub>
 </p>
 

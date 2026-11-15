@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { addMenuItem, chooseFromViewMenu, openBoard, viewMenuButton } from './library-controls';
+import { addMenuItem, chooseFromViewMenu, libraryPage, openLibraryTab, viewMenuButton } from './library-controls';
 
 // A 1 x 1 PNG: enough for a picture-type document.
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
@@ -21,12 +21,12 @@ async function addFiles(page: Page) {
 }
 const names = (page: Page) => page.locator('.library-document-open .library-document-name').allTextContents();
 
-test('the library panel is a one-line header over the tree; the board has the chips, search and sort rows', async ({ page }) => {
+test('the library panel is a one-line header over the tree; the Library tab has the chips, search and sort rows', async ({ page }) => {
   await page.setViewportSize({ width: 1080, height: 680 });
   await page.goto('/');
   await expect(page.locator('.library-header h2')).toContainText('Library');
   // The old drawer chrome is gone, not hidden: the scope popover, the search button, the dock button, the cover rail.
-  for (const gone of ['.library-tools', '.library-sort', '.library-view-toggle', '.library-add', '.library-panel > select', '.library-scope-menu', '.library-search-toggle', '.library-dock', '.library-rail-cover', '.library-header-glyph', '.library-filter-toggle', '.library-board-toggle', '.library-new-collection', '.icon-rail-menu']) await expect(page.locator(gone)).toHaveCount(0);
+  for (const gone of ['.library-tools', '.library-sort', '.library-add', '.library-panel > select', '.library-search-toggle', '.library-dock', '.library-rail-cover', '.library-header-glyph', '.library-filter-toggle', '.library-board-toggle', '.library-new-collection', '.icon-rail-menu']) await expect(page.locator(gone)).toHaveCount(0);
   await addFiles(page);
   const panel = page.locator('.library-panel');
   const y = async (selector: string) => (await page.locator(selector).first().boundingBox())!;
@@ -35,7 +35,7 @@ test('the library panel is a one-line header over the tree; the board has the ch
   expect(header.y + header.height).toBeLessThanOrEqual(tree.y + 1);
   expect(tree.y - (await panel.boundingBox())!.y).toBeLessThan(80);
   expect(await panel.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-  // The header is the title (the button that opens the board) and the count, and the filter field is always under it; + (add files) is the compact window's and the board's, and the icon rail has Add files.
+  // The header is the title (the button that opens the Library tab) and the count, and the filter field is always under it; + (add files) is the compact window's, and the icon rail has Add files.
   await expect(page.locator('.library-header button:visible')).toHaveText(['Library']);
   await expect(page.getByRole('searchbox', { name: 'Filter the library' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add files or manage sources' })).toBeHidden();
@@ -45,26 +45,26 @@ test('the library panel is a one-line header over the tree; the board has the ch
   await page.keyboard.press('Escape');
   await expect(page.getByRole('menuitem', { name: 'Add local documents or images' })).toBeHidden();
 
-  // The board: its header, a chips row, a search and sort row, then the documents, one line each.
-  await openBoard(page);
-  const board = { header: await y('.library-header'), chips: await y('.library-scope'), bar: await y('.library-searchbar'), list: await y('.library-documents') };
-  expect(board.chips.height).toBeLessThan(32); expect(board.bar.height).toBeLessThan(34);
-  expect(board.chips.y + board.chips.height).toBeLessThanOrEqual(board.bar.y + 1); expect(board.bar.y + board.bar.height).toBeLessThanOrEqual(board.list.y + 4);
-  await expect(page.getByRole('button', { name: 'Add files or manage sources' })).toBeVisible();
+  // The Library tab: its own header row (scope, count, chips), a search and sort row, then the documents, one line each. The panel's header stays one line.
+  await openLibraryTab(page);
+  const tab = { header: await y('.library-header'), chips: await y('.library-scope'), bar: await y('.library-searchbar'), list: await y('.library-documents') };
+  expect(tab.header.height).toBeLessThan(36);
+  expect(tab.chips.height).toBeLessThan(36); expect(tab.bar.height).toBeLessThan(34);
+  expect(tab.chips.y + tab.chips.height).toBeLessThanOrEqual(tab.bar.y + 1); expect(tab.bar.y + tab.bar.height).toBeLessThanOrEqual(tab.list.y + 4);
+  await expect(page.getByRole('button', { name: 'Add files or manage sources' })).toBeHidden();
 });
 
-test('the board\'s file-type chips filter, one at a time, for the types the library holds', async ({ page }) => {
+test('the Library tab\'s file-type chips filter, one at a time, for the types the library holds', async ({ page }) => {
   await page.setViewportSize({ width: 1080, height: 680 });
   await page.goto('/');
-  await openBoard(page);
+  await openLibraryTab(page);
   await expect(page.locator('.library-type-chip')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Back to reading' }).click();
+  await page.locator('#home-tab').click();
   await addFiles(page);
-  await openBoard(page);
+  await openLibraryTab(page);
   const chips = page.locator('.library-type-chip');
   await expect(chips).toHaveText(['Markdown', 'Text', 'Images']);
-  await expect(page.locator('.library-scope-label')).toHaveText('All references');
-  await expect(page.locator('.library-filter-name').first()).toHaveText('All references');
+  await expect(page.locator('.library-scope-label')).toHaveText('All documents');
 
   const count = page.locator('.library-result-count');
   await expect(count).toHaveText('4 references');
@@ -78,11 +78,11 @@ test('the board\'s file-type chips filter, one at a time, for the types the libr
   await expect(count).toHaveText('4 references');
 });
 
-test('the board\'s search field is always there; Escape leaves the board, and Ctrl+B still opens and closes the panel', async ({ page }) => {
+test('the Library tab\'s search field is always there and Escape leaves it open; Ctrl+B still opens and closes the panel', async ({ page }) => {
   await page.setViewportSize({ width: 1080, height: 680 });
   await page.goto('/');
   await addFiles(page);
-  await openBoard(page);
+  await openLibraryTab(page);
   const field = page.locator('.library-search');
   await expect(field).toBeVisible();
   await field.fill('alpha');
@@ -90,7 +90,7 @@ test('the board\'s search field is always there; Escape leaves the board, and Ct
   await field.fill('');
   await expect(page.locator('.library-result-count')).toHaveText('4 references');
   await page.keyboard.press('Escape');
-  await expect(page.locator('#library-root')).not.toHaveClass(/is-board/);
+  await expect(libraryPage(page)).toBeVisible();
   await expect(page.locator('#library-root')).toBeVisible();
   // Ctrl+B closes and opens the panel from the page, and focus lands on the tree.
   await page.locator('#workspace').click({ position: { x: 600, y: 300 } });
@@ -103,19 +103,19 @@ test('the board\'s search field is always there; Escape leaves the board, and Ct
   await expect(page.locator('#library-rail').getByRole('button', { name: 'Library', exact: true })).toBeFocused();
 });
 
-test('Recent ☰ is one menu for sort, view and availability, with a Size slider for the grid that is remembered per scope', async ({ page }) => {
+test('Recent ☰ is one menu for sort and availability, beside the List and Grid buttons, with a Size slider for the grid that is remembered per scope', async ({ page }) => {
   await page.setViewportSize({ width: 1080, height: 680 });
   await page.goto('/');
   await addFiles(page);
-  await openBoard(page);
+  await openLibraryTab(page);
   const button = viewMenuButton(page), menu = page.locator('.library-view-menu');
   await expect(button).toContainText('Recent');
   await button.click();
-  await expect(menu.getByRole('group')).toHaveCount(3);
+  await expect(menu.getByRole('group')).toHaveCount(2);
   await expect(menu.getByRole('group', { name: 'Sort by' }).getByRole('menuitemradio')).toHaveText(['Recent', 'Name A–Z']);
-  await expect(menu.getByRole('group', { name: 'View as' }).getByRole('menuitemradio')).toHaveText(['List', 'Grid']);
   await expect(menu.getByRole('group', { name: 'Show' }).getByRole('menuitemradio')).toHaveText(['Any availability', 'Ready', 'Missing']);
-  await expect(menu.getByRole('menuitemradio', { name: 'Grid', exact: true })).toHaveAttribute('aria-checked', 'true'); // Half of the library has pictures: the board opens on the grid.
+  await expect(page.getByRole('button', { name: 'Grid view' })).toHaveAttribute('aria-pressed', 'true'); // Half of the library has pictures: the page opens on the grid.
+  await expect(page.getByRole('button', { name: 'List view' })).toHaveAttribute('aria-pressed', 'false');
   await expect(menu.getByLabel('Tile size')).toBeVisible();
   await page.keyboard.press('Escape');
 
@@ -135,7 +135,7 @@ test('Recent ☰ is one menu for sort, view and availability, with a Size slider
   await expect(page.locator('.library-documents .library-tile')).toHaveCount(4);
   const tileWidth = async () => Math.round((await page.locator('.library-documents .library-tile').first().boundingBox())!.width);
   const before = await tileWidth();
-  expect(before).toBeGreaterThanOrEqual(150); // the board's own minimum
+  expect(before).toBeGreaterThanOrEqual(150); // the page's own minimum
   await button.click();
   const size = menu.getByLabel('Tile size');
   await expect(size).toBeVisible();
@@ -143,7 +143,7 @@ test('Recent ☰ is one menu for sort, view and availability, with a Size slider
   await expect.poll(tileWidth).toBeLessThan(before - 20);
   await page.keyboard.press('Escape');
   await page.reload();
-  await openBoard(page);
+  await openLibraryTab(page);
   await expect(page.locator('.library-documents .library-tile')).toHaveCount(4);
   await expect.poll(tileWidth).toBeLessThan(before - 20);
   // It is kept for this scope only: Favorites has no saved size and no saved view.
@@ -154,7 +154,7 @@ test('list rows carry a 32 x 43 cover and grid tiles their title, two lines at m
   await page.setViewportSize({ width: 1080, height: 680 });
   await page.goto('/');
   await addFiles(page);
-  await openBoard(page);
+  await openLibraryTab(page);
   await chooseFromViewMenu(page, 'List');
   const media = page.locator('.library-list .library-document-open .library-tile-media');
   await expect(media).toHaveCount(4);

@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { libraryToggle, openBoard } from './library-controls';
+import { libraryToggle, openLibraryTab } from './library-controls';
 
 /**
  * Intake: the sheet that opens when files arrive in the library, with each book's generated cover, a ↻ to re-roll it,
@@ -81,7 +81,7 @@ test('a lone file with a real cover is simply added, with no sheet', async ({ pa
   await open(page);
   await page.locator('.library-panel input[type=file]').setInputFiles([pride]);
   await expect(page.locator('.library-title-count')).toHaveText('1');
-  await openBoard(page);
+  await openLibraryTab(page);
   await expect(page.locator('.library-tile-media.is-loaded')).toHaveCount(1);
   await page.waitForTimeout(600);
   await expect(page.locator('.library-dialog')).toHaveCount(0);
@@ -94,12 +94,15 @@ test('a lone file with a real cover is simply added, with no sheet', async ({ pa
 test('a shelf header moves its books to another collection, which then covers them', async ({ page }) => {
   await open(page);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await openBoard(page);
-  await page.getByRole('button', { name: 'New personal collection' }).click();
+  await openLibraryTab(page);
+  const caption = page.locator('#library-root .tree-row[data-node="s:collections"]');
+  await caption.hover();
+  await caption.locator('.tree-add').click();
   await page.getByLabel('Collection name').fill('2-creative-apps');
   await page.getByRole('button', { name: 'Create collection' }).click();
   await expect(page.locator('.library-dialog')).toHaveCount(0);
-  await page.locator('.library-filter', { hasText: /^All references/ }).click();
+  await page.locator('.library-scope-button').click(); // Saving the collection showed it: back to every document, so the files arrive as Unfiled.
+  await page.locator('.library-scope-menu').getByRole('menuitemradio', { name: 'All documents' }).click();
   await page.locator('.library-panel input[type=file]').setInputFiles(creative);
   await expect(dialog(page)).toBeVisible();
   const before = await dialog(page).locator('.library-intake-tile .library-cover').first().evaluate(node => getComputedStyle(node).backgroundColor);
@@ -110,6 +113,6 @@ test('a shelf header moves its books to another collection, which then covers th
   await expect(dialog(page).locator('.library-intake-tile')).toHaveCount(3);
   expect(await dialog(page).locator('.library-intake-tile .library-cover').first().evaluate(node => getComputedStyle(node).backgroundColor)).not.toBe(before);
   await dialog(page).getByRole('button', { name: 'Keep all' }).click();
-  await page.locator('.library-filter', { hasText: /^Creative apps/ }).click();
+  await page.locator('#library-root .tree-row.is-collection', { hasText: 'Creative apps' }).dblclick();
   await expect(page.locator('.library-result-count')).toHaveText('3 references');
 });

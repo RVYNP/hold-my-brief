@@ -305,13 +305,16 @@ impl Default for WindowState {
     }
 }
 
-/// One open document tab: enough to draw the tab and to reopen its document.
+/// One open tab: enough to draw it and to reopen its document. The Library tab (format `library`) is saved too and keeps what it
+/// shows in `scope`; every other tab leaves it out.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct SavedTab {
     pub path: String,
     pub name: String,
     pub format: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
 }
 
 /// The tabs open when the reader last ran, in order, and which one was showing (an index into `tabs`; `None` is Home).
@@ -872,7 +875,7 @@ mod tests {
     }
 
     fn tab(path: &str) -> SavedTab {
-        SavedTab { path: path.into(), name: format!("{path}.pdf"), format: "pdf".into() }
+        SavedTab { path: path.into(), name: format!("{path}.pdf"), format: "pdf".into(), scope: None }
     }
 
     #[test]
@@ -894,6 +897,20 @@ mod tests {
         assert_eq!(Store::load(file.clone()).saved.tabs, TabSession { tabs: vec![tab("/a")], active: None });
         store.save_tabs(TabSession::default()).unwrap();
         assert_eq!(Store::load(file).saved.tabs, TabSession::default());
+    }
+
+    #[test]
+    fn the_library_tab_keeps_its_scope_and_document_tabs_write_none() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("state.json");
+        let mut store = Store::load(file.clone());
+        let library = SavedTab { path: "hold-my-brief:library".into(), name: "Favorites".into(), format: "library".into(), scope: Some("favorites".into()) };
+        let session = TabSession { tabs: vec![library, tab("/a")], active: Some(0) };
+        store.save_tabs(session.clone()).unwrap();
+        assert_eq!(Store::load(file.clone()).saved.tabs, session);
+        let json: Value = serde_json::from_slice(&fs::read(&file).unwrap()).unwrap();
+        assert_eq!(json["tabs"]["tabs"][0]["scope"], "favorites");
+        assert!(json["tabs"]["tabs"][1].get("scope").is_none());
     }
 
     #[test]

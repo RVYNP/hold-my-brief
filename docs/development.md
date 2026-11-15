@@ -151,7 +151,7 @@ It writes every still the README uses: `hero.png`, `hand-tool.png`, `library.png
 `intake.png`, `appearance.png`, `themes.png` and `desktop.png`. The hero and the theme sheet are composed in the
 script: real window captures set in one row on white with 14 px gutters and square corners. The theme
 sheet reads the public-domain opening of *Pride and Prejudice*. The shelf still (`shelf.png`) is the
-library board at 1440 × 900 with a parent collection and three sub-collection shelves: the script writes
+Library tab at 1440 × 900 with a parent collection and three sub-collection shelves: the script writes
 small Markdown files named after public-domain works (*Moby-Dick*, *Middlemarch*, *Leaves of Grass*,
 *The Origin of Species* and others, each with its opening line) into a temporary folder, so they get
 generated covers, and adds your EPUB (a real cover) and PDF (its first page) to the shelves; the

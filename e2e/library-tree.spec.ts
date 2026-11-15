@@ -336,28 +336,29 @@ test('a new collection starts from the COLLECTIONS caption: its + and its menu',
   // From the keyboard, the caption's menu has it too.
   await node(page, 's:collections').focus();
   await page.keyboard.press('Shift+F10');
-  await expect(page.locator('#library-root .library-item-menu').getByRole('menuitem')).toHaveText(['New collection…']);
+  await expect(page.locator('.library-item-menu:not(.library-view-menu):not(.library-add-menu)').getByRole('menuitem')).toHaveText(['New collection…']);
 });
 
-test('a double-click on a folder opens the board scoped to it, and a right-click on a document is the item menu', async ({ page }) => {
+test('a double-click on a folder shows it in the Library tab, and a right-click on a document is the item menu', async ({ page }) => {
   await seed(page);
   await node(page, folder('refs', '03_vintage_magazine')).dblclick();
   const rootBox = page.locator('#library-root');
-  await expect(rootBox).toHaveClass(/is-board/);
-  await expect(page.locator('.library-scope-name')).toHaveText('03_vintage_magazine');
+  await expect(page.locator('#library-page')).toBeVisible();
+  await expect(page.locator('.library-scope-name')).toHaveText('refs › 03_vintage_magazine');
   await expect(page.locator('.library-result-count')).toHaveText('2 references');
-  // The icon rail stays beside the board.
+  // The icon rail and the panel stay beside the page, and the page does not reach under them.
   expect((await iconRail(page).boundingBox())!.width).toBe(48);
   expect((await rootBox.boundingBox())!.x).toBeGreaterThanOrEqual(54);
-  await page.keyboard.press('Escape');
-  await expect(rootBox).not.toHaveClass(/is-board/);
+  const panel = (await rootBox.boundingBox())!, view = (await page.locator('#library-page').boundingBox())!;
+  expect(view.x).toBeGreaterThanOrEqual(panel.x + panel.width);
+  await expect(node(page, folder('refs', '03_vintage_magazine'))).toHaveClass(/is-scope/);
   // The tree's folder is as it was before the double-click.
   await expect(node(page, folder('refs', '03_vintage_magazine'))).toHaveAttribute('aria-expanded', 'false');
 
   await expand(page, folder('refs', '01_art_nouveau_posters'));
   const target = document_(page, 'refs', '01_art_nouveau_posters/source.pdf');
   await target.click({ button: 'right' });
-  const menu = page.locator('#library-root .library-item-menu');
+  const menu = page.locator('.library-item-menu:not(.library-view-menu):not(.library-add-menu)');
   await expect(menu).toBeVisible();
   await expect(menu.getByRole('menuitem')).toContainText(['Open in new tab', 'Remove from favorites', 'Details', 'Organize…', 'Remove from library…']);
   await menu.getByRole('menuitem', { name: 'Remove from favorites' }).click();
@@ -367,7 +368,7 @@ test('a double-click on a folder opens the board scoped to it, and a right-click
   await expand(page, folder('refs', '01_art_nouveau_posters'));
   await target.click({ button: 'right' });
   await menu.getByRole('menuitem', { name: 'Open in new tab' }).click();
-  await expect(page.locator('#tab-count')).toHaveText('1');
+  await expect(page.locator('#tab-count')).toHaveText('2'); // The Library tab and the document, in the background.
 });
 
 test('a generic file name is shown by its folder on Home, in the library rows and on tabs; the tree keeps the file name', async ({ page }) => {

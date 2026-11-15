@@ -1,10 +1,10 @@
 import { test, expect, type Page } from '@playwright/test';
 import { seedLibrary, type FixtureCollection, type FixtureDocument } from './home-fixture';
-import { chooseFromViewMenu, openBoard } from './library-controls';
+import { chooseFromViewMenu, openLibraryTab } from './library-controls';
 import { pngFixture } from './png-fixture';
 import { warmDevServer } from './warm';
 
-// The library board has no pages: the whole filtered and sorted set is one scroll, rendered in batches as the end of what is shown comes near.
+// The Library tab has no pages: the whole filtered and sorted set is one scroll, rendered in batches as the end of what is shown comes near.
 // Every fixture is generated: 1,000 documents named `Reference 0001.md` … `Reference 1000.md`.
 test.beforeAll(async ({ browser, baseURL }) => { await warmDevServer(browser, baseURL); });
 
@@ -18,7 +18,7 @@ async function seed(page: Page, documents: FixtureDocument[], collections: Fixtu
   await page.setViewportSize({ width: 1440, height: 900 });
   await seedLibrary(page, documents, collections);
   await expect(page.locator('#library-root')).toBeVisible();
-  await openBoard(page);
+  await openLibraryTab(page);
 }
 const texts = (count = total): FixtureDocument[] => Array.from({ length: count }, (_, index) => ({ name: name(index + 1, 'md'), format: 'md' }));
 const pictures = (count = total): FixtureDocument[] => Array.from({ length: count }, (_, index) => ({ name: name(index + 1, 'png'), format: 'png', content: picture }));
@@ -32,13 +32,13 @@ const scrollToEnd = (page: Page) => page.evaluate(async () => {
 const scrollTop = (page: Page) => page.evaluate(() => document.querySelector('.library-documents')!.scrollTop);
 const focusFirst = (page: Page) => page.locator('.library-documents .library-document-open').first().focus();
 
-test('no pager: the board lists every document in one scroll and reaches the last one', async ({ page }) => {
+test('no pager: the Library tab lists every document in one scroll and reaches the last one', async ({ page }) => {
   await seed(page, texts());
   await expect(page.locator('.library-result-count')).toHaveText(`${total} references`);
   // Nothing that looks like pages, and the whole set is not in the DOM up front.
   await expect(page.locator('.library-pager')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /library page/i })).toHaveCount(0);
-  await expect(page.locator('#library-root')).not.toContainText(/\d+\s*[–-]\s*\d+\s*\/\s*\d+/);
+  await expect(page.locator('#library-page')).not.toContainText(/\d+\s*[–-]\s*\d+\s*\/\s*\d+/);
   expect(await rows(page).count()).toBeGreaterThan(0);
   expect(await rows(page).count()).toBeLessThan(200);
   await expect.poll(() => scrollToEnd(page)).toBe(total);
@@ -78,7 +78,7 @@ test('selection, the detail strip and the item menu work on a document from a la
   await more.click();
   await expect(page.locator('.library-item-menu:not(.library-view-menu):not(.library-add-menu)').getByRole('menuitem', { name: 'Details' })).toBeVisible();
   await page.keyboard.press('Escape');
-  // An edit re-renders the board without losing the place: the same documents stay rendered and the list stays where it was.
+  // An edit re-renders the page without losing the place: the same documents stay rendered and the list stays where it was.
   await page.getByRole('button', { name: `Favorite ${name(total, 'md')}` }).click();
   await expect(page.getByRole('button', { name: `Unfavorite ${name(total, 'md')}` })).toBeInViewport();
   await expect(rows(page)).toHaveCount(total);
@@ -135,7 +135,7 @@ test('a shelf header is drawn once, however many batches its tiles span', async 
   ];
   const collections: FixtureCollection[] = [{ name: 'Parent' }, ...shelves.map(shelf => ({ name: shelf, parent: 'Parent' }))];
   await seed(page, documents, collections);
-  await page.getByRole('button', { name: 'Parent', exact: true }).click();
+  await page.locator('#library-root .tree-row.is-collection', { hasText: /^Parent/ }).first().dblclick();
   await expect(page.locator('.library-result-count')).toHaveText(`${documents.length} references`);
   await expect(page.locator('.library-shelf-head')).toHaveCount(1); // The collection's own documents need no header; the first shelf starts after them.
   // Scroll down frame by frame, as a batch lands after another: after every one no shelf has a second header, though the batch boundaries (30, 60, 90 …) fall inside shelves of 198.

@@ -50,7 +50,7 @@ export const COMMANDS: readonly Command[] = [
   { id: 'library', label: 'Toggle document library', group: 'File', keywords: ['sidebar', 'books', 'collection'], shortcut: 'Ctrl B' },
   { id: 'library-search', label: 'Search the library', group: 'File', keywords: ['find', 'filter', 'folders', 'documents', 'tree', 'sidebar'], shortcut: 'Ctrl Shift F' },
   { id: 'library-side', label: 'Move library to other side', group: 'File', keywords: ['dock', 'rail', 'sidebar', 'left', 'right', 'lock'] },
-  { id: 'library-board', label: 'Library board', group: 'File', keywords: ['board', 'grid', 'browse', 'collection'] },
+  { id: 'library-board', label: 'Open Library tab', group: 'File', keywords: ['library', 'board', 'grid', 'browse', 'collection'] },
   { id: 'find', label: 'Find in document…', group: 'Navigate', keywords: ['search', 'text', 'grep', 'locate'], shortcut: 'Ctrl F', requiresDocument: true },
   { id: 'goto', label: 'Go to location…', group: 'Navigate', keywords: ['jump', 'page', 'line', 'percentage'], shortcut: 'Ctrl G', requiresDocument: true },
   { id: 'outline', label: 'Contents', group: 'Navigate', keywords: ['toc', 'chapters', 'outline'], requiresDocument: true },
