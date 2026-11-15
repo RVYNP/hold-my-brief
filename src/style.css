@@ -277,10 +277,10 @@
  * with one light/dark pair each, set here (after the defaults above) because a family's colour block comes before them. The
  * unset root is Brief. The glow themes' own blocks below come later and win on a root that carries one of their palettes.
  */
-:root:not([data-palette]), [data-palette='brief'] { --grad-a: light-dark(#e13a3a57, #ff6a5e47); --grad-b: light-dark(#f08a3c42, #ffb37a38); }
+:root:not([data-palette]), [data-palette='brief'] { --grad-a: light-dark(#e13a3a4e, #ff6a5e47); --grad-b: light-dark(#f08a3c42, #ffb37a38); }
 [data-palette='lilac'] { --grad-a: light-dark(#6358d857, #8b80f247); --grad-b: light-dark(#c04fd842, #d58bf238); }
 [data-palette='birch'] { --grad-a: light-dark(#b4613a57, #e08b5f47); --grad-b: light-dark(#d49a3a42, #f0c07038); }
-[data-palette='graphite'] { --grad-a: light-dark(#3d6fff57, #5a8cff47); --grad-b: light-dark(#7b5cff42, #9d7bff38); }
+[data-palette='graphite'] { --grad-a: light-dark(#3d6fff40, #5a8cff47); --grad-b: light-dark(#7b5cff3f, #9d7bff38); }
 [data-palette='arctic'] { --grad-a: light-dark(#2b7fa857, #5db2d847); --grad-b: light-dark(#2fb5a042, #6ee7c838); }
 [data-palette='blossom'] { --grad-a: light-dark(#c0315357, #e1647947); --grad-b: light-dark(#e0704a42, #f09a7a38); }
 [data-palette='peony'] { --grad-a: light-dark(#c5038157, #ee45a647); --grad-b: light-dark(#8e3fd842, #b47bff38); }
