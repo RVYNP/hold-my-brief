@@ -41,9 +41,9 @@ function highlight(line: string, classes: { keyword: string; string: string; com
 const pandocClasses = { keyword: 'kw', string: 'st', comment: 'co' };
 const sphinxClasses = { keyword: 'k', string: 's2', comment: 'c1' };
 /** Pandoc's own markup: a `div.sourceCode` around a `pre`, one `span` per line, each opening with an empty anchor. */
-function pandocBlock(id: number, lines: string[]) {
+function pandocBlock(id: number, lines: string[], wrapperClass = '') {
   const body = lines.map((line, i) => `<span id="cb${id}-${i + 1}"><a href="#cb${id}-${i + 1}" aria-hidden="true" tabindex="-1"></a>${highlight(line, pandocClasses)}</span>`).join('\n');
-  return `<div class="sourceCode" id="cb${id}"><pre class="sourceCode python"><code class="sourceCode python">${body}</code></pre></div>`;
+  return `<div class="sourceCode${wrapperClass}" id="cb${id}"><pre class="sourceCode python"><code class="sourceCode python">${body}</code></pre></div>`;
 }
 /** Sphinx's markup: `div.highlight > pre` holding token spans and the line breaks themselves. */
 const sphinxBlock = (lines: string[]) => `<div class="highlight-python notranslate"><div class="highlight"><pre><span></span>${lines.map(line => highlight(line, sphinxClasses)).join('\n')}\n</pre></div></div>`;
@@ -54,7 +54,7 @@ const shortLine = (n: number) => `    total_${n} = values[${n}] * scale + offset
 /**
  * A synthetic reflowable EPUB shaped like pandoc's (and Sphinx's) output, with the publisher CSS that makes code a nowrap scroll box:
  * `pre > code.sourceCode { white-space: pre }`, `div.sourceCode { overflow: auto }`, per-line spans at `line-height: 1.25`, light code
- * backgrounds. One chapter holds a pandoc block of 100-140 character lines, an indented block, an inline `<code>`, a 60-line block and a
+ * backgrounds, and one dark block (`div.sourceCode.dark`, Monokai colours). One chapter holds a pandoc block of 100-140 character lines, an indented block, an inline `<code>`, a 60-line block, the dark block and a
  * Sphinx `div.highlight`, among prose.
  */
 export async function codeBook() {
@@ -72,6 +72,10 @@ pre.sourceCode { margin: 0; padding: 0.5em; background-color: #f0f0f0; border-le
 code span.kw { color: #204a87; font-weight: bold; }
 code span.st { color: #4e9a06; }
 code span.co { color: #8f5902; font-style: italic; }
+div.sourceCode.dark { background-color: #272822; border-left-color: #75715e; color: #f8f8f2; }
+div.sourceCode.dark pre.sourceCode { background-color: transparent; border-left: 0; }
+div.sourceCode.dark code span.kw { color: #a6e22e; }
+div.sourceCode.dark code span.st { color: #f8f8f2; }
 .highlight { background: #f3f3f3; border-left: 4px solid #cccccc; margin: 1em 0; }
 .highlight pre { line-height: 125%; margin: 0; overflow-x: auto; }
 .highlight .k { color: #007020; font-weight: bold; }
@@ -80,9 +84,10 @@ code span.co { color: #8f5902; font-style: italic; }
   const long = Array.from({ length: 6 }, (_, n) => longLine(n + 1)), mixed = ['def run(job):', ...long.slice(0, 2), '    return job', '', '# done'];
   const indented = ['def outer(items):', '    for item in items:', '        if item:', '            with open(item) as handle:', '                return handle.read()', '    return None'];
   const sixty = Array.from({ length: 60 }, (_, n) => n % 9 === 8 ? longLine(n + 1) : n % 5 === 4 ? '' : shortLine(n + 1));
+  const dark = ['def tint(job):', '    return job.run("synthetic")  # dark block on any page', '', 'for job in jobs:', '    tint(job)'];
   const sphinx = ['import json', '', 'def load(path):', ...long.slice(2, 4), '    return json.loads(path)  # synthetic'];
   const prose = (n: number) => `<p>Paragraph ${n}: the reader keeps a stable place beside your work, and this synthetic paragraph supplies ordinary flowing text between the listings of the generated book.</p>`;
-  const chapter = `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>Code</title><link rel="stylesheet" type="text/css" href="style.css"/></head><body><h1 id="code">Code listings</h1>${prose(1)}<p>Call <code>client.submit(graph)</code> inside a paragraph to queue a job.</p>${pandocBlock(1, mixed)}${prose(2)}${pandocBlock(2, indented)}${prose(3)}${pandocBlock(3, sixty)}${prose(4)}${sphinxBlock(sphinx)}${prose(5)}</body></html>`;
+  const chapter = `<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>Code</title><link rel="stylesheet" type="text/css" href="style.css"/></head><body><h1 id="code">Code listings</h1>${prose(1)}<p>Call <code>client.submit(graph)</code> inside a paragraph to queue a job.</p>${pandocBlock(1, mixed)}${prose(2)}${pandocBlock(2, indented)}${prose(3)}${pandocBlock(3, sixty)}${prose(4)}${pandocBlock(4, dark, ' dark')}${prose(5)}${sphinxBlock(sphinx)}${prose(6)}</body></html>`;
   return pack({
     mimetype: 'application/epub+zip',
     'META-INF/container.xml': '<?xml version="1.0"?><container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0"><rootfiles><rootfile full-path="OPS/book.opf" media-type="application/oebps-package+xml"/></rootfiles></container>',

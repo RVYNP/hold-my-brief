@@ -68,12 +68,16 @@ const measure = (page: Page) => page.evaluate(() => {
   const type = (element: Element) => { const style = win.getComputedStyle(element); return { lineHeight: parseFloat(style.lineHeight), fontSize: parseFloat(style.fontSize) }; };
   const texts = Array.from(doc.querySelectorAll('pre, pre *')).filter(element => Array.from(element.childNodes).some(child => child.nodeType === Node.TEXT_NODE && child.textContent?.trim()));
   const contrast = texts.map(element => ratio(rgba(win.getComputedStyle(element).color), backdrop(element)));
+  // The block a publisher painted dark: its backdrop and the contrast of every text in it.
+  const darkPre = doc.querySelector('div.sourceCode.dark pre')!;
+  const darkTexts = texts.filter(element => darkPre.contains(element));
+  const publishedDark = { shelf: luminance(backdrop(darkPre)), lowest: Math.min(...darkTexts.map(element => ratio(rgba(win.getComputedStyle(element).color), backdrop(element)))), texts: darkTexts.length };
   return {
     boxes: code.map(box), hang, frames, pandoc: type(line), sphinx: type(sphinx),
     prose: doc.querySelector('p')!.getClientRects()[0].width,
     wrapper: doc.querySelector('div.sourceCode')!.getClientRects()[0].width,
     shelf: Math.min(...Array.from(doc.querySelectorAll('pre')).filter(visible).map(element => luminance(backdrop(element)))),
-    paper: luminance(paper), lowest: Math.min(...contrast), texts: texts.length,
+    publishedDark, paper: luminance(paper), lowest: Math.min(...contrast), texts: texts.length,
   };
 });
 
@@ -108,6 +112,11 @@ for (const flow of ['pages', 'scroll'] as const) for (const [width, height] of [
     }
     if (flow === 'scroll' && width === 1080) expect(m.wrapper).toBeGreaterThan(m.prose + 1);
     if (flow === 'pages') expect(m.wrapper).toBeLessThanOrEqual(m.prose + 1);
+    expect(m.publishedDark.texts, 'dark block has coloured text').toBeGreaterThanOrEqual(3);
+    if (scheme === 'light') {
+      expect(m.publishedDark.shelf, 'a dark code background on a light page is lightened').toBeGreaterThanOrEqual(0.18);
+      expect(m.publishedDark.lowest, 'its text is lifted to a readable colour').toBeGreaterThanOrEqual(4.5);
+    }
     if (scheme === 'dark') {
       expect(m.shelf, 'code background stays bright on a dark page').toBeLessThan(0.18);
       expect(m.lowest).toBeGreaterThanOrEqual(4.5);
