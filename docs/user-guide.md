@@ -220,6 +220,9 @@ is remembered per document (and is also in the palette as **Pages view** and **S
 no choice saved, it starts in Scroll if it looks like a reference book, that is, if `<pre>` blocks appear in at least 3 of its
 first 10 spine items, or `<pre>` and `<table>` hold at least a fifth of their text; otherwise in Pages. Your choice always wins afterwards.
 **A−** and **A+** step the text size by 2 px between 12 and 40 px, the same setting as the size stepper in **Appearance and text…**.
+Code blocks in a reflowable EPUB wrap instead of scrolling sideways, with wrapped lines indented under the line they continue, and are set
+at a tighter line height than the text. In Scroll a code block may run wider than the text column. A code background that is light on a
+dark page (or dark on a light one) takes a tint of the page, and its text is lifted to stay readable.
 
 **What the percentage means.** Zoom is a true scale, the same as in a design tool: **100%** is actual size.
 For a PDF, a page at its physical size at screen resolution (1 point = 96/72 CSS pixels, so a Letter page is
