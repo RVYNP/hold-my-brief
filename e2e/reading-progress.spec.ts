@@ -61,14 +61,15 @@ test('an EPUB row shows a percentage, and a text file does too', async ({ page }
   await start(page);
   await page.locator('#file-input').setInputFiles({ name: 'progress.epub', mimeType: 'application/epub+zip', buffer: await longEpub() });
   await expect(page.locator('#filename')).toHaveAttribute('title', /progress\.epub$/); // The tab is titled by the book's own title once read.
-  await expect(page.locator('#position')).toContainText('One');
+  await expect(page.locator('#position')).toContainText('Chapter 1 of 2');
   await goTo(page, '40%');
-  await expect(page.locator('#position')).toContainText(/≈(3\d|4\d)%/);
-  const shown = Number(/≈(\d+)%/.exec(await page.locator('#position').innerText())![1]);
+  await expect(page.locator('#position')).toContainText(/· (3\d|4\d)\.\d%/);
+  const shown = Number(/· (\d+\.\d)%/.exec(await page.locator('#position').innerText())![1]);
 
   await reopenLibrary(page);
   const epub = page.locator('#library-root .tree-row.is-document[data-doc-path$="progress.epub"] .tree-meta');
-  await expect(epub).toHaveText(`${shown} %`);
+  // The row rounds the footer's one-decimal percentage to a whole number.
+  await expect(epub).toHaveText(new RegExp(`^(${Math.floor(shown)}|${Math.ceil(shown)}) %$`));
 
   // A text file, jumped to a line in its middle.
   await page.locator('#file-input').setInputFiles({ name: 'long.txt', mimeType: 'text/plain', buffer: Buffer.from(Array.from({ length: 200 }, (_, n) => `Line number ${n + 1}.`).join('\n')) });
