@@ -119,15 +119,27 @@ test('a pattern choice repaints the band in place', async ({ page }) => {
   await expect.poll(async () => (await canvases(page).count()) === 1 && await pixels(page) !== before).toBe(true);
 });
 
-test('below 720 px the band is 64 px tall and its plate fills it', async ({ page }) => {
-  await page.setViewportSize({ width: 700, height: 700 });
+test('below 720 px the band is 64 px tall: a 14 px strip of art on top and the 50 px plate under it', async ({ page }) => {
+  await page.setViewportSize({ width: 640, height: 620 });
   await seedLibrary(page, documents);
   await expect(band(page)).toBeVisible();
-  expect((await band(page).boundingBox())!.height).toBe(64);
-  expect((await page.locator('.home-banner-plate').boundingBox())!.height).toBe(64);
+  await pixels(page);
+  const box = (await band(page).boundingBox())!, plate = (await page.locator('.home-banner-plate').boundingBox())!, art = (await page.locator('.home-banner-art').boundingBox())!;
+  const canvas = (await canvases(page).boundingBox())!;
+  expect(box.height).toBe(64);
+  expect(plate.height).toBe(50);
+  expect(plate.y - box.y).toBe(14); // the art shows above the plate
+  expect(art.height).toBe(14);
+  expect(art.y + art.height).toBeLessThanOrEqual(plate.y);
+  expect(canvas.height).toBe(14);
+  expect(await canvases(page).evaluate(node => (node as HTMLCanvasElement).height)).toBe(7);
+  const title = await page.locator('.home-banner-plate h1').evaluate(node => ({ size: getComputedStyle(node).fontSize, family: getComputedStyle(node).fontFamily }));
+  expect(title.size).toBe('20px');
+  expect(title.family).toContain('Geist Serif');
   await expect(page.getByRole('button', { name: 'Browse library' })).toBeVisible();
   await page.setViewportSize({ width: 800, height: 700 });
   await expect.poll(async () => (await band(page).boundingBox())!.height).toBe(140);
+  await expect.poll(async () => (await canvases(page).first().boundingBox())!.height).toBe(140);
 });
 
 test('the band re-renders on a theme change', async ({ page }) => {
