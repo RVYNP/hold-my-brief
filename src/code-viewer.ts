@@ -195,6 +195,9 @@ export function attachCodeControls(doc: Document, hooks: CodeHooks): void {
     if (event.key !== 'Tab' || !current) return;
     event.stopPropagation();
     if (event.shiftKey && target === open) { event.preventDefault(); current.focus({ preventScroll: true }); }
+    // WebKit on macOS does not make buttons Tab stops by default, so the steps between the two buttons are routed here as well.
+    else if (!event.shiftKey && target === open) { event.preventDefault(); copy.focus({ preventScroll: true }); }
+    else if (event.shiftKey && target === copy) { event.preventDefault(); open.focus({ preventScroll: true }); }
     // The block takes focus so that the browser's own step from it leads on to what follows the block.
     else if (!event.shiftKey && target === copy) current.focus({ preventScroll: true });
   });
