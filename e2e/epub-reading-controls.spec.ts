@@ -14,7 +14,8 @@ async function openFile(page: Page, file: BookFile) {
   await page.locator('#file-input').setInputFiles(file);
   await expect(page.locator('#position')).toContainText('%');
   await expect(page.locator('#view-controls')).toBeVisible();
-  await page.locator('.reader-host').focus();
+  await expect(page.locator('.reader-host.staging')).toHaveCount(0);
+  await page.locator('.reader-host:not(.staging):not(.tab-hidden)').focus();
 }
 async function openBook(page: Page, options: Book, width = 1440) {
   await page.setViewportSize({ width, height: 900 });
