@@ -37,7 +37,7 @@ type Callbacks = {
   /** The icon-rail button that stands for `view`, where focus returns when the info rail closes. */
   door?: (view: RailView) => HTMLElement | undefined;
 };
-/** What Home's "Show all" opens the library on. */
+/** What Home's "Open in library" opens the library on. */
 export type LibraryScope = 'all' | 'favorites' | 'reading' | { collection: string };
 type Filter = { kind: 'all' | 'favorites' | 'reading' | 'unfiled' } | { kind: 'collection' | 'source'; id: string } | { kind: 'folder'; id: string; path: string };
 /** Documents rendered per step of the continuous scroll: the first screen's worth, then one more each time the end of what is shown comes near. */
@@ -1295,7 +1295,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     setActive,
     // Library board (palette command): open the info rail if needed, then enter or leave the board. Below 720 px there is only the sheet: it opens on the tree's filter.
     board: () => { if (!visible) setVisible(true, false); if (wide.matches) setBoard(!board, 'control'); else setView('search'); if (visible && loadError) void refresh(); },
-    /** Home's "Show all" and collection cards: the info rail opened on a scope of the library, as the board where there is room. */
+    /** Home's "Open in library" and collection cards: the info rail opened on a scope of the library, as the board where there is room. */
     browse: (scope: LibraryScope) => openScope(typeof scope === 'string' ? { kind: scope } : { kind: 'collection', id: scope.collection }),
     filter: filterBy,
     colourNames,
