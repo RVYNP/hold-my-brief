@@ -1040,7 +1040,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
       void thumbs.primeRatios(shown.map(doc => doc.path)).then(learned => {
         if (!learned || generation !== renderGeneration) return;
         for (const tile of added) { const ratio = thumbs.ratio(tile.path); if (ratio && Math.abs(ratio - tile.ratio) > .001) { tile.ratio = ratio; tile.node.querySelector<HTMLElement>('.library-tile-media')?.style.setProperty('--ratio', String(ratio)); } }
-        layoutGrid(first, dirty);
+        layoutGrid();
       });
     }
     if (visible) for (const node of nodes) { const media = node.querySelector<HTMLElement>('[data-path]:not(.is-loaded):not(.is-unavailable)'); if (media) thumbnailObserver.observe(media); }
