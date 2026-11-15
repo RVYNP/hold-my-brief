@@ -504,6 +504,14 @@ posters and wide spreads read as themselves; a reference with no picture shows a
 400 pixels wide. Hovering or focusing a tile shows its star and ··· menu; the document you are
 reading is marked **Reading**, and a missing original is dimmed.
 
+The library has no pages. The grid or list scrolls all the way through everything that matches, however many
+references that is; the count is in the board's header row (`230 references`). References are added as you
+scroll, and a shelf's heading is shown once, with its tiles continuing under it. Changing the search, a type
+chip, the sort, the view or the collection starts again at the top. **↑** and **↓** move between references (the
+grid also takes **←** and **→**), **Page Up** and **Page Down** move a screenful, and **Home** and **End** go to
+the first and the last reference of the whole set, however far down that is. Thumbnails are made only for tiles on
+or near the screen: scrolling quickly past a tile before its turn comes cancels its request.
+
 Thumbnails are made on this computer: images are scaled down, and a PDF's first page is rendered
 with the reader's own PDF engine, reading only as much of the file as that page needs. They are kept
 in the app's cache folder (at most 192 MB) and remade automatically when a file changes, so a large
