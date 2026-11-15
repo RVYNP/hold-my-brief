@@ -13,7 +13,7 @@ export type FixtureDocument = {
   progress?: Progress;
   /** The file's bytes, for a document that should have a real picture; text and Markdown get text. */
   content?: Buffer;
-  /** An indexed source folder this document sits in (its name) and its path inside it (`03_wwe_mag/source.pdf`): the info rail's tree is built from these. */
+  /** An indexed source folder this document sits in (its name) and its path inside it (`03_wwe_mag/source.pdf`): the panel's tree is built from these. */
   root?: string;
   relativePath?: string;
 };

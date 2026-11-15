@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { libraryToggle } from './library-controls';
+import { chooseLibrarySide, libraryToggle } from './library-controls';
 
 /**
  * Find in document. Each format stores its text differently, so every test drives the same
@@ -64,8 +64,8 @@ test('beside the library the find field is never under the drawer, on either sid
     return [hit(document.querySelector('#find-query'), box => box.left + 3), hit(document.querySelector('#find-query'), box => box.right - 3), hit(document.querySelector('#find-close'), box => box.left + box.width / 2)];
   });
   expect(await reachable()).toEqual([true, true, true]);
-  await page.getByRole('button', { name: 'Move library to the right' }).click();
-  await expect(page.getByRole('button', { name: 'Move library to the left' })).toBeVisible();
+  await chooseLibrarySide(page, 'right');
+  await expect(page.locator('#library-rail')).toHaveAttribute('data-library-side', 'right');
   await page.locator('#find-query').focus();
   expect(await reachable()).toEqual([true, true, true]);
 });

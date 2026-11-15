@@ -1,35 +1,42 @@
-/* The info rail is an out-of-flow drawer over the reading panel at every width: it never takes
-   width from #workspace, so opening, dragging or docking it cannot move or refit the page. From 720 px it stands beside the
-   48 px icon rail (6 px margin, 48 px rail, 6 px gap: it starts 60 px from the edge). */
+/* The library panel is docked from 720 px: it stands beside the 48 px icon rail (6 px margin, 48 px rail, 6 px gap: it starts 60 px
+   from the edge) and #workspace takes a margin of the same width (see --library-clear below), so the reading panel gives the width up
+   and the page re-fits as it does for a window resize. Nothing is drawn under it. Below 720 px it is a sheet over a scrim (see the end
+   of this file). The board stays an overlay across the reading panel. */
 .library-root { --library-width: 270px; position: absolute; z-index: 20; top: 0; bottom: 0; left: 0; display: flex; flex: 0 0 auto; width: calc(var(--library-width) + 10px); min-width: 0; min-height: 0; margin: 0 0 0 6px; }
 .library-panel { position: relative; container: library-panel / inline-size; display: flex; flex-direction: column; flex: 1 1 auto; height: 100%; min-width: 0; min-height: 0; padding: 8px 8px 6px; overflow: auto; border: 1px solid var(--border); border-radius: 9px; background-color: var(--glass-raise-base); background-image: var(--glass-raise-paint); background-attachment: var(--glass-raise-attach); box-shadow: var(--shadow-drawer); scrollbar-width: thin; scrollbar-color: var(--faint) transparent; }
 .library-panel button, .library-panel input, .library-panel select { font-size: 12px; }
-/* Header, one line: the view's name and count, then the filter, + New (Collections), + (add files; compact windows and the board), → (the board) and close (compact). */
+/* Header, one line: the title (the button that opens the board; plain text in the compact sheet) and the count, then + (add files; compact windows and the board) and close (compact). */
 .library-header { display: flex; align-items: center; gap: 7px; flex-shrink: 0; margin: 0 0 6px 8px; }
 .library-header h2 { display: flex; flex: 1; align-items: baseline; gap: 6px; min-width: 0; margin: 0; overflow: hidden; font-size: 16px; white-space: nowrap; }
 .library-title-count { color: var(--muted); font: 400 11px/1 var(--font-mono); letter-spacing: 0; }
 .library-header-actions { display: flex; align-items: center; flex-shrink: 0; }
 .library-header button { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; color: var(--muted); }
 .library-header button:hover, .library-header button[aria-expanded=true] { color: var(--fg); }
-.library-header .library-new-collection { width: auto; padding: 0 6px; color: var(--accent-ink); font-size: 11px; font-weight: 600; }
+.library-header .library-title-button { display: inline; width: auto; height: auto; padding: 0; border: 0; border-radius: 4px; background: none; color: inherit; font: inherit; cursor: pointer; }
+.library-header .library-title-button:hover { color: var(--accent-ink); }
+.library-header .library-title-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .library-panel [hidden] { display: none !important; }
-/* Resize handle: a 10 px hit area between the library and the reading panel. The drawer keeps the
-   geometry of the retired divider, anchored to the 6 px page margin, so the panel stays put. */
+/* Resize handle: a 10 px hit area between the library and the reading panel, anchored to the 6 px page margin. */
 .library-right { flex-direction: row-reverse; }
 .library-right > .library-root { left: auto; right: 0; flex-direction: row-reverse; margin: 0 6px 0 0; }
 /* --shadow-drawer casts rightward; a right-docked drawer uses the symmetric popover shadow. */
 .library-right .library-panel { box-shadow: var(--shadow-popover); }
-/* Everything that floats over the reading panel's edge starts beside what stands there: the icon rail (a 6 px margin, 48 px, 6 px
-   after) and, when the info rail is open, the info rail (its width and the 10 px handle, 6 px after). The right-docked view controls
-   move out from under it too. The position is fully specified (left/right/translate): the workspace `@container` query in style.css
-   only starts matching at 734 px (workspace content width = viewport - 14), so between 720 and 733 px the base `left: 50%;
-   translate: -50% 0` still applies and would over-constrain the pill if this rule only set `right`. The applied width is exposed on
-   #reader-layout by applyWidth in library.ts. */
+/* What stands beside the reading panel. --library-clear is the width from the layout's edge to where the reading panel may draw: the icon
+   rail (a 6 px margin, 48 px, 6 px after) while the panel is closed, and, while it is open, the rail and the panel (its width and the
+   10 px handle, 6 px after). The open panel docks: #workspace takes that width as a margin, so what is inside it (the page, Home, the
+   find bar, the page strip, the image pager, the view controls) starts after the panel without further help. --workspace-clear is the
+   same room measured from the reading panel's own edge: the icon rail's overlay while the panel is closed, nothing once it is open.
+   The right-docked view controls move out from under it too. Their position is fully specified (left/right/translate): the workspace
+   `@container` query in style.css only starts matching at 734 px (workspace content width = viewport - 14), so between 720 and 733 px
+   the base `left: 50%; translate: -50% 0` still applies and would over-constrain the pill if this rule only set `right`. The applied
+   width is exposed on #reader-layout by applyWidth in library.ts. */
 @media (min-width: 720px) {
-  #reader-layout { --library-clear: 60px; }
-  #reader-layout.library-open { --library-clear: calc(var(--library-width, 270px) + 76px); }
-  #reader-layout.library-right #view-controls { left: auto; right: var(--library-clear); translate: none; }
-  /* The info rail ends where the icon rail does: above the footer's lane (see style.css), so the footer is never under it. */
+  #reader-layout { --library-clear: 60px; --workspace-clear: 60px; }
+  #reader-layout.library-open { --library-clear: calc(var(--library-width, 270px) + 76px); --workspace-clear: 0px; }
+  #reader-layout.library-open:not(.library-right) > #workspace { margin-left: var(--library-clear); }
+  #reader-layout.library-open.library-right > #workspace { margin-right: var(--library-clear); }
+  #reader-layout.library-right #view-controls { left: auto; right: var(--workspace-clear); translate: none; }
+  /* The panel ends where the icon rail does: above the footer's lane (see style.css), so the footer is never under it. */
   .library-root { bottom: var(--footer-height); left: 54px; }
   .library-right > .library-root { left: auto; right: 54px; }
   .library-header .library-plus, .library-header .library-close { display: none; }
@@ -49,7 +56,6 @@
 .library-resizing .library-resize .library-resize-tip, .library-resize:focus-visible .library-resize-tip { transition-delay: 0s; }
 .library-resize:focus-visible .library-resize-grip { outline: 2px solid var(--accent); outline-offset: 2px; }
 .library-resizing, .library-resizing * { cursor: col-resize !important; user-select: none; }
-/* The panel follows the pointer live; the page underneath never refits, so no reader-host width freeze is needed. */
 #library-toggle[data-library-side=right] svg { transform: scaleX(-1); }
 /* Nothing inside the drawer is a bordered box: actions are text, fields are tinted fills, filters are
    plain dropdown text, and selection is a tint. Only the drawer's own edge is drawn. */
@@ -199,10 +205,9 @@
 .library-shelf-name { overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 .library-shelf-count { flex: none; font-variant-numeric: tabular-nums; }
 
-/* Board: the drawer opened across the whole reading panel. It stays out of flow like the drawer (the page
-   underneath never resizes or refits and #workspace never gets a width); only this box's own width changes,
-   and the saved drawer width is not touched. A left rail holds the tree, the main column the grid, and from
-   1200 px a detail strip joins. */
+/* Board: the panel opened across the whole reading panel. It stays an overlay (#workspace keeps the margin the docked panel gave it, so
+   the page underneath does not refit); only this box's own width changes, and the saved panel width is not touched. A left rail holds the
+   tree, the main column the grid, and from 1200 px a detail strip joins. */
 .library-root.is-board { width: calc(100% - 12px); }
 @media (min-width: 720px) { .library-root.is-board { width: calc(100% - 66px); } }
 .is-board .library-resize { display: none; }
@@ -224,14 +229,12 @@
 .is-board .library-result-count { margin: 0 auto 0 2px; }
 .is-board .library-search-field { flex: 0 1 220px; }
 .is-board .library-documents { margin-top: 0; }
-.library-board-toggle { display: grid; place-items: center; }
 .library-board-back { display: flex; flex: none; align-items: center; gap: 5px; padding: 4px 8px; color: var(--fg); font-weight: 600; }
 .library-board-back span { white-space: nowrap; }
 .library-board-back kbd { padding: 0 2px; border: 0; background: none; color: var(--muted); font: 11px/1.3 var(--font-mono); }
-.library-board-back, .is-board .library-board-toggle { display: none; }
+.library-board-back { display: none; }
 .is-board .library-board-back { display: flex; }
-.library-board-toggle { color: var(--muted); }
-@media (max-width: 719px) { .library-board-toggle, .library-board-back { display: none !important; } }
+@media (max-width: 719px) { .library-board-back { display: none !important; } }
 .library-tile.is-selected .library-tile-media::after { box-shadow: inset 0 0 0 2px var(--accent); }
 .library-list .library-document.is-selected { background: var(--accent-soft); }
 .library-detail { flex-direction: column; min-width: 0; min-height: 0; gap: 6px; padding: 12px; overflow-y: auto; border-left: 1px solid var(--hairline); scrollbar-width: thin; }
@@ -272,13 +275,13 @@
    (`has-image-navigation`, set by renderImageNavigation) instead of sharing its row: at 720-790 px a row holds the controls, the
    drawer or rail and this pill only on paper. It is as wide as its caption, which is cut short before it can reach the drawer. */
 #reader-layout { --image-navigation-height: 30px; --image-navigation-room: calc(var(--footer-height) + 4px + var(--image-navigation-height)); }
-.library-image-navigation { position: absolute; z-index: 5; right: 0; bottom: calc(var(--footer-height) + 4px); left: 0; display: flex; align-items: center; gap: 6px; width: fit-content; max-width: calc(100% - var(--library-clear, 0px) - 24px); height: var(--image-navigation-height); margin-inline: auto; padding: 3px 4px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); box-shadow: var(--shadow-page); color: var(--muted); font: 11px/1 var(--font-mono); }
+.library-image-navigation { position: absolute; z-index: 5; right: 0; bottom: calc(var(--footer-height) + 4px); left: 0; display: flex; align-items: center; gap: 6px; width: fit-content; max-width: calc(100% - var(--workspace-clear, 0px) - 24px); height: var(--image-navigation-height); margin-inline: auto; padding: 3px 4px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); box-shadow: var(--shadow-page); color: var(--muted); font: 11px/1 var(--font-mono); }
 #workspace.has-image-navigation #view-controls { bottom: calc(var(--image-navigation-room) + 8px); }
 .library-image-navigation button { display: grid; place-items: center; flex: none; width: 24px; height: 22px; padding: 0; border-radius: 999px; color: var(--fg); font-size: 12px; }
 .library-image-navigation span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 2px; font-variant-numeric: tabular-nums; }
 @media (min-width: 720px) {
-  #reader-layout:not(.library-right) .library-image-navigation { left: var(--library-clear); }
-  #reader-layout.library-right .library-image-navigation { right: var(--library-clear); }
+  #reader-layout:not(.library-right) .library-image-navigation { left: var(--workspace-clear); }
+  #reader-layout.library-right .library-image-navigation { right: var(--workspace-clear); }
 }
 .library-empty { padding: 16px 8px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .library-empty strong { color: var(--fg); font-weight: 600; }
@@ -347,7 +350,7 @@
 .library-intake-more { margin: 10px 0 0 !important; color: var(--muted); font: 11px/1.4 var(--font-mono) !important; }
 .library-dialog .library-intake-patterns { margin-right: auto; color: var(--muted); }
 .library-dialog .library-intake-patterns:hover { color: var(--fg); }
-/* Compact windows: the drawer covers the layout as a sheet over a scrim instead of floating beside it. */
+/* Compact windows: the panel covers the layout as a sheet over a scrim instead of docking beside the reading panel. */
 @media (max-width: 719px) {
   .library-root { position: absolute; z-index: 20; inset: 0; display: block; width: auto; margin: 0; }
   .library-right > .library-root { inset: 0; margin: 0; }
@@ -390,24 +393,29 @@
 .tree-label mark { border-radius: 2px; background: color-mix(in srgb, var(--accent) 26%, transparent); color: inherit; }
 .tree-meta { flex: none; margin-left: auto; padding-left: 6px; color: var(--muted); font: 11px/1 var(--font-mono); letter-spacing: 0; font-variant-numeric: tabular-nums; }
 .tree-row.is-missing .tree-label { color: var(--muted); font-style: italic; }
-.tree-row.is-section { height: 22px; margin-top: 10px; padding-left: 6px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; }
+.tree-row.is-section { height: 22px; margin-top: 10px; padding-left: 4px; cursor: pointer; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; }
 .tree-row.is-section:first-child { margin-top: 2px; }
 .tree-row.is-section .tree-label { flex: 0 1 auto; }
 .tree-row.is-section .tree-meta { margin-left: 6px; padding-left: 0; }
+.tree-add { display: grid; flex: none; place-items: center; width: 18px; height: 18px; margin-left: auto; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--muted); font-size: 14px; line-height: 1; opacity: 0; }
+.tree-row.is-section:hover .tree-add, .tree-row.is-section:focus-within .tree-add, .tree-row.is-section:focus-visible .tree-add, .tree-add:focus-visible { opacity: 1; }
+.tree-add::before { content: '+'; }
+.tree-add:hover { background: var(--hover); color: var(--fg); }
 @media (prefers-reduced-motion: reduce) { .tree-chevron-icon { transition: none; } }
 
-/* The Add files menu and the dialogs stand outside the info rail, so they work while it is closed; the menu is fixed to the window, beside the icon rail's button. */
+/* The Add files menu and the dialogs stand outside the panel, so they work while it is closed; the menu is fixed to the window, beside the icon rail's button. */
 .library-add-menu { position: fixed; z-index: 40; }
 .library-dialog-host { display: contents; }
 
-/* Icon rail: from 720 px up, a 48 px strip of the library's views, Home and Add files, and at its foot the side switch and Appearance.
-   A window-level overlay like the info rail, so it never changes the page's box; the active icon wears the accent-soft fill. */
+/* Icon rail: from 720 px up, a 48 px strip with Library, Search and Add files, and at its foot Settings. It overlays the reading panel's
+   edge while the panel is closed (--workspace-clear keeps the page's furniture off it) and stands beside the docked panel when it is open;
+   Library wears the accent-soft fill while the panel is open. */
 .icon-rail { display: none; }
 @media (min-width: 720px) {
   #reader-layout > .icon-rail { position: absolute; z-index: 21; top: 0; bottom: var(--footer-height); left: 6px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; box-sizing: border-box; width: 48px; padding: 8px 0; border: 1px solid var(--border); border-radius: 9px; background-color: var(--glass-raise-base); background-image: var(--glass-raise-paint); background-attachment: var(--glass-raise-attach); }
   #reader-layout.library-right > .icon-rail { left: auto; right: 6px; }
-  #reader-layout:not(.library-right) #empty.is-home { padding-left: 64px; }
-  #reader-layout.library-right #empty.is-home { padding-right: 64px; }
+  #reader-layout:not(.library-right):not(.library-open) #empty.is-home { padding-left: 64px; }
+  #reader-layout.library-right:not(.library-open) #empty.is-home { padding-right: 64px; }
   /* The toolbar's library button is the compact window's door; here the icon rail is. */
   #library-toggle { display: none; }
 }
@@ -417,13 +425,12 @@
 .icon-rail-button[aria-pressed=true] { background: var(--accent-soft); color: var(--accent-ink); }
 .icon-rail-button[aria-pressed=true]:hover { background: var(--accent-soft-hover); }
 .icon-rail-button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-/* Light: the design's dark ink pill. Dark: a raised card. Drawn on the side away from the rail's edge, after a short hover. */
+/* Light: the design's dark ink pill. Dark: a raised card. Drawn on the side away from the rail's edge, after a short hover, and only while the
+   panel is closed: an open panel's header already names the view, and the tip would be drawn over its title and filter field. */
 .icon-rail-button::after { content: attr(data-tip); position: absolute; top: 50%; left: calc(100% + 10px); z-index: 2; padding: 5px 8px; border: 1px solid light-dark(var(--fg), var(--border)); border-radius: 6px; background: light-dark(var(--fg), var(--card)); color: light-dark(var(--chrome), var(--fg)); font: 11px/1.3 var(--font-mono); white-space: nowrap; pointer-events: none; opacity: 0; transform: translateY(-50%); }
 .icon-rail[data-library-side=right] .icon-rail-button::after { left: auto; right: calc(100% + 10px); }
 .icon-rail-button:hover::after, .icon-rail-button:focus-visible::after { opacity: 1; transition: opacity .12s .35s; }
 .icon-rail-button:focus-visible::after { transition-delay: 0s; }
 .icon-rail-button[aria-expanded=true]::after { opacity: 0; }
+#reader-layout.library-open .icon-rail-button::after { content: none; display: none; }
 @media (prefers-reduced-motion: reduce) { .icon-rail-button:hover::after, .icon-rail-button:focus-visible::after { transition: none; } }
-.icon-rail-menu { position: fixed; z-index: 40; display: flex; flex-direction: column; min-width: 180px; padding: 4px; border: 1px solid var(--border); border-radius: 7px; background: var(--card); box-shadow: var(--shadow-popover); }
-.icon-rail-menu button { padding: 6px 10px 6px 24px; text-align: left; font-size: 12px; }
-.icon-rail-menu button[aria-checked=true] { background: var(--hover-subtle); background-image: radial-gradient(circle at 12px 50%, var(--accent) 0 2.5px, transparent 3px); }

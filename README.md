@@ -59,8 +59,9 @@ where you stopped. PDF, EPUB, Markdown, text and images. Your files never leave 
     </td>
     <td valign="top">
       <h3>Your folders, as a tree</h3>
-      A slim icon rail and a nested folder tree: watched folders, subfolders, documents, each with how
-      far you got (<code>p. 62 / 88</code>, <code>37 %</code>, <code>Finished</code>). Type to filter.
+      A slim icon rail (Library, Search, Add files, Settings) and one docked library panel: favorites,
+      collections, then watched folders, subfolders and documents, each with how far you got
+      (<code>p. 62 / 88</code>, <code>37 %</code>, <code>Finished</code>). Type to filter.
       A scan called <code>source.pdf</code> goes by its folder's name.
     </td>
   </tr>

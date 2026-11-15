@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { chooseFromViewMenu, openBoard, openSearch, preferGrid, libraryToggle } from './library-controls';
+import { chooseFromViewMenu, chooseLibrarySide, openBoard, openSearch, preferGrid, libraryToggle } from './library-controls';
 import { ZipWriter, Uint8ArrayWriter, TextReader } from '@zip.js/zip.js';
 import { createHash } from 'node:crypto';
 import { deflateSync } from 'node:zlib';
@@ -250,7 +250,7 @@ test('opening a document reveals the page at its settled size and rasterises it 
   }
 });
 
-test('library drawer floats over the page and never resizes it, while drag, keyboard, double-click, right dock and persistence still work', async ({ page }) => {
+test('the library panel docks: opening and resizing it re-fit the page as a window resize does and no page is under it, while drag, keyboard, double-click, right side and persistence still work', async ({ page }) => {
   await page.setViewportSize({ width: 1080, height: 680 });
   await page.goto('/');
   await page.locator('#file-input').setInputFiles({ name: 'library-resize.pdf', mimeType: 'application/pdf', buffer: pdfFixture() });
@@ -266,53 +266,45 @@ test('library drawer floats over the page and never resizes it, while drag, keyb
   // The library is open by default at >=720 px, so close it to measure the untouched page first.
   await libraryToggle(page).click();
   await expect(page.locator('#library-root')).toBeHidden();
-  // Everything the drawer must leave alone: the reading panel's box, its client width, the page
-  // box and the backing bitmap. Any of those changing when the drawer opens, is dragged or is
-  // docked is exactly the regression this test exists for (it used to shrink #workspace and
-  // refit the PDF).
-  const pageGeometry = async () => ({
-    workspace: await workspace.boundingBox(),
-    hostClientWidth: await host.evaluate(el => el.clientWidth),
-    canvasBox: await canvas.boundingBox(),
-    bitmap: await canvas.evaluate((el: HTMLCanvasElement) => ({ width: el.width, height: el.height })),
-  });
-  // Hiding the loading bar is not enough: a pre-existing deferred ResizeObserver re-applies the fit
-  // roughly 100 ms later (see the note in the loading-geometry test above), so the very first
-  // samples can still be a mid-flight page. Sample until two reads 200 ms apart agree -- the
-  // baseline must be the settled page, otherwise this comparison measures the pending refit
-  // instead of the drawer. Any refit *after* this point is the regression under test.
-  await expect.poll(async () => {
-    const before = JSON.stringify(await pageGeometry());
-    await page.waitForTimeout(200);
-    return JSON.stringify(await pageGeometry()) === before;
-  }, { timeout: 5000 }).toBe(true);
-  const untouched = await pageGeometry();
-  // Absolute, layout-stable expectations only: the workspace and host widths. The bitmap stays in
-  // the relative pageGeometry() comparison below, which is the actual regression guard -- pinning
-  // its exact pixel size here would depend on the loading-bar race described above.
-  expect(untouched.workspace!.width).toBe(1080);
-  expect(untouched.hostClientWidth).toBe(1080);
+  const pageGeometry = async () => ({ workspace: await workspace.boundingBox(), hostClientWidth: await host.evaluate(el => el.clientWidth), canvasBox: await canvas.boundingBox() });
+  // A pre-existing deferred ResizeObserver re-applies the fit roughly 100 ms after the loading bar goes (see the note in the
+  // loading-geometry test above), so sample until two reads 200 ms apart agree: that is the settled page.
+  const settled = async () => { await expect.poll(async () => { const before = JSON.stringify(await pageGeometry()); await page.waitForTimeout(200); return JSON.stringify(await pageGeometry()) === before; }, { timeout: 5000 }).toBe(true); return pageGeometry(); };
+  const closed = await settled();
+  expect(closed.workspace!.width).toBe(1080);
+  expect(closed.hostClientWidth).toBe(1080);
 
-  // Opening the drawer rolls over the page instead of narrowing it.
+  // Opening the panel docks it: the reading panel gives the width up (the panel, its handle and the 6 px margins) and the page is
+  // fitted to what is left, so no part of the page is under the panel.
   await libraryToggle(page).click();
   await expect(page.locator('#library-root')).toBeVisible();
   await expect(handle).toHaveAttribute('aria-valuenow', '270');
-  expect(await pageGeometry()).toEqual(untouched);
+  const dockedAt = async (width: number) => {
+    const opened = await settled();
+    expect(Math.round(opened.workspace!.width), `reading panel beside a ${width} px library`).toBe(1080 - width - 76);
+    expect(opened.hostClientWidth).toBeLessThanOrEqual(opened.workspace!.width);
+    const edge = (await panel.boundingBox())!, sheet = (await canvas.boundingBox())!;
+    expect(opened.workspace!.x).toBeGreaterThanOrEqual(edge.x + edge.width);
+    expect(sheet.x).toBeGreaterThanOrEqual(edge.x + edge.width);
+    expect(sheet.x + sheet.width).toBeLessThanOrEqual(opened.workspace!.x + opened.workspace!.width + .5);
+    return opened;
+  };
+  const narrow = await dockedAt(270);
+  expect(narrow.hostClientWidth).toBeLessThan(closed.hostClientWidth); // the page's host was laid out again in the narrower panel
 
   const box = (await handle.boundingBox())!, y = box.y + box.height / 2;
   await page.mouse.move(box.x + 5, y); await page.mouse.down();
   await page.mouse.move(box.x + 45, y, { steps: 6 });
-  // The drawer follows the pointer live; the page underneath must not move or refit.
+  // The panel follows the pointer live, and the reading panel gives or takes the width with it.
   await expect(handle).toHaveAttribute('aria-valuenow', '310');
-  expect(await pageGeometry()).toEqual(untouched);
+  await expect.poll(async () => Math.round((await workspace.boundingBox())!.width)).toBe(1080 - 310 - 76);
   await page.mouse.move(box.x + 75, y, { steps: 6 }); await page.mouse.up();
   await expect(handle).toHaveAttribute('aria-valuenow', '340');
   expect(Math.round((await panel.boundingBox())!.width)).toBe(340);
-  expect(await pageGeometry()).toEqual(untouched);
+  await dockedAt(340);
   await expect(page.locator('.pdf-render-status')).toHaveCount(0);
   await page.waitForTimeout(450); // Several resize-debounce periods must remain idle.
   await expect(page.locator('.pdf-page')).toHaveCount(1);
-  expect(await pageGeometry()).toEqual(untouched);
 
   await handle.focus();
   for (const [key, width] of [['ArrowRight', 356], ['Shift+ArrowLeft', 292], ['End', 520], ['Home', 240], ['Enter', 270], ['End', 520]] as const) {
@@ -320,33 +312,35 @@ test('library drawer floats over the page and never resizes it, while drag, keyb
   }
   await handle.dblclick(); await expect(handle).toHaveAttribute('aria-valuenow', '270');
   await page.keyboard.press('Shift+ArrowRight'); await expect(handle).toHaveAttribute('aria-valuenow', '334');
+  await dockedAt(334);
 
-  await page.getByRole('button', { name: 'Move library to the right' }).click();
-  await expect(page.getByRole('button', { name: 'Move library to the left' })).toBeVisible();
+  // The library on the right (Settings › Appearance): the panel docks to that edge, and the reading panel starts at the layout's.
+  await chooseLibrarySide(page, 'right');
   const docked = async () => (await panel.boundingBox())!.x > (await workspace.boundingBox())!.x;
   expect(await docked()).toBe(true);
-  // Mirroring the drawer is a pure overlay too: the page keeps its box and its bitmap.
-  expect(await pageGeometry()).toEqual(untouched);
+  await expect.poll(async () => { const at = (await workspace.boundingBox())!, edge = (await panel.boundingBox())!; return at.x === 0 && Math.round(at.x + at.width) <= Math.round(edge.x); }).toBe(true);
+  await settled();
 
-  // The tree is the info rail's content, so adding six images adds rows (Loose files), never a change to the page.
+  // The tree is the panel's content, so adding six images adds rows (Loose files) and leaves the reading panel's box alone.
+  const beside = (await settled()).workspace;
   await page.locator('.library-panel input[type=file]').setInputFiles(pngFiles);
   await expect(page.locator('.library-title-count')).toHaveText('7');
   await expect(page.locator('.library-tree .tree-row.is-document')).toHaveCount(7);
-  expect(await pageGeometry()).toEqual(untouched);
-  // A wider rail and a narrower one never touch the page either, and no row runs past the rail.
+  expect((await workspace.boundingBox())).toEqual(beside);
+  // A wider panel and a narrower one move the reading panel's edge with them, and no row runs past the panel.
   const tree = page.locator('.library-tree');
   await handle.focus(); await page.keyboard.press('End'); await expect(handle).toHaveAttribute('aria-valuenow', '520');
   expect(await tree.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-  expect(await pageGeometry()).toEqual(untouched);
+  await expect.poll(async () => Math.round((await workspace.boundingBox())!.width)).toBe(1080 - 520 - 76);
   await page.keyboard.press('Home'); await expect(handle).toHaveAttribute('aria-valuenow', '240');
   expect(await tree.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-  expect(await pageGeometry()).toEqual(untouched);
+  await expect.poll(async () => Math.round((await workspace.boundingBox())!.width)).toBe(1080 - 240 - 76);
   await page.keyboard.press('Enter'); await page.keyboard.press('Shift+ArrowLeft'); await expect(handle).toHaveAttribute('aria-valuenow', '334'); // docked right: Left widens
-
-  // Board: the info rail opened across the whole reading panel (beside the icon rail). It is still out of flow, so the page is covered
-  // and inert but never resized or refitted, the rail width is not rewritten, and Escape or the back button
-  // returns to the info rail exactly as it was.
-  await page.getByRole('button', { name: 'Open library board' }).click();
+  const underBoard = await settled();
+  // Board: the panel opened across the whole reading panel (beside the icon rail). It is an overlay, so the page is covered
+  // and inert but never resized or refitted, the panel width is not rewritten, and Escape or the back button
+  // returns to the panel exactly as it was.
+  await openBoard(page);
   const root = page.locator('#library-root');
   await expect(root).toHaveClass(/is-board/);
   await expect(handle).toBeHidden();
@@ -354,24 +348,24 @@ test('library drawer floats over the page and never resizes it, while drag, keyb
   expect(Math.round((await panel.boundingBox())!.width)).toBe(1080 - 66);
   const columns = () => tileColumns(page);
   await expect.poll(columns).toBeGreaterThanOrEqual(4);
-  expect(await pageGeometry()).toEqual(untouched);
+  expect(await pageGeometry()).toEqual(underBoard);
   await expect(page.locator('.library-detail')).toBeHidden();
   // The board pre-selects the document being read, and pressing a selected tile opens it, so select another one.
   await page.locator('.library-tile:not(.is-selected)').first().click();
   await expect(page.locator('.library-tile.is-selected')).toHaveCount(1);
   await expect(root).toHaveClass(/is-board/);
-  expect(await pageGeometry()).toEqual(untouched);
+  expect(await pageGeometry()).toEqual(underBoard);
   await page.keyboard.press('Escape');
   await expect(root).not.toHaveClass(/is-board/);
   await expect(handle).toHaveAttribute('aria-valuenow', '334');
   expect(Math.round((await panel.boundingBox())!.width)).toBe(334);
   await expect(workspace).toHaveJSProperty('inert', false);
   expect(await docked()).toBe(true);
-  expect(await pageGeometry()).toEqual(untouched);
-  await page.getByRole('button', { name: 'Open library board' }).click();
+  expect(await pageGeometry()).toEqual(underBoard);
+  await openBoard(page);
   await page.getByRole('button', { name: /Back to reading/ }).click();
   await expect(root).not.toHaveClass(/is-board/);
-  expect(await pageGeometry()).toEqual(untouched);
+  expect(await pageGeometry()).toEqual(underBoard);
   // A reload reopens the document, and the library refresh that follows redraws the drawer and may move focus: a key or a menu used before it
   // lands goes nowhere. It has landed once the drawer marks the document that is open.
   const reopened = async () => { await expect(page.locator('#position')).toContainText('Page 1 of 3'); await expect(page.locator('.library-tree [aria-current="true"]')).toHaveCount(1); };
@@ -551,7 +545,7 @@ test('the library board browses at full width and a detail strip joins from 1200
   await page.goto('/');
   await page.locator('.library-panel input[type=file]').setInputFiles(pngFiles);
   await expect(page.locator('.library-title-count')).toHaveText('6');
-  // The palette command opens the board (and the info rail if it was closed).
+  // The palette command opens the board (and the panel if it was closed).
   await page.mouse.click(1100, 450); // Shortcuts belong to the reading panel, not the library's own fields.
   await page.keyboard.press('Control+k');
   await page.locator('#palette-input').fill('library board');
@@ -575,7 +569,7 @@ test('the library board browses at full width and a detail strip joins from 1200
   // Below 720 px there is no board: the sheet is all there is.
   await page.setViewportSize({ width: 420, height: 620 });
   await libraryToggle(page).click();
-  await expect(page.locator('.library-board-toggle')).toBeHidden();
+  await expect(page.locator('.library-title-button')).toBeHidden(); // the compact sheet's title is plain text
 });
 
 test('browser library lists one document per file however it is added or opened', async ({ page }) => {
@@ -993,7 +987,7 @@ for (const side of ['left', 'right'] as const) for (const layout of ['single', '
     const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
     await openPdfForPill(page, { width: 1080, height: 680 });
     if (side === 'right') {
-      await page.locator('#library-rail').getByRole('button', { name: 'Move library to the right' }).click();
+      await chooseLibrarySide(page, 'right');
       await expect(page.locator('#library-rail')).toHaveAttribute('data-library-side', 'right');
     }
     const host = page.locator('.pdf-reader'), sheet = page.locator(layout === 'spread' ? '.pdf-spread' : '.pdf-page').first();
@@ -1282,12 +1276,13 @@ test('Ctrl + wheel and a pinch over a fixed-layout EPUB page zoom the document, 
 async function openPdfForPill(page: Page, viewport: { width: number; height: number }) {
   await page.setViewportSize(viewport);
   await page.goto('/');
+  // Closed before the document opens: a library closed after it hands the page its width back, and the page is fitted again.
+  if (await page.locator('#library-root').isVisible()) await libraryToggle(page).click();
+  await expect(page.locator('#library-root')).toBeHidden();
   await page.locator('#file-input').setInputFiles({ name: 'pill.pdf', mimeType: 'application/pdf', buffer: pdfFixture() });
   await expect(page.locator('#position')).toContainText('Page 1 of 3');
   await expect(page.locator('#loading')).toBeHidden();
   await expect(page.locator('#view-controls')).toBeVisible();
-  if (await page.locator('#library-root').isVisible()) await libraryToggle(page).click();
-  await expect(page.locator('#library-root')).toBeHidden();
 }
 
 test('view controls pill moves by its grip, stays inside the panel, persists, resets, and never refits the page', async ({ page }) => {
@@ -1374,28 +1369,31 @@ test('view controls pill moves by its grip, stays inside the panel, persists, re
   expect(errors).toEqual([]);
 });
 
-test('a moved view-controls pill steps out from under the info rail and returns when it closes', async ({ page }) => {
+test('a moved view-controls pill stays beside the docked library panel, on either side, and returns when it closes', async ({ page }) => {
   await openPdfForPill(page, { width: 1080, height: 700 });
-  const pill = page.locator('#view-controls'), grip = page.getByRole('button', { name: 'Move view controls' }), workspace = page.locator('#workspace');
+  const pill = page.locator('#view-controls'), grip = page.getByRole('button', { name: 'Move view controls' }), workspace = page.locator('#workspace'), root = page.locator('#library-root');
   const panel = (await workspace.boundingBox())!, handle = (await grip.boundingBox())!;
   await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2); await page.mouse.down();
   await page.mouse.move(panel.x + 1, panel.y + 1, { steps: 8 }); await page.mouse.up();
   const corner = (await pill.boundingBox())!;
   expect(corner.x).toBeCloseTo(panel.x + 54 + 8, 0); // beside the icon rail
 
+  // The open panel docks: the reading panel starts after it, and the pill, which was kept off the rail, is inside the narrower reading panel.
   await libraryToggle(page).click();
-  await expect(page.locator('#library-root')).toBeVisible();
-  const drawer = (await page.locator('#library-root').boundingBox())!;
+  await expect(root).toBeVisible();
+  const drawer = (await root.boundingBox())!;
   await expect.poll(async () => (await pill.boundingBox())!.x >= drawer.x + drawer.width + 8 - .5).toBe(true);
-  expect((await pill.boundingBox())!.x + (await pill.boundingBox())!.width).toBeLessThanOrEqual(panel.x + panel.width - 8 + .5);
+  const docked = (await workspace.boundingBox())!;
+  expect(docked.x).toBeGreaterThanOrEqual(drawer.x + drawer.width);
+  expect((await pill.boundingBox())!.x + (await pill.boundingBox())!.width).toBeLessThanOrEqual(docked.x + docked.width - 8 + .5);
 
-  // Docking the drawer to the other side moves the pill back to its own place.
-  await page.getByRole('button', { name: 'Move library to the right' }).click();
-  await expect.poll(async () => Math.abs((await pill.boundingBox())!.x - corner.x) < 1.5).toBe(true);
-  await page.getByRole('button', { name: 'Move library to the left' }).click();
+  // Docked on the right, the reading panel ends before the panel, and the pill stays inside it.
+  await chooseLibrarySide(page, 'right');
+  await expect.poll(async () => { const at = (await root.boundingBox())!, box = (await pill.boundingBox())!; return box.x + box.width <= at.x - 8 + .5; }).toBe(true);
+  await chooseLibrarySide(page, 'left');
   await expect.poll(async () => (await pill.boundingBox())!.x >= drawer.x + drawer.width + 8 - .5).toBe(true);
 
   await libraryToggle(page).click();
-  await expect(page.locator('#library-root')).toBeHidden();
+  await expect(root).toBeHidden();
   await expect.poll(async () => Math.abs((await pill.boundingBox())!.x - corner.x) < 1.5).toBe(true);
 });
