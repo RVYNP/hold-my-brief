@@ -40,7 +40,8 @@ type Callbacks = {
 /** What Home's "Open in library" opens the library on. */
 export type LibraryScope = 'all' | 'favorites' | 'reading' | { collection: string };
 type Filter = { kind: 'all' | 'favorites' | 'reading' | 'unfiled' } | { kind: 'collection' | 'source'; id: string } | { kind: 'folder'; id: string; path: string };
-const pageSize = 40;
+/** Documents rendered per step of the continuous scroll: the first screen's worth, then one more each time the end of what is shown comes near. */
+const batchSize = 30;
 
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag); node.className = className;
@@ -122,7 +123,10 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   const preferenceKey = () => `hold-my-brief:library-${wide.matches ? 'wide' : 'narrow'}`;
   function preference() { try { const saved = localStorage.getItem(preferenceKey()); return saved === null ? wide.matches : saved === 'open'; } catch { return wide.matches; } }
   let visible = preference(); let library: Library = emptyLibrary(); let filter: Filter = { kind: 'all' };
-  let activePath: string | undefined; let progress: Record<string, Progress> = {}; let busy = false, loaded = false, revision = 0, page = 0;
+  let activePath: string | undefined; let progress: Record<string, Progress> = {}; let busy = false, loaded = false, revision = 0;
+  // Whatever changes what the list shows (a filter, the sort, the scope, the board) sets this: the next render starts at the top. Any other render
+  // (an edit, a refresh, colours arriving) keeps the scroll position and as many documents rendered as there were.
+  let fromTop = true;
   let loadError = false; let modal: HTMLDialogElement | undefined; let modalError: HTMLElement | undefined;
   let matches: LibraryDocument[] = []; let imageSequence: string[] = [];
   const expanded = new Set<string>(); const knownCollections = new Set<string>();
@@ -192,13 +196,14 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     for (const [value, label] of options) { const item = button(label); item.setAttribute('role', 'menuitemradio'); item.onclick = () => pick(value); choices.push({ group, value, node: item }); section.append(item); }
     viewMenu.append(section);
   }
-  menuGroup('Sort by', [['recent', 'Recent'], ['name', 'Name A–Z']], value => { sortMode = value === 'name' ? 'name' : 'recent'; page = 0; renderDocuments(); });
-  menuGroup('View as', [['list', 'List'], ['grid', 'Grid']], value => { savePreference(viewKey(), value); renderDocuments(); });
-  menuGroup('Show', [['', 'Any availability'], ['ready', 'Ready'], ['missing', 'Missing']], value => { availabilityFilter = value; page = 0; renderDocuments(); });
+  menuGroup('Sort by', [['recent', 'Recent'], ['name', 'Name A–Z']], value => { sortMode = value === 'name' ? 'name' : 'recent'; fromTop = true; renderDocuments(); });
+  menuGroup('View as', [['list', 'List'], ['grid', 'Grid']], value => { savePreference(viewKey(), value); fromTop = true; renderDocuments(); });
+  menuGroup('Show', [['', 'Any availability'], ['ready', 'Ready'], ['missing', 'Missing']], value => { availabilityFilter = value; fromTop = true; renderDocuments(); });
   const sizeRow = element('label', 'library-size-row'); const sizeInput = element('input'); sizeInput.type = 'range'; sizeInput.min = String(libraryTileSize.min); sizeInput.max = String(libraryTileSize.max); sizeInput.step = String(libraryTileSize.step); sizeInput.setAttribute('aria-label', 'Tile size');
   sizeRow.append(element('span', '', 'Size'), sizeInput); viewMenu.append(sizeRow);
   const documents = element('div', 'library-documents'); documents.setAttribute('aria-label', 'Library items'); documents.setAttribute('role', 'list');
-  const pager = element('div', 'library-pager');
+  // Sits after the last document rendered; the next batch is rendered when it comes within reach of the viewport (see `sentinelObserver`).
+  const sentinel = element('div', 'library-sentinel'); sentinel.setAttribute('aria-hidden', 'true');
   const fileInput = element('input'); fileInput.type = 'file'; fileInput.accept = '.pdf,.epub,.md,.markdown,.txt,.png,.jpeg,.jpg,.webp,.gif,.avif,.bmp'; fileInput.multiple = true; fileInput.hidden = true;
   // Board layout: the header and the collection tree become a left rail, the chips, search row and grid the
   // main column, and a detail strip joins from 1200 px. `arrange` moves the same nodes between the two layouts.
@@ -210,10 +215,10 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     const focused = document.activeElement instanceof HTMLElement && root.contains(document.activeElement) ? document.activeElement : undefined;
     if (board) {
       searchRow.append(boardBack);
-      rail.append(header, boardNav); boardMain.append(scope, searchRow, documents, pager);
+      rail.append(header, boardNav); boardMain.append(scope, searchRow, documents);
       panel.replaceChildren(boardLayout, itemMenu, viewMenu, fileInput);
     } else {
-      boardBack.remove(); panel.replaceChildren(header, treeFilterRow, treeRoot, treeEmpty, documents, pager, itemMenu, fileInput);
+      boardBack.remove(); panel.replaceChildren(header, treeFilterRow, treeRoot, treeEmpty, documents, itemMenu, fileInput);
     }
     syncRail();
     if (focused?.isConnected) focused.focus();
@@ -221,7 +226,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   /** Brings the title, the filter field and what fills the panel (the tree, or the board's list) in line with the layout; nothing is rebuilt. */
   function syncRail() {
     titleButton.hidden = !wide.matches; headingText.hidden = wide.matches;
-    treeRoot.hidden = board; documents.hidden = !board; pager.hidden = documents.hidden; treeFilterRow.hidden = board;
+    treeRoot.hidden = board; documents.hidden = !board; treeFilterRow.hidden = board;
     if (board) treeEmpty.hidden = true;
   }
   arrange();
@@ -402,7 +407,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
         if (name !== collection.name) { next = await editLibrary({ action: 'renameCollection', id, name }); library = next; }
         if ((parent.value || null) !== collection.parentId) next = await editLibrary({ action: 'moveCollection', id, parentId: parent.value || null });
         return next;
-      }, () => { if (board) filter = { kind: 'collection', id }; if (parent.value) expanded.add(parent.value); page = 0; render(); view.dialog.close(); });
+      }, () => { if (board) filter = { kind: 'collection', id }; if (parent.value) expanded.add(parent.value); fromTop = true; render(); view.dialog.close(); });
     };
     view.dialog.showModal(); input.focus(); input.select();
   }
@@ -529,7 +534,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     function filterButton(label: string, count: number, next: Filter, key: string) {
       const control = button('', label, key); control.className = 'library-filter'; control.append(element('span', 'library-filter-name', label), element('span', 'library-count', String(count)));
       control.setAttribute('aria-pressed', String(filter.kind === next.kind && (!('id' in next) || 'id' in filter && filter.id === next.id)));
-      control.onclick = () => { filter = next; page = 0; render(); }; return control;
+      control.onclick = () => { filter = next; fromTop = true; render(); }; return control;
     }
     navigation.append(filterButton('All references', library.documents.length, { kind: 'all' }, 'all'), filterButton('Favorites', library.documents.filter(doc => doc.favorite).length, { kind: 'favorites' }, 'favorites'), filterButton('Continue reading', library.documents.filter(doc => inProgress(progress[doc.path])).length, { kind: 'reading' }, 'reading'), filterButton('Unfiled', library.documents.filter(doc => !doc.collectionIds.length).length, { kind: 'unfiled' }, 'unfiled'));
     const heading = element('div', 'library-collections-heading'); const create = button('+ New', 'New personal collection', 'new-collection'); create.onclick = () => collectionForm(create); heading.append(element('h3', '', 'Collections'), create); navigation.append(heading);
@@ -555,20 +560,36 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   // view, and every re-render reuses what has already loaded, so typing in the search box fetches nothing.
   const thumbs = createThumbnailStore();
   let renderGeneration = 0;
-  // The tile's media box is observed, not the <img>: it stays hidden until its picture arrives and a
-  // hidden element never intersects.
+  // The tile's media box is observed, not the <img>: it stays hidden until its picture arrives and a hidden element never intersects.
+  // A picture is asked for only while its tile is within 120 px of the viewport (`near`). The request is withdrawn when the tile scrolls away
+  // (the store skips jobs nobody wants any more) and made again if the tile comes back, so a fast scroll through thousands of tiles only
+  // fetches what it comes to rest on.
+  const near = new Set<HTMLElement>(), asking = new Set<HTMLElement>(), wandered = new Set<HTMLElement>();
   const thumbnailObserver = new IntersectionObserver(entries => {
-    for (const entry of entries) if (entry.isIntersecting) {
-      const media = entry.target as HTMLElement; thumbnailObserver.unobserve(media); const path = media.dataset.path!;
-      void thumbs.request(path, media.dataset.format!, () => media.isConnected && visible).then(thumbnail => {
-        if (!media.isConnected) return;
-        if (thumbnail) showThumbnail(media, thumbnail); else if (thumbs.failed(path)) markUnavailable(media);
-        if (media.dataset.format === 'epub') reflectEpub(path);
-      });
+    for (const entry of entries) {
+      const media = entry.target as HTMLElement;
+      if (!entry.isIntersecting) { near.delete(media); if (asking.has(media)) wandered.add(media); continue; }
+      near.add(media); ask(media);
+      const path = media.dataset.path!;
+      if (media.dataset.format === 'epub' && !thumbs.epub(path)) void thumbs.loadEpub(path, () => visible && near.has(media)).then(info => { if (info) reflectEpub(path); });
     }
   }, { root: documents, rootMargin: '120px' });
-  const clearThumbnails = () => thumbnailObserver.disconnect();
+  function ask(media: HTMLElement) {
+    if (asking.has(media)) return; asking.add(media); const path = media.dataset.path!;
+    void thumbs.request(path, media.dataset.format!, () => media.isConnected && visible && near.has(media)).then(thumbnail => {
+      asking.delete(media); const returned = wandered.delete(media);
+      if (!media.isConnected) return;
+      if (thumbnail) showThumbnail(media, thumbnail); else if (thumbs.failed(path)) markUnavailable(media);
+      if (thumbnail || thumbs.failed(path)) { thumbnailObserver.unobserve(media); near.delete(media); }
+      if (media.dataset.format === 'epub') reflectEpub(path);
+      // The request was dropped while the tile was out of range and it is back in range: ask again.
+      if (returned && !thumbnail && near.has(media)) ask(media);
+    });
+  }
+  const clearThumbnails = () => { thumbnailObserver.disconnect(); near.clear(); asking.clear(); wandered.clear(); };
   function observeThumbnails() { if (visible) for (const media of documents.querySelectorAll<HTMLElement>('[data-path]:not(.is-loaded):not(.is-unavailable)')) thumbnailObserver.observe(media); }
+  // The rest of the set is rendered in batches: when the sentinel after the last document nears the viewport, the next batch goes in front of it.
+  const sentinelObserver = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting) && rendered < ordered.length) appendBatch(batchSize); }, { root: documents, rootMargin: '0px 0px 800px 0px' });
   function showThumbnail(media: HTMLElement, thumbnail: Thumbnail) {
     const tile = tileByPath.get(media.dataset.path!); if (tile && Math.abs(tile.ratio - thumbnail.ratio) > .001) { tile.ratio = thumbnail.ratio; schedulePlacement(); }
     showPicture(media, thumbnail);
@@ -594,10 +615,52 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     };
     open.onkeydown = event => { if (board && event.key === 'Enter') { event.preventDefault(); void openFromBoard(doc, open); } };
   }
+  /**
+   * Arrow keys move between documents, however many are rendered: stepping past the last one rendered renders the next batch, and End
+   * renders the rest and goes to the last document. In the grid, up and down follow the column the tile is in, left and right the sort order.
+   */
+  function focusItem(index: number) {
+    const target = ordered[Math.min(ordered.length - 1, Math.max(0, index))]; if (!target) return;
+    const at = orderIndex.get(target.path)!; if (at >= rendered) appendBatch(at + 1 - rendered);
+    documents.querySelector<HTMLElement>(`[data-doc-path="${CSS.escape(target.path)}"] .library-document-open`)?.focus();
+  }
+  /** The tile above or below tile `index` in its column (else the nearest column), rendering further batches below while no tile in the same column is there yet. */
+  function vertical(index: number, step: 1 | -1): number | undefined {
+    for (let attempt = 0; ; attempt++) {
+      const from = tiles[index]; if (!from) return undefined;
+      const left = parseFloat(from.node.style.left), top = parseFloat(from.node.style.top); let best: number | undefined, bestScore = Infinity, aligned = false;
+      tiles.forEach((tile, at) => {
+        const rise = (parseFloat(tile.node.style.top) - top) * step; if (rise <= 1) return;
+        const aside = Math.abs(parseFloat(tile.node.style.left) - left), score = aside * 1000 + rise;
+        if (score < bestScore) { best = at; bestScore = score; aligned = aside < 1; }
+      });
+      if (aligned || step < 0 || rendered >= ordered.length || attempt >= 3) return best;
+      appendBatch(batchSize);
+    }
+  }
+  documents.addEventListener('keydown', event => {
+    const open = event.target instanceof HTMLElement ? event.target.closest<HTMLElement>('.library-document-open') : null;
+    if (!open || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    const path = open.closest<HTMLElement>('[data-doc-path]')?.dataset.docPath, index = path === undefined ? undefined : orderIndex.get(path); if (index === undefined) return;
+    const grid = view === 'grid'; let next: number | undefined;
+    if (event.key === 'ArrowDown') next = grid ? vertical(index, 1) : index + 1;
+    else if (event.key === 'ArrowUp') next = grid ? vertical(index, -1) : index - 1;
+    else if (event.key === 'ArrowRight' && grid) next = index + 1;
+    else if (event.key === 'ArrowLeft' && grid) next = index - 1;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = ordered.length - 1;
+    else if (event.key === 'PageDown' || event.key === 'PageUp') {
+      const step = event.key === 'PageDown' ? 1 : -1;
+      if (grid) { next = index; const start = parseFloat(tiles[index].node.style.top); for (let reached = vertical(next, step); reached !== undefined && Math.abs(parseFloat(tiles[reached].node.style.top) - start) < documents.clientHeight * .85; reached = vertical(next, step)) next = reached; if (next === index) next = vertical(index, step); }
+      else next = index + step * Math.max(1, Math.floor(documents.clientHeight / (open.closest<HTMLElement>('.library-document')?.offsetHeight || 56)) - 1);
+    } else return;
+    event.preventDefault(); if (next !== undefined && next !== index) focusItem(next);
+  });
   function selectDocument(path: string | undefined) {
-    selectedPath = path;
-    for (const node of documents.querySelectorAll<HTMLElement>('[data-doc-path]')) {
-      node.classList.toggle('is-selected', board && node.dataset.docPath === path);
+    const previous = selectedPath; selectedPath = path;
+    for (const changed of new Set([previous, path])) {
+      const node = changed === undefined ? null : documents.querySelector<HTMLElement>(`[data-doc-path="${CSS.escape(changed)}"]`); if (!node) continue;
+      node.classList.toggle('is-selected', board && changed === path);
       const open = node.querySelector<HTMLElement>('.library-document-open'); if (open) labelOpen(open, { name: node.dataset.docName ?? '', path: node.dataset.docPath ?? '' });
     }
     renderDetail();
@@ -610,7 +673,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     if (next === board || next && (!wide.matches || !visible || modal?.open)) return;
     closeItemMenu(false); closeChromeMenu(false); board = next;
     // Leaving the board returns the scope to every reference, which is what the tree shows.
-    if (!board) { filter = { kind: 'all' }; page = 0; }
+    fromTop = true; if (!board) filter = { kind: 'all' };
     root.classList.toggle('is-board', board);
     if (workspace) workspace.inert = visible && (!wide.matches || board);
     arrange(); renderDocuments(); paintTree();
@@ -783,30 +846,55 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   // positioned absolutely into masonry columns: each joins the shortest column of its shelf, and a tile's height
   // follows its ratio. A shelf header is placed the same way, above its tiles.
   type Tile = { node: HTMLElement; path: string; ratio: number; column: number; caption: number };
-  type Section = { shelf?: string; head?: HTMLElement; tiles: Tile[] };
+  // `top`, `used`, `bottoms` and `placed` are where the section's tiles began, how tall they came out, the bottom of each column and how many tiles are placed: a batch only places what it added.
+  type Section = { shelf?: string; head?: HTMLElement; tiles: Tile[]; top: number; used: number; bottoms: number[]; placed: number };
   let tiles: Tile[] = []; let sections: Section[] = []; let columnCount = 0; const tileByPath = new Map<string, Tile>();
+  // The set in order (shelves flattened), how much of it is rendered, and where each document stands: `tiles[i]` is `ordered[i]` in the grid.
+  let ordered: LibraryDocument[] = []; let rendered = 0; let orderIndex = new Map<string, number>();
+  let shelves: Shelf<LibraryDocument>[] | undefined; let shelfOf = new Map<LibraryDocument, Shelf<LibraryDocument>>();
+  let placedWidth = 0;
   // The shelf each tile's cover was made for (which tints and styles it), so the detail strip shows the very same cover.
   const coverShelf = new Map<string, string | undefined>();
   const gridSizer = element('div', 'library-grid-sizer'); gridSizer.setAttribute('aria-hidden', 'true');
   function contentWidth() { const style = getComputedStyle(documents); return documents.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight); }
-  /** Places every header and tile. The column of each tile is only reassigned when asked or when the column count changes, so a picture arriving moves what is below it, never reshuffles. */
-  function layoutGrid(assign = false) {
+  /**
+   * Places every header and tile. The column of each tile is only reassigned when asked or when the column count changes, so a picture arriving moves what is below it, never reshuffles.
+   * `appendedFrom` (the index of the last section before a batch was added) says nothing placed has changed, so the tiles already there stay and only what was added is placed.
+   */
+  function layoutGrid(assign = false, appendedFrom?: number) {
     if (view !== 'grid' || !tiles.length) return;
     const width = contentWidth(); if (width <= 0) return;
     const columns = libraryGridColumns(width, tileSize()); const gap = libraryGrid.gap;
     const tileWidth = (width - gap * (columns - 1)) / columns; const reassign = assign || columns !== columnCount; columnCount = columns;
     const style = getComputedStyle(documents); const left = parseFloat(style.paddingLeft), top = parseFloat(style.paddingTop);
-    let y = 0;
-    sections.forEach((section, index) => {
-      if (section.head) {
-        if (index) y += shelfLayout.gap;
-        section.head.style.left = `${left}px`; section.head.style.top = `${top + y}px`; section.head.style.width = `${width}px`; y += shelfLayout.head + shelfLayout.below;
+    const resume = !reassign && appendedFrom !== undefined && placedWidth === width && (sections[appendedFrom]?.placed ?? 0) > 0; placedWidth = width;
+    const first = resume ? appendedFrom! : 0; let y = first ? sections[first - 1].top + sections[first - 1].used : 0;
+    for (let index = first; index < sections.length; index++) {
+      const section = sections[index], resuming = resume && index === first;
+      if (!resuming) {
+        if (section.head) {
+          if (index) y += shelfLayout.gap;
+          section.head.style.left = `${left}px`; section.head.style.top = `${top + y}px`; section.head.style.width = `${width}px`; y += shelfLayout.head + shelfLayout.below;
+        }
+        section.top = y; section.bottoms = new Array<number>(columns).fill(0); section.placed = 0;
       }
-      y += placeTiles(section.tiles, { columns, tileWidth, gap, left, top: top + y, reassign });
-    });
+      if (!reassign) assignNew(section, tileWidth, gap);
+      section.used = placeTiles(section.tiles, { columns, tileWidth, gap, left, top: top + section.top, reassign, resume: { from: section.placed, bottoms: section.bottoms } });
+      section.placed = section.tiles.length; y = section.top + section.used;
+    }
     gridSizer.style.height = `${Math.max(0, y)}px`;
     // Tiles built while the drawer was hidden or had no width are only placed now; observing is idempotent.
-    observeThumbnails();
+    if (reassign) observeThumbnails();
+  }
+  /** Gives the tiles a later batch brought (column -1) the shortest column of their shelf, as the greedy placement would have; the tiles already placed keep their columns, so nothing above reshuffles. */
+  function assignNew(section: Section, tileWidth: number, gap: number) {
+    if (!section.tiles.some((tile, at) => at >= section.placed && tile.column < 0)) return;
+    const bottoms = [...section.bottoms];
+    for (let at = section.placed; at < section.tiles.length; at++) {
+      const tile = section.tiles[at];
+      if (tile.column < 0) { let shortest = 0; for (let column = 1; column < bottoms.length; column++) if (bottoms[column] < bottoms[shortest]) shortest = column; tile.column = shortest; }
+      bottoms[tile.column] += tileWidth / tile.ratio + tile.caption + gap;
+    }
   }
   // The drawer's own width is the only input; a new width re-places the tiles (and re-assigns columns if their count changed).
   new ResizeObserver(() => { if (visible) layoutGrid(); }).observe(documents);
@@ -817,8 +905,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   function reflectEpub(path: string) {
     const doc = library.documents.find(item => item.path === path); if (!doc) return;
     const label = docLabel(doc);
-    for (const node of documents.querySelectorAll<HTMLElement>('[data-doc-path]')) {
-      if (node.dataset.docPath !== path) continue;
+    for (const node of documents.querySelectorAll<HTMLElement>(`[data-doc-path="${CSS.escape(path)}"]`)) {
       node.dataset.docName = label; const open = node.querySelector<HTMLElement>('.library-document-open'); if (open) labelOpen(open, { name: label, path });
       for (const text of node.querySelectorAll<HTMLElement>('.library-document-name, .library-tile-name, .library-tile-caption')) text.textContent = label;
       for (const text of node.querySelectorAll<HTMLElement>('.library-cover-title')) text.textContent = displayTitle(doc, epubTitle(doc), true);
@@ -880,7 +967,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     if (caption) caption.style.height = `${libraryGrid.captionHeight}px`;
     open.append(...(caption ? [media, caption] : [media]));
     bindOpen(doc, open, node);
-    node.append(open, actionsFor(doc, generated)); return { node, path: doc.path, ratio, column: 0, caption: caption ? libraryGrid.captionHeight : 0 };
+    node.append(open, actionsFor(doc, generated)); return { node, path: doc.path, ratio, column: -1, caption: caption ? libraryGrid.captionHeight : 0 };
   }
   function shelfHead(shelf: Shelf<LibraryDocument>) {
     const head = element('div', 'library-shelf-head'); head.setAttribute('role', 'listitem'); head.dataset.shelf = shelf.id;
@@ -893,7 +980,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     if (fileType && !present.some(([value]) => value === fileType)) fileType = '';
     typeChips.replaceChildren(...present.map(([value]) => {
       const chip = button(chipLabels[value] ?? value, undefined, `type:${value}`); chip.className = 'library-type-chip'; chip.dataset.type = value;
-      chip.onclick = () => { fileType = fileType === value ? '' : value; page = 0; renderDocuments(); };
+      chip.onclick = () => { fileType = fileType === value ? '' : value; fromTop = true; renderDocuments(); };
       return chip;
     }));
     typeChips.hidden = !present.length; fadeChips();
@@ -909,8 +996,44 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     viewLabel.textContent = sortMode === 'name' ? 'Name A–Z' : 'Recent'; viewButton.setAttribute('aria-label', `Sort, view and filter options. Sorted by ${viewLabel.textContent}`);
   }
   sizeInput.oninput = () => { savePreference(sizeKey(), sizeInput.value); layoutGrid(true); };
+  /**
+   * Renders the next `count` documents after the ones shown (the first call of a render is `first`). In the grid a batch continues the last shelf, so a shelf's
+   * header is drawn once however many batches its tiles span. The sentinel stays after the last one until the whole set is rendered.
+   */
+  function appendBatch(count: number, first = false) {
+    const from = rendered, shown = ordered.slice(from, from + count), generation = renderGeneration; if (!shown.length) return;
+    const nodes: HTMLElement[] = []; const added: Tile[] = []; const dirty = Math.max(0, sections.length - 1); rendered += shown.length;
+    shown.forEach((doc, offset) => {
+      let node: HTMLElement;
+      if (view === 'grid') {
+        const shelf = shelfOf.get(doc); const last = sections[sections.length - 1];
+        // What sits directly in the open collection comes first and needs no header: the scope row already names it.
+        if (!last || shelf && last.shelf !== shelf.id) { const head = shelf && shelf.id !== (filter.kind === 'collection' ? filter.id : undefined) ? shelfHead(shelf) : undefined; sections.push({ shelf: shelf?.id, head, tiles: [], top: 0, used: 0, bottoms: [], placed: 0 }); if (head) nodes.push(head); }
+        const tile = documentTile(doc, shelf?.id ?? doc.collectionIds[0]); sections[sections.length - 1].tiles.push(tile); tiles.push(tile); added.push(tile); tileByPath.set(tile.path, tile); node = tile.node;
+      } else node = documentRow(doc);
+      // A screen reader is told where the document stands in the whole set, not just in what is rendered so far.
+      if (!shelves) { node.setAttribute('aria-posinset', String(from + offset + 1)); node.setAttribute('aria-setsize', String(ordered.length)); }
+      nodes.push(node);
+    });
+    sentinel.before(...nodes);
+    sentinelObserver.unobserve(sentinel);
+    if (rendered >= ordered.length) sentinel.remove(); else sentinelObserver.observe(sentinel);
+    if (view === 'grid') {
+      layoutGrid(first, dirty);
+      // The disk cache knows the shape of every thumbnail it holds: reserve those tiles' real height now
+      // rather than letting the grid jump as pictures arrive.
+      void thumbs.primeRatios(shown.map(doc => doc.path)).then(learned => {
+        if (!learned || generation !== renderGeneration) return;
+        for (const tile of added) { const ratio = thumbs.ratio(tile.path); if (ratio && Math.abs(ratio - tile.ratio) > .001) { tile.ratio = ratio; tile.node.querySelector<HTMLElement>('.library-tile-media')?.style.setProperty('--ratio', String(ratio)); } }
+        layoutGrid();
+      });
+    }
+    if (visible) for (const node of nodes) { const media = node.querySelector<HTMLElement>('[data-path]:not(.is-loaded):not(.is-unavailable)'); if (media) thumbnailObserver.observe(media); }
+    if (busy) setBusy(true);
+  }
   function renderDocuments() {
-    clearThumbnails(); documents.replaceChildren(); pager.replaceChildren(); tiles = []; sections = []; tileByPath.clear(); coverShelf.clear(); columnCount = 0; closeItemMenu(false); const generation = ++renderGeneration;
+    const scrolled = documents.scrollTop, fresh = fromTop, keep = fresh ? 0 : rendered; fromTop = false;
+    clearThumbnails(); documents.replaceChildren(); tiles = []; sections = []; tileByPath.clear(); coverShelf.clear(); columnCount = 0; rendered = 0; closeItemMenu(false); const generation = ++renderGeneration;
     const unknown: LibraryDocument[] = [];
     const query = search.value.trim().toLocaleLowerCase();
     matches = library.documents.filter(doc => {
@@ -928,9 +1051,10 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     matches.sort(sortMode === 'name' ? (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base', numeric: true }) || a.path.localeCompare(b.path) : (a, b) => timestamp(b.lastOpened) - timestamp(a.lastOpened) || a.name.localeCompare(b.name));
     view = currentView();
     // A collection with sub-collections shows as shelves in the grid: its own documents first, then one shelf per child.
-    const shelves = view === 'grid' && filter.kind === 'collection' ? groupIntoShelves(filter.id, library.collections, matches) : undefined;
-    const ordered = shelves ? shelves.flatMap(shelf => shelf.items) : matches;
-    page = Math.min(page, Math.max(0, Math.ceil(matches.length / pageSize) - 1));
+    shelves = view === 'grid' && filter.kind === 'collection' ? groupIntoShelves(filter.id, library.collections, matches) : undefined;
+    ordered = shelves ? shelves.flatMap(shelf => shelf.items) : matches;
+    shelfOf = new Map(shelves?.flatMap(shelf => shelf.items.map(doc => [doc, shelf] as const)));
+    orderIndex = new Map(ordered.map((doc, index) => [doc.path, index]));
     if (board && !matches.some(doc => doc.path === selectedPath)) selectedPath = matches.find(doc => doc.path === activePath)?.path ?? ordered[0]?.path;
     colourUnknown = unknown.length; colourChip.hidden = !colourFilter;
     if (colourFilter) {
@@ -946,33 +1070,12 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
       empty.append(element('strong', '', loadError ? 'Library unavailable' : !loaded ? 'Loading library…' : !library.documents.length ? 'Your references, collected.' : 'No matching references'), element('p', '', loadError ? 'Could not load the library. Close and reopen it to retry.' : !loaded ? 'Getting your saved library.' : !library.documents.length ? 'Add local documents and images, or index a folder. Originals stay untouched.' : 'Try another search, format, availability, or collection.'));
       documents.append(empty);
     }
-    const shown = ordered.slice(page * pageSize, (page + 1) * pageSize);
-    if (view === 'grid') {
-      const nodes: HTMLElement[] = [];
-      for (const doc of shown) {
-        const shelf = shelves?.find(candidate => candidate.items.includes(doc)); const last = sections[sections.length - 1];
-        // What sits directly in the open collection comes first and needs no header: the scope row already names it.
-        if (!last || shelf && last.shelf !== shelf.id) { const head = shelf && shelf.id !== (filter.kind === 'collection' ? filter.id : undefined) ? shelfHead(shelf) : undefined; sections.push({ shelf: shelf?.id, head, tiles: [] }); if (head) nodes.push(head); }
-        const tile = documentTile(doc, shelf?.id ?? doc.collectionIds[0]); sections[sections.length - 1].tiles.push(tile); tiles.push(tile); tileByPath.set(tile.path, tile); nodes.push(tile.node);
-      }
-      documents.append(gridSizer, ...nodes); layoutGrid(true);
-      // The disk cache knows the shape of every thumbnail it holds: reserve those tiles' real height now
-      // rather than letting the grid jump as pictures arrive.
-      void thumbs.primeRatios(shown.map(doc => doc.path)).then(learned => {
-        if (!learned || generation !== renderGeneration) return;
-        for (const tile of tiles) { const ratio = thumbs.ratio(tile.path); if (ratio && Math.abs(ratio - tile.ratio) > .001) { tile.ratio = ratio; tile.node.querySelector<HTMLElement>('.library-tile-media')?.style.setProperty('--ratio', String(ratio)); } }
-        layoutGrid(true);
-      });
-    }
-    else documents.append(...shown.map(documentRow));
-    for (const doc of board ? shown : []) if (doc.format === 'epub' && (doc.availability ?? 'ready') !== 'missing' && !thumbs.epub(doc.path)) void thumbs.loadEpub(doc.path, () => visible && generation === renderGeneration).then(info => { if (info) reflectEpub(doc.path); });
-    thumbs.trim(new Set(shown.map(doc => doc.path)));
-    if (matches.length > pageSize) {
-      const previous = button('←', 'Previous library page', 'page-previous'); previous.disabled = page === 0; const next = button('→', 'Next library page', 'page-next'); next.disabled = (page + 1) * pageSize >= matches.length;
-      const change = (offset: number) => { page += offset; renderDocuments(); documents.scrollTop = 0; documents.querySelector<HTMLElement>('.library-document-open')?.focus(); };
-      previous.onclick = () => change(-1); next.onclick = () => change(1); pager.append(previous, element('span', '', `${page * pageSize + 1}–${Math.min(matches.length, (page + 1) * pageSize)} / ${matches.length}`), next);
-    }
-    observeThumbnails(); renderImageNavigation(); renderDetail(); if (busy) setBusy(true);
+    if (view === 'grid') documents.append(gridSizer);
+    if (ordered.length) documents.append(sentinel);
+    appendBatch(Math.max(batchSize, keep), true);
+    documents.scrollTop = fresh ? 0 : scrolled;
+    thumbs.trim(new Set(ordered.slice(0, rendered).map(doc => doc.path)));
+    renderImageNavigation(); renderDetail(); if (busy) setBusy(true);
   }
   // The panel's tree. Opening a document from it opens or focuses its tab; ⌘/Ctrl-click gives it a background tab; right-click is the item menu.
   const treeView = createTreeView(treeRoot, {
@@ -1024,7 +1127,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   }
   /** The board scoped to a folder, collection or Home's scope (the compact sheet has no board: it opens on the tree). */
   function openScope(next: Filter) {
-    filter = next; page = 0; search.value = ''; fileType = ''; availabilityFilter = ''; colourFilter = null; colourRequested.clear(); colourSelect.value = '';
+    filter = next; fromTop = true; search.value = ''; fileType = ''; availabilityFilter = ''; colourFilter = null; colourRequested.clear(); colourSelect.value = '';
     if (!visible) setVisible(true, false);
     if (wide.matches) { setBoard(true, 'control'); render(); }
     else focusRail();
@@ -1040,7 +1143,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     add.title = collection && !collection.sourceId ? `Add files to ${collectionDisplayName(collection.name)}` : 'Add files to Unfiled';
     if (busy) setBusy(true); if (key && !busy && !modal?.open) restoreFocus(key);
   }
-  function setColour(next: ColourName | null) { colourFilter = next; colourRequested.clear(); colourSelect.value = next ?? ''; page = 0; renderDocuments(); }
+  function setColour(next: ColourName | null) { colourFilter = next; colourRequested.clear(); colourSelect.value = next ?? ''; fromTop = true; renderDocuments(); }
   colourChip.onclick = () => { setColour(null); search.focus(); };
   colourSelect.onchange = () => setColour(parseColourName(colourSelect.value) ?? null);
   // A picture's colours are known once its thumbnail has been made, or the disk cache already has them. While a
@@ -1075,7 +1178,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     if (typeof change.colour === 'string' && !colour) throw Error(`Unknown colour "${change.colour}". Choose one of: ${colourNames.join(', ')}.`);
     if (change.query !== undefined) search.value = change.query;
     if (colour !== undefined) { colourFilter = colour; colourRequested.clear(); colourSelect.value = colour ?? ''; }
-    page = 0; renderDocuments();
+    fromTop = true; renderDocuments();
     // The tree narrows by words; a colour is the board's filter, so it opens there where there is room.
     if (!visible) setVisible(true, false);
     if (colourFilter && wide.matches) setBoard(true, 'none');
@@ -1086,7 +1189,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     if (colourFilter) renderDocuments();
     return { colour: colourFilter, query: search.value.trim(), matches: matches.length, names: matches.slice(0, 10).map(doc => doc.name), pending: colourFilter ? colourUnknown : 0 };
   }
-  search.oninput = () => { page = 0; renderDocuments(); };
+  search.oninput = () => { fromTop = true; renderDocuments(); };
   let chosenCollection: string | null = null;
   // Who asked for files, so focus returns there once the dialogs are done: the icon rail's Add files, or this panel's + (compact windows, the board).
   let addTrigger: HTMLElement = plus;
@@ -1140,8 +1243,9 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     progress = next;
     paintTree();
     if (filter.kind === 'reading') render(); // Its members are the progress.
+    const byPath = new Map(library.documents.map(item => [item.path, item]));
     for (const node of documents.querySelectorAll<HTMLElement>('[data-doc-path]')) {
-      const doc = library.documents.find(item => item.path === node.dataset.docPath); const meta = node.querySelector<HTMLElement>('.library-row-meta');
+      const doc = byPath.get(node.dataset.docPath ?? ''); const meta = node.querySelector<HTMLElement>('.library-row-meta');
       if (doc && meta) meta.textContent = rowMeta(doc);
     }
     if (board && selectedPath) renderDetail();

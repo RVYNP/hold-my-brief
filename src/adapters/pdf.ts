@@ -2,7 +2,7 @@ import { getDocument, GlobalWorkerOptions, TextLayer, type PageViewport, type PD
 import workerURL from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import 'pdfjs-dist/web/pdf_viewer.css';
 import './pdf.css';
-import type { Locator, OutlineItem, PageThumbnails, Position, PreviewSink, ReaderAdapter, ReaderContext, ReaderOptions, ReaderSource } from '../types';
+import type { Locator, OutlineItem, PageThumbnails, Position, PreviewSink, ReaderAdapter, ReaderContext, ReaderOptions, ReaderSource, ThumbnailPriority } from '../types';
 import { MIN_SPREAD_WIDTH, pagesLabel, spreadPages } from '../spread';
 import { searchUnits, type DocumentSearch, type SearchHit, type SearchOptions, type UnitText } from '../search';
 import { BitmapCache, PREVIEW_CACHE_BYTES, THUMBNAIL_HEIGHT } from '../page-strip';
@@ -19,8 +19,12 @@ const CSS_UNITS = 96 / 72;
 const MAX_PAGE_EXTENT = 24_000;
 /** The most pixels along one side of a canvas backing store (Chromium, WebView2 and WebKit all stop at 16 384). */
 const MAX_CANVAS_SIDE = 16_384;
-/** A thumbnail somebody asked for: waits in the queue until the main page has finished, runs alone, and is dropped when its signal aborts. */
-type ThumbnailJob = { page: number; signal: AbortSignal; resolve: (bitmap: HTMLCanvasElement | undefined) => void };
+/** Thumbnails drawn at once while the main page is settled. */
+const THUMBNAIL_JOBS = 2;
+/** Queue order of the priorities: lower goes first. */
+const THUMBNAIL_RANK: Record<ThumbnailPriority, number> = { urgent: 0, visible: 1, idle: 2 };
+/** A thumbnail somebody asked for: waits in the queue until the main page has finished, runs while it is the only one of its page, and is dropped when its signal aborts. */
+type ThumbnailJob = { page: number; signal: AbortSignal; priority: ThumbnailPriority; resolve: (bitmap: HTMLCanvasElement | undefined) => void; task?: RenderTask };
 const clamp = (value: number, min = 0, max = 1) => Math.max(min, Math.min(max, Number.isFinite(value) ? value : min));
 
 export class PdfAdapter implements ReaderAdapter {
@@ -67,11 +71,10 @@ export class PdfAdapter implements ReaderAdapter {
   private prefetching = false;
   /** The page-preview strip while it is on. */
   private previews?: PreviewSink;
-  /** Thumbnails, in a bounded bitmap cache of their own, rendered one at a time and only while the main page is not being drawn. */
+  /** Thumbnails, in a bounded bitmap cache of their own, rendered a couple at a time and only while the main page is not being drawn. */
   private previewCache = new BitmapCache<HTMLCanvasElement>(PREVIEW_CACHE_BYTES);
   private thumbQueue: ThumbnailJob[] = [];
-  private thumbTask?: RenderTask;
-  private pumping = false;
+  private thumbRunning = new Set<ThumbnailJob>();
   /** True once the page in `render` has everything, text layer and links included; thumbnails wait for it so the strip never delays first paint. */
   private settled = false;
   private explicitEnd = false;
@@ -356,49 +359,56 @@ export class PdfAdapter implements ReaderAdapter {
 
   readonly thumbnails: PageThumbnails = {
     cached: page => this.previewCache.get(this.thumbnailKey(page)),
-    render: (page, signal, urgent = false) => this.queueThumbnail(page, signal, urgent),
+    render: (page, signal, priority = 'visible') => this.queueThumbnail(page, signal, priority),
+    keep: (view, ahead = []) => this.previewCache.hold(new Set(view.map(page => this.thumbnailKey(page))), new Set(ahead.map(page => this.thumbnailKey(page)))),
     open: page => this.render(page),
   };
   /** Thumbnails depend on the page, the document's rotation and the pixel ratio; a page's own /Rotate never changes. */
   private thumbnailKey(page: number) { return `${page}:${this.options?.rotation ?? 0}:${Math.min(devicePixelRatio || 1, 2)}`; }
-  private queueThumbnail(page: number, signal: AbortSignal, urgent: boolean): Promise<HTMLCanvasElement | undefined> {
+  private queueThumbnail(page: number, signal: AbortSignal, priority: ThumbnailPriority): Promise<HTMLCanvasElement | undefined> {
     const hit = this.previewCache.get(this.thumbnailKey(page));
     if (hit) return Promise.resolve(hit);
     if (signal.aborted || this.disposed || !this.doc || page < 1 || page > this.doc.numPages) return Promise.resolve(undefined);
     return new Promise(resolve => {
-      const job: ThumbnailJob = { page, signal, resolve };
+      const job: ThumbnailJob = { page, signal, priority, resolve };
       signal.addEventListener('abort', () => {
         const at = this.thumbQueue.indexOf(job);
         if (at >= 0) this.thumbQueue.splice(at, 1);
         resolve(undefined);
-        if (this.thumbJob === job) this.thumbTask?.cancel();
+        job.task?.cancel();
       }, { once: true });
-      if (urgent) this.thumbQueue.unshift(job); else this.thumbQueue.push(job);
+      this.enqueue(job, priority === 'urgent');
       this.pumpThumbnails();
     });
   }
-  private thumbJob?: ThumbnailJob;
-  /** A page render is starting: the thumbnail being drawn stops (its request waits for the page) so the page gets the worker. */
-  private pauseThumbnails() { this.thumbTask?.cancel(); }
+  /** Queues `job` behind every job of its own priority or higher, or, when `front`, ahead of its own priority's. */
+  private enqueue(job: ThumbnailJob, front: boolean) {
+    const rank = THUMBNAIL_RANK[job.priority];
+    const at = this.thumbQueue.findIndex(queued => front ? THUMBNAIL_RANK[queued.priority] >= rank : THUMBNAIL_RANK[queued.priority] > rank);
+    if (at < 0) this.thumbQueue.push(job); else this.thumbQueue.splice(at, 0, job);
+  }
+  /** A page render is starting: the thumbnails being drawn stop (their requests wait for the page) so the page gets the worker. */
+  private pauseThumbnails() { for (const job of this.thumbRunning) job.task?.cancel(); }
   /**
-   * Draws queued thumbnails one at a time while the main page is settled. A page turn pauses the one running and puts it back,
-   * so holding PgDn never finishes thumbnails it passes: only the strip's requests for the page it lands on resume.
+   * Draws queued thumbnails, a couple at a time, while the main page is settled; urgent first, idle look-ahead last. A page turn pauses the
+   * ones running and puts them back, so holding PgDn never finishes thumbnails it passes: only the strip's requests for the page it lands on resume.
    */
   private pumpThumbnails() {
-    if (this.pumping || !this.settled || this.disposed) return;
-    this.pumping = true;
-    void (async () => {
-      try {
-        while (this.settled && !this.disposed) {
-          const job = this.thumbQueue.shift();
-          if (!job) break;
-          if (job.signal.aborted) continue;
-          const bitmap = await this.drawThumbnail(job);
-          if (bitmap === null) { this.thumbQueue.unshift(job); continue; } // Paused by a page turn: it asks again when the page has settled.
-          job.resolve(bitmap);
-        }
-      } finally { this.pumping = false; this.thumbJob = undefined; }
-    })();
+    while (this.settled && !this.disposed && this.thumbRunning.size < THUMBNAIL_JOBS) {
+      // A page already being drawn is not drawn twice: its other requests wait and find it in the cache.
+      const at = this.thumbQueue.findIndex(job => ![...this.thumbRunning].some(running => running.page === job.page));
+      if (at < 0) return;
+      const [job] = this.thumbQueue.splice(at, 1);
+      this.thumbRunning.add(job);
+      void this.runThumbnail(job);
+    }
+  }
+  private async runThumbnail(job: ThumbnailJob) {
+    try {
+      const bitmap = await this.drawThumbnail(job);
+      if (bitmap === null) this.enqueue(job, true); // Paused by a page turn: it asks again when the page has settled.
+      else job.resolve(bitmap);
+    } finally { job.task = undefined; this.thumbRunning.delete(job); this.pumpThumbnails(); }
   }
   /** The bitmap, `undefined` when the page cannot be drawn or the request was dropped, `null` when a page turn paused the render. */
   private async drawThumbnail(job: ThumbnailJob): Promise<HTMLCanvasElement | undefined | null> {
@@ -414,15 +424,16 @@ export class PdfAdapter implements ReaderAdapter {
       const viewport = page.getViewport({ scale: Math.min(THUMBNAIL_HEIGHT / base.height, 2 * THUMBNAIL_HEIGHT / base.width), rotation });
       const canvas = document.createElement('canvas');
       canvas.width = Math.ceil(viewport.width * dpr); canvas.height = Math.ceil(viewport.height * dpr);
-      const task = this.thumbTask = page.render({ canvas, viewport, transform: dpr === 1 ? undefined : [dpr, 0, 0, dpr, 0, 0] });
-      this.thumbJob = job;
-      await task.promise;
-      this.previewCache.set(key, canvas);
+      const reach = job.priority === 'idle' ? 0 : 2; // Look-ahead may replace only what nobody has asked the strip to keep.
+      if (!this.previewCache.fits(canvas, reach)) return undefined; // No room without evicting a thumbnail that is wanted more: not worth drawing.
+      job.task = page.render({ canvas, viewport, transform: dpr === 1 ? undefined : [dpr, 0, 0, dpr, 0, 0] });
+      await job.task.promise;
+      this.previewCache.set(key, canvas, reach);
       return canvas;
     } catch (error) {
       if (job.signal.aborted) return undefined;
       return (error as Error).name === 'RenderingCancelledException' ? null : undefined; // A thumbnail that fails stays a blank tile and never surfaces.
-    } finally { this.thumbTask = undefined; this.thumbJob = undefined; }
+    }
   }
 
   private pushHistory() { this.history.push(this.getPosition().locator); if (this.history.length > 20) this.history.shift(); }
@@ -581,7 +592,7 @@ export class PdfAdapter implements ReaderAdapter {
     return this.fitHeight(bases, this.shownSpread === 'active', fit) / (CSS_UNITS * this.referenceOf(bases));
   }
   destroy() {
-    this.disposed = true; ++this.generation; for (const task of this.tasks) task.cancel(); this.thumbTask?.cancel(); for (const job of this.thumbQueue.splice(0)) job.resolve(undefined); for (const layer of this.layers) layer.cancel(); this.observer?.disconnect(); clearTimeout(this.resizeTimer);
+    this.disposed = true; ++this.generation; for (const task of this.tasks) task.cancel(); for (const job of this.thumbRunning) job.task?.cancel(); for (const job of this.thumbQueue.splice(0)) job.resolve(undefined); for (const layer of this.layers) layer.cancel(); this.observer?.disconnect(); clearTimeout(this.resizeTimer);
     this.host?.removeEventListener('scroll', this.onScroll); this.host?.classList.remove('pdf-reader');
     this.prefetchAbort?.abort(); this.pageCache.clear(); this.previews = undefined; this.previewCache.clear();
     void this.loading?.destroy(); this.surface = undefined; this.doc = undefined; this.currentPages = [];
