@@ -14,7 +14,7 @@ import { collectionDisplayName, compareCollections, displayTitle } from './shelf
 
 export type TreeKind = 'section' | 'root' | 'folder' | 'collection' | 'document';
 export type SectionId = 'favorites' | 'collections' | 'folders' | 'loose';
-/** What a folder or collection node stands for when the board is scoped to it. */
+/** What a folder or collection node stands for when the Library tab is scoped to it. */
 export type TreeScope = { kind: 'folder'; rootId: string; path: string } | { kind: 'collection'; id: string };
 export type TreeNode = {
   /** Unique in the whole tree, and stable across rebuilds: expand state is saved by it. */

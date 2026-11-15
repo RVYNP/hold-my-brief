@@ -1,5 +1,5 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
-import { chooseFromViewMenu, chooseLibrarySide, openBoard, openSearch, preferGrid, libraryToggle } from './library-controls';
+import { chooseFromViewMenu, chooseLibrarySide, openLibraryTab, openSearch, preferGrid, libraryToggle } from './library-controls';
 import { ZipWriter, Uint8ArrayWriter, TextReader } from '@zip.js/zip.js';
 import { createHash } from 'node:crypto';
 import { deflateSync } from 'node:zlib';
@@ -336,36 +336,33 @@ test('the library panel docks: opening and resizing it re-fit the page as a wind
   expect(await tree.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
   await expect.poll(async () => Math.round((await workspace.boundingBox())!.width)).toBe(1080 - 240 - 76);
   await page.keyboard.press('Enter'); await page.keyboard.press('Shift+ArrowLeft'); await expect(handle).toHaveAttribute('aria-valuenow', '334'); // docked right: Left widens
-  const underBoard = await settled();
-  // Board: the panel opened across the whole reading panel (beside the icon rail). It is an overlay, so the page is covered
-  // and inert but never resized or refitted, the panel width is not rewritten, and Escape or the back button
-  // returns to the panel exactly as it was.
-  await openBoard(page);
+  const beforeTab = await settled();
+  // The Library tab: a tab of the reading panel, beside the docked panel (on its right here). Nothing covers the panel, so it keeps its width and its
+  // resize handle, and the document's own tab is left as it was and comes back as it was.
+  await openLibraryTab(page);
   const root = page.locator('#library-root');
-  await expect(root).toHaveClass(/is-board/);
-  await expect(handle).toBeHidden();
-  await expect(workspace).toHaveJSProperty('inert', true);
-  expect(Math.round((await panel.boundingBox())!.width)).toBe(1080 - 66);
+  await expect(page.locator('#library-page')).toBeVisible();
+  await expect(handle).toBeVisible();
+  await expect(workspace).toHaveJSProperty('inert', false);
+  expect(Math.round((await panel.boundingBox())!.width)).toBe(334);
+  const view = (await page.locator('#library-page').boundingBox())!, edge = (await panel.boundingBox())!;
+  expect(view.x + view.width).toBeLessThanOrEqual(edge.x + .5);
   const columns = () => tileColumns(page);
   await expect.poll(columns).toBeGreaterThanOrEqual(4);
-  expect(await pageGeometry()).toEqual(underBoard);
-  await expect(page.locator('.library-detail')).toBeHidden();
-  // The board pre-selects the document being read, and pressing a selected tile opens it, so select another one.
+  await expect(page.locator('.library-detail')).toBeHidden(); // The reading panel is under 900 px wide.
   await page.locator('.library-tile:not(.is-selected)').first().click();
   await expect(page.locator('.library-tile.is-selected')).toHaveCount(1);
-  await expect(root).toHaveClass(/is-board/);
-  expect(await pageGeometry()).toEqual(underBoard);
-  await page.keyboard.press('Escape');
-  await expect(root).not.toHaveClass(/is-board/);
+  await expect(page.locator('#library-page')).toBeVisible();
+  // Back on the document's tab, the panel is as it was and the page is where it was.
+  await page.locator('#tab-list .tab[data-kind=document]').click();
+  await expect(page.locator('#library-page')).toBeHidden();
   await expect(handle).toHaveAttribute('aria-valuenow', '334');
   expect(Math.round((await panel.boundingBox())!.width)).toBe(334);
-  await expect(workspace).toHaveJSProperty('inert', false);
   expect(await docked()).toBe(true);
-  expect(await pageGeometry()).toEqual(underBoard);
-  await openBoard(page);
-  await page.getByRole('button', { name: /Back to reading/ }).click();
-  await expect(root).not.toHaveClass(/is-board/);
-  expect(await pageGeometry()).toEqual(underBoard);
+  expect(await settled()).toEqual(beforeTab);
+  await openLibraryTab(page);
+  await page.locator('#tab-list .tab[data-kind=document]').click();
+  expect(await settled()).toEqual(beforeTab);
   // A reload reopens the document, and the library refresh that follows redraws the drawer and may move focus: a key or a menu used before it
   // lands goes nowhere. It has landed once the drawer marks the document that is open.
   const reopened = async () => { await expect(page.locator('#position')).toContainText('Page 1 of 3'); await expect(page.locator('.library-tree [aria-current="true"]')).toHaveCount(1); };
@@ -393,7 +390,7 @@ test('library thumbnails are made once and survive searching, sorting and switch
   await page.goto('/');
   await expect(page.locator('#library-root')).toBeVisible();
   await page.locator('.library-panel input[type=file]').setInputFiles(pngFiles);
-  await openBoard(page); // the grid is the board's
+  await openLibraryTab(page); // the grid is the Library tab's
   const loaded = page.locator('.library-tile-media.is-loaded');
   await expect(loaded).toHaveCount(6);
   const made = () => page.evaluate(() => Reflect.get(window, 'objectUrlCount') as number);
@@ -434,7 +431,7 @@ test('a PDF whose page is one huge image gets a real thumbnail, not a blank page
   await page.setViewportSize({ width: 1080, height: 680 });
   await page.goto('/');
   await page.locator('.library-panel input[type=file]').setInputFiles({ name: 'huge-scan.pdf', mimeType: 'application/pdf', buffer: Buffer.concat(parts) });
-  await openBoard(page);
+  await openLibraryTab(page);
   const media = page.locator('.library-tile-media.is-loaded');
   await expect(media).toHaveCount(1, { timeout: 60000 });
   const mean = await media.locator('img').evaluate(async (image: HTMLImageElement) => {
@@ -453,7 +450,7 @@ test('the grid keeps the sort order for Tab and screen readers even though tiles
   await preferGrid(page);
   await page.goto('/');
   await page.locator('.library-panel input[type=file]').setInputFiles([...pngFiles].reverse());
-  await openBoard(page);
+  await openLibraryTab(page);
   await expect(page.locator('.library-tile')).toHaveCount(6);
   await chooseFromViewMenu(page, 'Name A–Z');
   const order = () => page.locator('.library-tile-open').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label')?.replace(/^(Open|Select) /, '')));
@@ -466,12 +463,12 @@ test('the grid keeps the sort order for Tab and screen readers even though tiles
   await expect(page.locator('.library-tile-open:focus')).toHaveAttribute('aria-label', /^(Open|Select) plate-2\.png$/);
 });
 
-test('in the board a tile is a toggle: pressing selects it, pressing the selected one opens it', async ({ page }) => {
+test('in the Library tab a tile is a toggle: pressing selects it, pressing the selected one opens its tab', async ({ page }) => {
   await page.setViewportSize({ width: 1080, height: 680 });
   await preferGrid(page);
   await page.goto('/');
   await page.locator('.library-panel input[type=file]').setInputFiles(pngFiles);
-  await openBoard(page);
+  await openLibraryTab(page);
   await expect(page.locator('.library-tile')).toHaveCount(6);
   const selected = page.locator('.library-tile-open[aria-pressed=true]');
   await expect(selected).toHaveCount(1);
@@ -481,15 +478,15 @@ test('in the board a tile is a toggle: pressing selects it, pressing the selecte
   // Exposed to assistive technology: pressed, and now named for what activating it does.
   await expect(page.getByRole('button', { name: `Open ${name}` })).toHaveAttribute('aria-pressed', 'true');
   await expect(selected).toHaveCount(1);
-  await expect(page.locator('#library-root')).toHaveClass(/is-board/);
+  await expect(page.locator('#library-page')).toBeVisible();
   await page.getByRole('button', { name: `Open ${name}` }).click();
   await expect(page.locator('#filename')).toHaveText(name);
-  await expect(page.locator('#library-root')).not.toHaveClass(/is-board/);
+  await expect(page.locator('#library-page')).toBeHidden();
 });
 
-test('tiles built while the library is closed still load their pictures once the board opens', async ({ page }) => {
-  // Compact window: the library is closed, so the board's grid is built with no width and its tiles are attached
-  // only when the window grows and the board opens.
+test('tiles built while the library is closed still load their pictures once the Library tab opens', async ({ page }) => {
+  // Compact window: the library is closed, so the Library tab's grid is not drawn; its tiles are built, with a width, only when the window
+  // grows and the Library tab opens.
   await preferGrid(page);
   await page.goto('/');
   await expect(page.locator('#library-root')).toBeHidden();
@@ -498,7 +495,7 @@ test('tiles built while the library is closed still load their pictures once the
   await expect(page.locator('.library-tile-media.is-loaded')).toHaveCount(0);
   await page.setViewportSize({ width: 1080, height: 680 });
   await expect(page.locator('#library-root')).toBeVisible();
-  await openBoard(page);
+  await openLibraryTab(page);
   await expect(page.locator('.library-tile')).toHaveCount(6);
   await expect(page.locator('.library-tile-media.is-loaded')).toHaveCount(6);
 });
@@ -510,7 +507,7 @@ test('the colour filter narrows the library to a named hue with a removable chip
   await page.goto('/');
   await page.locator('.library-panel input[type=file]').setInputFiles([solid('green-one', [46, 139, 58]), solid('green-two', [60, 160, 70]), solid('red-one', [192, 48, 32]), solid('blue-one', [48, 80, 192]), solid('grey-one', [128, 128, 128])]);
   // A picture's colours are measured when its thumbnail is made.
-  await openBoard(page);
+  await openLibraryTab(page);
   await expect(page.locator('.library-tile-media.is-loaded')).toHaveCount(5);
   const chip = page.locator('.library-colour-chip'), tiles = page.locator('.library-tile');
   await expect(chip).toBeHidden();
@@ -539,37 +536,40 @@ test('the colour filter narrows the library to a named hue with a removable chip
   await expect(tiles).toHaveCount(1);
 });
 
-test('the library board browses at full width and a detail strip joins from 1200 px', async ({ page }) => {
+test('the Library tab browses at full width and a detail strip joins from 900 px of reading panel', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await preferGrid(page);
   await page.goto('/');
   await page.locator('.library-panel input[type=file]').setInputFiles(pngFiles);
   await expect(page.locator('.library-title-count')).toHaveText('6');
-  // The palette command opens the board (and the panel if it was closed).
+  // The palette command opens the Library tab.
   await page.mouse.click(1100, 450); // Shortcuts belong to the reading panel, not the library's own fields.
   await page.keyboard.press('Control+k');
-  await page.locator('#palette-input').fill('library board');
+  await page.locator('#palette-input').fill('library tab');
   await page.keyboard.press('Enter');
-  await expect(page.locator('#library-root')).toHaveClass(/is-board/);
+  await expect(page.locator('#library-page')).toBeVisible();
   await expect(page.locator('.library-detail')).toBeVisible();
-  await expect.poll(() => tileColumns(page)).toBe(6);
+  await expect.poll(() => tileColumns(page)).toBe(5);
   // The first reference is selected and described; a click moves the selection without opening anything.
   await expect(page.locator('.library-detail-name')).toHaveCount(1);
   const tiles = page.locator('.library-tile');
   await tiles.nth(1).click();
   const name = (await tiles.nth(1).locator('.library-tile-open').getAttribute('aria-label'))!.replace(/^(Open|Select) /, '');
   await expect(page.locator('.library-detail-name')).toHaveText(name);
-  await expect(page.locator('#library-root')).toHaveClass(/is-board/);
+  await expect(page.locator('#library-page')).toBeVisible();
   await expect(page.locator('#filename')).not.toHaveText(name);
-  // Enter opens the selected reference and leaves the board.
+  // Enter opens the selected reference's tab; the Library tab stays in the strip.
   await tiles.nth(1).locator('.library-tile-open').focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('#filename')).toHaveText(name);
-  await expect(page.locator('#library-root')).not.toHaveClass(/is-board/);
-  // Below 720 px there is no board: the sheet is all there is.
+  await expect(page.locator('#library-page')).toBeHidden();
+  await expect(page.locator('#tab-list .tab[data-kind=library]')).toHaveCount(1);
+  // The compact sheet's title still opens the Library tab, and the sheet gets out of the way.
   await page.setViewportSize({ width: 420, height: 620 });
   await libraryToggle(page).click();
-  await expect(page.locator('.library-title-button')).toBeHidden(); // the compact sheet's title is plain text
+  await page.locator('.library-title-button').click();
+  await expect(page.locator('#library-page')).toBeVisible();
+  await expect(page.locator('#library-root')).toBeHidden();
 });
 
 test('browser library lists one document per file however it is added or opened', async ({ page }) => {

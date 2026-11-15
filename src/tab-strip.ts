@@ -8,8 +8,8 @@
  */
 import { slotAt } from './tabs';
 
-/** What one tab shows. `where` is the short place ("40 / 146"), empty until the document has been read; `progress` is the library's wording for how far in it is ("p. 12 / 96", "37 %", "Finished"), for the tab menu. */
-export type TabView = { path: string; title: string; hint: string; format: string; where: string; progress: string; active: boolean; problem: boolean };
+/** What one tab shows. `where` is the short place ("40 / 146"), empty until the document has been read; `progress` is the library's wording for how far in it is ("p. 12 / 96", "37 %", "Finished"), for the tab menu. The Library tab (`library`) shows a glyph for the format and its title for the path. */
+export type TabView = { path: string; title: string; hint: string; format: string; where: string; progress: string; active: boolean; problem: boolean; library: boolean };
 
 export type TabHandlers = {
   /** A tab was chosen; `undefined` is Home. */
@@ -38,6 +38,7 @@ const icons = {
   plus: '<path d="M12 5v14M5 12h14"/>',
   chevron: '<path d="m6 9 6 6 6-6"/>',
   document: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
+  library: '<path d="m16 6 4 14"/><path d="M12 6v14"/><path d="M8 8v12"/><path d="M4 4v16"/>',
 };
 
 const text = (tag: string, className: string, content: string) => Object.assign(document.createElement(tag), { className, textContent: content });
@@ -88,9 +89,10 @@ export function createTabStrip(elements: { strip: HTMLElement; home: HTMLElement
   }
   function fill(tab: HTMLElement, view: TabView) {
     tab.classList.toggle('is-active', view.active); tab.classList.toggle('has-problem', view.problem);
-    tab.setAttribute('aria-selected', String(view.active));
-    tab.title = view.hint ? `${view.title}\n${view.path}` : view.path;
-    setText(tab.querySelector('.tab-format')!, view.format.toUpperCase());
+    tab.setAttribute('aria-selected', String(view.active)); tab.dataset.kind = view.library ? 'library' : 'document';
+    tab.title = view.library ? view.title : view.hint ? `${view.title}\n${view.path}` : view.path;
+    const mark = tab.querySelector('.tab-format')!;
+    if (!view.library) setText(mark, view.format.toUpperCase()); else if (!mark.firstElementChild) mark.replaceChildren(icon(icons.library, 12));
     setText(tab.querySelector('.tab-title')!, view.title);
     setText(tab.querySelector('.tab-hint')!, view.hint);
     setText(tab.querySelector('.tab-where')!, view.active ? view.where : '');
@@ -201,7 +203,7 @@ export function createTabStrip(elements: { strip: HTMLElement; home: HTMLElement
   }
   function fillMenu() {
     const rows: HTMLElement[] = [row('Home', undefined, homeActive, icons.home, () => handlers.select(undefined))];
-    for (const view of views) rows.push(row(view.title, [view.format.toUpperCase(), view.progress].filter(Boolean).join(' · '), view.active, icons.document, () => handlers.select(view.path), () => handlers.close(view.path), view.hint, `${view.title}\n${view.path}`));
+    for (const view of views) rows.push(row(view.title, view.library ? undefined : [view.format.toUpperCase(), view.progress].filter(Boolean).join(' · '), view.active, view.library ? icons.library : icons.document, () => handlers.select(view.path), () => handlers.close(view.path), view.hint, view.library ? view.title : `${view.title}\n${view.path}`));
     const separator = document.createElement('div'); separator.className = 'tab-menu-separator'; separator.setAttribute('role', 'separator');
     const fresh = row('New tab…', undefined, false, icons.plus, () => handlers.newTab());
     fresh.append(text('kbd', 'tab-menu-key', newTabKeys));

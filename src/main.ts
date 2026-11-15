@@ -3,7 +3,7 @@ import { defaultOptions, type Position, type ReaderAdapter, type ReaderOptions }
 import { nudgeFor, parsePlacement, placementOf, resolvePlacement, serialisePlacement, type Placement, type Point } from './view-controls-position';
 import { desktop, native, state, browserFile, persist, openExternal, confirmDocument, touchDocument, openLibraryDocument, chooseDocument, getLibrary, imageFormats, locateLibraryDocument, saveTabs, type Opened, type Recent, type WindowState } from './bridge';
 import { emptyLibrary, type Library } from './catalog-types';
-import { createLibrary } from './library';
+import { createLibrary, type LibraryPlace } from './library';
 import { formatProgress, progressOf, type Progress } from './progress';
 import { createIconRail } from './icon-rail';
 import { ImageAdapter } from './adapters/image';
@@ -25,7 +25,7 @@ import { createZoomGesture } from './zoom-gesture';
 import { holdView, type Anchor, type Hold, type Spot } from './zoom-anchor';
 import { createZoomMenu } from './zoom-menu';
 import { createProgressPreview } from './progress-preview';
-import { TabList, type SavedTab } from './tabs';
+import { LIBRARY_PATH, TabList, type SavedTab } from './tabs';
 import { createTabStrip, type TabView } from './tab-strip';
 import { titleHints } from './tab-titles';
 import { baseName, ghostLabel, insertionIndex, overlayNames, splitDropped, unsupportedNotice } from './drop';
@@ -117,6 +117,8 @@ type Tab = {
   /** Where a hibernated tab picks up again; absent for a tab never opened this session, which takes its saved place from the store. */
   resume?: { locator: Position['locator']; options: ReaderOptions };
   problem?: { kind: 'missing' | 'failed'; message: string };
+  /** The Library tab (`path` is `LIBRARY_PATH`, `format` `library`) holds no reader: its `name` is the scope's title and `scope` what it shows, in the form library-scope.ts saves. */
+  scope?: string;
 };
 const tabs = new TabList<Tab>();
 let shown: Tab | undefined;
@@ -426,6 +428,8 @@ const library = createLibrary($('library-root'), {
   sideChanged: side => rail.setSide(side),
   openChanged: open => rail.setOpen(open),
   door: () => rail.button('library'),
+  openPage: place => openLibraryTab(place),
+  pageChanged: place => retargetLibraryTab(place),
 });
 $('library-toggle').onclick = () => library.toggle();
 rail.setSide(library.side());
@@ -522,7 +526,7 @@ async function command(id: string) {
   else if (id === 'next-tab' || id === 'previous-tab') { const next = tabs.neighbour(id === 'next-tab' ? 1 : -1); if (next) selectTab(next.path); }
   else if (id === 'library') library.toggle();
   else if (id === 'library-search') library.showView('search');
-  else if (id === 'library-board') library.board();
+  else if (id === 'library-board') openLibraryTab();
   else if (id === 'library-side') library.setSide(library.side() === 'left' ? 'right' : 'left');
   else if (id === 'find') findBar.open();
   else if (id === 'assistant') assistant.openSettings();
@@ -647,10 +651,12 @@ function show(next: Tab | undefined, refreshed = false) {
   if (reader && position) showPosition(position, false); else paintNoDocument();
   activeHost?.focus();
   if (next?.find !== undefined) findBar.open(next.find, false);
-  lastBackground = undefined; library.setActive(next?.path);
+  lastBackground = undefined;
+  // The Library tab's page is drawn while the tab is in front; the document that was showing is no longer the one the tree marks.
+  if (next?.path === LIBRARY_PATH) { library.setActive(undefined); library.showPage(true); } else { library.showPage(false); library.setActive(next?.path); }
   paintTabState(); paintTabs(); saveSession();
   if (!next) paintHome();
-  else if (!next.reader && !next.problem) void reopen(next);
+  else if (!next.reader && !next.problem && next.path !== LIBRARY_PATH) void reopen(next);
 }
 
 /** What the reading area, footer and title show while no document does: Home, or a tab waiting to open. */
@@ -664,7 +670,7 @@ function paintNoDocument() {
 /** Reopens a tab that holds nothing: its place was saved when it hibernated (or by the last session), and the page comes back there. */
 function reopen(tab: Tab) { return load(() => openLibraryDocument(tab.path), tab.name, { target: tab }); }
 
-const tabTitle = (tab: Tab) => displayTitle(tab, tab.format === 'epub' ? homeThumbs.epub(tab.path)?.title : undefined);
+const tabTitle = (tab: Tab) => tab.path === LIBRARY_PATH ? tab.name : displayTitle(tab, tab.format === 'epub' ? homeThumbs.epub(tab.path)?.title : undefined);
 /** Where a tab is, short: "40 / 146" for pages and lines, a percentage for the rest. */
 function tabWhere(tab: Tab) {
   const place = tab === shown ? position : tab.position;
@@ -674,8 +680,8 @@ function tabWhere(tab: Tab) {
 }
 let paintedTabs = '';
 function paintTabs() {
-  const hints = titleHints(tabs.tabs.map(tab => ({ path: tab.path, title: tabTitle(tab) })));
-  const views: TabView[] = tabs.tabs.map(tab => ({ path: tab.path, title: tabTitle(tab), hint: hints.get(tab.path) ?? '', format: tab.format, where: tabWhere(tab), progress: formatProgress(progressOf((tab === shown ? position : tab.position) ?? { fraction: NaN, scrub: { current: 0, total: 0, unit: 'line' } })) ?? '', active: tab === tabs.active, problem: Boolean(tab.problem) }));
+  const hints = titleHints(tabs.tabs.filter(tab => tab.path !== LIBRARY_PATH).map(tab => ({ path: tab.path, title: tabTitle(tab) })));
+  const views: TabView[] = tabs.tabs.map(tab => ({ path: tab.path, title: tabTitle(tab), hint: hints.get(tab.path) ?? '', format: tab.format, where: tabWhere(tab), progress: formatProgress(progressOf((tab === shown ? position : tab.position) ?? { fraction: NaN, scrub: { current: 0, total: 0, unit: 'line' } })) ?? '', active: tab === tabs.active, problem: Boolean(tab.problem), library: tab.path === LIBRARY_PATH }));
   const key = JSON.stringify([views, tabs.size]);
   if (key === paintedTabs) return;
   paintedTabs = key;
@@ -687,7 +693,7 @@ function paintTabs() {
 
 /** The placeholder for a showing tab that has no page: its file is missing, its open failed, or it is not opened yet. */
 function paintTabState() {
-  const tab = tabs.active, waiting = Boolean(tab && !tab.reader && loadingTarget !== tab);
+  const tab = tabs.active, waiting = Boolean(tab && !tab.reader && loadingTarget !== tab && tab.path !== LIBRARY_PATH);
   $('tab-state').hidden = !waiting || !tab;
   if (!waiting || !tab) return;
   const problem = tab.problem;
@@ -728,6 +734,7 @@ function closeTab(path: string) {
   tab.reader?.destroy(); tab.host?.remove(); tab.reader = tab.host = undefined;
   const next = tabs.close(path);
   if (wasShown) { shown = undefined; show(next, true); } else { paintTabs(); saveSession(); }
+  if (path === LIBRARY_PATH) library.forgetScope();
 }
 
 let sessionTimer: ReturnType<typeof setTimeout> | undefined;
@@ -736,7 +743,7 @@ function saveSession() {
   if (sessionTimer) return;
   sessionTimer = setTimeout(() => {
     sessionTimer = undefined;
-    const session = tabs.session((tab): SavedTab => ({ path: tab.path, name: tab.name, format: tab.format }));
+    const session = tabs.session((tab): SavedTab => ({ path: tab.path, name: tab.name, format: tab.format, ...(tab.scope ? { scope: tab.scope } : {}) }));
     void saveTabs(session).catch(fail);
   });
 }
@@ -748,6 +755,24 @@ const strip = createTabStrip(
 );
 $('title').onclick = () => (strip.isMenuOpen() ? strip.closeMenu() : strip.openMenu($('title')));
 
+/**
+ * The Library tab: at most one, at the front of the strip. Opening it names a scope (a double-click in the panel, Home's Open in library, the panel's
+ * title); a tab that is already open is shown and retargeted rather than opened again. With no scope named, an open tab is only shown.
+ */
+function openLibraryTab(place?: LibraryPlace) {
+  const existing = tabs.find(LIBRARY_PATH);
+  if (!place) { if (existing) selectTab(LIBRARY_PATH); else library.browse('all'); return; }
+  if (existing) { retargetLibraryTab(place); selectTab(LIBRARY_PATH); return; }
+  cancelOpen();
+  const tab: Tab = { path: LIBRARY_PATH, name: place.title, format: 'library', scope: place.scope, options: { ...defaultOptions }, hand: false, scanNoticeShown: false };
+  tabs.open(tab, 0); show(tab, true);
+}
+/** The Library tab's title and saved scope follow what the library shows; with no such tab, nothing is kept. */
+function retargetLibraryTab(place: LibraryPlace) {
+  const tab = tabs.find(LIBRARY_PATH);
+  if (!tab || tab.name === place.title && tab.scope === place.scope) return;
+  tab.name = place.title; tab.scope = place.scope; paintTabs(); saveSession();
+}
 /** Opens a library document in a tab, or shows the tab it is already in. */
 function openPath(path: string, name = path.split(/[\\/]/).pop()) { return openTab(path, () => openLibraryDocument(path), name); }
 /** The tab a background open added last, so the next one lands after it (as a browser's middle clicks do); forgotten when another tab is shown. */
@@ -1061,6 +1086,7 @@ async function initialize() {
   homeLibrary = await getLibrary().catch(() => emptyLibrary());
   paintHome();
   for (const entry of saved.tabs.tabs) tabs.open({ ...entry, options: { ...defaultOptions }, hand: false, scanNoticeShown: false });
+  library.restoreScope(tabs.find(LIBRARY_PATH)?.scope);
   show(saved.tabs.active === null ? undefined : tabs.tabs[saved.tabs.active], true);
   if (desktop) {
     const { listen } = await import('@tauri-apps/api/event');

@@ -102,7 +102,7 @@ test('arrow keys move the highlight and skip commands that need a document', asy
 test('the library command opens the library from the palette', async ({ page }) => {
   await page.goto('/');
   await page.keyboard.press('Control+k');
-  await page.locator('#palette-input').fill('library');
+  await page.locator('#palette-input').fill('toggle document library');
   await page.keyboard.press('Enter');
   await expect(libraryToggle(page)).toHaveAttribute('aria-expanded', 'true');
 });

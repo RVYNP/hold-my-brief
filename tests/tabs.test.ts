@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_LIVE_TABS, MAX_TABS, TabList, emptySession, readSession, slotAt } from '../src/tabs';
+import { LIBRARY_PATH, MAX_LIVE_TABS, MAX_TABS, TabList, emptySession, readSession, slotAt } from '../src/tabs';
 
 type Tab = { path: string; name: string };
 const tab = (path: string): Tab => ({ path, name: path.toUpperCase() });
@@ -251,6 +251,11 @@ describe('the saved session', () => {
 
   it('fills a missing name from the path, so a tab can always be drawn', () => {
     expect(readSession({ tabs: [{ path: '/books/Dune.epub' }], active: 0 }).tabs[0]).toEqual({ path: '/books/Dune.epub', name: 'Dune.epub', format: '' });
+  });
+
+  it('keeps the Library tab with its scope, and drops a scope that is not text', () => {
+    const read = readSession({ tabs: [{ path: LIBRARY_PATH, name: 'Favorites', format: 'library', scope: 'favorites' }, { path: 'a', name: 'A', format: 'pdf', scope: 7 }], active: 0 });
+    expect(read.tabs).toEqual([{ path: LIBRARY_PATH, name: 'Favorites', format: 'library', scope: 'favorites' }, { path: 'a', name: 'A', format: 'pdf' }]);
   });
 
   it('caps the number of restored tabs', () => {

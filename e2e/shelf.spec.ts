@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
-import { addMenuItem, chooseFromViewMenu, openBoard } from './library-controls';
+import { addMenuItem, chooseFromViewMenu, openLibraryTab } from './library-controls';
 
 /**
  * The reference shelf: EPUB titles and covers read from the files themselves, generated covers for what has no
@@ -27,18 +27,27 @@ async function keepAll(page: Page) {
   await expect(page.locator('.library-dialog')).toHaveCount(0);
 }
 async function newCollection(page: Page, name: string, parent?: string) {
-  await page.getByRole('button', { name: 'New personal collection' }).click();
+  const caption = page.locator('#library-root .tree-row[data-node="s:collections"]');
+  await caption.hover();
+  await caption.locator('.tree-add').click();
   await page.getByLabel('Collection name').fill(name);
   if (parent) await page.getByLabel('Parent collection').selectOption({ label: parent }); // option labels are display names, like the rail
   await page.getByRole('button', { name: 'Create collection' }).click();
   await expect(page.locator('.library-dialog')).toHaveCount(0);
 }
+/** Shows a collection in the Library tab by double-clicking its row in the panel (a child's row once its parent, Reference, is open). */
+async function showCollection(page: Page, name: string) {
+  const rows = page.locator('#library-root .tree-row.is-collection');
+  const parent = rows.filter({ hasText: /^Reference/ }).first();
+  if (name !== 'Reference' && await parent.getAttribute('aria-expanded') !== 'true') await parent.locator('.tree-chevron').click();
+  await rows.filter({ hasText: new RegExp(`^${name}`) }).first().dblclick();
+}
 
 async function buildShelves(page: Page) {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await openBoard(page);
-  await expect(page.locator('#library-root')).toHaveClass(/is-board/);
+  await openLibraryTab(page);
+  await expect(page.locator('#library-page')).toBeVisible();
   await newCollection(page, 'reference');
   await newCollection(page, '1-languages', 'Reference');
   await addFiles(page, languages);
@@ -48,7 +57,7 @@ async function buildShelves(page: Page) {
   await addFiles(page, creative);
   await keepAll(page);
   await expect(page.locator('.library-tile')).toHaveCount(creative.length);
-  await page.locator('.library-filter', { hasText: /^Reference/ }).click();
+  await showCollection(page, 'Reference');
   await addFiles(page, [pride]);
   await expect(page.locator('.library-tile')).toHaveCount(languages.length + creative.length + 1);
 }
@@ -92,8 +101,8 @@ test('a collection with sub-collections shows its own documents first, then one 
   await expect(heads).toHaveCount(2);
   await expect(heads.locator('.library-shelf-name')).toHaveText(['Languages', 'Creative apps']);
   await expect(heads.locator('.library-shelf-count')).toHaveText(['3', '2']);
-  // The rail and the scope row show display names; the stored names are untouched.
-  await expect(page.locator('.library-board-rail .library-filter-name')).toContainText(['Reference', 'Languages', 'Creative apps']);
+  // The tab and the scope row show display names; the stored names are untouched.
+  await expect(page.locator('#tab-list .tab[data-kind=library] .tab-title')).toHaveText('Reference');
   await expect(page.locator('.library-scope-label')).toHaveText('Reference');
   await expect(page.getByRole('button', { name: '1-languages', exact: true })).toHaveCount(0);
   // Headers sit above their tiles, in DOM order: shelf by shelf, so keyboard order follows.
@@ -124,11 +133,11 @@ test('a collection with sub-collections shows its own documents first, then one 
   await expect(heads.locator('.library-shelf-name')).toHaveText(['Languages']);
   await page.locator('.library-search').fill('');
   // A child collection on its own is a plain grid, no header.
-  await page.locator('.library-filter', { hasText: /^Languages/ }).click();
+  await showCollection(page, 'Languages');
   await expect(heads).toHaveCount(0);
   await expect(page.locator('.library-tile')).toHaveCount(3);
   // List view is unchanged: rows, no shelf headers, the title shown and the file name in the meta line.
-  await page.locator('.library-filter', { hasText: /^Reference/ }).click();
+  await showCollection(page, 'Reference');
   await chooseFromViewMenu(page, 'List');
   await expect(heads).toHaveCount(0);
   await expect(page.locator('.library-document')).toHaveCount(6);

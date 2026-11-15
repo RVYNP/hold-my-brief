@@ -1,23 +1,30 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 
-/** The Recent ☰ button: the one menu for sort, view and availability. */
-export const viewMenuButton = (page: Page) => page.getByRole('button', { name: /Sort, view and filter options/ });
+/** The Sort and filter button: the one menu for sort and availability. */
+export const viewMenuButton = (page: Page) => page.getByRole('button', { name: /Sort and filter options/ });
 
-/** Chooses a radio item of the Recent ☰ menu (Recent, Name A–Z, List, Grid, Any availability, Ready, Missing) and closes the menu. */
+/** The Library tab's page, in the reading panel. */
+export const libraryPage = (page: Page) => page.locator('#library-page');
+
+/** The Library tab in the strip. */
+export const libraryTab = (page: Page) => page.locator('#tab-list .tab[data-kind=library]');
+
+/** Chooses List or Grid (the toggle beside the sort button) or a radio item of the sort menu (Recent, Name A–Z, Any availability, Ready, Missing) and closes the menu. */
 export async function chooseFromViewMenu(page: Page, name: string) {
+  if (name === 'List' || name === 'Grid') { await page.getByRole('button', { name: `${name} view` }).click(); return; }
   await viewMenuButton(page).click();
   await page.getByRole('menuitemradio', { name, exact: true }).click();
   await page.keyboard.press('Escape');
-  await expect(page.locator('.library-view-menu')).toBeHidden();
+  await expect(page.locator('.library-view-menu:not(.library-scope-menu)')).toBeHidden();
 }
 
-/** Opens the library board across the reading panel (the panel's "Library" title, a button) and waits for it. */
-export async function openBoard(page: Page) {
+/** Opens the Library tab on all documents (the panel's "Library" title, a button) and waits for its page. */
+export async function openLibraryTab(page: Page) {
   await page.locator('#library-root').getByRole('button', { name: 'Library', exact: true }).click();
-  await expect(page.locator('#library-root')).toHaveClass(/is-board/);
+  await expect(libraryPage(page)).toBeVisible();
 }
 
-/** The board's search field, which is always shown there. */
+/** The Library tab's search field, which is always shown there. */
 export async function openSearch(page: Page): Promise<Locator> {
   const field = page.locator('.library-search');
   await expect(field).toBeVisible();
@@ -31,7 +38,7 @@ export async function addMenuItem(page: Page, name: string) {
   return page.getByRole('menuitem', { name });
 }
 
-/** A saved choice for the whole library, so a test that needs tiles does not depend on the width-based default (a drawer under 400 px opens on list). */
+/** A saved choice for the whole library, so a test that needs tiles does not depend on the default (grid only when half the documents can show a picture). */
 export const preferGrid = (page: Page) => page.addInitScript(() => localStorage.setItem('hold-my-brief:library-view:all', 'grid'));
 
 /** The library's door at the window's width: the icon rail's Library button from 720 px up, the toolbar's button below it. */

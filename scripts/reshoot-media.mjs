@@ -335,7 +335,7 @@ if (want('shelf', 'intake')) {
   const { ctx, page } = await open(browser, { viewport: { width: 1440, height: 900 } });
   await setInfoRail(page, true);
   await page.locator('#library-root').getByRole('button', { name: 'Library', exact: true }).click();
-  await page.waitForSelector('#library-root.is-board');
+  await page.waitForSelector('#library-page:not([hidden])');
   const addFiles = async paths => {
     await page.locator('#library-rail').getByRole('button', { name: 'Add files', exact: true }).click();
     const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.getByRole('menuitem', { name: 'Add local documents or images' }).click()]);
@@ -348,14 +348,17 @@ if (want('shelf', 'intake')) {
     await page.waitForSelector('.library-dialog', { state: 'detached' });
   };
   const newCollection = async (name, parent) => {
-    await page.getByRole('button', { name: 'New personal collection' }).click();
+    const caption = page.locator('#library-root .tree-row[data-node="s:collections"]');
+    await caption.hover();
+    await caption.locator('.tree-add').click();
     await page.getByLabel('Collection name').fill(name);
     if (parent) await page.getByLabel('Parent collection').selectOption({ label: parent });
     await page.getByRole('button', { name: 'Create collection' }).click();
     await page.waitForSelector('.library-dialog', { state: 'detached' });
   };
   const chooseFromViewMenu = async name => {
-    await page.getByRole('button', { name: /Sort, view and filter options/ }).click();
+    if (name === 'Grid' || name === 'List') return void await page.getByRole('button', { name: `${name} view` }).click();
+    await page.getByRole('button', { name: /Sort and filter options/ }).click();
     await page.getByRole('menuitemradio', { name, exact: true }).click();
     await page.keyboard.press('Escape');
     await page.waitForSelector('.library-view-menu', { state: 'hidden' });
@@ -378,7 +381,7 @@ if (want('shelf', 'intake')) {
     }
     await keepAll();
   }
-  await page.locator('.library-filter', { hasText: /^Classics/ }).click();
+  await page.locator('#library-root .tree-row.is-collection', { hasText: 'Classics' }).dblclick();
   await chooseFromViewMenu('Grid');
   await chooseFromViewMenu('Name A–Z');
   await page.waitForFunction(() => document.querySelectorAll('.library-tile-media.is-loaded').length >= 2, null, { timeout: 30000 });

@@ -1,11 +1,11 @@
 /* The library panel is docked from 720 px: it stands beside the 48 px icon rail (6 px margin, 48 px rail, 6 px gap: it starts 60 px
    from the edge) and #workspace takes a margin of the same width (see --library-clear below), so the reading panel gives the width up
    and the page re-fits as it does for a window resize. Nothing is drawn under it. Below 720 px it is a sheet over a scrim (see the end
-   of this file). The board stays an overlay across the reading panel. */
+   of this file). The Library tab's page is not part of it: it fills the reading panel (see `.library-page` below). */
 .library-root { --library-width: 270px; position: absolute; z-index: 20; top: 0; bottom: 0; left: 0; display: flex; flex: 0 0 auto; width: calc(var(--library-width) + 10px); min-width: 0; min-height: 0; margin: 0 0 0 6px; }
 .library-panel { position: relative; container: library-panel / inline-size; display: flex; flex-direction: column; flex: 1 1 auto; height: 100%; min-width: 0; min-height: 0; padding: 8px 8px 6px; overflow: auto; border: 1px solid var(--border); border-radius: 9px; background-color: var(--glass-raise-base); background-image: var(--glass-raise-paint); background-attachment: var(--glass-raise-attach); box-shadow: var(--shadow-drawer); scrollbar-width: thin; scrollbar-color: var(--faint) transparent; }
-.library-panel button, .library-panel input, .library-panel select { font-size: 12px; }
-/* Header, one line: the title (the button that opens the board; plain text in the compact sheet) and the count, then + (add files; compact windows and the board) and close (compact). */
+.library-panel button, .library-panel input, .library-panel select, .library-page button, .library-page input, .library-page select { font-size: 12px; }
+/* Header, one line: the title (the button that opens the Library tab) and the count, then + (add files; compact windows) and close (compact). */
 .library-header { display: flex; align-items: center; gap: 7px; flex-shrink: 0; margin: 0 0 6px 8px; }
 .library-header h2 { display: flex; flex: 1; align-items: baseline; gap: 6px; min-width: 0; margin: 0; overflow: hidden; font-size: 16px; white-space: nowrap; }
 .library-title-count { color: var(--muted); font: 400 11px/1 var(--font-mono); letter-spacing: 0; }
@@ -15,7 +15,8 @@
 .library-header .library-title-button { display: inline; width: auto; height: auto; padding: 0; border: 0; border-radius: 4px; background: none; color: inherit; font: inherit; cursor: pointer; }
 .library-header .library-title-button:hover { color: var(--accent-ink); }
 .library-header .library-title-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.library-panel [hidden] { display: none !important; }
+.library-header .library-title-button[aria-current=location] { color: var(--accent-ink); }
+.library-panel [hidden], .library-page [hidden] { display: none !important; }
 /* Resize handle: a 10 px hit area between the library and the reading panel, anchored to the 6 px page margin. */
 .library-right { flex-direction: row-reverse; }
 .library-right > .library-root { left: auto; right: 0; flex-direction: row-reverse; margin: 0 6px 0 0; }
@@ -40,7 +41,6 @@
   .library-root { bottom: var(--footer-height); left: 54px; }
   .library-right > .library-root { left: auto; right: 54px; }
   .library-header .library-plus, .library-header .library-close { display: none; }
-  .is-board .library-header .library-plus { display: grid; }
 }
 .library-resize { position: relative; z-index: 2; flex: 0 0 10px; display: grid; place-items: center; cursor: col-resize; touch-action: none; outline: none; }
 .library-resize::before { content: ''; position: absolute; inset: 0 4px; border-radius: 1px; background: var(--accent-border); }
@@ -63,37 +63,31 @@
 .library-search, .library-tree-search { flex-shrink: 0; width: 100%; min-width: 0; padding: 5px 8px; border: 0; border-radius: 6px; background: color-mix(in srgb, var(--hover) 55%, var(--raise)); color: var(--fg); }
 .library-search::placeholder, .library-tree-search::placeholder { color: var(--muted); }
 .library-tree-filter { flex: none; margin: 0 0 6px; }
-.library-facets { display: flex; flex-shrink: 0; flex-wrap: wrap; gap: 0 6px; margin: 0; }
-.library-facets select { flex: 0 1 auto; min-width: 0; max-width: 100%; padding: 4px 16px 4px 2px; border: 0; border-radius: 4px; background-color: transparent; background-position: right 6px center, right 2px center; color: var(--muted); font-size: 11px !important; }
-.library-facets select:hover { color: var(--fg); }
-.library-navigation { flex: 0 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 2px; margin: 0 -2px 2px; scrollbar-width: thin; }
-.library-filter { display: flex; align-items: center; gap: 5px; width: 100%; min-width: 0; text-align: left; padding: 4px 8px; line-height: 1.35; }
-.library-filter[aria-pressed=true] { border-color: transparent; background: var(--accent-soft); color: var(--accent-ink); }
-.library-filter[aria-pressed=true]:hover { background: var(--accent-soft-hover); }
+.library-colour-select { flex: 0 1 auto; min-width: 0; padding: 4px 16px 4px 2px; border: 0; border-radius: 4px; background-color: transparent; background-position: right 6px center, right 2px center; color: var(--muted); font-size: 11px !important; }
+.library-colour-select:hover { color: var(--fg); }
 .library-filter-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .library-count { flex-shrink: 0; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
-.library-filter[aria-pressed=true] .library-count { color: inherit; }
-.library-collections-heading { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: 8px 0 1px; }
-.library-collections-heading h3 { margin: 0 0 0 8px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .1px; text-transform: uppercase; }
-.library-collections-heading button { font-size: 11px; color: var(--accent-ink); padding: 3px 6px; }
-.library-collection { display: flex; gap: 2px; align-items: center; min-width: 0; }
-.library-collection .library-filter { flex: 1; }
-.library-collection-action { padding: 5px 4px; flex-shrink: 0; color: var(--muted); }
-.library-collection-action:last-child { font-size: 16px; }
-.library-no-collections { margin: 4px 7px 8px; color: var(--muted); font-size: 11px; line-height: 1.5; }
-/* Chips row (the board): the scope's name, then a chip per file type. It scrolls sideways; nothing wraps or runs past the edge. */
+/* The Library tab's header row: the scope's name (a button that opens the menu of scopes), how many documents it holds, then a chip per file type. It scrolls sideways; nothing wraps or runs past the edge. */
 .library-scope { display: flex; flex-shrink: 0; align-items: center; gap: 4px; min-width: 0; margin: 0 0 6px; overflow-x: auto; scrollbar-width: none; }
 .library-scope::-webkit-scrollbar { display: none; }
 .library-scope.has-more { mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
-.library-scope-name { flex: none; max-width: 70%; margin: 0; overflow: hidden; padding: 4px 2px; font-size: 15px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.library-scope-name { flex: none; max-width: 70%; margin: 0; overflow: hidden; font-size: 15px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.library-scope-button { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 6px; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; }
+.library-scope-button:hover, .library-scope-button[aria-expanded=true] { background: var(--hover-subtle); }
+.library-scope-button .library-menu-icon { color: var(--muted); }
+.library-scope-label { overflow: hidden; text-overflow: ellipsis; }
 .library-type-chips { display: flex; flex: none; gap: 4px; }
 .library-type-chip { flex: none; padding: 3px 9px; border: 0; border-radius: 999px; color: var(--muted); }
 .library-type-chip:hover { background: var(--hover-subtle); color: var(--fg); }
 .library-type-chip[aria-pressed=true] { background: var(--accent-soft); color: var(--accent-ink); }
-/* The board's search and sort row: the field, the count, and the one Recent menu. */
+/* The search row: the field, the colour filter, the list/grid toggle and the one sort menu. */
 .library-searchbar { display: flex; flex-shrink: 0; align-items: center; gap: 4px; min-width: 0; margin: 0 0 6px; }
 .library-search-field { flex: 1; min-width: 0; }
-.library-result-count { margin: 0 2px 0 auto; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.library-result-count { flex: none; margin: 0 8px 0 0; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.library-view-toggle { display: flex; flex: none; gap: 1px; }
+.library-view-toggle button { display: grid; place-items: center; width: 26px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--muted); }
+.library-view-toggle button:hover { color: var(--fg); }
+.library-view-toggle button[aria-pressed=true] { background: var(--accent-soft); color: var(--accent-ink); }
 .library-view-button { display: flex; flex: none; align-items: center; gap: 5px; padding: 3px 6px; border: 0; color: var(--muted); }
 .library-view-button:hover, .library-view-button[aria-expanded=true] { color: var(--fg); }
 .library-menu-icon { flex: none; }
@@ -117,8 +111,9 @@
 .library-grid .library-tile-scrim { display: none; }
 /* An EPUB's generated cover prints its own title; its caption (space is reserved) appears only once the cover image has replaced it. */
 .library-tile.is-cover .library-tile-media:not(.is-loaded) ~ .library-tile-caption { visibility: hidden; }
-.library-board-nav .library-facets { margin: 4px 0 0 2px; padding-top: 4px; border-top: 1px solid var(--hairline); }
-.library-item-menu { position: absolute; z-index: 5; display: flex; flex-direction: column; min-width: 150px; padding: 4px; border: 1px solid var(--border); border-radius: 7px; background: var(--card); box-shadow: var(--shadow-popover); }
+.library-item-menu { position: fixed; z-index: 40; display: flex; flex-direction: column; min-width: 150px; padding: 4px; border: 1px solid var(--border); border-radius: 7px; background: var(--card); box-shadow: var(--shadow-popover); }
+.library-item-menu[hidden] { display: none; }
+.library-scope-menu .library-menu-heading { margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--hairline); }
 .library-item-menu button { padding: 6px 10px; text-align: left; }
 /* The marker after the last document rendered; reaching it renders the next batch (see `sentinelObserver` in library.ts). */
 .library-sentinel { height: 1px; pointer-events: none; }
@@ -205,36 +200,21 @@
 .library-shelf-name { overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 .library-shelf-count { flex: none; font-variant-numeric: tabular-nums; }
 
-/* Board: the panel opened across the whole reading panel. It stays an overlay (#workspace keeps the margin the docked panel gave it, so
-   the page underneath does not refit); only this box's own width changes, and the saved panel width is not touched. A left rail holds the
-   tree, the main column the grid, and from 1200 px a detail strip joins. */
-.library-root.is-board { width: calc(100% - 12px); }
-@media (min-width: 720px) { .library-root.is-board { width: calc(100% - 66px); } }
-.is-board .library-resize { display: none; }
-.is-board .library-panel { padding: 0; overflow: hidden; }
-.library-panel:focus { outline: none; }
-.library-board { display: grid; grid-template-columns: 200px minmax(0, 1fr); height: 100%; min-height: 0; }
+/* The Library tab's page: it fills the reading panel the way Home and a document do (#workspace keeps the margin the docked panel gives it, so
+   the page sits beside the panel and never under it). The documents scroll in the main column; from 900 px of reading panel a detail strip
+   joins on the right. */
+.library-page { position: absolute; z-index: 1; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr); min-height: 0; }
+.library-page[hidden] { display: none; }
+.library-page-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 10px 14px 6px; }
 .library-detail { display: none; }
-@container library-panel (min-width: 1200px) {
-  .library-board { grid-template-columns: 200px minmax(0, 1fr) 220px; }
+@container workspace (min-width: 900px) {
+  .library-page { grid-template-columns: minmax(0, 1fr) 240px; }
   .library-detail { display: flex; }
 }
-.library-board-rail, .library-board-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
-.library-board-rail { padding: 8px 6px 6px; }
-.library-board-main { padding: 8px 10px 6px; border-left: 1px solid var(--hairline); }
-.is-board .library-header-actions > :not(.library-plus) { display: none; }
-.library-board-nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
-.library-board-nav .library-navigation { overflow: visible; }
-.is-board .library-scope { gap: 6px; margin: 0 0 8px; }
-.is-board .library-result-count { margin: 0 auto 0 2px; }
-.is-board .library-search-field { flex: 0 1 220px; }
-.is-board .library-documents { margin-top: 0; }
-.library-board-back { display: flex; flex: none; align-items: center; gap: 5px; padding: 4px 8px; color: var(--fg); font-weight: 600; }
-.library-board-back span { white-space: nowrap; }
-.library-board-back kbd { padding: 0 2px; border: 0; background: none; color: var(--muted); font: 11px/1.3 var(--font-mono); }
-.library-board-back { display: none; }
-.is-board .library-board-back { display: flex; }
-@media (max-width: 719px) { .library-board-back { display: none !important; } }
+.library-panel:focus { outline: none; }
+.library-page .library-scope { gap: 6px; margin: 0 0 8px -6px; } /* The title button's own 6 px padding lines its text up with the search field below. */
+.library-page .library-search-field { flex: 0 1 260px; margin-right: auto; }
+.library-page .library-documents { margin-top: 0; }
 .library-tile.is-selected .library-tile-media::after { box-shadow: inset 0 0 0 2px var(--accent); }
 .library-list .library-document.is-selected { background: var(--accent-soft); }
 .library-detail { flex-direction: column; min-width: 0; min-height: 0; gap: 6px; padding: 12px; overflow-y: auto; border-left: 1px solid var(--hairline); scrollbar-width: thin; }
@@ -260,7 +240,7 @@
 .library-detail-section p { margin: 0; font-size: 12px; line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere; }
 .library-detail-empty { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 
-/* Colour filter: a removable chip in the scope row, swatches in the board's detail strip. */
+/* Colour filter: a removable chip in the scope row, swatches in the Library tab's detail strip. */
 .library-colour-chip { display: flex; flex: none; align-items: center; gap: 5px; padding: 2px 7px 2px 6px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); font-size: 11px; font-weight: 600; line-height: 1.4; }
 .library-colour-chip:hover { background: var(--accent-soft-hover); }
 .library-colour-dot { width: 9px; height: 9px; border-radius: 50%; box-shadow: inset 0 0 0 1px #00000033; }
@@ -340,7 +320,7 @@
 .library-intake-shelf:hover { color: var(--fg); }
 .library-intake-menu { top: calc(100% + 2px); right: 0; max-height: 220px; overflow-y: auto; font: 12px/1.35 var(--font-ui); letter-spacing: 0; scrollbar-width: thin; }
 .library-intake-menu button { white-space: nowrap; }
-/* Fixed-width covers with the board's own 4 px gap (libraryGrid.gap), rows left-aligned like a shelf. */
+/* Fixed-width covers with the page's own 4 px gap (libraryGrid.gap), rows left-aligned like a shelf. */
 .library-intake-tiles { display: grid; grid-template-columns: repeat(auto-fill, 132px); justify-content: start; align-items: start; gap: 4px; }
 .library-intake-tile { position: relative; min-width: 0; }
 .library-intake-tile .library-tile-media.is-loaded .library-tile-scrim { padding-top: 32px; background: linear-gradient(to top, #000000db, #00000000); opacity: 1; }
@@ -364,13 +344,6 @@
   .library-panel { padding: 7px 9px; }
   .library-header { margin-bottom: 3px; }
   .library-searchbar { margin-bottom: 4px; }
-  .library-facets { margin-bottom: 6px; }
-  .library-facets select { padding-top: 4px; padding-bottom: 4px; }
-  .library-navigation { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-content: start; gap: 2px; max-height: 42%; min-height: 94px; }
-  .library-navigation > :nth-child(n+4) { grid-column: 1 / -1; }
-  .library-navigation > .library-filter { padding: 4px; font-size: 11px; }
-  .library-collections-heading { margin-top: 2px; padding-top: 4px; }
-  .library-filter { padding-top: 4px; padding-bottom: 4px; }
   .library-documents-head { padding-top: 4px; padding-bottom: 4px; }
   .library-documents { min-height: 56px; }
   .library-empty { padding-top: 8px; }
@@ -381,13 +354,13 @@
 .tree-row:hover { background: var(--hover-subtle); }
 .tree-row:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
 .tree-row.is-menu-open { background: var(--hover); }
-.tree-row.is-active { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
-.tree-row.is-active:hover { background: var(--accent-soft-hover); }
+.tree-row.is-active, .tree-row.is-scope { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+.tree-row.is-active:hover, .tree-row.is-scope:hover { background: var(--accent-soft-hover); }
 .tree-chevron { display: grid; flex: none; place-items: center; width: 12px; color: var(--muted); }
 .tree-chevron-icon { transition: rotate .12s; }
 .tree-row[aria-expanded=true] > .tree-chevron .tree-chevron-icon { rotate: 90deg; }
 .tree-icon { display: grid; flex: none; place-items: center; color: var(--muted); }
-.tree-row.is-active .tree-icon, .tree-row.is-active .tree-meta { color: inherit; }
+.tree-row.is-active .tree-icon, .tree-row.is-active .tree-meta, .tree-row.is-scope .tree-icon, .tree-row.is-scope .tree-meta { color: inherit; }
 .tree-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .tree-row.is-root .tree-label { font-weight: 650; }
 .tree-label mark { border-radius: 2px; background: color-mix(in srgb, var(--accent) 26%, transparent); color: inherit; }

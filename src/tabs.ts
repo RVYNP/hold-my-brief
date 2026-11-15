@@ -15,8 +15,11 @@ export const MAX_TABS = 64;
 /** What the model needs to know about a tab; the owner adds whatever else a tab carries. */
 export type TabBase = { path: string };
 
-/** The part of a tab that survives a restart: enough to draw it and to reopen it. */
-export type SavedTab = { path: string; name: string; format: string };
+/** The Library tab's identity: no document has this path, so it can sit in the tab list beside documents and be saved with them. */
+export const LIBRARY_PATH = 'hold-my-brief:library';
+
+/** The part of a tab that survives a restart: enough to draw it and to reopen its document. The Library tab (format `library`) also saves its `scope`. */
+export type SavedTab = { path: string; name: string; format: string; scope?: string };
 /** The saved session: the tabs in order, and which one was showing (an index into `tabs`; none means Home). */
 export type TabSession = { tabs: SavedTab[]; active: number | null };
 
@@ -32,7 +35,7 @@ export function readSession(value: unknown): TabSession {
     const tab = entry as Partial<SavedTab> | null;
     if (!tab || typeof tab.path !== 'string' || !tab.path || tabs.length >= MAX_TABS || tabs.some(kept => kept.path === tab.path)) return;
     if (index === raw.active) active = tabs.length;
-    tabs.push({ path: tab.path, name: typeof tab.name === 'string' && tab.name ? tab.name : tab.path.split(/[\\/]/).pop() ?? tab.path, format: typeof tab.format === 'string' ? tab.format : '' });
+    tabs.push({ path: tab.path, name: typeof tab.name === 'string' && tab.name ? tab.name : tab.path.split(/[\\/]/).pop() ?? tab.path, format: typeof tab.format === 'string' ? tab.format : '', ...(typeof tab.scope === 'string' && tab.scope ? { scope: tab.scope } : {}) });
   });
   return { tabs, active };
 }

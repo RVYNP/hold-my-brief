@@ -22,6 +22,11 @@ document with its format, its title (an EPUB's own title once it is known), and 
 where you are ("40 / 146"). **+** after the last tab opens the file dialog into a new tab. When there are more tabs than fit, the strip
 scrolls and a **⌄** at its end lists them all. Drag a tab to reorder; middle-click a tab to close it. Empty strip space still drags the window.
 
+The **Library** tab (see *Library tab* under Document library) is a tab like the others, with the library glyph and the name of what it
+shows: `All documents`, `Favorites`, a collection's name, or a folder as `refs › 03_wwe_mag`. There is at most one: opening the library
+again from anywhere shows it and points it at the new selection instead of opening another. It starts after Home, can be dragged, closed
+with its × or middle-click, and is restored with the other tabs at the next launch, on the same selection.
+
 **Dropping files.** Drop one or several files anywhere on the window and each opens in its own tab, in the order dropped (a file that
 is already open is shown instead). While files are over the window the reading area dims behind a "Drop to open in a new tab" panel;
 over the tab strip a marker between two tabs and a "+ N files" ghost tab show where they will go, and the tabs open there. Dropped on the
@@ -30,7 +35,7 @@ one notice names them. A document dragged out of the library (a tree row, row or
 the same way, with a small copy of its cover following the pointer; a plain click on any of them still opens it, and Escape cancels a drag.
 
 In a compact window (under 720 px) there is no strip. The title shows the open document's name, how many tabs are open and a ⌄; it
-opens a menu with Home, every document (with its format and place, and a close ×), and **New tab…**.
+opens a menu with Home, the Library tab when it is open, every document (with its format and place, and a close ×), and **New tab…**.
 
 | Action | Shortcut |
 | --- | --- |
@@ -49,7 +54,7 @@ shown most recently); the others are put away and reopen at the place you left t
 
 The open tabs, their order and the one showing are remembered and restored at the next launch (in the browser preview, in this
 browser's storage). Only the tab that was showing opens at once; the others open when selected. A tab whose file has gone shows
-**File not found** with **Locate…** and **Close tab**, rather than failing the launch.
+**File not found** with **Locate…** and **Close tab**, rather than failing the launch. The Library tab comes back drawn from the library as it is then.
 
 With nothing saved, the window opens on **Hand it over.** Once documents have been opened, it opens
 on **Home**:
@@ -62,8 +67,8 @@ on **Home**:
   collection that holds something, a 2 × 2 mosaic of its first covers with the number of references.
 - A shelf scrolls sideways with the trackpad or a horizontal wheel, by dragging it sideways, with the **‹** and
   **›** buttons that appear at its ends when you point at it, or with the arrow keys (one Tab stop per shelf). It snaps to
-  cards. **Open in library** opens the library on that selection (**Continue reading**, **Favorites**, or all references for
-  Collections); a collection card opens the library on that collection. A section with nothing in it is left out.
+  cards. **Open in library** opens the Library tab on that selection (**Continue reading**, **Favorites**, or all documents for
+  Collections); a collection card opens it on that collection. A section with nothing in it is left out.
 - The chips under the title (**All**, **PDF**, **EPUB**, **Markdown**, **Text**, **Images**, only the types you have) filter every
   section; **All** restores the mixed view. They stay on one row that scrolls sideways when the window is narrow.
 
@@ -431,8 +436,8 @@ it does when you resize the window. Escape closes the panel while focus is insid
 are remembered separately. In compact windows (below 720 pixels) there is no icon rail: the sidebar button at the left
 of the toolbar opens the library as a sheet.
 
-The panel's header is its title, **Library**, and how many documents it holds. The title is a button: it opens the full
-library, the **board**, on all documents. Under the header the filter field is always there, reading *Filter 40 documents*
+The panel's header is its title, **Library**, and how many documents it holds. The title is a button: it opens the
+Library tab on all documents. Under the header the filter field is always there, reading *Filter 40 documents*
 with your count. It narrows everything below it as you type (every word must match the name or a folder above it; the
 matches are highlighted and their folders open); Esc clears it, and Esc on an empty field closes the panel.
 
@@ -446,7 +451,7 @@ is remembered, like a folder's:
 - **Folders**: one bold root for each folder you indexed, its subfolders (with a chevron, a folder icon and how many
   documents are beneath), and the documents as rows with their file name, their format icon and, at the right, how far
   you got (`p. 62 / 88`, `37 %`, `Finished`). Files that share a name (many are called `source.pdf`) sit under their own
-  folders, which is how you tell them apart here. Elsewhere (Home, tabs, the board, Favorites) a file with a generic
+  folders, which is how you tell them apart here. Elsewhere (Home, tabs, the Library tab, Favorites) a file with a generic
   name (`source`, `document`, `scan`, `file`, `untitled`, or only digits) is shown by its folder's name instead.
 - **Loose files**: documents added by hand that are not in an indexed folder.
 
@@ -456,7 +461,7 @@ Click a row to open a document (a document that is already open shows its tab), 
 Linux) or middle-click to give it a tab in the background, or right-click for **Open in new tab**, **Add to / Remove
 from favorites**, **Details**, **Organize…** (collections), **Remove from library…** and, on the desktop, **Locate
 original…**. The same works in every section. Click a folder, a collection or a section caption to open or close it; double-click a
-folder or collection to browse it in the board. The folders above the document you are reading open by themselves, so it
+folder or collection to show it in the Library tab (its row stays highlighted while the tab shows it). The folders above the document you are reading open by themselves, so it
 is always in view. The tree is a keyboard tree across all four sections: one Tab stop, Up and Down move, Right opens a
 section, folder or collection or enters it, Left closes it or goes to its parent, Home and End jump, Enter opens a
 document or toggles a section or folder, and typing a name jumps to it.
@@ -481,19 +486,10 @@ and the width is re-fitted when the window shrinks.
 
 In compact windows the sheet covers the reading panel behind a scrim, cannot be resized, and closes on a click
 outside it or after you open a document from it. Escape closes it while focus is inside. It has the same header, filter
-field and sections; its title is plain text, because there is no board to open.
+field and sections; its title still opens the Library tab, and the sheet gets out of the way so you can see it.
 
-The **board** (the panel's **Library** title, or **Library board** in the palette) opens the library across
-the reading panel, beside the icon rail; it covers the page without resizing it. Its header has the library name and **+** (a menu with **Add files…** and
-**Sources…**); under it a row of chips: the name of what you are looking at (**All references**, **Favorites**, a
-collection, a source or a folder) and one chip for each file type the library holds (PDF, EPUB, Markdown, Text,
-Images). Click a type to show only those, click it again to clear it. The row scrolls sideways when it is longer than the
-board. Under it are the search field, the number of references shown, and **Recent ☰**, one menu for **Sort by**
-(Recent, Name A–Z), **View as** (List, Grid), **Show** (any availability, ready, missing) and, with the grid on, a
-**Size** slider for the tiles. The board keeps the collection tree in its own left column.
-
-- **Add files** (in the **+** menu) selects several documents or images at once without opening them. Select a
-  collection first to add new entries directly to it. New references with no picture of their own
+- **Add files** (in the **+** menu) selects several documents or images at once without opening them. Show a
+  collection in the Library tab first to add new entries directly to it. New references with no picture of their own
   open the **intake** sheet (below).
 - **Index a folder** (desktop only) picks a folder and adds every PDF, EPUB, Markdown and text file
   beneath it. The folder becomes a collection, and each first-level subfolder that contains such
@@ -516,7 +512,7 @@ board. Under it are the search field, the number of references shown, and **Rece
 The **Recent ☰** menu switches between a **grid** of thumbnails and a **list** of names. A list row has a
 small cover or thumbnail, the title and a line with its format and how far you got: `PDF · p. 12 / 96` for pages,
 `EPUB · 38 %` for text that reflows (Markdown and text files too), `Finished` at the last page or the end, and nothing
-for a document you have not opened yet. The same line is in the board's detail strip. Progress is the saved reading
+for a document you have not opened yet. The same line is in the Library tab's detail strip. Progress is the saved reading
 position, read again when the library opens; the browser build uses the positions it keeps itself. A grid tile has its title under it (two
 lines at most, then an ellipsis), so a scanned page is never anonymous. The **Size** slider sets how wide the
 tiles are at least, and is remembered with the choice of view per collection. A drawer narrower than 400
@@ -527,7 +523,7 @@ posters and wide spreads read as themselves; a reference with no picture shows a
 reading is marked **Reading**, and a missing original is dimmed.
 
 The library has no pages. The grid or list scrolls all the way through everything that matches, however many
-references that is; the count is in the board's header row (`230 references`). References are added as you
+references that is; the count is in the Library tab's header (`230 references`). References are added as you
 scroll, and a shelf's heading is shown once, with its tiles continuing under it. Changing the search, a type
 chip, the sort, the view or the collection starts again at the top. **↑** and **↓** move between references (the
 grid also takes **←** and **→**), **Page Up** and **Page Down** move a screenful, and **Home** and **End** go to
@@ -545,7 +541,7 @@ loses nothing.
 **EPUB titles and covers.** An EPUB shows the title (and author) written inside the book instead of
 its file name, and its own cover image as the thumbnail when it has one. Only the book's package
 file (which holds the title) and its cover are read, never the whole book, and the result is remembered so it is not
-read again until the file changes. The file name stays visible in the board's detail strip, in small
+read again until the file changes. The file name stays visible in the Library tab's detail strip, in small
 monospaced type, and on the list's second line.
 
 **Generated covers.** A reference with no picture (an EPUB without a cover, Markdown, plain text)
@@ -560,14 +556,14 @@ reference in no collection gets a quiet blue-grey and a pattern of its own. Ligh
 have their own quiet version, and all of the text keeps at least 4.5:1 contrast. The open or
 selected reference carries the same accent ring as a picture.
 
-**A new pattern.** Point at or Tab to a generated cover in the grid or the board and a small **↻**
+**A new pattern.** Point at or Tab to a generated cover in the grid and a small **↻**
 appears at its top right (named *New cover pattern for* the title): it gives that book a fresh random
 pattern, in the same colours and kind as its shelf, and the book keeps it. The ··· menu has the same
 **New cover pattern**, and **Reset cover** (shown once the book has a pattern of its own) goes back to
-the one its path gives. The board's detail strip has its own ↻ on the cover. A book that shows a real
+the one its path gives. The Library tab's detail strip has its own ↻ on the cover. A book that shows a real
 picture has no pattern to change.
 
-**Shelves.** When you open a collection that has child collections, the grid and board group its
+**Shelves.** When you open a collection that has child collections, the grid groups its
 references into shelves: a quiet monospaced header (the collection's name in capitals, then a count)
 above that collection's tiles, with the references that sit directly in the parent first under the
 parent's own name. Shelves are ordered by collection name, so a numeric prefix sets the order. Search,
@@ -588,7 +584,7 @@ references*, with where they came from in small monospaced type under the title 
 *Added files*). It does not open for a single PDF, image or EPUB that has its own cover, nor when
 every added file does; it always opens after indexing a folder. The new references are grouped by shelf (their
 first collection, shown by display name; those in none are *Unfiled*), each shelf with a quiet
-header and its count, then its books as covers 132 px wide, as on the board: the generated cover (or the real
+header and its count, then its books as covers 132 px wide, as in the Library tab: the generated cover (or the real
 picture), with the title, format and version.
 
 - **↻** on a cover, shown on hover or focus (Tab to it, **Enter**), gives that book a new pattern.
@@ -601,21 +597,29 @@ picture), with the title, format and version.
   confirmation. At most 60 books are shown per shelf, with *and n more* under them; **New patterns** and
   **shelf ▾** still apply to all of them.
 
-### Library board
+### Library tab
 
-The board shows a whole collection at once. Choose the expand button in the library header, or run
-**Library board** from the command palette. The drawer opens across the reading panel, with your
-collections on the left and every reference as a true-proportion thumbnail; the page underneath keeps
-its size and place. Click a reference to select it. From 1200 px wide, a detail strip on the right
-shows its collections, tags, notes and source. Press Enter or double-click to open it and return to
-reading. Press Escape, or choose **Back to reading**, to return to the drawer exactly as you left it.
-The board needs a window at least 720 px wide.
+The Library tab shows a whole selection of the library at once, in the reading panel, as a tab beside your documents. The panel
+is its only navigation: click the panel's **Library** title for all documents, double-click a folder or a collection in the tree
+for that one, press **Open in library** on Home, or run **Open Library tab** from the command palette. If the tab is already open
+it is shown and pointed at the new selection; it is never opened twice. The panel marks what the tab shows (the folder or collection
+row is highlighted), and the tab's name says it too. Nothing covers the page you were reading: switching back to a document is
+a click on its tab.
+
+The header has the name of what is shown, as a button: its menu offers the selections the tree has no row for (**All
+documents**, **Favorites**, **Continue reading**, **Unfiled** and each **Source**). Next to it are the number of references and one
+chip for each file type the library holds (PDF, EPUB, Markdown, Text, Images); click a type to show only those, click it again to
+clear it. Under it are the search field, a colour menu, the **List** and **Grid** buttons and **Recent ☰**, one menu for **Sort by**
+(Recent, Name A–Z), **Show** (any availability, ready, missing) and, with the grid on, a **Size** slider for the tiles. The documents
+scroll all the way through. Click one to select it; from 900 px of reading panel a detail strip on the right shows its
+collections, tags, notes and source. Click the selected document again, or press Enter, to open it: its tab opens, or is shown if it
+is already open. **⌘-click** (Ctrl-click on Windows and Linux) or middle-click gives it a tab in the background instead.
 
 ### Filter by colour
 
 The library can be narrowed to references whose pictures are mostly one colour: red, orange,
-yellow, green, teal, blue, purple, pink, brown, black, white or grey. Choose a colour in the filter
-menu (beside the collection name), or click a swatch in the board's detail strip. A chip such as
+yellow, green, teal, blue, purple, pink, brown, black, white or grey. Choose a colour in the colour menu beside the Library tab's
+search field, or click a swatch in its detail strip. A chip such as
 **Blue ×** appears in the scope row; its × removes the filter. The filter applies on top of the
 current collection and search. Colours are measured on this computer as thumbnails are made, and
 remembered with them; while some are still being measured the chip says how many.

@@ -13,6 +13,7 @@ import { formatProgress, inProgress, type Progress } from './progress';
 import { coverNode as cardCover, markUnavailable, placeTiles, repaintCovers, showPicture, tileMedia } from './cards';
 import { createIntake, intakeSource, intakeTitle, newArrivals, movedCollectionIds, type IntakeHost } from './intake';
 import { assignCoverSlots, collectionDisplayName, compareCollections, coverRatio, coverSeedOf, displayTitle, groupIntoShelves, shelfLayout, type Shelf } from './shelf';
+import { parseScope, sameScope, scopeKey, scopeTitle, type Scope } from './library-scope';
 import { onAppearanceChange, scheme } from './theme';
 
 /** `pending` is how many pictures still had no measured colours when the answer was given (0 = `matches` is complete). */
@@ -36,10 +37,15 @@ type Callbacks = {
   openChanged?: (open: boolean) => void;
   /** The icon-rail button that opens the panel, where focus returns when it closes. */
   door?: () => HTMLElement | undefined;
+  /** Something asked for the Library tab (a scope was opened, a colour filter was set): show it, on `place`, opening it if it is not open. */
+  openPage: (place: LibraryPlace) => void;
+  /** What the Library tab shows changed (another scope, a collection renamed): its title and saved scope follow. */
+  pageChanged?: (place: LibraryPlace) => void;
 };
 /** What Home's "Open in library" opens the library on. */
 export type LibraryScope = 'all' | 'favorites' | 'reading' | { collection: string };
-type Filter = { kind: 'all' | 'favorites' | 'reading' | 'unfiled' } | { kind: 'collection' | 'source'; id: string } | { kind: 'folder'; id: string; path: string };
+/** What the Library tab shows, as its tab saves and titles it: the scope's saved form and its name. */
+export type LibraryPlace = { scope: string; title: string };
 /** Documents rendered per step of the continuous scroll: the first screen's worth, then one more each time the end of what is shown comes near. */
 const batchSize = 30;
 
@@ -78,7 +84,9 @@ function icon(paths: string) {
 const closeIcon = icon('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>');
 const plusIcon = icon('<path d="M5 12h14"/><path d="M12 5v14"/>');
 const menuIcon = icon('<path d="M4 6h16M4 12h16M4 18h16"/>').replace('width="15" height="15"', 'width="13" height="13" class="library-menu-icon"');
-const boardIcon = { close: icon('<path d="m14 10 7-7"/><path d="M20 10h-6V4"/><path d="m3 21 7-7"/><path d="M4 14h6v6"/>') };
+const chevronIcon = icon('<path d="m6 9 6 6 6-6"/>').replace('width="15" height="15"', 'width="12" height="12" class="library-menu-icon"');
+const listIcon = icon('<path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>');
+const gridIcon = icon('<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>');
 function savedPreference(key: string) { try { return localStorage.getItem(key); } catch { return null; } }
 function savePreference(key: string, value: string) { try { localStorage.setItem(key, value); } catch { /* Optional preference. */ } }
 function orderedTree<T extends { id: string; name: string; parentId: string | null }>(items: T[]): { item: T; depth: number }[] {
@@ -99,10 +107,10 @@ function orderedTree<T extends { id: string; name: string; parentId: string | nu
 }
 
 export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
-  refresh: (activePath?: string) => Promise<void>; toggle: () => void; board: () => void;
+  refresh: (activePath?: string) => Promise<void>; toggle: () => void;
   /** The side the library, drawer and rail, is kept on (one saved preference), and the way to change it. */
   side: () => LibrarySide; setSide: (side: LibrarySide) => void;
-  /** Opens the library on all references, on favorites, on the documents still being read, or on one collection (the board where there is room). */
+  /** Opens the Library tab on all documents, on favorites, on the documents still being read, or on one collection (a tab that is open is retargeted). */
   browse: (scope: LibraryScope) => void;
   /** Sets the colour and/or search text of the library list (opening the drawer if needed) and reports what matches. `colour: null` clears it; omitted fields are left alone. */
   filter: (change: { colour?: string | null; query?: string }) => Promise<LibraryFilterResult>;
@@ -113,6 +121,12 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   openAddMenu: (anchor: HTMLElement) => void;
   /** The document showing (none: Home): its row is marked in the tree and the folders above it are opened. */
   setActive: (path: string | undefined) => void;
+  /** The Library tab is in front (or not): its page is drawn while it is, and kept in step with the library. */
+  showPage: (open: boolean) => void;
+  /** Points the Library tab at a saved scope without showing it; anything unrecognised is every document. */
+  restoreScope: (key: string | undefined) => void;
+  /** The Library tab was closed: the next one opens on every document, and Add files stop going to the scope's collection. */
+  forgetScope: () => void;
 } {
   // Panel mode: at >=720 px the library is a resizable panel docked beside the icon rail, taking its width from the reading
   // panel (see library.css); below it becomes a compact sheet with a scrim, a focus trap and workspace `inert`.
@@ -122,24 +136,23 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   const workspace = document.getElementById('workspace');
   const preferenceKey = () => `hold-my-brief:library-${wide.matches ? 'wide' : 'narrow'}`;
   function preference() { try { const saved = localStorage.getItem(preferenceKey()); return saved === null ? wide.matches : saved === 'open'; } catch { return wide.matches; } }
-  let visible = preference(); let library: Library = emptyLibrary(); let filter: Filter = { kind: 'all' };
+  let visible = preference(); let library: Library = emptyLibrary(); let filter: Scope = { kind: 'all' };
   let activePath: string | undefined; let progress: Record<string, Progress> = {}; let busy = false, loaded = false, revision = 0;
-  // Whatever changes what the list shows (a filter, the sort, the scope, the board) sets this: the next render starts at the top. Any other render
+  // Whatever changes what the list shows (a filter, the sort, the scope, the Library tab coming up) sets this: the next render starts at the top. Any other render
   // (an edit, a refresh, colours arriving) keeps the scroll position and as many documents rendered as there were.
   let fromTop = true;
   let loadError = false; let modal: HTMLDialogElement | undefined; let modalError: HTMLElement | undefined;
   let matches: LibraryDocument[] = []; let imageSequence: string[] = [];
-  const expanded = new Set<string>(); const knownCollections = new Set<string>();
   // The panel is the tree: FAVORITES, COLLECTIONS, FOLDERS, LOOSE FILES. `treeQuery` is what its always-visible filter field holds.
   let tree: LibraryTree = buildLibraryTree(emptyLibrary()); let treeQuery = ''; let revealed: string | undefined;
   let collectionMatches = new Map<string, Set<string>>();
   let searchable = new Map<string, string>();
   const busyDisabled = new Map<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLButtonElement, boolean>();
   let view: LibraryView = 'list'; let menuAnchor: HTMLElement | undefined;
-  // The sort, the availability and the file type are what the Recent menu and the chips set (the board's controls).
+  // The sort, the availability and the file type are what the Recent menu and the chips set (the Library tab's controls).
   let sortMode: 'recent' | 'name' = 'recent'; let availabilityFilter = ''; let fileType = ''; let chromeMenu: { menu: HTMLElement; anchor: HTMLElement } | undefined;
-  // The board is the same drawer opened across the whole reading panel; it is never saved, so the drawer width is untouched.
-  let board = false; let selectedPath: string | undefined;
+  // The Library tab's page is what shows documents; `pageOpen` is true while that tab is in front. The panel is only the tree.
+  let pageOpen = false; let selectedPath: string | undefined; let savedScroll = 0; let lastPlace: LibraryPlace | undefined;
   // Colour filter: a named hue applied on top of the collection and search. A picture counts once its colours are known.
   let colourFilter: ColourName | null = null; let colourIndex: Promise<number> | undefined; let colourUnknown = 0; let colourTimer = 0; const colourRequested = new Set<string>();
 
@@ -147,10 +160,10 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   const backdrop = button('', 'Close library'); backdrop.className = 'library-backdrop'; backdrop.tabIndex = -1;
   const panel = element('aside', 'library-panel'); panel.setAttribute('aria-label', 'Reference library');
   const header = element('div', 'library-header'); const headerActions = element('div', 'library-header-actions');
-  // Header, one line: the title and the count, then + (add files, sources; compact windows and the board only: the icon rail has Add files) and, in the compact sheet, close.
-  // The title is the button that opens the board on All documents; the compact sheet has no board, so there it is plain text.
+  // Header, one line: the title and the count, then + (add files, sources; compact windows only: the icon rail has Add files) and, in the compact sheet, close.
+  // The title is the button that opens the Library tab on All documents.
   const heading = element('h2'); const titleButton = button('Library', undefined, 'title'); titleButton.className = 'library-title-button'; titleButton.title = 'Browse the whole library';
-  const headingText = element('span', 'library-title-plain', 'Library'); const headingCount = element('span', 'library-title-count'); heading.append(titleButton, headingText, headingCount);
+  const headingCount = element('span', 'library-title-count'); heading.append(titleButton, headingCount);
   const close = button('', 'Close library'); close.className = 'library-close'; close.innerHTML = closeIcon; close.title = 'Close library';
   const plus = button('', 'Add files or manage sources', 'plus'); plus.className = 'library-plus'; plus.innerHTML = plusIcon; plus.title = 'Add files, manage sources'; plus.setAttribute('aria-haspopup', 'menu'); plus.setAttribute('aria-expanded', 'false');
   headerActions.append(plus, close); header.append(heading, headerActions);
@@ -163,7 +176,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   dialogHost.addEventListener('keydown', event => { if (shortcutFor(event) !== 'command-palette') event.stopPropagation(); });
   const searchLabel = element('label', 'library-search-label', 'Search library');
   const search = element('input', 'library-search'); search.type = 'search'; search.placeholder = 'Title, tags, notes, folder…'; search.id = 'library-search'; search.autocomplete = 'off'; searchLabel.htmlFor = search.id;
-  // The panel's own filter, always under the header, narrows the tree as you type; the board's search has the fuller query (tags, notes, colour).
+  // The panel's own filter, always under the header, narrows the tree as you type; the Library tab's search has the fuller query (tags, notes, colour).
   const treeFilterRow = element('div', 'library-tree-filter');
   const treeFilterLabel = element('label', 'library-search-label', 'Filter the library'); const treeFilter = element('input', 'library-tree-search'); treeFilter.type = 'search'; treeFilter.placeholder = 'Filter 0 documents'; treeFilter.id = 'library-tree-filter'; treeFilter.autocomplete = 'off'; treeFilterLabel.htmlFor = treeFilter.id;
   treeFilterRow.append(treeFilterLabel, treeFilter);
@@ -171,25 +184,28 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   const treeEmpty = element('div', 'library-empty'); treeEmpty.hidden = true;
   const colourSelect = element('select'); colourSelect.setAttribute('aria-label', 'Filter by colour'); option(colourSelect, '', 'Any colour');
   for (const name of colourNames) option(colourSelect, name, titleCase(name));
-  const facets = element('div', 'library-facets'); facets.append(colourSelect);
-  const navigation = element('nav', 'library-navigation'); navigation.setAttribute('aria-label', 'Library filters and collections');
-  // The board's chips row: the scope names what is open, then one chip per file type the library has. The row scrolls sideways rather than wrapping.
+  // The Library tab's header: the scope's name (a button, for the scopes the panel does not list) and how many documents it holds, then one chip per file type the library has. The row scrolls sideways rather than wrapping.
   const scope = element('div', 'library-scope');
-  const scopeTitle = element('h3', 'library-scope-name'); const scopeLabel = element('span', 'library-scope-label'); scopeTitle.append(scopeLabel);
+  const scopeHeading = element('h3', 'library-scope-name'); const scopeButton = button('', undefined, 'scope-menu'); scopeButton.className = 'library-scope-button'; scopeButton.setAttribute('aria-haspopup', 'menu'); scopeButton.setAttribute('aria-expanded', 'false'); scopeButton.title = 'Choose what to browse';
+  const scopeLabel = element('span', 'library-scope-label'); scopeButton.append(scopeLabel); scopeButton.insertAdjacentHTML('beforeend', chevronIcon); scopeHeading.append(scopeButton);
+  const resultCount = element('span', 'library-result-count'); resultCount.setAttribute('role', 'status');
   const colourChip = button('', undefined, 'colour-chip'); colourChip.className = 'library-colour-chip'; colourChip.hidden = true;
   const typeChips = element('div', 'library-type-chips'); typeChips.setAttribute('role', 'group'); typeChips.setAttribute('aria-label', 'File type');
-  scope.append(scopeTitle, colourChip, typeChips);
-  // The board's search and sort row: the search field, the result count, and the one menu for sort, view and availability.
-  const searchRow = element('div', 'library-searchbar');
+  scope.append(scopeHeading, resultCount, colourChip, typeChips);
+  // The search row: the search field, the colour filter, the list/grid toggle and the one menu for sort and availability.
+  const searchRow = element('div', 'library-searchbar'); colourSelect.className = 'library-colour-select';
   const searchField = element('div', 'library-search-field'); searchField.append(searchLabel, search);
-  const resultCount = element('span', 'library-result-count'); resultCount.setAttribute('role', 'status');
+  const viewToggle = element('div', 'library-view-toggle'); viewToggle.setAttribute('role', 'group'); viewToggle.setAttribute('aria-label', 'View as');
+  const listButton = button('', 'List view', 'view-list'); const gridButton = button('', 'Grid view', 'view-grid');
+  listButton.innerHTML = listIcon; gridButton.innerHTML = gridIcon; listButton.title = 'List'; gridButton.title = 'Grid'; viewToggle.append(listButton, gridButton);
   const viewButton = button('', undefined, 'view-menu'); viewButton.className = 'library-view-button'; viewButton.setAttribute('aria-haspopup', 'menu'); viewButton.setAttribute('aria-expanded', 'false');
   const viewLabel = element('span', 'library-view-label'); viewButton.append(viewLabel); viewButton.insertAdjacentHTML('beforeend', menuIcon);
-  searchRow.append(searchField, resultCount, viewButton);
-  const boardNav = element('div', 'library-board-nav'); boardNav.append(navigation, facets);
+  searchRow.append(searchField, colourSelect, viewToggle, viewButton);
   const itemMenu = element('div', 'library-item-menu'); itemMenu.setAttribute('role', 'menu'); itemMenu.hidden = true;
-  // One menu: Sort by, View as, Show and, for the grid, Size.
+  // One menu: Sort by, Show and, for the grid, Size (the list/grid toggle is beside it).
   const viewMenu = element('div', 'library-item-menu library-view-menu'); viewMenu.setAttribute('role', 'menu'); viewMenu.hidden = true;
+  // What the title's menu offers: the scopes the panel's tree has no row for.
+  const scopeMenu = element('div', 'library-item-menu library-view-menu library-scope-menu'); scopeMenu.setAttribute('role', 'menu'); scopeMenu.hidden = true;
   const choices: { group: string; value: string; node: HTMLButtonElement }[] = [];
   function menuGroup(group: string, options: readonly (readonly [string, string])[], pick: (value: string) => void) {
     const section = element('div', 'library-menu-group'); section.setAttribute('role', 'group'); section.setAttribute('aria-label', group); section.append(element('div', 'library-menu-heading', group));
@@ -197,7 +213,6 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     viewMenu.append(section);
   }
   menuGroup('Sort by', [['recent', 'Recent'], ['name', 'Name A–Z']], value => { sortMode = value === 'name' ? 'name' : 'recent'; fromTop = true; renderDocuments(); });
-  menuGroup('View as', [['list', 'List'], ['grid', 'Grid']], value => { savePreference(viewKey(), value); fromTop = true; renderDocuments(); });
   menuGroup('Show', [['', 'Any availability'], ['ready', 'Ready'], ['missing', 'Missing']], value => { availabilityFilter = value; fromTop = true; renderDocuments(); });
   const sizeRow = element('label', 'library-size-row'); const sizeInput = element('input'); sizeInput.type = 'range'; sizeInput.min = String(libraryTileSize.min); sizeInput.max = String(libraryTileSize.max); sizeInput.step = String(libraryTileSize.step); sizeInput.setAttribute('aria-label', 'Tile size');
   sizeRow.append(element('span', '', 'Size'), sizeInput); viewMenu.append(sizeRow);
@@ -205,31 +220,13 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   // Sits after the last document rendered; the next batch is rendered when it comes within reach of the viewport (see `sentinelObserver`).
   const sentinel = element('div', 'library-sentinel'); sentinel.setAttribute('aria-hidden', 'true');
   const fileInput = element('input'); fileInput.type = 'file'; fileInput.accept = '.pdf,.epub,.md,.markdown,.txt,.png,.jpeg,.jpg,.webp,.gif,.avif,.bmp'; fileInput.multiple = true; fileInput.hidden = true;
-  // Board layout: the header and the collection tree become a left rail, the chips, search row and grid the
-  // main column, and a detail strip joins from 1200 px. `arrange` moves the same nodes between the two layouts.
-  const boardBack = button('', undefined, 'board-back'); boardBack.className = 'library-board-back'; boardBack.setAttribute('aria-keyshortcuts', 'Escape'); boardBack.insertAdjacentHTML('beforeend', `${boardIcon.close}<span>Back to reading</span><kbd>Esc</kbd>`);
-  const rail = element('div', 'library-board-rail'); const boardMain = element('div', 'library-board-main');
+  // The Library tab's page fills the reading panel the way Home and a document do: the header, the search row and the documents, then the
+  // detail of the selected document (from 900 px). The panel beside it is only the tree; the menus, like the dialogs, stand outside both.
   const detail = element('aside', 'library-detail'); detail.setAttribute('aria-label', 'Selected reference');
-  const boardLayout = element('div', 'library-board'); boardLayout.append(rail, boardMain, detail);
-  function arrange() {
-    const focused = document.activeElement instanceof HTMLElement && root.contains(document.activeElement) ? document.activeElement : undefined;
-    if (board) {
-      searchRow.append(boardBack);
-      rail.append(header, boardNav); boardMain.append(scope, searchRow, documents);
-      panel.replaceChildren(boardLayout, itemMenu, viewMenu, fileInput);
-    } else {
-      boardBack.remove(); panel.replaceChildren(header, treeFilterRow, treeRoot, treeEmpty, documents, itemMenu, fileInput);
-    }
-    syncRail();
-    if (focused?.isConnected) focused.focus();
-  }
-  /** Brings the title, the filter field and what fills the panel (the tree, or the board's list) in line with the layout; nothing is rebuilt. */
-  function syncRail() {
-    titleButton.hidden = !wide.matches; headingText.hidden = wide.matches;
-    treeRoot.hidden = board; documents.hidden = !board; treeFilterRow.hidden = board;
-    if (board) treeEmpty.hidden = true;
-  }
-  arrange();
+  const pageMain = element('div', 'library-page-main'); pageMain.append(scope, searchRow, documents);
+  const page = element('section', 'library-page'); page.id = 'library-page'; page.hidden = true; page.setAttribute('aria-label', 'Library'); page.append(pageMain, detail);
+  panel.replaceChildren(header, treeFilterRow, treeRoot, treeEmpty, fileInput);
+  (layout ?? root).append(itemMenu, viewMenu, scopeMenu); workspace?.append(page);
   const resizeHandle = element('div', 'library-resize'); resizeHandle.tabIndex = 0;
   for (const [name, value] of [['role', 'separator'], ['aria-orientation', 'vertical'], ['aria-label', 'Resize library'], ['aria-controls', root.id]]) resizeHandle.setAttribute(name, value);
   const grip = element('span', 'library-resize-grip'); grip.append(element('span'), element('span'), element('span'));
@@ -301,9 +298,9 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
 
   function applyVisibility() {
     root.hidden = !visible; layout?.classList.toggle('library-open', visible); toggleButton?.setAttribute('aria-expanded', String(visible));
-    if (workspace) workspace.inert = visible && (!wide.matches || board);
+    if (workspace) workspace.inert = visible && !wide.matches;
     if (visible && loaded) void refreshProgress();
-    if (visible) { thumbs.retryFailed(); for (const media of documents.querySelectorAll('.is-unavailable')) media.classList.remove('is-unavailable'); observeThumbnails(); } else { setBoard(false, 'none'); closeItemMenu(false); closeChromeMenu(false); clearThumbnails(); }
+    if (!visible) { closeItemMenu(false); closeChromeMenu(false); }
     callbacks.openChanged?.(visible);
   }
   /** Where focus goes when the panel closes: the icon that opened it, or the toolbar's button in a compact window. */
@@ -319,12 +316,11 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   }
   function toggle() { if (modal?.open) return; setVisible(!visible); }
   backdrop.onclick = close.onclick = () => { if (!busy) setVisible(false); };
-  wide.addEventListener('change', () => { const hadFocus = root.contains(document.activeElement); if (!wide.matches) setBoard(false, 'none'); syncRail(); visible = modal?.open ? true : preference(); applyVisibility(); if (!visible && hadFocus) focusDoor(); });
+  wide.addEventListener('change', () => { const hadFocus = root.contains(document.activeElement); visible = modal?.open ? true : preference(); applyVisibility(); if (!visible && hadFocus) focusDoor(); });
   root.addEventListener('keydown', event => {
     if (event.key === 'Escape' && (!itemMenu.hidden || chromeMenu)) { event.preventDefault(); event.stopPropagation(); if (!itemMenu.hidden) closeItemMenu(); else closeChromeMenu(); return; }
     // In the filter field Escape clears what was typed; with nothing typed it closes the panel like anywhere else.
     if (event.key === 'Escape' && event.target === treeFilter && !modal?.open && treeFilter.value) { event.preventDefault(); event.stopPropagation(); setTreeQuery(''); return; }
-    if (event.key === 'Escape' && board && !modal?.open) { event.preventDefault(); event.stopPropagation(); if (!busy) setBoard(false, 'control'); return; }
     if (event.key === 'Escape' && !modal?.open) { event.preventDefault(); event.stopPropagation(); if (!busy) setVisible(false); }
     if (event.key === 'Tab' && visible && !wide.matches && !modal?.open) {
       const controls = Array.from(panel.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled):not([hidden]), select:not(:disabled), summary, [role=treeitem][tabindex="0"]')).filter(node => node.getClientRects().length);
@@ -339,17 +335,18 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     event.stopPropagation();
   });
   imageNavigation.addEventListener('keydown', event => { if (shortcutFor(event) !== 'command-palette') event.stopPropagation(); });
-  function focusKey() { return document.activeElement instanceof HTMLElement && root.contains(document.activeElement) ? document.activeElement.dataset.libraryFocus : undefined; }
+  const inside = (node: Node | null) => Boolean(node && (root.contains(node) || page.contains(node)));
+  function focusKey() { return document.activeElement instanceof HTMLElement && inside(document.activeElement) ? document.activeElement.dataset.libraryFocus : undefined; }
   function restoreFocus(key?: string, original?: HTMLElement) {
     if (original?.isConnected && !original.matches(':disabled') && original.getClientRects().length) { original.focus(); return; }
-    if (!visible) { focusDoor(); return; }
-    if (!key && root.contains(document.activeElement) && document.activeElement !== document.body) return; // a tree row keeps its focus
-    const replacement = key && Array.from(root.querySelectorAll<HTMLElement>('[data-library-focus]')).find(node => node.dataset.libraryFocus === key);
+    if (!visible && !pageOpen) { focusDoor(); return; }
+    if (!key && inside(document.activeElement) && document.activeElement !== document.body) return; // a tree row keeps its focus
+    const replacement = key && [...root.querySelectorAll<HTMLElement>('[data-library-focus]'), ...page.querySelectorAll<HTMLElement>('[data-library-focus]')].find(node => node.dataset.libraryFocus === key);
     if (replacement) replacement.focus(); else if (plus.offsetParent) plus.focus(); else treeView.focus();
   }
   function setBusy(next: boolean) {
     busy = next; panel.setAttribute('aria-busy', String(next));
-    if (next) for (const control of [...root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLButtonElement>('button, input, select, textarea'), ...dialogHost.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLButtonElement>('button, input, select, textarea'), ...addMenu.querySelectorAll<HTMLButtonElement>('button'), ...imageNavigation.querySelectorAll<HTMLButtonElement>('button')]) {
+    if (next) for (const control of [...root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLButtonElement>('button, input, select, textarea'), ...dialogHost.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLButtonElement>('button, input, select, textarea'), ...page.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLButtonElement>('button, input, select, textarea'), ...addMenu.querySelectorAll<HTMLButtonElement>('button'), ...imageNavigation.querySelectorAll<HTMLButtonElement>('button')]) {
       if (!busyDisabled.has(control)) busyDisabled.set(control, control.disabled); control.disabled = true;
     }
     else { for (const [control, disabled] of busyDisabled) control.disabled = disabled; busyDisabled.clear(); }
@@ -385,7 +382,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     const view = openDialog(collection ? 'Edit collection' : 'New collection', trigger); if (!view) return;
     const input = element('input'); input.required = true; input.maxLength = 120; input.autocomplete = 'off'; input.value = collection?.name ?? '';
     const parent = element('select'); parentOptions(parent, collection ? descendantIds(library.collections, collection.id) : undefined);
-    const current = filter.kind === 'collection' ? library.collections.find(item => filter.kind === 'collection' && item.id === filter.id) : undefined;
+    const current = pageOpen && filter.kind === 'collection' ? library.collections.find(item => filter.kind === 'collection' && item.id === filter.id) : undefined;
     parent.value = collection?.parentId ?? (current && !current.sourceId ? current.id : '');
     const submit = button(collection ? 'Save collection' : 'Create collection'); submit.type = 'submit'; submit.className = 'primary';
     view.content.append(labeled('Collection name', input), labeled('Parent collection', parent)); view.actions.append(submit);
@@ -407,7 +404,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
         if (name !== collection.name) { next = await editLibrary({ action: 'renameCollection', id, name }); library = next; }
         if ((parent.value || null) !== collection.parentId) next = await editLibrary({ action: 'moveCollection', id, parentId: parent.value || null });
         return next;
-      }, () => { if (board) filter = { kind: 'collection', id }; if (parent.value) expanded.add(parent.value); fromTop = true; render(); view.dialog.close(); });
+      }, () => { if (pageOpen) { filter = { kind: 'collection', id }; fromTop = true; render(); } view.dialog.close(); });
     };
     view.dialog.showModal(); input.focus(); input.select();
   }
@@ -518,42 +515,13 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     const siblings = new Map<string | null, Collection[]>();
     for (const collection of library.collections) siblings.set(collection.parentId, [...(siblings.get(collection.parentId) ?? []), collection]);
     assignCoverSlots([...siblings.values()].map(group => [...group].sort(compareCollections).map(collection => collection.id)));
-    for (const collection of library.collections) {
-      if (!knownCollections.has(collection.id)) { knownCollections.add(collection.id); if (!collection.parentId) expanded.add(collection.id); }
-      collectionMatches.set(collection.id, new Set(library.documents.filter(doc => doc.collectionIds.includes(collection.id)).map(doc => doc.path)));
-    }
+    for (const collection of library.collections) collectionMatches.set(collection.id, new Set(library.documents.filter(doc => doc.collectionIds.includes(collection.id)).map(doc => doc.path)));
     for (const { item } of orderedTree(library.collections).reverse()) {
       if (!item.parentId) continue;
       const parent = collectionMatches.get(item.parentId); if (parent) for (const path of collectionMatches.get(item.id) ?? []) parent.add(path);
     }
     tree = buildLibraryTree(library); if (loaded) treeView.prune(treeIds(tree)); revealed = undefined;
     thumbs.reconcile(new Set(library.documents.map(doc => doc.path))); colourIndex = undefined; colourRequested.clear();
-  }
-  function renderNavigation() {
-    navigation.replaceChildren();
-    function filterButton(label: string, count: number, next: Filter, key: string) {
-      const control = button('', label, key); control.className = 'library-filter'; control.append(element('span', 'library-filter-name', label), element('span', 'library-count', String(count)));
-      control.setAttribute('aria-pressed', String(filter.kind === next.kind && (!('id' in next) || 'id' in filter && filter.id === next.id)));
-      control.onclick = () => { filter = next; fromTop = true; render(); }; return control;
-    }
-    navigation.append(filterButton('All references', library.documents.length, { kind: 'all' }, 'all'), filterButton('Favorites', library.documents.filter(doc => doc.favorite).length, { kind: 'favorites' }, 'favorites'), filterButton('Continue reading', library.documents.filter(doc => inProgress(progress[doc.path])).length, { kind: 'reading' }, 'reading'), filterButton('Unfiled', library.documents.filter(doc => !doc.collectionIds.length).length, { kind: 'unfiled' }, 'unfiled'));
-    const heading = element('div', 'library-collections-heading'); const create = button('+ New', 'New personal collection', 'new-collection'); create.onclick = () => collectionForm(create); heading.append(element('h3', '', 'Collections'), create); navigation.append(heading);
-    const parents = new Set(library.collections.map(item => item.parentId)); const byId = new Map(library.collections.map(item => [item.id, item]));
-    for (const { item, depth } of orderedTree(library.collections)) {
-      let parent = item.parentId, hidden = false; const seen = new Set<string>();
-      while (parent && !seen.has(parent)) { seen.add(parent); if (byId.has(parent) && !expanded.has(parent)) hidden = true; parent = byId.get(parent)?.parentId ?? null; }
-      if (hidden) continue;
-      const row = element('div', 'library-collection'); row.style.paddingInlineStart = `${Math.min(depth, 8) * 11}px`;
-      if (parents.has(item.id)) { const expand = button(expanded.has(item.id) ? '▾' : '▸', `${expanded.has(item.id) ? 'Collapse' : 'Expand'} ${collectionDisplayName(item.name)}`, `expand:${item.id}`); expand.className = 'library-expand'; expand.setAttribute('aria-expanded', String(expanded.has(item.id))); expand.onclick = () => { if (expanded.has(item.id)) expanded.delete(item.id); else expanded.add(item.id); renderNavigation(); restoreFocus(`expand:${item.id}`); }; row.append(expand); }
-      else row.append(element('span', 'library-expand-spacer'));
-      const select = filterButton(`${collectionDisplayName(item.name)}${item.removed ? ' · removed' : ''}`, collectionMatches.get(item.id)?.size ?? 0, { kind: 'collection', id: item.id }, `collection:${item.id}`);
-      select.title = [collectionDisplayName(item.name), item.sourceId ? 'Indexed folder collection' : 'Personal collection'].join('\n'); row.append(select);
-      if (!item.sourceId) { const edit = button('···', `Edit ${collectionDisplayName(item.name)}`, `edit:${item.id}`); edit.className = 'library-collection-action'; edit.onclick = () => collectionForm(edit, item); row.append(edit); }
-      navigation.append(row);
-    }
-    if (!library.collections.length) navigation.append(element('p', 'library-no-collections', 'Create a collection or index a folder.'));
-    const sources = [...new Set(library.documents.map(doc => doc.source?.repository).filter((source): source is string => Boolean(source)))];
-    if (sources.length) { const heading = element('div', 'library-collections-heading'); heading.append(element('h3', '', 'Sources')); navigation.append(heading); for (const source of sources) navigation.append(filterButton(source, library.documents.filter(doc => doc.source?.repository === source).length, { kind: 'source', id: source }, `source:${source}`)); }
   }
 
   // Thumbnails come from the shared store (src/thumbnails.ts). Tiles ask for theirs as they scroll into
@@ -571,12 +539,12 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
       if (!entry.isIntersecting) { near.delete(media); if (asking.has(media)) wandered.add(media); continue; }
       near.add(media); ask(media);
       const path = media.dataset.path!;
-      if (media.dataset.format === 'epub' && !thumbs.epub(path)) void thumbs.loadEpub(path, () => visible && near.has(media)).then(info => { if (info) reflectEpub(path); });
+      if (media.dataset.format === 'epub' && !thumbs.epub(path)) void thumbs.loadEpub(path, () => pageOpen && near.has(media)).then(info => { if (info) reflectEpub(path); });
     }
   }, { root: documents, rootMargin: '120px' });
   function ask(media: HTMLElement) {
     if (asking.has(media)) return; asking.add(media); const path = media.dataset.path!;
-    void thumbs.request(path, media.dataset.format!, () => media.isConnected && visible && near.has(media)).then(thumbnail => {
+    void thumbs.request(path, media.dataset.format!, () => media.isConnected && pageOpen && near.has(media)).then(thumbnail => {
       asking.delete(media); const returned = wandered.delete(media);
       if (!media.isConnected) return;
       if (thumbnail) showThumbnail(media, thumbnail); else if (thumbs.failed(path)) markUnavailable(media);
@@ -587,7 +555,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     });
   }
   const clearThumbnails = () => { thumbnailObserver.disconnect(); near.clear(); asking.clear(); wandered.clear(); };
-  function observeThumbnails() { if (visible) for (const media of documents.querySelectorAll<HTMLElement>('[data-path]:not(.is-loaded):not(.is-unavailable)')) thumbnailObserver.observe(media); }
+  function observeThumbnails() { if (pageOpen) for (const media of documents.querySelectorAll<HTMLElement>('[data-path]:not(.is-loaded):not(.is-unavailable)')) thumbnailObserver.observe(media); }
   // The rest of the set is rendered in batches: when the sentinel after the last document nears the viewport, the next batch goes in front of it.
   const sentinelObserver = new IntersectionObserver(entries => { if (entries.some(entry => entry.isIntersecting) && rendered < ordered.length) appendBatch(batchSize); }, { root: documents, rootMargin: '0px 0px 800px 0px' });
   function showThumbnail(media: HTMLElement, thumbnail: Thumbnail) {
@@ -599,21 +567,21 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   // The picture box, its cover and the placement of tiles are shared with Home (src/cards.ts).
   window.addEventListener('pagehide', () => { clearThumbnails(); thumbs.dispose(); });
 
-  // Board: a click selects a reference for the detail strip, and activating the selected one (a second click,
-  // Enter, VoiceOver's press) opens it and returns to reading. Outside the board a click opens it, as before.
+  // A click selects a document for the detail strip, and activating the selected one (a second click, Enter, VoiceOver's press) opens its tab, or
+  // shows it if it is open. ⌘/Ctrl-click and a middle click give it a tab in the background instead.
   function labelOpen(open: HTMLElement, doc: { name: string; path: string }) {
-    if (!board) { open.setAttribute('aria-label', `Open ${doc.name}`); open.removeAttribute('aria-pressed'); return; }
     const selected = doc.path === selectedPath;
     open.setAttribute('aria-pressed', String(selected)); open.setAttribute('aria-label', `${selected ? 'Open' : 'Select'} ${doc.name}`);
   }
   function bindOpen(doc: LibraryDocument, open: HTMLElement, node: HTMLElement) {
-    node.dataset.docPath = doc.path; node.dataset.docName = docLabel(doc); node.classList.toggle('is-selected', board && doc.path === selectedPath); labelOpen(open, { name: docLabel(doc), path: doc.path });
-    open.onclick = () => {
-      if (!board) void openDocument(doc, open, matches.filter(isImage).map(item => item.path));
-      else if (selectedPath === doc.path) void openFromBoard(doc, open);
+    node.dataset.docPath = doc.path; node.dataset.docName = docLabel(doc); node.classList.toggle('is-selected', doc.path === selectedPath); labelOpen(open, { name: docLabel(doc), path: doc.path });
+    open.onclick = event => {
+      if (event.metaKey || event.ctrlKey) callbacks.openBackground(doc);
+      else if (selectedPath === doc.path) void openFromPage(doc, open);
       else selectDocument(doc.path);
     };
-    open.onkeydown = event => { if (board && event.key === 'Enter') { event.preventDefault(); void openFromBoard(doc, open); } };
+    open.onauxclick = event => { if (event.button === 1) { event.preventDefault(); callbacks.openBackground(doc); } };
+    open.onkeydown = event => { if (event.key === 'Enter' && !event.altKey) { event.preventDefault(); if (event.metaKey || event.ctrlKey) callbacks.openBackground(doc); else void openFromPage(doc, open); } };
   }
   /**
    * Arrow keys move between documents, however many are rendered: stepping past the last one rendered renders the next batch, and End
@@ -660,31 +628,25 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     const previous = selectedPath; selectedPath = path;
     for (const changed of new Set([previous, path])) {
       const node = changed === undefined ? null : documents.querySelector<HTMLElement>(`[data-doc-path="${CSS.escape(changed)}"]`); if (!node) continue;
-      node.classList.toggle('is-selected', board && changed === path);
+      node.classList.toggle('is-selected', changed === path);
       const open = node.querySelector<HTMLElement>('.library-document-open'); if (open) labelOpen(open, { name: node.dataset.docName ?? '', path: node.dataset.docPath ?? '' });
     }
     renderDetail();
   }
-  async function openFromBoard(doc: LibraryDocument, trigger: HTMLElement) {
-    await openDocument(doc, trigger, matches.filter(isImage).map(item => item.path));
-    if (activePath === doc.path) setBoard(false, 'reader');
+  const openFromPage = (doc: LibraryDocument, trigger: HTMLElement) => openDocument(doc, trigger, matches.filter(isImage).map(item => item.path));
+  /** The Library tab comes to the front or goes behind another tab: its page is drawn afresh as it comes up (the library may have changed while it was away) and its thumbnail work stops when it goes. */
+  function showPage(open: boolean) {
+    if (open === pageOpen) return;
+    closeItemMenu(false); closeChromeMenu(false);
+    if (!open) { savedScroll = documents.scrollTop; pageOpen = false; page.hidden = true; clearThumbnails(); }
+    else { pageOpen = true; page.hidden = false; thumbs.retryFailed(); for (const media of documents.querySelectorAll('.is-unavailable')) media.classList.remove('is-unavailable'); renderDocuments(savedScroll); }
+    paintTree(); updateAddTitle();
   }
-  function setBoard(next: boolean, focus: 'none' | 'control' | 'reader') {
-    if (next === board || next && (!wide.matches || !visible || modal?.open)) return;
-    closeItemMenu(false); closeChromeMenu(false); board = next;
-    // Leaving the board returns the scope to every reference, which is what the tree shows.
-    fromTop = true; if (!board) filter = { kind: 'all' };
-    root.classList.toggle('is-board', board);
-    if (workspace) workspace.inert = visible && (!wide.matches || board);
-    arrange(); renderDocuments(); paintTree();
-    if (focus === 'reader') workspace?.querySelector<HTMLElement>('.reader-host:not(.staging)')?.focus();
-    else if (focus === 'control') (board ? documents.querySelector<HTMLElement>('.is-selected .library-document-open') ?? search : titleButton).focus();
-  }
-  // The title opens the board on All documents (from the board itself it returns to All).
-  titleButton.onclick = () => openScope({ kind: 'all' }); boardBack.onclick = () => setBoard(false, 'control');
-  // The detail strip (from 1200 px): the selected reference at a glance, with the actions the tile menu has.
+  // The title opens the Library tab on All documents.
+  titleButton.onclick = () => openScope({ kind: 'all' });
+  // The detail strip (from 900 px): the selected reference at a glance, with the actions the tile menu has.
   function renderDetail() {
-    if (!board) return;
+    if (!pageOpen) return;
     detail.replaceChildren(); const doc = library.documents.find(item => item.path === selectedPath);
     if (!doc) { detail.append(element('p', 'library-detail-empty', 'Select a reference to see its details.')); return; }
     const missing = (doc.availability ?? 'ready') === 'missing'; const cached = thumbs.peek(doc.path);
@@ -695,10 +657,10 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
         preview.append(coverNode(doc, coverShelf.has(doc.path) ? coverShelf.get(doc.path) : doc.collectionIds[0]));
         const reroll = rerollButton(doc, 'detail-reroll'); reroll.classList.add('library-detail-reroll'); preview.append(reroll);
       } else preview.append(element('span', '', missing ? 'Missing' : doc.format.toUpperCase()));
-      if (thumbnailable(doc) && !missing) void thumbs.request(doc.path, doc.format, () => board && selectedPath === doc.path).then(made => { if (made && board && selectedPath === doc.path) renderDetail(); });
+      if (thumbnailable(doc) && !missing) void thumbs.request(doc.path, doc.format, () => pageOpen && selectedPath === doc.path).then(made => { if (made && pageOpen && selectedPath === doc.path) renderDetail(); });
     }
     const name = element('h3', 'library-detail-name', docLabel(doc)); name.title = doc.path;
-    const open = button('Open in reader'); open.className = 'library-detail-open'; open.append(element('kbd', '', 'Enter')); open.onclick = () => void openFromBoard(doc, open);
+    const open = button('Open in reader'); open.className = 'library-detail-open'; open.append(element('kbd', '', 'Enter')); open.onclick = () => void openFromPage(doc, open);
     const organizeButton = button('Organize…'); organizeButton.onclick = () => organize(doc, organizeButton);
     const actions = element('div', 'library-detail-actions'); actions.append(open, organizeButton);
     detail.append(preview, name);
@@ -723,14 +685,6 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     }
   }
 
-  // Scope popover: the collection tree and the two filters, opened from the scope row.
-  function scopeName() {
-    const selected = filter;
-    if (!('id' in selected)) return selected.kind === 'all' ? 'All references' : selected.kind === 'favorites' ? 'Favorites' : selected.kind === 'reading' ? 'Continue reading' : 'Unfiled';
-    if (selected.kind === 'source') return selected.id;
-    if (selected.kind === 'folder') return selected.path ? selected.path.split('/').pop()! : library.roots.find(item => item.id === selected.id)?.name ?? 'Folder';
-    const named = library.collections.find(item => item.id === selected.id); return named ? collectionDisplayName(named.name) : 'Collection';
-  }
   // The context menu of a row, tile or tree row: what can be done with a document, a folder or a collection.
   function closeItemMenu(refocus = true) {
     if (itemMenu.hidden) return; itemMenu.hidden = true; const anchor = menuAnchor; menuAnchor = undefined;
@@ -758,7 +712,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     const collection = node.scope?.kind === 'collection' ? library.collections.find(item => item.id === (node.scope as { id: string }).id) : undefined;
     if (collection && !collection.sourceId) entries.push(['Edit collection…', () => collectionForm(anchor, collection)]);
     const target = node.scope;
-    if (target && wide.matches) entries.push(['Browse in the board', () => openScope(target.kind === 'folder' ? { kind: 'folder', id: target.rootId, path: target.path } : { kind: 'collection', id: target.id })]);
+    if (target) entries.push(['Open in Library tab', () => openScope(target.kind === 'folder' ? { kind: 'folder', id: target.rootId, path: target.path } : { kind: 'collection', id: target.id })]);
     if (entries.length) showItemMenu(entries, anchor, at);
   }
   function removeReference(doc: LibraryDocument, trigger: HTMLElement) {
@@ -767,18 +721,16 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     const confirm = button('Remove entry'); confirm.className = 'danger'; confirm.onclick = () => void mutate(() => editLibrary({ action: 'removeDocument', path: doc.path }), () => view.dialog.close());
     view.actions.append(confirm); view.dialog.showModal();
   }
-  /** Puts `menu` (already shown) under `anchor`, its right edge on the anchor's, or above it when it would run past the panel. */
-  function placeMenu(menu: HTMLElement, anchor: HTMLElement) {
-    const bounds = panel.getBoundingClientRect(), at = anchor.getBoundingClientRect(), border = panel.clientLeft;
-    const below = at.bottom - bounds.top - panel.clientTop + panel.scrollTop + 2;
-    menu.style.left = `${Math.min(Math.max(4, at.right - bounds.left - border - menu.offsetWidth), panel.clientWidth - menu.offsetWidth - 4)}px`;
-    menu.style.top = `${below + menu.offsetHeight > panel.scrollTop + panel.clientHeight ? Math.max(4, at.top - bounds.top - panel.clientTop + panel.scrollTop - menu.offsetHeight - 2) : below}px`;
+  /** Puts `menu` (already shown, and fixed to the window) under `anchor`, its right edge (or its left, for `align` left) on the anchor's, or above it when it would run past the window. */
+  function placeMenu(menu: HTMLElement, anchor: HTMLElement, align: 'left' | 'right' = 'right') {
+    const at = anchor.getBoundingClientRect(), below = at.bottom + 2;
+    menu.style.left = `${Math.max(4, Math.min(align === 'right' ? at.right - menu.offsetWidth : at.left, window.innerWidth - menu.offsetWidth - 4))}px`;
+    menu.style.top = `${below + menu.offsetHeight > window.innerHeight - 4 ? Math.max(4, at.top - menu.offsetHeight - 2) : below}px`;
   }
-  /** Puts `menu` (already shown) at the window point (x, y), kept inside the panel. */
+  /** Puts `menu` (already shown) at the window point (x, y), kept inside the window. */
   function placeMenuAt(menu: HTMLElement, x: number, y: number) {
-    const bounds = panel.getBoundingClientRect();
-    menu.style.left = `${Math.max(4, Math.min(x - bounds.left - panel.clientLeft, panel.clientWidth - menu.offsetWidth - 4))}px`;
-    menu.style.top = `${Math.max(4, Math.min(y - bounds.top - panel.clientTop + panel.scrollTop, panel.scrollTop + panel.clientHeight - menu.offsetHeight - 4))}px`;
+    menu.style.left = `${Math.max(4, Math.min(x, window.innerWidth - menu.offsetWidth - 4))}px`;
+    menu.style.top = `${Math.max(4, Math.min(y, window.innerHeight - menu.offsetHeight - 4))}px`;
   }
   /** Puts the fixed Add files menu beside the icon rail button (on the side away from the rail's edge), or under a header button. */
   function placeBeside(menu: HTMLElement, anchor: HTMLElement) {
@@ -795,14 +747,14 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   function openChromeMenu(menu: HTMLElement, anchor: HTMLElement) {
     if (busy || modal?.open) return; if (chromeMenu?.menu === menu) { closeChromeMenu(); return; }
     closeChromeMenu(false); closeItemMenu(false);
-    chromeMenu = { menu, anchor }; anchor.setAttribute('aria-expanded', 'true'); menu.hidden = false; if (menu === addMenu) placeBeside(menu, anchor); else placeMenu(menu, anchor);
+    chromeMenu = { menu, anchor }; anchor.setAttribute('aria-expanded', 'true'); menu.hidden = false; if (menu === addMenu) placeBeside(menu, anchor); else placeMenu(menu, anchor, menu === scopeMenu ? 'left' : 'right');
     menu.querySelector<HTMLElement>('[aria-checked=true], button')?.focus();
   }
-  plus.onclick = () => openChromeMenu(addMenu, plus); viewButton.onclick = () => openChromeMenu(viewMenu, viewButton);
-  for (const menu of [addMenu, viewMenu]) menu.addEventListener('keydown', event => {
+  plus.onclick = () => openChromeMenu(addMenu, plus); viewButton.onclick = () => openChromeMenu(viewMenu, viewButton); scopeButton.onclick = () => { if (!chromeMenu || chromeMenu.menu !== scopeMenu) fillScopeMenu(); openChromeMenu(scopeMenu, scopeButton); };
+  for (const menu of [addMenu, viewMenu, scopeMenu]) menu.addEventListener('keydown', event => {
     // The Add files menu stands outside the panel, so its keys are its own: Escape closes it, and no reader shortcut sees them.
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeChromeMenu(); return; }
-    if (menu === addMenu && shortcutFor(event) !== 'command-palette') event.stopPropagation();
+    if (shortcutFor(event) !== 'command-palette') event.stopPropagation();
     if (event.key === 'Tab') { closeChromeMenu(false); return; }
     if (event.target instanceof HTMLInputElement) return; // The size slider keeps its own arrow keys.
     const items = Array.from(menu.querySelectorAll<HTMLElement>('button')); const index = items.indexOf(document.activeElement as HTMLElement);
@@ -810,6 +762,8 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     else if (event.key === 'Home' || event.key === 'End') { event.preventDefault(); items[event.key === 'Home' ? 0 : items.length - 1]?.focus(); }
   });
   itemMenu.addEventListener('keydown', event => {
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeItemMenu(); return; }
+    if (shortcutFor(event) !== 'command-palette') event.stopPropagation();
     const items = Array.from(itemMenu.querySelectorAll<HTMLElement>('button')); const index = items.indexOf(document.activeElement as HTMLElement);
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); items[(index + (event.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]?.focus(); }
     else if (event.key === 'Home' || event.key === 'End') { event.preventDefault(); items[event.key === 'Home' ? 0 : items.length - 1]?.focus(); }
@@ -832,15 +786,13 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     return true;
   }
   const viewKey = () => `hold-my-brief:library-view:${filter.kind === 'collection' || filter.kind === 'source' ? `${filter.kind}:${filter.id}` : filter.kind === 'folder' ? `folder:${filter.id}:${filter.path}` : filter.kind}`;
-  /** The grid's minimum tile width: the Size saved for this scope, else the surface's own (the board's tiles are larger). */
+  /** The grid's minimum tile width: the Size saved for this scope, else the page's own. */
   const sizeKey = () => viewKey().replace('library-view:', 'library-tile-size:');
-  const tileSize = () => parseTileSize(savedPreference(sizeKey())) ?? (board ? libraryGrid.boardMinTile : libraryGrid.minTile);
-  // Saved per collection; with no choice yet, grid when at least half of the collection can show a thumbnail, but a drawer
-  // narrower than 400 px opens on list. The default looks at the whole collection, not the search, so typing never flips the view.
+  const tileSize = () => parseTileSize(savedPreference(sizeKey())) ?? libraryGrid.pageMinTile;
+  // Saved per scope; with no choice yet, grid when at least half of the scope can show a thumbnail. The default looks at the whole scope, not the search, so typing never flips the view.
   function currentView(): LibraryView {
-    if (!board) return 'list'; // the panel is the tree; its hidden list is never a grid
     const saved = parseLibraryView(savedPreference(viewKey())); if (saved) return saved;
-    const scoped = library.documents.filter(inScope); return defaultLibraryView(scoped.filter(thumbnailable).length, scoped.length, board ? Infinity : wide.matches ? width : 0);
+    const scoped = library.documents.filter(inScope); return defaultLibraryView(scoped.filter(thumbnailable).length, scoped.length);
   }
   // Tiles sit in the DOM in sorted order (so Tab and screen readers follow the sort, shelf by shelf) and are
   // positioned absolutely into masonry columns: each joins the shortest column of its shelf, and a tile's height
@@ -896,8 +848,8 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
       bottoms[tile.column] += tileWidth / tile.ratio + tile.caption + gap;
     }
   }
-  // The drawer's own width is the only input; a new width re-places the tiles (and re-assigns columns if their count changed).
-  new ResizeObserver(() => { if (visible) layoutGrid(); }).observe(documents);
+  // The page's own width is the only input; a new width re-places the tiles (and re-assigns columns if their count changed).
+  new ResizeObserver(() => { if (pageOpen) layoutGrid(); }).observe(documents);
 
   // An EPUB's title is what its tile and detail show, once read (the file name until then). The library entry's own name is kept as the file name.
   const epubTitle = (doc: LibraryDocument) => doc.format === 'epub' ? thumbs.epub(doc.path)?.title : undefined;
@@ -911,7 +863,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
       for (const text of node.querySelectorAll<HTMLElement>('.library-cover-title')) text.textContent = displayTitle(doc, epubTitle(doc), true);
       const meta = node.querySelector<HTMLElement>('.library-row-meta'); if (meta) meta.textContent = rowMeta(doc);
     }
-    if (board && selectedPath === path) renderDetail();
+    if (pageOpen && selectedPath === path) renderDetail();
   }
   /** Format, how far the reader got, then only what is worth saying: a missing or removed original, the open reference, and the file name when the title is the book's own. A reference that is simply there says nothing about it. */
   const rowMeta = (doc: LibraryDocument, full = true) => [doc.format.toUpperCase(), formatProgress(progress[doc.path]), doc.source?.removed ? 'no longer in folder' : (doc.availability ?? 'ready') === 'ready' ? undefined : doc.availability, full && doc.path === activePath ? 'Reading' : undefined, full && docLabel(doc) !== doc.name ? doc.name : undefined].filter(Boolean).join(' · ');
@@ -991,11 +943,14 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   /** Brings the chips, the Recent menu and the search field in line with the state they show; nothing is rebuilt, so focus stays where it is. */
   function syncChrome() {
     for (const chip of typeChips.querySelectorAll<HTMLElement>('.library-type-chip')) chip.setAttribute('aria-pressed', String(chip.dataset.type === fileType));
-    for (const { group, value, node } of choices) node.setAttribute('aria-checked', String(value === (group === 'Sort by' ? sortMode : group === 'View as' ? view : availabilityFilter)));
+    for (const { group, value, node } of choices) node.setAttribute('aria-checked', String(value === (group === 'Sort by' ? sortMode : availabilityFilter)));
+    listButton.setAttribute('aria-pressed', String(view === 'list')); gridButton.setAttribute('aria-pressed', String(view === 'grid'));
     sizeRow.hidden = view !== 'grid'; sizeInput.value = String(tileSize());
-    viewLabel.textContent = sortMode === 'name' ? 'Name A–Z' : 'Recent'; viewButton.setAttribute('aria-label', `Sort, view and filter options. Sorted by ${viewLabel.textContent}`);
+    viewLabel.textContent = sortMode === 'name' ? 'Name A–Z' : 'Recent'; viewButton.setAttribute('aria-label', `Sort and filter options. Sorted by ${viewLabel.textContent}`);
   }
   sizeInput.oninput = () => { savePreference(sizeKey(), sizeInput.value); layoutGrid(true); };
+  const chooseView = (next: LibraryView) => { if (next === view) return; savePreference(viewKey(), next); fromTop = true; renderDocuments(); };
+  listButton.onclick = () => chooseView('list'); gridButton.onclick = () => chooseView('grid');
   /**
    * Renders the next `count` documents after the ones shown (the first call of a render is `first`). In the grid a batch continues the last shelf, so a shelf's
    * header is drawn once however many batches its tiles span. The sentinel stays after the last one until the whole set is rendered.
@@ -1028,12 +983,11 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
         layoutGrid();
       });
     }
-    if (visible) for (const node of nodes) { const media = node.querySelector<HTMLElement>('[data-path]:not(.is-loaded):not(.is-unavailable)'); if (media) thumbnailObserver.observe(media); }
+    if (pageOpen) for (const node of nodes) { const media = node.querySelector<HTMLElement>('[data-path]:not(.is-loaded):not(.is-unavailable)'); if (media) thumbnailObserver.observe(media); }
     if (busy) setBusy(true);
   }
-  function renderDocuments() {
-    const scrolled = documents.scrollTop, fresh = fromTop, keep = fresh ? 0 : rendered; fromTop = false;
-    clearThumbnails(); documents.replaceChildren(); tiles = []; sections = []; tileByPath.clear(); coverShelf.clear(); columnCount = 0; rendered = 0; closeItemMenu(false); const generation = ++renderGeneration;
+  /** Works out what the scope, the search and the chips match, then, while the Library tab is in front, draws it. `restore` is where a tab coming back to the front scrolls to. */
+  function renderDocuments(restore?: number) {
     const unknown: LibraryDocument[] = [];
     const query = search.value.trim().toLocaleLowerCase();
     matches = library.documents.filter(doc => {
@@ -1055,16 +1009,20 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     ordered = shelves ? shelves.flatMap(shelf => shelf.items) : matches;
     shelfOf = new Map(shelves?.flatMap(shelf => shelf.items.map(doc => [doc, shelf] as const)));
     orderIndex = new Map(ordered.map((doc, index) => [doc.path, index]));
-    if (board && !matches.some(doc => doc.path === selectedPath)) selectedPath = matches.find(doc => doc.path === activePath)?.path ?? ordered[0]?.path;
+    if (!matches.some(doc => doc.path === selectedPath)) selectedPath = matches.find(doc => doc.path === activePath)?.path ?? ordered[0]?.path;
     colourUnknown = unknown.length; colourChip.hidden = !colourFilter;
     if (colourFilter) {
       colourChip.replaceChildren(); const dot = element('span', 'library-colour-dot'); dot.style.background = colourSwatches[colourFilter];
       colourChip.append(dot, element('span', '', titleCase(colourFilter)), element('span', 'library-colour-clear', '×')); colourChip.setAttribute('aria-label', `Remove colour filter: ${colourFilter}`); colourChip.title = 'Remove colour filter';
-      analyseColours(unknown, generation);
     }
     resultCount.textContent = `${matches.length} ${matches.length === 1 ? 'reference' : 'references'}${colourFilter && unknown.length ? ` · analysing ${unknown.length}` : ''}`;
+    scopeLabel.textContent = scopeTitle(filter, library); syncChrome();
+    // The page is drawn only while it shows. A render that waits keeps `fromTop`, so the tab that comes up starts where the scope asked.
+    if (!pageOpen) { renderImageNavigation(); return; }
+    const scrolled = restore ?? documents.scrollTop, fresh = fromTop, keep = fresh ? 0 : rendered; fromTop = false;
+    clearThumbnails(); documents.replaceChildren(); tiles = []; sections = []; tileByPath.clear(); coverShelf.clear(); columnCount = 0; rendered = 0; closeItemMenu(false); const generation = ++renderGeneration;
+    if (colourFilter) analyseColours(unknown, generation);
     documents.classList.toggle('library-grid', view === 'grid'); documents.classList.toggle('library-list', view === 'list');
-    scopeLabel.textContent = scopeName(); syncChrome();
     if (!matches.length) {
       const empty = element('div', 'library-empty'); empty.setAttribute('role', 'listitem');
       empty.append(element('strong', '', loadError ? 'Library unavailable' : !loaded ? 'Loading library…' : !library.documents.length ? 'Your references, collected.' : 'No matching references'), element('p', '', loadError ? 'Could not load the library. Close and reopen it to retry.' : !loaded ? 'Getting your saved library.' : !library.documents.length ? 'Add local documents and images, or index a folder. Originals stay untouched.' : 'Try another search, format, availability, or collection.'));
@@ -1093,12 +1051,12 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   const treeExtra = (doc: LibraryDocument) => { const info = doc.format === 'epub' ? thumbs.epub(doc.path) : undefined; return `${docLabel(doc)} ${info?.creator ?? ''} ${doc.tags.join(' ')} ${doc.notes}`; };
   function paintTree() {
     treeFilter.placeholder = `Filter ${tree.total} documents`;
-    if (board) { syncRail(); updateCount(); return; }
+    if (pageOpen && filter.kind === 'all') titleButton.setAttribute('aria-current', 'location'); else titleButton.removeAttribute('aria-current');
     const filtered = filterTree(tree.sections, treeQuery, treeExtra);
     // A library with no documents and no collection of its own shows the welcome note rather than empty captions.
     const bare = !library.documents.length && !library.collections.some(collection => !collection.sourceId);
     const empty = bare || !filtered.sections.length;
-    treeView.paint({ sections: empty ? [] : filtered.sections, query: treeQuery, extra: treeExtra, forced: filtered.open, activePath, progress: doc => formatProgress(progress[doc.path]) });
+    treeView.paint({ sections: empty ? [] : filtered.sections, query: treeQuery, extra: treeExtra, forced: filtered.open, activePath, scope: pageOpen ? filter : undefined, progress: doc => formatProgress(progress[doc.path]) });
     treeEmpty.hidden = !empty; treeRoot.hidden = empty;
     if (empty) {
       const searching = !bare && treeQuery.trim() !== '';
@@ -1112,7 +1070,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
       if (ancestors) { revealed = activePath; treeView.reveal(ancestors, `d:${activePath}`); }
     }
   }
-  function updateCount(documentsShown?: number) { headingCount.textContent = board ? '' : loaded ? String(documentsShown ?? tree.total) : ''; }
+  function updateCount(documentsShown?: number) { headingCount.textContent = loaded ? String(documentsShown ?? tree.total) : ''; }
   function setTreeQuery(value: string) { treeQuery = value; treeFilter.value = value; paintTree(); }
   treeFilter.addEventListener('input', () => setTreeQuery(treeFilter.value));
   treeFilter.addEventListener('keydown', event => { if (event.key === 'ArrowDown' || event.key === 'Enter') { event.preventDefault(); treeView.focus(); } });
@@ -1120,27 +1078,56 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   function showView(next: RailView) {
     if (modal?.open || busy) return;
     if (next === 'library') { setVisible(!visible); if (visible && loadError) void refresh(); return; }
-    if (board) setBoard(false, 'none');
     if (!visible) setVisible(true, false);
     treeFilter.focus();
     if (loadError) void refresh();
   }
-  /** The board scoped to a folder, collection or Home's scope (the compact sheet has no board: it opens on the tree). */
-  function openScope(next: Filter) {
+  /** The scope as the Library tab saves and titles it. */
+  const place = (): LibraryPlace => ({ scope: scopeKey(filter), title: scopeTitle(filter, library) });
+  /** Tells the tab what it shows when that changed (another scope, a renamed collection). */
+  function announce() {
+    const next = place(); if (lastPlace && lastPlace.scope === next.scope && lastPlace.title === next.title) return;
+    lastPlace = next; callbacks.pageChanged?.(next);
+  }
+  /** The collection Add files go to: the one the Library tab is showing, while it is, when it is a personal one. */
+  const addTarget = () => { const target = pageOpen && filter.kind === 'collection' ? library.collections.find(item => filter.kind === 'collection' && item.id === filter.id) : undefined; return target && !target.sourceId ? target : undefined; };
+  function updateAddTitle() { const target = addTarget(); add.title = target ? `Add files to ${collectionDisplayName(target.name)}` : 'Add files to Unfiled'; }
+  /** Points the Library tab at `next`: the search, chips and colour start afresh. */
+  function setScope(next: Scope) {
     filter = next; fromTop = true; search.value = ''; fileType = ''; availabilityFilter = ''; colourFilter = null; colourRequested.clear(); colourSelect.value = '';
-    if (!visible) setVisible(true, false);
-    if (wide.matches) { setBoard(true, 'control'); render(); }
-    else focusRail();
+    render();
+  }
+  /** Opens the Library tab on `next`; a tab that is open is retargeted, not opened again. */
+  function openScope(next: Scope) {
+    setScope(next);
+    if (!wide.matches && visible) setVisible(false, false, false); // The compact sheet covers the page: it gives way.
+    callbacks.openPage(place());
+    (documents.querySelector<HTMLElement>('.is-selected .library-document-open') ?? search).focus();
     if (visible && loadError) void refresh();
+  }
+  /** The scopes the panel's tree has no row for: every document, favorites, what is being read, what is in no collection, and each source. */
+  function fillScopeMenu() {
+    scopeMenu.replaceChildren();
+    const entry = (label: string, count: number, next: Scope) => {
+      const item = button('', label); item.setAttribute('role', 'menuitemradio'); item.setAttribute('aria-checked', String(sameScope(filter, next)));
+      item.append(element('span', 'library-filter-name', label), element('span', 'library-count', String(count)));
+      item.onclick = () => { closeChromeMenu(false); setScope(next); scopeButton.focus(); };
+      scopeMenu.append(item);
+    };
+    const documentsNow = library.documents;
+    entry('All documents', documentsNow.length, { kind: 'all' }); entry('Favorites', documentsNow.filter(doc => doc.favorite).length, { kind: 'favorites' });
+    entry('Continue reading', documentsNow.filter(doc => inProgress(progress[doc.path])).length, { kind: 'reading' }); entry('Unfiled', documentsNow.filter(doc => !doc.collectionIds.length).length, { kind: 'unfiled' });
+    const sources = [...new Set(documentsNow.map(doc => doc.source?.repository).filter((source): source is string => Boolean(source)))];
+    if (sources.length) scopeMenu.append(element('div', 'library-menu-heading', 'Sources'));
+    for (const source of sources) entry(source, documentsNow.filter(doc => doc.source?.repository === source).length, { kind: 'source', id: source });
   }
   function setActive(path: string | undefined) {
     if (path === activePath) return;
-    activePath = path; revealed = undefined; renderImageNavigation(); if (visible) renderDocuments(); paintTree();
+    activePath = path; revealed = undefined; renderImageNavigation(); if (pageOpen) renderDocuments(); paintTree();
   }
   function render() {
     const key = focusKey(); if (filter.kind === 'collection' && !library.collections.some(collection => filter.kind === 'collection' && collection.id === filter.id)) filter = { kind: 'unfiled' };
-    renderNavigation(); renderChips(); renderDocuments(); paintTree(); const collection = filter.kind === 'collection' ? library.collections.find(item => filter.kind === 'collection' && item.id === filter.id) : undefined;
-    add.title = collection && !collection.sourceId ? `Add files to ${collectionDisplayName(collection.name)}` : 'Add files to Unfiled';
+    renderChips(); renderDocuments(); paintTree(); updateAddTitle(); announce();
     if (busy) setBusy(true); if (key && !busy && !modal?.open) restoreFocus(key);
   }
   function setColour(next: ColourName | null) { colourFilter = next; colourRequested.clear(); colourSelect.value = next ?? ''; fromTop = true; renderDocuments(); }
@@ -1155,7 +1142,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   function scheduleColourRender() {
     if (colourTimer) return;
     colourTimer = window.setTimeout(() => {
-      colourTimer = 0; if (!colourFilter || !visible) return;
+      colourTimer = 0; if (!colourFilter || !pageOpen) return;
       if (!itemMenu.hidden || modal?.open || busy) { scheduleColourRender(); return; }
       const key = focusKey(), scrolled = documents.scrollTop, hadFocus = root.contains(document.activeElement);
       renderDocuments(); documents.scrollTop = scrolled;
@@ -1169,7 +1156,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
       // Each picture is asked for once per colour session, however often the list is refreshed meanwhile.
       for (const doc of unknown) {
         if (thumbs.colours(doc.path) || colourRequested.has(doc.path)) continue; colourRequested.add(doc.path);
-        void thumbs.request(doc.path, doc.format, () => colourFilter !== null && visible).then(made => { if (!made) colourRequested.delete(doc.path); scheduleColourRender(); });
+        void thumbs.request(doc.path, doc.format, () => colourFilter !== null && pageOpen).then(made => { if (!made) colourRequested.delete(doc.path); scheduleColourRender(); });
       }
     });
   }
@@ -1178,11 +1165,11 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     if (typeof change.colour === 'string' && !colour) throw Error(`Unknown colour "${change.colour}". Choose one of: ${colourNames.join(', ')}.`);
     if (change.query !== undefined) search.value = change.query;
     if (colour !== undefined) { colourFilter = colour; colourRequested.clear(); colourSelect.value = colour ?? ''; }
-    fromTop = true; renderDocuments();
-    // The tree narrows by words; a colour is the board's filter, so it opens there where there is room.
-    if (!visible) setVisible(true, false);
-    if (colourFilter && wide.matches) setBoard(true, 'none');
-    else if (change.query !== undefined && !board) setTreeQuery(change.query);
+    fromTop = true;
+    // A colour is the Library tab's filter, so it opens there; words narrow the panel's tree, unless the tab's own search is showing.
+    if (colourFilter) callbacks.openPage(place());
+    renderDocuments();
+    if (change.query !== undefined && !colourFilter && !pageOpen) { if (!visible) setVisible(true, false); setTreeQuery(change.query); }
     // Pictures whose colours are not known yet are analysed first, for at most 25 s, so the answer is complete.
     for (const deadline = Date.now() + 25_000; colourFilter && colourUnknown > 0 && Date.now() < deadline;) await new Promise(resolve => setTimeout(resolve, 200));
     if (colourTimer) { clearTimeout(colourTimer); colourTimer = 0; }
@@ -1191,9 +1178,9 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   }
   search.oninput = () => { fromTop = true; renderDocuments(); };
   let chosenCollection: string | null = null;
-  // Who asked for files, so focus returns there once the dialogs are done: the icon rail's Add files, or this panel's + (compact windows, the board).
+  // Who asked for files, so focus returns there once the dialogs are done: the icon rail's Add files, or this panel's + (compact windows).
   let addTrigger: HTMLElement = plus;
-  add.onclick = () => { addTrigger = chromeMenu?.anchor ?? plus; closeChromeMenu(false); if (busy) return; const collection = filter.kind === 'collection' ? library.collections.find(item => filter.kind === 'collection' && item.id === filter.id) : undefined; chosenCollection = collection && !collection.sourceId ? collection.id : null; if (desktop) void addAndReview(() => addDocuments(chosenCollection), 'Added files', false, addTrigger); else fileInput.click(); };
+  add.onclick = () => { addTrigger = chromeMenu?.anchor ?? plus; closeChromeMenu(false); if (busy) return; chosenCollection = addTarget()?.id ?? null; if (desktop) void addAndReview(() => addDocuments(chosenCollection), 'Added files', false, addTrigger); else fileInput.click(); };
   fileInput.onchange = () => { const files = Array.from(fileInput.files ?? []); fileInput.value = ''; if (files.length) void addAndReview(() => addDocuments(chosenCollection, files), 'Added files', false, addTrigger); };
   // Intake: once files arrive (Add files, Index a folder) a quiet sheet shows what came in, grouped by shelf, each with its cover.
   const intakeHost: IntakeHost = {
@@ -1248,7 +1235,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
       const doc = byPath.get(node.dataset.docPath ?? ''); const meta = node.querySelector<HTMLElement>('.library-row-meta');
       if (doc && meta) meta.textContent = rowMeta(doc);
     }
-    if (board && selectedPath) renderDetail();
+    if (pageOpen && selectedPath) renderDetail();
     callbacks.progressChanged?.(progress);
   }
   async function refresh(path?: string) {
@@ -1265,9 +1252,10 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     showView,
     openAddMenu: (anchor: HTMLElement) => openChromeMenu(addMenu, anchor),
     setActive,
-    // Library board (palette command): open the panel if needed, then enter or leave the board. Below 720 px there is only the sheet: it opens on the tree's filter.
-    board: () => { if (!visible) setVisible(true, false); if (wide.matches) setBoard(!board, 'control'); else treeFilter.focus(); if (visible && loadError) void refresh(); },
-    /** Home's "Open in library" and collection cards: the panel opened on a scope of the library, as the board where there is room. */
+    showPage,
+    restoreScope: key => { lastPlace = undefined; setScope(parseScope(key) ?? { kind: 'all' }); },
+    forgetScope: () => setScope({ kind: 'all' }),
+    /** Home's "Open in library" and collection cards, and the library-board command: the Library tab on a scope of the library. */
     browse: (scope: LibraryScope) => openScope(typeof scope === 'string' ? { kind: scope } : { kind: 'collection', id: scope.collection }),
     filter: filterBy,
     colourNames,

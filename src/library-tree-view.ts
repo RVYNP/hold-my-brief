@@ -4,6 +4,7 @@
 import type { LibraryDocument } from './catalog-types';
 import { highlightRuns, openByDefault, sectionId, treeRows, type TreeNode, type TreeRow } from './library-tree';
 import { isImage } from './library-query';
+import type { Scope } from './library-scope';
 
 export type TreeHost = {
   /** A document was chosen: shown now, or (`background`) only given a tab. `siblings` are the images next to it, for the image pager. */
@@ -12,7 +13,7 @@ export type TreeHost = {
   menu: (node: TreeNode, anchor: HTMLElement, at: { x: number; y: number } | undefined) => void;
   /** The + on the COLLECTIONS caption was pressed: a new collection, with `anchor` where focus returns. */
   create: (anchor: HTMLElement) => void;
-  /** A folder or collection was double-clicked: the board scoped to it. */
+  /** A folder or collection was double-clicked: the Library tab scoped to it. */
   scope: (node: TreeNode) => void;
 };
 
@@ -24,6 +25,8 @@ export type TreeInput = {
   /** The ids a filter forces open. */
   forced: ReadonlySet<string>;
   activePath: string | undefined;
+  /** What the Library tab shows while it is showing: its folder or collection row is marked. */
+  scope?: Scope;
   /** The reading progress to show for a document, if any. */
   progress: (doc: LibraryDocument) => string | undefined;
 };
@@ -123,7 +126,11 @@ export function createTreeView(root: HTMLElement, host: TreeHost) {
       item.dataset.docPath = doc.path; item.dataset.docName = node.label; item.title = doc.path;
       if ((doc.availability ?? 'ready') === 'missing') { item.classList.add('is-missing'); meta.textContent = 'Missing'; }
       if (doc.path === input?.activePath) { item.classList.add('is-active'); item.setAttribute('aria-selected', 'true'); item.setAttribute('aria-current', 'true'); }
-    } else meta.textContent = String(node.count);
+    } else {
+      meta.textContent = String(node.count);
+      const shown = input?.scope, mine = node.scope;
+      if (shown && mine && (mine.kind === 'collection' ? shown.kind === 'collection' && shown.id === mine.id : shown.kind === 'folder' && shown.id === mine.rootId && shown.path === mine.path)) { item.classList.add('is-scope'); item.setAttribute('aria-current', 'location'); }
+    }
     item.append(meta);
     return item;
   }

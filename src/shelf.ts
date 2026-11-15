@@ -42,7 +42,7 @@ export function parentFolder(path: string): string | undefined {
 }
 
 /**
- * The one title a document goes by outside the folder tree (Home cards, tab titles, library rows and the board): an EPUB's own
+ * The one title a document goes by outside the folder tree (Home cards, tab titles, library rows and the Library tab): an EPUB's own
  * title once read, else the folder's name when the file's name is generic (`03_wwe_mag/source.pdf` is "03_wwe_mag"), else
  * the cleaned file name (`cleaned`) or the file name itself.
  */
