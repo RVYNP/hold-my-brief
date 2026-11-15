@@ -32,15 +32,23 @@ export type ReaderContext = {
   /** A same-origin content frame finished loading. Pointer input inside it never reaches the host, so the hand tool listens there directly. */
   onFrame?: (doc: Document) => void;
 };
-/** Page thumbnails for the strip and the progress-bar preview: one bounded cache, rendered one at a time once the page itself is on screen. */
+/**
+ * How soon a thumbnail is wanted: `urgent` goes before everything queued (a card under the pointer), `visible` is
+ * what the strip shows, and `idle` is look-ahead that runs only when nothing else waits.
+ */
+export type ThumbnailPriority = 'urgent' | 'visible' | 'idle';
+/** Page thumbnails for the strip and the progress-bar preview: one bounded cache, rendered a couple at a time once the page itself is on screen. */
 export interface PageThumbnails {
   /** A thumbnail already rendered, 88 CSS px tall, or `undefined`. */
   cached(page: number): HTMLCanvasElement | undefined;
   /**
    * Renders a thumbnail, or finds it in the cache. Aborting `signal` drops the request (and stops the render if it
-   * is the one running); a dropped or failed request resolves to `undefined`. `urgent` goes before queued requests.
+   * is the one running); a dropped or failed request resolves to `undefined`. An `idle` request never evicts a
+   * thumbnail the strip is keeping and resolves to `undefined` instead of rendering when there is no room for it.
    */
-  render(page: number, signal: AbortSignal, urgent?: boolean): Promise<HTMLCanvasElement | undefined>;
+  render(page: number, signal: AbortSignal, priority?: ThumbnailPriority): Promise<HTMLCanvasElement | undefined>;
+  /** The pages the strip shows (`view`) and the ones it looks ahead to (`ahead`): their thumbnails are the last the cache lets go of, the shown ones after the others. */
+  keep(view: readonly number[], ahead?: readonly number[]): void;
   /** Turns to the page, or the spread that holds it, the way a page turn does. */
   open(page: number): Promise<void>;
 }
