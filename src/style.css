@@ -1014,6 +1014,17 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
 #view-controls #zoom-level[aria-expanded=true] { background: var(--hover-subtle); }
 #view-controls .view-group { display: flex; align-items: center; gap: 2px; }
 #view-controls .view-sep { width: 1px; height: 16px; background: var(--hairline); }
+/* A reflowable EPUB's pill holds Contents, Pages | Scroll and A− size A+ in place of the zoom, hand and page-layout controls. */
+#view-controls:not(.is-reading) > #view-reading, #view-controls.is-reading > :not(#view-grip, #view-reading) { display: none; }
+#view-controls #view-reading { gap: 4px; }
+#view-controls .view-text { width: auto; min-width: 28px; padding: 0 8px; font-size: 12px; font-weight: 500; line-height: 1; white-space: nowrap; }
+#view-controls #view-contents { display: flex; align-items: center; gap: 6px; color: var(--fg); }
+#view-controls .view-segmented { display: flex; gap: 2px; padding: 2px; border-radius: 7px; background: var(--hover-subtle); }
+#view-controls .view-segmented button { height: 22px; border-radius: 5px; }
+#view-controls .view-segmented button[aria-pressed=true] { background: var(--card); box-shadow: 0 0 0 1px var(--hairline); }
+#view-controls .view-size { display: flex; align-items: center; }
+#view-controls .view-size output { min-width: 22px; color: var(--fg); font: 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; text-align: center; }
+#view-controls .view-size button:disabled { opacity: .45; cursor: default; background: transparent; }
 /* Move grip: six muted dots, no box. The default placement is CSS; dragging it (or the arrow keys) pins the pill with inline left/top. */
 #view-controls #view-grip { width: 14px; height: 26px; margin: 0 2px 0 -1px; border-radius: 5px; color: var(--muted); cursor: grab; touch-action: none; }
 #view-controls #view-grip:hover, #view-controls #view-grip:active { color: var(--fg); background: var(--hover-subtle); }
@@ -1132,6 +1143,10 @@ dialog.drop::backdrop { background: transparent; }
 #outline-list { display: flex; flex-direction: column; }
 #outline-list:not(:has(button)) { color: var(--muted); font-size: 12px; padding: 4px 6px; }
 #outline-list button { text-align: left; white-space: normal; padding: 6px 8px; font-size: 12px; }
+#outline-list .outline-entry { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; width: 100%; padding-left: calc(8px + var(--depth, 0) * 14px); }
+#outline-list .outline-page { flex: none; color: var(--muted); font: 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+#outline-list .outline-entry.is-current { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+#outline-list .outline-entry.is-current .outline-page { color: inherit; }
 dl { display: grid; grid-template-columns: 1fr auto; gap: 12px 8px; font-size: 11px; }
 dd { margin: 0; color: var(--muted); }
 /* Keyboard shortcuts: grouped like the palette, key caps in its style, two columns when there is
