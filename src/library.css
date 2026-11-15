@@ -39,7 +39,7 @@
   #reader-layout.library-open::before, .library-root::after { content: ''; position: absolute; top: 0; bottom: var(--footer-height); background-color: var(--glass-raise-base); background-image: var(--glass-raise-paint); background-attachment: var(--glass-raise-attach); pointer-events: none; }
   #reader-layout.library-open::before { z-index: 0; left: 0; width: 60px; }
   #reader-layout.library-open.library-right::before { left: auto; right: 0; }
-  .library-root::after { left: calc(100% - 10px); width: 16px; }
+  .library-root::after { bottom: 0; left: calc(100% - 10px); width: 16px; }
   .library-right > .library-root::after { left: auto; right: calc(100% - 10px); }
   #reader-layout { --library-clear: 60px; --workspace-clear: 60px; }
   #reader-layout.library-open { --library-clear: calc(var(--library-width, 270px) + 76px); --workspace-clear: 0px; }
