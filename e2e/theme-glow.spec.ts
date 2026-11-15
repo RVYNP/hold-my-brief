@@ -6,8 +6,21 @@ import { test, expect, type Page } from '@playwright/test';
  */
 const appearance = (mode: 'light' | 'dark', accent: string | null = null) => ({ mode, palette: 'brief', accent, page: 'theme' });
 
+// Playwright's emulateMedia has no reducedTransparency option; ask the browser directly.
+// A runner can have Reduce transparency, Increase contrast or forced colours switched on in the OS: pin all three, so the
+// glow is measured as drawn and only the reduced case below turns it off.
+const emulate = async (page: Page, reducedTransparency: 'reduce' | 'no-preference') => {
+  const session = await page.context().newCDPSession(page);
+  await session.send('Emulation.setEmulatedMedia', { features: [
+    { name: 'prefers-reduced-transparency', value: reducedTransparency },
+    { name: 'prefers-contrast', value: 'no-preference' },
+    { name: 'forced-colors', value: 'none' },
+  ] });
+};
+
 async function open(page: Page, mode: 'light' | 'dark', accent: string | null = null) {
   await page.setViewportSize({ width: 1080, height: 760 });
+  await emulate(page, 'no-preference');
   await page.addInitScript(record => localStorage.setItem('hold-my-brief:appearance', JSON.stringify(record)), appearance(mode, accent));
   await page.goto('/');
   await expect(page.locator('html')).toHaveAttribute('data-theme', mode);
@@ -29,9 +42,7 @@ for (const mode of ['light', 'dark'] as const) {
     expect(glow.workspaceAlpha).toBeLessThan(1);
     await page.screenshot({ path: `test-results/glow-brief-${mode}.png` });
 
-    // Playwright's emulateMedia has no reducedTransparency option; ask the browser directly.
-    const session = await page.context().newCDPSession(page);
-    await session.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-transparency', value: 'reduce' }] });
+    await emulate(page, 'reduce');
     await expect.poll(() => page.evaluate(() => matchMedia('(prefers-reduced-transparency: reduce)').matches)).toBe(true);
     const flat = await paint(page);
     // The glow's stops are transparent and the panel is the opaque surface: the paint goes with it.
