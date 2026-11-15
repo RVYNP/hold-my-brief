@@ -54,7 +54,7 @@ browser's storage). Only the tab that was showing opens at once; the others open
 With nothing saved, the window opens on **Hand it over.** Once documents have been opened, it opens
 on **Home**:
 
-- **Jump back in** is the eight documents you looked at last, most recent first: four across in a wide window, two
+- **Recently opened** is the eight documents you looked at last, most recent first: four across in a wide window, two
   in a narrower one and in the compact window (2 × 4), one only below about 380 px of width. Each card has the cover, the title and, if you got part of the way
   through, a thin line showing how far. Click one to open it (or switch to its tab).
 - **Continue reading** shelves what you have started and not finished, most recent first, with where you got to
@@ -62,7 +62,7 @@ on **Home**:
   collection that holds something, a 2 × 2 mosaic of its first covers with the number of references.
 - A shelf scrolls sideways with the trackpad or a horizontal wheel, by dragging it sideways, with the **‹** and
   **›** buttons that appear at its ends when you point at it, or with the arrow keys (one Tab stop per shelf). It snaps to
-  cards. **Show all** opens the library on that selection (**Continue reading**, **Favorites**, or all references for
+  cards. **Open in library** opens the library on that selection (**Continue reading**, **Favorites**, or all references for
   Collections); a collection card opens the library on that collection. A section with nothing in it is left out.
 - The chips under the title (**All**, **PDF**, **EPUB**, **Markdown**, **Text**, **Images**, only the types you have) filter every
   section; **All** restores the mixed view. They stay on one row that scrolls sideways when the window is narrow.
@@ -70,7 +70,7 @@ on **Home**:
 **Browse library** and **Open files** are in the header. Edits made in the library refresh Home. A picture fills in when its
 thumbnail is ready; a book without a picture keeps the generated cover it has on its shelf. An EPUB shows the title from its
 own metadata once it has been read, and its file name cleaned up until then. A cover looks the same here as in the library.
-In the desktop app, the × on a Jump back in card removes it from the recent list and leaves the library entry. A file whose
+In the desktop app, the × on a Recently opened card removes it from the recent list and leaves the library entry. A file whose
 original has gone is dimmed.
 
 The library offers the same choices under **Choose collection and filters → Filter by format**,
