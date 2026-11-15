@@ -14,13 +14,18 @@ export type Position = {
   /** True while a page on screen has no text layer, so its text cannot be selected or searched. */
   imageOnly?: boolean;
 };
-export type OutlineItem = { label: string; target: string };
+/** A contents entry. `depth` (0 for top level) and `page` are given by adapters whose contents nest or number their pages. */
+export type OutlineItem = { label: string; target: string; depth?: number; page?: string };
+/** How a reflowable document lays out: one page at a time, or one continuous column. */
+export type ReadingFlow = 'paginated' | 'scrolled';
 /**
  * `fit` is the fit mode in force while `fitted`, and the one the level returns to otherwise. While not `fitted`, `zoom` is a true
  * scale (1 = actual size, see zoom.ts); while fitted the page follows the window and `zoom` is not used. `zoomModel` says which meaning
  * of `zoom` a saved value carries: options saved before it existed held a multiplier of the fit and are converted on open.
  */
-export type ReaderOptions = { fontSize: number; lineHeight: number; margin: number; wrap: boolean; fit: 'page' | 'width'; fitted: boolean; zoom: number; zoomModel: number; rotation: number; spread: boolean; cover: boolean };
+export type ReaderOptions = { fontSize: number; lineHeight: number; margin: number; wrap: boolean; fit: 'page' | 'width'; fitted: boolean; zoom: number; zoomModel: number; rotation: number; spread: boolean; cover: boolean;
+  /** Reflowable EPUB only. Absent until chosen: the adapter then picks from the book and the pick is saved with the document. */
+  flow?: ReadingFlow };
 export const defaultOptions: ReaderOptions = { fontSize: 18, lineHeight: 1.65, margin: 24, wrap: true, fit: 'page', fitted: true, zoom: 1, zoomModel: ZOOM_MODEL, rotation: 0, spread: false, cover: true };
 export type ReaderSource = { name: string; bytes: Uint8Array; format: Format; path?: string };
 export type ReaderContext = {
@@ -87,6 +92,10 @@ export interface ReaderAdapter {
    */
   setOptions(options: ReaderOptions, hold?: Anchor): Promise<void>;
   outline(): OutlineItem[];
+  /** The index in `outline()` of the entry the reader is in, or -1. Absent when the contents cannot say. */
+  currentOutline?(): number;
+  /** The flow a reflowable document is laid out in; absent for formats with no choice of flow. */
+  flow?(): ReadingFlow | undefined;
   /**
    * Finds `query` in the document's text. Absent when the format cannot expose text at all,
    * such as images, where the find bar explains instead of searching.

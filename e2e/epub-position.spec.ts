@@ -17,10 +17,15 @@ async function turn(page: Page) {
 }
 const percent = async (page: Page) => Number(/·\s*(\d+(?:\.\d+)?)%/.exec(await footer(page).innerText())![1]);
 
-/** The horizontal extent of the text on the page now, in window pixels, from the range Foliate reports as visible. */
+/**
+ * The horizontal extent of the text on the page now, in window pixels, from the range Foliate reports as visible. Right after a turn into a
+ * new chapter the range can still belong to the chapter just unloaded, which has no frame: that reads as a width of 0, so a poll tries again.
+ */
 const textSpan = (page: Page) => page.evaluate(() => {
   const range: Range = (document.querySelector('foliate-view') as unknown as { lastLocation: { range: Range } }).lastLocation.range;
-  const frame = range.startContainer.ownerDocument!.defaultView!.frameElement!.getBoundingClientRect();
+  const frameElement = range.startContainer.ownerDocument!.defaultView?.frameElement;
+  if (!frameElement) return { width: 0, left: 0, right: 0, centre: 0, hostCentre: 0, hostWidth: 0 };
+  const frame = frameElement.getBoundingClientRect();
   const sides = Array.from(range.getClientRects()).filter(rect => rect.width > 0).map(rect => [rect.left + frame.left, rect.right + frame.left]);
   const left = Math.min(...sides.map(side => side[0])), right = Math.max(...sides.map(side => side[1]));
   const host = document.querySelector('.reader-host')!.getBoundingClientRect();
@@ -31,9 +36,9 @@ for (const width of [1440, 900]) {
   test(`reflowed text sits in the middle of the reading area at ${width} px, at a readable measure`, async ({ page }) => {
     await openBook(page, width);
     await turn(page); // A page of running text, not the title page.
-    await expect.poll(async () => (await textSpan(page)).width).toBeGreaterThan(0);
-    const span = await textSpan(page);
-    expect(Math.abs(span.centre - span.hostCentre)).toBeLessThan(24);
+    // The layout can still be settling just after the turn (a refit of the column), so the page is measured until it has.
+    let span = await textSpan(page);
+    await expect.poll(async () => { span = await textSpan(page); return span.width > 0 ? Math.abs(span.centre - span.hostCentre) : Infinity; }).toBeLessThan(24);
     // About 66 characters of 18 px serif text: roughly 450 to 600 px, and well short of the window.
     expect(span.right - span.left).toBeGreaterThan(420);
     expect(span.right - span.left).toBeLessThan(620);

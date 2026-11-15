@@ -92,6 +92,8 @@ export function formatPercent(fraction: number): string {
 export type PageInfo = { page: string; pages: string; estimated: boolean };
 /** `p. 34 of 412`, or `p. ~34 of ~412` when the count is an estimate. */
 export const formatPage = ({ page, pages, estimated }: PageInfo) => estimated ? `p. ~${page} of ~${pages}` : `p. ${page} of ${pages}`;
+/** A page as a contents entry gives it: `p. 34`, or `p. ~34` when it is an estimate. */
+export const formatPageShort = ({ page, estimated }: Pick<PageInfo, 'page' | 'estimated'>) => estimated ? `p. ~${page}` : `p. ${page}`;
 
 /** The page of a Foliate location (a fixed span of the book's text): its number from 1 and how many there are. */
 export function estimatedPage(location: { current: number; total: number } | undefined): PageInfo | undefined {

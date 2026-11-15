@@ -30,6 +30,9 @@ import { createTabStrip, type TabView } from './tab-strip';
 import { titleHints } from './tab-titles';
 import { baseName, ghostLabel, insertionIndex, overlayNames, splitDropped, unsupportedNotice } from './drop';
 import { attachOpenDrag } from './open-drag';
+import { createReadingControls } from './reading-controls';
+import { fillContents } from './contents';
+import { steppedFontSize } from './text-size';
 initAppearance();
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
@@ -184,7 +187,7 @@ function updateViewControls() {
   const level = `${zoomPercent(current)}%`;
   const layout = position?.spread, waiting = layout === 'waiting' ? `Two pages appear when the reading area is at least ${MIN_SPREAD_WIDTH} px wide` : '';
   const kind = reader.mode === 'fixed' && fitted && !width && layout === 'active' ? 'Two-page view'
-    : `${reader.mode !== 'fixed' ? (reader.mode === 'paginated' ? 'Reading view' : 'Scroll view') : fitted ? (width ? 'Fit width' : 'Page view') : level}${layout === 'active' ? ' · Two pages' : ''}`;
+    : `${reader.mode !== 'fixed' ? (reader.mode === 'paginated' && reader.flow?.() !== 'scrolled' ? 'Reading view' : 'Scroll view') : fitted ? (width ? 'Fit width' : 'Page view') : level}${layout === 'active' ? ' · Two pages' : ''}`;
   // The subtitle says where you are, compactly ("48 / 146", without a PDF's printed page number);
   // the full position and the kind of view are in its tooltip.
   const where = position?.label ?? '';
@@ -217,7 +220,11 @@ function updateViewControls() {
   $('page-strip-toggle').setAttribute('aria-pressed', String(stripWanted));
   $('page-strip-toggle').title = hidden ? `Page previews (Ctrl 4) · ${hidden}` : 'Page previews (Ctrl 4)';
   if (hidden) $('page-strip-toggle').setAttribute('aria-description', hidden); else $('page-strip-toggle').removeAttribute('aria-description');
-  $('view-controls').hidden = !pan.pannable;
+  // A reflowable EPUB has no page to zoom or pan: its pill holds the reading controls instead.
+  const reflowable = active.format === 'epub' && reader.mode !== 'fixed';
+  $('view-controls').classList.toggle('is-reading', reflowable);
+  $('view-controls').hidden = !pan.pannable && !reflowable;
+  if (reflowable) readingControls.update({ flow: reader.flow?.() ?? 'paginated', fontSize: options.fontSize });
   if (!pan.pannable) { zoomMenu.close(); return; }
   // The level opens the zoom menu; double-clicking it still toggles fit page/fit width (while zoomed it first returns to the current fit).
   const next = fitted && !width ? 'fit-width' : fitted ? 'fit-page' : `fit-${options.fit}`;
@@ -241,6 +248,12 @@ $('zoom-level').ondblclick = () => void action($('zoom-level').dataset.next ?? '
 // The level is a menu button: it offers the zoom commands, a field to type a percentage into, and presets.
 const zoomMenu = createZoomMenu($<HTMLButtonElement>('zoom-level'), choice => void (choice.kind === 'command' ? action(choice.id) : changeOptions({ fitted: false, zoom: choice.zoom })).catch(fail));
 $('hand-tool').onclick = toggleHand;
+const readingControls = createReadingControls({
+  contents: () => void command('outline').catch(fail),
+  flow: flow => void changeOptions({ flow }).catch(fail),
+  size: direction => void action(direction > 0 ? 'larger' : 'smaller').catch(fail),
+});
+$('view-grip').after(readingControls.element);
 $('view-single').onclick = () => void changeOptions({ spread: false });
 $('view-spread').onclick = () => void changeOptions({ spread: true });
 $('page-strip-toggle').onclick = () => void command('page-strip').catch(fail);
@@ -369,13 +382,21 @@ function flush(): Promise<void> {
 setInterval(() => { if (dirty) void flush(); }, 1500);
 // Go to and Contents drop from the toolbar under the title, like the palette, instead of centring on a
 // dimmed page; a click outside closes them.
-function showDialog(id: string) {
+/** `anchor` stands a popover on that box, above it where there is room and below it where there is not; without one it drops from the toolbar. */
+function showDialog(id: string, anchor?: DOMRect) {
   const dialog = $(id);
   if (!(dialog instanceof HTMLDialogElement)) return;
   if (dialog.classList.contains('drop')) {
     const title = ($('tab-strip').offsetParent ? $('tab-strip') : $('title')).getBoundingClientRect(), width = Math.min(320, innerWidth - 12);
-    dialog.style.top = `${Math.round($('title').closest('header')!.getBoundingClientRect().bottom + 4)}px`;
-    dialog.style.left = `${Math.round(Math.max(6, Math.min(title.left, innerWidth - width - 6)))}px`;
+    const left = anchor?.left ?? title.left;
+    dialog.style.left = `${Math.round(Math.max(6, Math.min(left, innerWidth - width - 6)))}px`;
+    if (anchor && anchor.top >= 160) {
+      dialog.style.top = 'auto'; dialog.style.bottom = `${Math.round(innerHeight - anchor.top + 6)}px`; dialog.style.maxHeight = `${Math.round(anchor.top - 6 - 8)}px`;
+    } else if (anchor) {
+      dialog.style.top = `${Math.round(anchor.bottom + 6)}px`; dialog.style.bottom = 'auto'; dialog.style.maxHeight = `${Math.round(innerHeight - anchor.bottom - 6 - 8)}px`;
+    } else {
+      dialog.style.top = `${Math.round($('title').closest('header')!.getBoundingClientRect().bottom + 4)}px`; dialog.style.bottom = 'auto'; dialog.style.maxHeight = '';
+    }
   }
   dialog.showModal();
   // A dialog marked autofocus (a reference with nothing to fill in) takes focus itself rather than
@@ -557,6 +578,9 @@ async function load(open: () => Promise<Opened | null>, label = 'document', { ta
       onPosition: p => { if (reader === current) showPosition(p); else if (tab.reader === current) tab.position = p; }, onError: fail, openExternal, requestPassword: password, onFrame: doc => { pan.watchFrame(doc); watchFrameZoom(doc); },
       resolveImage: desktop ? async relative => { const result = await native<{bytes: number[]; mime: string}>('read_relative_image', { path: doc.path, relative }); const url = URL.createObjectURL(new Blob([new Uint8Array(result.bytes)], { type: result.mime })); urls.push(url); return url; } : undefined,
     }, prefs);
+    // A reflowable book opens in the flow the reader last chose; with none saved the adapter picked one from the book, and it is kept from here on.
+    const flow = candidate.flow?.();
+    if (flow) prefs.flow = flow;
     if (doc.previousState?.locator) await candidate.restore(doc.previousState.locator);
     if (legacy && candidate.mode === 'fixed') {
       const converted = migrateLegacyZoom({ fit: prefs.fit, zoom: legacyZoom }, candidate.legacyZoomBase?.(prefs.fit), candidate.zoomLimits?.());
@@ -857,6 +881,17 @@ async function changeOptions(next: Partial<ReaderOptions>, hold: Hold | Spot | f
     showPosition(open.getPosition());
   } catch (error) { options = previous; fail(error); }
 }
+/**
+ * The Contents popover. A reflowable EPUB, whose pill carries the Contents button, opens it above the pill; any other document drops it from
+ * the toolbar. The entry the reader is in is marked, scrolled to the middle of the list and focused, so Enter goes there and the arrow keys move from it.
+ */
+function openContents() {
+  const dialog = $<HTMLDialogElement>('contents'), anchored = !$('view-controls').hidden && $('view-controls').classList.contains('is-reading');
+  const current = fillContents($('outline-list'), reader?.outline() ?? [], reader?.currentOutline?.() ?? -1, item => { void reader?.goTo(item.target).then(() => closeDialog(dialog)).catch(fail); });
+  showDialog('contents', anchored ? $('view-controls').getBoundingClientRect() : undefined);
+  current?.focus({ preventScroll: true });
+  current?.scrollIntoView({ block: 'center' });
+}
 async function action(name: string) {
   if (name === 'goto') jump();
   else if (name === 'appearance') appearanceSheet.open();
@@ -872,9 +907,13 @@ async function action(name: string) {
     try { localStorage.setItem(stripKey, stripWanted ? 'on' : 'off'); } catch { /* Optional preference. */ }
     updateViewControls();
   }
-  else if (name === 'smaller' || name === 'larger') { const direction = name === 'larger' ? 1 : -1; await changeOptions(reader?.mode === 'fixed' ? { fitted: false, zoom: stepZoom(zoomLevel(), direction, zoomLimits()) } : { fontSize: Math.max(12, Math.min(40, options.fontSize + direction * 2)) }); }
+  else if (name === 'smaller' || name === 'larger') { const direction = name === 'larger' ? 1 : -1; await changeOptions(reader?.mode === 'fixed' ? { fitted: false, zoom: stepZoom(zoomLevel(), direction, zoomLimits()) } : { fontSize: steppedFontSize(options.fontSize, direction) }); }
+  else if (name === 'pages-view' || name === 'scroll-view') {
+    if (!reader?.flow?.()) return notify('Pages and Scroll views are for reflowable books.');
+    await changeOptions({ flow: name === 'pages-view' ? 'paginated' : 'scrolled' });
+  }
   else if (name === 'type') appearanceSheet.open('text');
-  else if (name === 'outline') { const list = $('outline-list'); list.replaceChildren(); const entries = reader?.outline() ?? []; if (!entries.length) list.textContent = 'No contents outline in this document.'; for (const item of entries) { const button = document.createElement('button'); button.textContent = item.label; button.onclick = () => { void reader?.goTo(item.target).then(() => closeDialog($<HTMLDialogElement>('contents'))).catch(fail); }; list.append(button); } showDialog('contents'); }
+  else if (name === 'outline') openContents();
   else if (name === 'shortcuts') showDialog('shortcuts');
   else if (name === 'clear-data') showDialog('delete-data');
   else if (name === 'clear-recents') { if (desktop) await native('clear_recents'); homeRecents = []; paintHome(); notify('Recent-file list cleared. Documents and saved positions are unchanged.'); }

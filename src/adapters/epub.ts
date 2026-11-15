@@ -1,11 +1,12 @@
 import { BlobReader, ZipReader, configure, type FileEntry } from '@zip.js/zip.js';
 import { EPUB } from 'foliate-js/epub.js';
 import 'foliate-js/view.js';
-import type { Locator, OutlineItem, Position, ReaderAdapter, ReaderContext, ReaderOptions, ReaderSource } from '../types';
+import type { Locator, OutlineItem, Position, ReaderAdapter, ReaderContext, ReaderOptions, ReaderSource, ReadingFlow } from '../types';
 import { isDark, liftInk, onAppearanceChange, parseRgb, readingColors, rgbToHex, type Rgb } from '../theme';
 import { MIN_SPREAD_WIDTH, pagesLabel, pairedSides } from '../spread';
 import { clampZoom } from '../zoom';
-import { DEFAULT_WPM, chapterMap, estimatedPage, footerLabel, numberedChapters, readingMeasure, type PageInfo } from '../epub-position';
+import { DEFAULT_WPM, chapterMap, cleanChapterLabel, estimatedPage, footerLabel, formatPageShort, numberedChapters, readingMeasure, type PageInfo } from '../epub-position';
+import { SAMPLE_SECTIONS, codeHeavy, sectionMix, type SectionMix } from '../epub-flow';
 import { excerpt, findMatches, type DocumentSearch, type SearchHit, type SearchOptions, type UnitText } from '../search';
 
 const RESOURCE_LIMIT = 64 * 1024 * 1024;
@@ -15,8 +16,11 @@ const CONTENT_CSP = "default-src 'none'; script-src 'none'; connect-src 'none'; 
 const clamp = (n: number) => Math.max(0, Math.min(1, Number.isFinite(n) ? n : 0));
 
 type Section = { id: string; size: number; linear?: string; pageSpread?: string; createDocument: () => Promise<Document>; unload: () => void };
-type FoliateBook = { sections: Section[]; dir?: string; rendition: { layout?: string; spread?: string }; toc?: TocNode[]; pageList?: { label?: string }[]; metadata?: { title?: string | Record<string, string> }; splitTOCHref?: (href: string) => string[]; transformTarget: EventTarget; destroy: () => void };
+type FoliateBook = { sections: Section[]; dir?: string; rendition: { layout?: string; spread?: string }; toc?: TocNode[]; pageList?: PageNode[]; metadata?: { title?: string | Record<string, string> }; splitTOCHref?: (href: string) => string[]; getTOCFragment?: (doc: Document, id: string) => Element | null; transformTarget: EventTarget; destroy: () => void };
 type TocNode = { label: string; href: string; subitems?: TocNode[] };
+type PageNode = { label?: string; href?: string };
+/** Where a contents entry or page-list item starts: its section, and how far through the section's text. */
+type Spot = { section: number; fraction: number };
 type ChapterEntry = { label: string; section: number; node: TocNode; parent?: ChapterEntry };
 type Target = { index: number; anchor?: number | ((doc: Document) => Range | Element | number) };
 type FoliateView = HTMLElement & {
@@ -92,6 +96,12 @@ function rangeAtOffset(doc: Document, offset: number) {
   const range = doc.createRange(); range.selectNodeContents(root); range.collapse(false); return range;
 }
 
+/** Characters of a section's size that make one Foliate location, the unit of its page estimate (see its SectionProgress). */
+const SIZE_PER_LOCATION = 1500;
+/** A wheel gesture that begins this long after the last wheel event is a new one. */
+const WHEEL_GESTURE_GAP = 150;
+/** After a wheel gesture has turned a chapter, the next one waits this long. */
+const WHEEL_COOLDOWN = 700;
 export class EpubAdapter implements ReaderAdapter {
   mode: 'fixed' | 'paginated' = 'paginated';
   readonly spreads = true;
@@ -106,6 +116,10 @@ export class EpubAdapter implements ReaderAdapter {
   private abort = new AbortController();
   private history: Locator[] = [];
   private items: OutlineItem[] = [];
+  /** The contents node behind each entry of `items`, for finding the one Foliate says the reader is in. */
+  private nodes: TocNode[] = [];
+  /** Where contents entries and page-list items start, measured as the sections are read. */
+  private spots = new Map<object, Spot>();
   private weights: number[] = [];
   /** Words per spine section, and their running sum: the time left in a chapter is counted from them. */
   private words: number[] = [];
@@ -131,6 +145,10 @@ export class EpubAdapter implements ReaderAdapter {
   private resizeTimer?: ReturnType<typeof setTimeout>;
   /** Plain text per spine section, extracted on demand for search and kept with the document. */
   private sectionText = new Map<number, string>();
+  /** The reading flow in force: `scrolled` is one continuous column, `paginated` is pages. Reflowable books only. */
+  private flowNow: ReadingFlow = 'paginated';
+  /** Wheel input in scrolled flow: when the last event came, whether the gesture began at the edge it is heading for, and when a chapter was last turned. */
+  private wheel = { last: 0, atEdge: false, until: 0 };
   /** The section and offset of the currently marked search hit, if any. */
   private markedHit?: { index: number; start: number; length: number };
   private position: Position = { label: 'Opening EPUB…', fraction: 0, locator: { kind: 'epub' }, scrub: { current: 0, total: 100, unit: 'percent' } };
@@ -189,6 +207,9 @@ export class EpubAdapter implements ReaderAdapter {
     // Reflowable text follows the reading theme; fixed-layout pages stay faithful.
     if (this.mode === 'paginated') host.classList.add('reflow-reader');
     this.declaredSides = this.book.sections.map(section => section.pageSpread);
+    // A reflowable book opens in the flow the reader chose; with no choice yet it is picked below, once the first chapters have been read.
+    const stored = this.mode === 'paginated' && (this.options.flow === 'scrolled' || this.options.flow === 'paginated') ? this.options.flow : undefined;
+    this.flowNow = stored ?? 'paginated';
     this.layoutSpread = this.spreadState() === 'active'; this.layoutCover = this.options.cover !== false;
     this.pairSections();
     this.book.transformTarget.addEventListener('data', event => {
@@ -196,16 +217,23 @@ export class EpubAdapter implements ReaderAdapter {
       if (['application/xhtml+xml', 'text/html', 'image/svg+xml'].includes(detail.type))
         detail.data = Promise.resolve(detail.data).then(data => sanitizeEpubMarkup(String(data), detail.type, true));
     });
-    const flatten = (nodes: TocNode[]) => { for (const item of nodes) { if (item.href) this.items.push({ label: item.label, target: item.href }); flatten(item.subitems ?? []); } };
-    flatten(this.book.toc ?? []);
     this.numberChapters();
+    const targets = this.outlineTargets(), mixes: SectionMix[] = [];
     // The map is based on content, never displayed page counts or equal chapter weights.
-    for (const section of this.book.sections) {
+    for (const [index, section] of this.book.sections.entries()) {
       if (this.disposed) throw new DOMException('Opening cancelled', 'AbortError');
       const doc = await section.createDocument();
       this.weights.push(Math.max(1, weight(doc.body ?? doc.documentElement)));
       this.words.push((doc.body?.textContent ?? '').match(/\S+/g)?.length ?? 0);
+      if (!stored && this.mode === 'paginated' && index < SAMPLE_SECTIONS) mixes.push(sectionMix(doc));
+      this.locate(doc, index, targets.get(index));
     }
+    if (this.mode === 'paginated') {
+      this.flowNow = stored ?? (codeHeavy(mixes) ? 'scrolled' : 'paginated');
+      this.options.flow = this.flowNow;
+      this.layoutSpread = this.spreadState() === 'active';
+    }
+    this.buildOutline();
     this.wordsPrefix = [0];
     for (const count of this.words) this.wordsPrefix.push(this.wordsPrefix[this.wordsPrefix.length - 1] + count);
     const view = this.view = document.createElement('foliate-view') as FoliateView;
@@ -242,7 +270,7 @@ export class EpubAdapter implements ReaderAdapter {
         const forwarded = new KeyboardEvent('keydown', { key: event.key, code: event.code, ctrlKey: event.ctrlKey, altKey: event.altKey, shiftKey: event.shiftKey, metaKey: event.metaKey, bubbles: true, cancelable: true, repeat: event.repeat });
         if (!host.dispatchEvent(forwarded)) event.preventDefault();
       });
-      if (this.mode === 'paginated') this.adaptInk(doc);
+      if (this.mode === 'paginated') { this.adaptInk(doc); doc.addEventListener('wheel', event => this.chainChapter(event, doc), { passive: true }); }
     });
     await view.open(this.book);
     this.watchRenderer();
@@ -277,7 +305,7 @@ export class EpubAdapter implements ReaderAdapter {
   private numberChapters() {
     const book = this.book;
     if (!book) return;
-    const title = book.metadata?.title, bookTitle = typeof title === 'string' ? title : title ? Object.values(title)[0] : undefined;
+    const bookTitle = this.bookTitle();
     const entries: ChapterEntry[] = [];
     const walk = (nodes: TocNode[], parent?: ChapterEntry) => { for (const node of nodes) {
       const section = node.href ? book.sections.findIndex(candidate => candidate.id === book.splitTOCHref?.(node.href)[0]) : -1;
@@ -293,9 +321,74 @@ export class EpubAdapter implements ReaderAdapter {
     this.chapterOf = new Map(entries.flatMap(entry => { const found = byEntry.get(entry); return found ? [[entry.node, found] as const] : []; }));
     this.pageLabels = (book.pageList ?? []).map(item => String(item.label ?? '').trim()).filter(Boolean);
   }
+  private bookTitle(): string | undefined {
+    const title = this.book?.metadata?.title;
+    return typeof title === 'string' ? title : title ? Object.values(title)[0] : undefined;
+  }
+  /** The contents entries and page-list items that point into each section, with the fragment each names. */
+  private outlineTargets() {
+    const book = this.book!, sections = new Map(book.sections.map((section, index) => [section.id, index]));
+    const targets = new Map<number, { node: object; fragment?: string }[]>();
+    const add = (node: object, href?: string) => {
+      if (!href) return;
+      const [id, fragment] = book.splitTOCHref?.(href) ?? [], section = sections.get(id);
+      if (section !== undefined) targets.set(section, [...(targets.get(section) ?? []), { node, fragment }]);
+    };
+    const walk = (nodes: TocNode[]) => { for (const node of nodes) { add(node, node.href); walk(node.subitems ?? []); } };
+    walk(book.toc ?? []);
+    for (const item of book.pageList ?? []) add(item, item.href);
+    return targets;
+  }
+  /** Records how far through its section each target starts, counting text and images the way `weight` does, in one pass over the document. */
+  private locate(doc: Document, section: number, list: { node: object; fragment?: string }[] = []) {
+    const wanted = new Map<Element, object[]>();
+    for (const { node, fragment } of list) {
+      const element = fragment ? this.book?.getTOCFragment?.(doc, fragment) ?? doc.getElementById(fragment) : null;
+      if (element) wanted.set(element, [...(wanted.get(element) ?? []), node]);
+      else this.spots.set(node, { section, fraction: 0 });
+    }
+    if (!wanted.size) return;
+    const before = new Map<object, number>(), walker = doc.createTreeWalker(doc.body ?? doc.documentElement, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+    let at = 0;
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (node.nodeType === Node.TEXT_NODE) { at += node.textContent!.length; continue; }
+      for (const owner of wanted.get(node as Element) ?? []) before.set(owner, at);
+      if (/^(img|svg)$/i.test((node as Element).localName)) at += 1000;
+    }
+    for (const owners of wanted.values()) for (const owner of owners) this.spots.set(owner, { section, fraction: at ? Math.min(1, (before.get(owner) ?? 0) / at) : 0 });
+  }
+  /**
+   * The contents as the Contents list shows them: cleaned labels (the raw label where cleaning finds nothing), the contents' own
+   * nesting, and the page each entry starts on. A book with a page list gives its own page labels; otherwise the page is the
+   * footer's estimate, a fixed span of the book's text.
+   */
+  private buildOutline() {
+    const book = this.book;
+    if (!book) return;
+    const sizes = book.sections.map(section => section.linear !== 'no' && section.size > 0 ? section.size : 0);
+    const sizeBefore = sizes.map((_, index) => sizes.slice(0, index).reduce((sum, size) => sum + size, 0)), total = sizes.reduce((sum, size) => sum + size, 0);
+    const at = (spot: Spot) => sizeBefore[spot.section] + spot.fraction * sizes[spot.section];
+    const listed = (book.pageList ?? []).flatMap(item => { const spot = this.spots.get(item), label = String(item.label ?? '').trim(); return spot && label ? [{ at: at(spot), label }] : []; });
+    const pageOf = (spot: Spot) => {
+      if (listed.length) return { page: (listed.filter(item => item.at <= at(spot)).at(-1) ?? listed[0]).label, estimated: false };
+      const estimate = estimatedPage({ current: Math.floor(at(spot) / SIZE_PER_LOCATION), total: Math.ceil(total / SIZE_PER_LOCATION) });
+      return estimate && { page: estimate.page, estimated: true };
+    };
+    const bookTitle = this.bookTitle();
+    this.items = []; this.nodes = [];
+    const walk = (nodes: TocNode[], depth: number) => { for (const node of nodes) {
+      if (node.href) {
+        const spot = this.spots.get(node), page = spot && pageOf(spot);
+        this.items.push({ label: cleanChapterLabel(node.label, bookTitle) ?? (node.label.trim() || 'Untitled'), target: node.href, depth, ...(page ? { page: formatPageShort(page) } : {}) });
+        this.nodes.push(node);
+      }
+      walk(node.subitems ?? [], node.href ? depth + 1 : depth);
+    } };
+    walk(book.toc ?? [], 0);
+  }
   /** Two-page state for the current options and panel size. Foliate's paginator only sets two columns in a landscape box. */
   private spreadState(): Position['spread'] {
-    if (!this.options.spread) return undefined;
+    if (!this.options.spread || this.flowNow === 'scrolled') return undefined; // One column has no pages to pair.
     const width = this.host.offsetWidth;
     return width >= MIN_SPREAD_WIDTH && (this.mode === 'fixed' || width > this.host.offsetHeight) ? 'active' : 'waiting';
   }
@@ -363,7 +456,7 @@ export class EpubAdapter implements ReaderAdapter {
     const within = fixed ? clamp(renderer.scrollTop / Math.max(1, renderer.scrollHeight)) : clamp(offset / this.weights[index]);
     // A reflowable book's place is Foliate's own: its fraction counts the text on screen, so it moves with the first page turn.
     const fraction = this.explicitEnd ? 1 : fixed ? (index + within * shown.length) / total : clamp(this.reported?.fraction ?? 0);
-    const spread = this.options.spread ? this.layoutSpread ? 'active' as const : 'waiting' as const : undefined;
+    const spread = this.options.spread && this.flowNow !== 'scrolled' ? this.layoutSpread ? 'active' as const : 'waiting' as const : undefined;
     this.position = { label: fixed ? pagesLabel(shown.map(page => page + 1), total) : this.reflowLabel(index, within, fraction), fraction,
       scrub: fixed ? { current: index + 1, total, unit: 'page' } : { current: fraction * 100, total: 100, unit: 'percent' },
       ...(spread ? { spread } : {}),
@@ -566,7 +659,8 @@ export class EpubAdapter implements ReaderAdapter {
     // Foliate's numeric zoom is a scale of the book's declared viewport, which is what 100 % means for it.
     if (this.mode === 'fixed') renderer.setAttribute('zoom', options.fitted ? `fit-${options.fit}` : String(clampZoom(options.zoom)));
     else {
-      renderer.setAttribute('flow', 'paginated'); renderer.setAttribute('max-column-count', this.layoutSpread ? '2' : '1');
+      const scrolled = this.flowNow === 'scrolled';
+      renderer.setAttribute('flow', this.flowNow); renderer.setAttribute('max-column-count', this.layoutSpread && !scrolled ? '2' : '1');
       this.applyLayout();
       // The frame's color-scheme must match the app's or Chromium paints it opaque; Foliate paints --theme-bg-color behind each column.
       const { scheme, ink, paper, accent } = readingColors();
@@ -607,9 +701,31 @@ export class EpubAdapter implements ReaderAdapter {
     if (renderer.getAttribute('max-inline-size') !== measure) renderer.setAttribute('max-inline-size', measure);
   }
   async setOptions(options: ReaderOptions) {
-    return this.enqueue(async () => { this.options = { ...options }; await this.relayout(); });
+    return this.enqueue(async () => {
+      this.options = { ...options };
+      if (this.mode === 'paginated') { this.flowNow = options.flow === 'scrolled' || options.flow === 'paginated' ? options.flow : this.flowNow; this.options.flow = this.flowNow; }
+      await this.relayout();
+    });
+  }
+  /**
+   * In scrolled flow Foliate shows one chapter at a time and stops scrolling at its ends. A wheel or trackpad gesture that starts at an end
+   * and heads past it goes on into the next (or previous) chapter, so the column reads as continuous. A gesture that only arrives at the
+   * end, with its momentum still running, stops there.
+   */
+  private chainChapter(event: WheelEvent, doc: Document) {
+    const frame = doc.defaultView?.frameElement, renderer = this.view?.renderer, wheel = this.wheel;
+    if (this.flowNow !== 'scrolled' || !frame || !renderer || event.ctrlKey || !event.deltaY) return;
+    const down = event.deltaY > 0, area = renderer.getBoundingClientRect(), page = frame.getBoundingClientRect();
+    const atEdge = down ? page.bottom <= area.bottom + 2 : page.top >= area.top - 2;
+    if (event.timeStamp - wheel.last > WHEEL_GESTURE_GAP) wheel.atEdge = atEdge;
+    wheel.last = event.timeStamp;
+    if (!wheel.atEdge || !atEdge || event.timeStamp < wheel.until) return;
+    wheel.until = event.timeStamp + WHEEL_COOLDOWN;
+    void this.navigate(down ? 'next' : 'previous').catch(this.context.onError);
   }
   outline() { return this.items; }
+  currentOutline() { const item = this.reported?.tocItem; return item ? this.nodes.indexOf(item) : -1; }
+  flow() { return this.mode === 'paginated' ? this.flowNow : undefined; }
   /** Fixed-layout pages scroll inside Foliate's renderer when zoomed; reflowable chapters paginate and never pan. */
   scroller() { return this.mode === 'fixed' ? this.view?.renderer : undefined; }
   /** Foliate does not report the scale it drew at, so it is measured on the page frame on screen: its painted width over its declared width. */

@@ -65,6 +65,8 @@ export const COMMANDS: readonly Command[] = [
   { id: 'rotate', label: 'Rotate page 90°', group: 'View', keywords: ['orientation', 'landscape', 'sideways'], requiresDocument: true },
   { id: 'spread', label: 'Two-page spread', group: 'View', keywords: ['facing', 'dual', 'pair'], shortcut: 'Ctrl 3', requiresDocument: true },
   { id: 'cover', label: 'Cover page alone', group: 'View', keywords: ['spread', 'first page'], requiresDocument: true },
+  { id: 'pages-view', label: 'Pages view', group: 'View', keywords: ['paginated', 'flip', 'page turn', 'columns', 'reading view'], requiresDocument: true, formats: ['epub'] },
+  { id: 'scroll-view', label: 'Scroll view', group: 'View', keywords: ['scrolled', 'continuous', 'vertical', 'code', 'reading view'], requiresDocument: true, formats: ['epub'] },
   { id: 'page-strip', label: 'Page previews', group: 'View', keywords: ['thumbnails', 'filmstrip', 'next pages'], shortcut: 'Ctrl 4', requiresDocument: true, formats: ['pdf'] },
   { id: 'smaller', label: 'Smaller text / zoom out', group: 'View', keywords: ['decrease', 'reduce', 'small'], shortcut: 'Ctrl −', requiresDocument: true },
   { id: 'larger', label: 'Larger text / zoom in', group: 'View', keywords: ['increase', 'grow', 'big'], shortcut: 'Ctrl +', requiresDocument: true },

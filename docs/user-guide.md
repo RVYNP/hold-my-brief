@@ -180,8 +180,20 @@ inside. The page keeps its place when you turn pages and goes back to the middle
 when it is already fitted), when you switch between one and two pages, or when you open another document. A zoom holds the
 spot at the centre of the panel instead and may keep the page slid (see "Where a zoom stays", below). Text
 selection pauses while the hand is on, and a click without movement still follows links. Middle-button
-drag pans or slides in any mode. The hand turns off when a new document opens (and, in a fixed-layout EPUB, when switching between one and two pages rebuilds the view). Markdown, TXT and
-reflowable EPUB reflow instead of zooming, so they have no pill and no panning.
+drag pans or slides in any mode. The hand turns off when a new document opens (and, in a fixed-layout EPUB, when switching between one and two pages rebuilds the view). Markdown and TXT
+reflow instead of zooming, so they have no pill and no panning; a reflowable EPUB has a pill of its own (next).
+
+**Reflowable EPUB: Contents, Pages or Scroll, text size.** Its pill reads **Contents** · **Pages | Scroll** · **A− 18 A+**.
+**Contents** opens the contents list above the pill (Ctrl+K → Contents opens the same list). Entries use the cleaned chapter
+names ("Chapter 3"; the contents' own label where there is nothing to clean), keep the contents' nesting, show the page each
+starts on (`p. ~34` when the page is an estimate, the publisher's own page label when the book has a page list), and mark the
+entry you are in, which is scrolled into view and focused. Up and Down, Home and End move between entries, Enter or a click
+goes there and closes the list, and Escape closes it. **Pages** turns pages; **Scroll** is one continuous column per chapter,
+and a wheel or trackpad gesture that starts at the end of a chapter goes on into the next. Switching keeps your place. The choice
+is remembered per document (and is also in the palette as **Pages view** and **Scroll view**). The first time a book is opened with
+no choice saved, it starts in Scroll if it looks like a reference book, that is, if `<pre>` blocks appear in at least 3 of its
+first 10 spine items, or `<pre>` and `<table>` hold at least a fifth of their text; otherwise in Pages. Your choice always wins afterwards.
+**A−** and **A+** step the text size by 2 px between 12 and 40 px, the same setting as the size stepper in **Appearance and text…**.
 
 **What the percentage means.** Zoom is a true scale, the same as in a design tool: **100%** is actual size.
 For a PDF, a page at its physical size at screen resolution (1 point = 96/72 CSS pixels, so a Letter page is

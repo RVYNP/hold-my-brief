@@ -1,3 +1,4 @@
+import { FONT_MAX, FONT_MIN } from './text-size';
 import { appearance, applyAppearance, glows, glowSchemes, isGlow, palettes, readingColors, rgbToHex, saveAppearance, schemeOf, type Appearance, type AppearanceMode, type PageTone, type Palette } from './theme';
 
 const icon = (size: number, body: string) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
@@ -139,8 +140,8 @@ export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextContr
     if (!settings) return;
     sizeValue.value = `${settings.fontSize} px`;
     const steppers = Array.from(textSection.querySelectorAll<HTMLButtonElement>('[data-step]'));
-    for (const button of steppers) button.disabled = Number(button.dataset.step) < 0 ? settings.fontSize <= 12 : settings.fontSize >= 40;
-    // Reaching 12 or 40 px disables the button that was pressed; keep keyboard focus on the other one.
+    for (const button of steppers) button.disabled = Number(button.dataset.step) < 0 ? settings.fontSize <= FONT_MIN : settings.fontSize >= FONT_MAX;
+    // Reaching either end disables the button that was pressed; keep keyboard focus on the other one.
     if (steppers.some(button => button.disabled && button === document.activeElement)) steppers.find(button => !button.disabled)?.focus();
     // Spacing and margins snap to the nearest preset, so a value saved by an older build still shows a choice.
     const nearest = (options: [number, string][], value: number) => options.reduce((best, option) => Math.abs(option[0] - value) < Math.abs(best[0] - value) ? option : best)[0];
@@ -167,7 +168,7 @@ export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextContr
   textSection.addEventListener('click', event => {
     const step = Number((event.target as Element).closest<HTMLElement>('[data-step]')?.dataset.step);
     const settings = text.current();
-    if (step && settings) editText({ fontSize: Math.max(12, Math.min(40, settings.fontSize + step)) });
+    if (step && settings) editText({ fontSize: Math.max(FONT_MIN, Math.min(FONT_MAX, settings.fontSize + step)) });
   });
   for (const row of themeRows) {
     row.addEventListener('click', event => { const palette = (event.target as Element).closest<HTMLElement>('[data-choice]')?.dataset.choice as Palette | undefined; if (palette) keep({ palette }); });
