@@ -53,16 +53,26 @@ const measure = (page: Page) => page.evaluate(() => {
     const lefts = Array.from(rows).sort((a, b) => a[0] - b[0]).map(([, left]) => left);
     return { ch, rows: lefts.length, first: lefts[0], second: lefts[1], indent: Number((line as HTMLElement).style.getPropertyValue('--hmb-indent')) };
   });
+  // A listing in a frame paints once: the number of painted backgrounds and left rules in the wrapper and its pre, and how far the pre sits inside it beyond the wrapper's own rule.
+  const frames = Array.from(doc.querySelectorAll('div.sourceCode, div.highlight')).filter(visible).map(wrapper => {
+    const pre = wrapper.querySelector('pre')!, boxes = [wrapper, pre], outer = wrapper.getBoundingClientRect(), inner = pre.getBoundingClientRect();
+    const styles = boxes.map(element => win.getComputedStyle(element));
+    return {
+      backgrounds: styles.filter(style => rgba(style.backgroundColor)[3] > 0).length,
+      rules: styles.filter(style => parseFloat(style.borderLeftWidth) > 0 && style.borderLeftStyle !== 'none').length,
+      inset: Math.max(Math.abs(inner.left - outer.left - parseFloat(styles[0].borderLeftWidth)), Math.abs(inner.right - outer.right), Math.abs(inner.top - outer.top), Math.abs(inner.bottom - outer.bottom)),
+    };
+  });
   const code = Array.from(doc.querySelectorAll('pre, div.sourceCode, div.highlight')).filter(visible);
   const line = doc.querySelector('pre.sourceCode code > span')!, sphinx = doc.querySelector('.highlight pre')!;
   const type = (element: Element) => { const style = win.getComputedStyle(element); return { lineHeight: parseFloat(style.lineHeight), fontSize: parseFloat(style.fontSize) }; };
   const texts = Array.from(doc.querySelectorAll('pre, pre *')).filter(element => Array.from(element.childNodes).some(child => child.nodeType === Node.TEXT_NODE && child.textContent?.trim()));
   const contrast = texts.map(element => ratio(rgba(win.getComputedStyle(element).color), backdrop(element)));
   return {
-    boxes: code.map(box), hang, pandoc: type(line), sphinx: type(sphinx),
+    boxes: code.map(box), hang, frames, pandoc: type(line), sphinx: type(sphinx),
     prose: doc.querySelector('p')!.getClientRects()[0].width,
     wrapper: doc.querySelector('div.sourceCode')!.getClientRects()[0].width,
-    shelf: Math.min(...Array.from(doc.querySelectorAll('div.sourceCode, .highlight')).map(element => luminance(backdrop(element)))),
+    shelf: Math.min(...Array.from(doc.querySelectorAll('pre')).filter(visible).map(element => luminance(backdrop(element)))),
     paper: luminance(paper), lowest: Math.min(...contrast), texts: texts.length,
   };
 });
@@ -90,6 +100,11 @@ for (const flow of ['pages', 'scroll'] as const) for (const [width, height] of [
       expect(line!.rows, 'line wraps').toBeGreaterThanOrEqual(2);
       expect(line!.second, 'continuation starts right of its line').toBeGreaterThanOrEqual(line!.first + line!.ch);
       expect(line!.second - line!.first, 'continuation hangs 2ch from the line\'s indent').toBeCloseTo((line!.indent + 2) * line!.ch, 0);
+    }
+    for (const frame of m.frames) {
+      expect(frame.backgrounds, 'one painted background per listing').toBe(1);
+      expect(frame.rules, 'one left rule per listing').toBe(1);
+      expect(frame.inset, 'the pre fills its wrapper').toBeLessThanOrEqual(1);
     }
     if (flow === 'scroll' && width === 1080) expect(m.wrapper).toBeGreaterThan(m.prose + 1);
     if (flow === 'pages') expect(m.wrapper).toBeLessThanOrEqual(m.prose + 1);

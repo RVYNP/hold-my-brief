@@ -6,7 +6,7 @@ import { isDark, liftInk, onAppearanceChange, parseRgb, readingColors, rgbToHex,
 import { MIN_SPREAD_WIDTH, pagesLabel, pairedSides } from '../spread';
 import { clampZoom } from '../zoom';
 import { DEFAULT_WPM, chapterMap, contentsLabel, estimatedPage, footerLabel, formatPageShort, numberedChapters, readingMeasure, type PageInfo } from '../epub-position';
-import { CODE_BACKGROUND, CODE_BLOCKS, codeStyles, mappedBackground, markLines, scrollRoom } from '../epub-code';
+import { CODE_BACKGROUND, CODE_BLOCKS, CODE_WRAPPERS, codeStyles, mappedBackground, markLines, scrollRoom } from '../epub-code';
 import { SAMPLE_SECTIONS, codeHeavy, sectionMix, type SectionMix } from '../epub-flow';
 import { excerpt, findMatches, type DocumentSearch, type SearchHit, type SearchOptions, type UnitText } from '../search';
 
@@ -696,6 +696,15 @@ export class EpubAdapter implements ReaderAdapter {
       changed.push([element, property, element.style.getPropertyValue(property), element.style.getPropertyPriority(property)]);
       element.style.setProperty(property, value, 'important');
     };
+    // A listing inside a frame paints one box: where both a wrapper (pandoc's `div.sourceCode`, Sphinx's `div.highlight`) and its `pre` have a background, or a left rule, the wrapper's is dropped.
+    for (const wrapper of Array.from(body.querySelectorAll<HTMLElement>(CODE_WRAPPERS))) {
+      const pre = wrapper.parentElement?.closest(CODE_BLOCKS) ? null : wrapper.querySelector('pre');
+      if (!pre) continue;
+      const frame = view.getComputedStyle(wrapper), code = view.getComputedStyle(pre);
+      const rule = (style: CSSStyleDeclaration) => parseFloat(style.borderLeftWidth) > 0 && style.borderLeftStyle !== 'none';
+      if (parseRgb(frame.backgroundColor) && parseRgb(code.backgroundColor)) set(wrapper, 'background-color', 'transparent');
+      if (rule(frame) && rule(code)) set(wrapper, 'border-left', 'none');
+    }
     // A dark page is walked whole; a light one only inside its code blocks, which are the only place anything is changed there.
     const roots = dark ? [body] : Array.from(body.querySelectorAll<HTMLElement>(CODE_BLOCKS)).filter(block => !block.parentElement?.closest(CODE_BLOCKS));
     for (const root of roots) {

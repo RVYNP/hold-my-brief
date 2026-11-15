@@ -66,7 +66,7 @@ pre > code.sourceCode > span:empty { height: 1.2em; }
 .sourceCode { overflow: visible; }
 code.sourceCode > span { color: inherit; text-decoration: inherit; }
 div.sourceCode { margin: 1em 0; background-color: #f8f8f8; border-left: 4px solid #cccccc; }
-pre.sourceCode { margin: 0; }
+pre.sourceCode { margin: 0; padding: 0.5em; background-color: #f0f0f0; border-left: 3px solid #aaaaaa; }
 @media screen { div.sourceCode { overflow: auto; } }
 @media print { pre > code.sourceCode { white-space: pre-wrap; } pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; } }
 code span.kw { color: #204a87; font-weight: bold; }
