@@ -143,7 +143,7 @@ function updateWindow(next: WindowState) { windowState = next; $('pin').setAttri
 function showPosition(p: Position, save = true) {
   position = p;
   const percent = Math.max(0, Math.min(100, p.fraction * 100));
-  const label = active?.format === 'epub' && reader?.mode === 'paginated' ? `${p.label} position` : `${p.label} · ${reader?.mode === 'fixed' ? '' : '≈'}${Math.round(percent)}% position`;
+  const label = active?.format === 'epub' && reader?.mode === 'paginated' ? p.label : `${p.label} · ${reader?.mode === 'fixed' ? '' : '≈'}${Math.round(percent)}% position`;
   if (!scrubbing) {
     $('position').textContent = label; $('position').title = `${label} · Go to location (Ctrl+G)`;
     scrubber.min = p.scrub.unit === 'percent' ? '0' : '1';

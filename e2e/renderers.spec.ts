@@ -642,7 +642,7 @@ test('reflowable EPUB renders real chapters, blocks scripts/network, and follows
   const file = { name: 'flow.epub', mimeType: 'application/epub+zip', buffer };
   await page.locator('#file-input').setInputFiles(file);
   await expect(page.locator('#filename')).toHaveAttribute('title', /flow\.epub$/); // The tab is titled by the book's own title once that is read.
-  await expect(page.locator('#position')).toContainText('Opening chapter');
+  await expect(page.locator('#position')).toContainText('Chapter 1 of 2');
   const content = () => page.frames().find(frame => frame.url().startsWith('blob:'))!;
   await expect.poll(() => !!content()).toBe(true);
   await expect(content().locator('h1')).toHaveText('Opening chapter');
@@ -650,20 +650,20 @@ test('reflowable EPUB renders real chapters, blocks scripts/network, and follows
   expect(await content().evaluate(() => window.frameElement?.getAttribute('sandbox'))).toBe('allow-same-origin');
   expect(await page.locator('body').getAttribute('data-compromised')).toBeNull();
   await content().getByRole('link', { name: 'Jump to other chapter' }).click();
-  await expect(page.locator('#position')).toContainText('Second chapter');
+  await expect(page.locator('#position')).toContainText('Chapter 2 of 2');
   await page.locator('.reader-host').focus(); await page.keyboard.press('Alt+ArrowLeft');
-  await expect(page.locator('#position')).toContainText('Opening chapter');
+  await expect(page.locator('#position')).toContainText('Chapter 1 of 2');
   await page.keyboard.press('Control+g'); await page.locator('#target').fill('70%'); await page.getByRole('button', { name: 'Go to location', exact: true }).click();
-  await expect(page.locator('#position')).toContainText('Second chapter');
+  await expect(page.locator('#position')).toContainText('Chapter 2 of 2');
   await page.setViewportSize({ width: 760, height: 900 });
-  await expect(page.locator('#position')).toContainText('Second chapter');
+  await expect(page.locator('#position')).toContainText('Chapter 2 of 2');
   await page.locator('.reader-host').focus(); await page.keyboard.press('Control+Equal');
-  await expect(page.locator('#position')).toContainText('Second chapter');
+  await expect(page.locator('#position')).toContainText('Chapter 2 of 2');
   await expect.poll(async () => Number(await page.locator('#progress').getAttribute('aria-valuenow'))).toBeGreaterThan(60);
   await page.waitForTimeout(900); // Wait for the public settled-position persistence contract.
   const before = Number(await page.locator('#progress').getAttribute('aria-valuenow'));
   await page.reload(); await page.locator('#file-input').setInputFiles(file);
-  await expect(page.locator('#position')).toContainText('Second chapter');
+  await expect(page.locator('#position')).toContainText('Chapter 2 of 2');
   const after = Number(await page.locator('#progress').getAttribute('aria-valuenow'));
   expect(Math.abs(before - after)).toBeLessThan(5);
   expect(remote).toEqual([]); expect(errors).toEqual([]);

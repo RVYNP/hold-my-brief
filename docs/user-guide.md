@@ -54,7 +54,7 @@ browser's storage). Only the tab that was showing opens at once; the others open
 With nothing saved, the window opens on **Hand it over.** Once documents have been opened, it opens
 on **Home**:
 
-- **Jump back in** is the eight documents you looked at last, most recent first: four across in a wide window, two
+- **Recently opened** is the eight documents you looked at last, most recent first: four across in a wide window, two
   in a narrower one and in the compact window (2 × 4), one only below about 380 px of width. Each card has the cover, the title and, if you got part of the way
   through, a thin line showing how far. Click one to open it (or switch to its tab).
 - **Continue reading** shelves what you have started and not finished, most recent first, with where you got to
@@ -62,7 +62,7 @@ on **Home**:
   collection that holds something, a 2 × 2 mosaic of its first covers with the number of references.
 - A shelf scrolls sideways with the trackpad or a horizontal wheel, by dragging it sideways, with the **‹** and
   **›** buttons that appear at its ends when you point at it, or with the arrow keys (one Tab stop per shelf). It snaps to
-  cards. **Show all** opens the library on that selection (**Continue reading**, **Favorites**, or all references for
+  cards. **Open in library** opens the library on that selection (**Continue reading**, **Favorites**, or all references for
   Collections); a collection card opens the library on that collection. A section with nothing in it is left out.
 - The chips under the title (**All**, **PDF**, **EPUB**, **Markdown**, **Text**, **Images**, only the types you have) filter every
   section; **All** restores the mixed view. They stay on one row that scrolls sideways when the window is narrow.
@@ -70,7 +70,7 @@ on **Home**:
 **Browse library** and **Open files** are in the header. Edits made in the library refresh Home. A picture fills in when its
 thumbnail is ready; a book without a picture keeps the generated cover it has on its shelf. An EPUB shows the title from its
 own metadata once it has been read, and its file name cleaned up until then. A cover looks the same here as in the library.
-In the desktop app, the × on a Jump back in card removes it from the recent list and leaves the library entry. A file whose
+In the desktop app, the × on a Recently opened card removes it from the recent list and leaves the library entry. A file whose
 original has gone is dimmed.
 
 The library offers the same choices under **Choose collection and filters → Filter by format**,
@@ -270,8 +270,9 @@ both move it sideways without changing where you are reading. Click a page, or T
 arrow keys to move along it (Home and End go to the ends) and press Enter or Space, to go there as if you
 had turned the pages; the strip then glides back to the middle (it jumps if your system asks for reduced
 motion, or when the page is far away). PgDn and PgUp keep turning pages from anywhere, and the strip
-follows. Thumbnails are drawn only for the pages in or near view, after the page itself, so a long
-document costs no more than a short one and they never delay the page.
+follows. Thumbnails are drawn for the pages in or near view, after the page itself, and, once the strip has
+rested, for a screenful on each side of it, so a scroll finds them ready. They never delay the page or a
+page turn, and a long document costs no more than a short one.
 
 Hovering the progress bar along the footer shows a small card above the pointer with the page that spot
 would go to ("Page 12 of 146", or the spread, in two-page view); dragging the bar moves the card with it,
@@ -502,6 +503,14 @@ posters and wide spreads read as themselves; a reference with no picture shows a
 (below). A collection that is mostly images, PDFs or EPUBs opens as a grid where the drawer is at least
 400 pixels wide. Hovering or focusing a tile shows its star and ··· menu; the document you are
 reading is marked **Reading**, and a missing original is dimmed.
+
+The library has no pages. The grid or list scrolls all the way through everything that matches, however many
+references that is; the count is in the board's header row (`230 references`). References are added as you
+scroll, and a shelf's heading is shown once, with its tiles continuing under it. Changing the search, a type
+chip, the sort, the view or the collection starts again at the top. **↑** and **↓** move between references (the
+grid also takes **←** and **→**), **Page Up** and **Page Down** move a screenful, and **Home** and **End** go to
+the first and the last reference of the whole set, however far down that is. Thumbnails are made only for tiles on
+or near the screen: scrolling quickly past a tile before its turn comes cancels its request.
 
 Thumbnails are made on this computer: images are scaled down, and a PDF's first page is rendered
 with the reader's own PDF engine, reading only as much of the file as that page needs. They are kept

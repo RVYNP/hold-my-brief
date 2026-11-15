@@ -99,13 +99,13 @@ where you stopped. PDF, EPUB, Markdown, text and images. Your files never leave 
   </tr>
 </table>
 
-**Home** is a tab, always first, laid out like a media player's front page: **Jump back in** (your eight
+**Home** is a tab, always first, laid out like a media player's front page: **Recently opened** (your eight
 latest documents), then shelves that scroll sideways: **Continue reading**, **Favorites** and
-**Collections**. **Show all** opens the library on that selection. Chips filter PDFs, EPUBs, Markdown,
+**Collections**. **Open in library** opens the library on that selection. Chips filter PDFs, EPUBs, Markdown,
 text and images separately; opening a reference keeps its original format.
 
 <p align="center">
-  <img src="docs/media/home.png" alt="The Home tab: Jump back in as two rows of cards with progress lines, then Continue reading with the half-tone manual, Pride and Prejudice and three generated covers, each showing its page or percentage" width="880">
+  <img src="docs/media/home.png" alt="The Home tab: Recently opened as two rows of cards with progress lines, then Continue reading with the half-tone manual, Pride and Prejudice and three generated covers, each showing its page or percentage" width="880">
   <br><sub><b>Home</b>: what you looked at last, with how far you got</sub>
 </p>
 
