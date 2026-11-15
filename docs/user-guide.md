@@ -98,7 +98,7 @@ this build, so run the PDF through an OCR tool first if you need its text. This 
 ## The window
 
 The toolbar is one row, and the window has no separate title bar. On macOS the close, minimize and
-zoom buttons sit at the toolbar's left end; on Windows, minimize, maximize and close sit at its right
+zoom buttons are three quiet grey circles at the toolbar's left end that take their usual colours when you point at them (the green one enters full screen, and zooms when you hold Option); on Windows, minimize, maximize and close sit at its right
 end. Drag any empty part of the toolbar to move the window, and double-click it to maximize. The
 tabs start at its left end (after the window buttons on a Mac) and run up to the pin (see Tabs above). In windows
 720 pixels wide and up the toolbar has no library button, because the icon rail's **Library** is the way in (see Document
