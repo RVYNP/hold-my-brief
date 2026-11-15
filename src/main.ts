@@ -81,7 +81,7 @@ $('shortcut-list').replaceChildren(...shortcutReference({ desktop }).map(section
 const appearanceSheet = createAppearanceSheet($<HTMLDialogElement>('appearance'), {
   current: () => reader && active && reader.mode !== 'fixed' ? { fontSize: options.fontSize, lineHeight: options.lineHeight, margin: options.margin, wrap: options.wrap, wraps: active.format === 'txt' } : undefined,
   change: next => changeOptions(next),
-});
+}, { side: () => library.side(), setSide: side => library.setSide(side) });
 const scrubber = $<HTMLInputElement>('progress');
 let scrubbing = false, scrubRequest = 0;
 let reader: ReaderAdapter | undefined;
@@ -143,7 +143,7 @@ function updateWindow(next: WindowState) { windowState = next; $('pin').setAttri
 function showPosition(p: Position, save = true) {
   position = p;
   const percent = Math.max(0, Math.min(100, p.fraction * 100));
-  const label = active?.format === 'epub' && reader?.mode === 'paginated' ? `${p.label} position` : `${p.label} · ${reader?.mode === 'fixed' ? '' : '≈'}${Math.round(percent)}% position`;
+  const label = active?.format === 'epub' && reader?.mode === 'paginated' ? p.label : `${p.label} · ${reader?.mode === 'fixed' ? '' : '≈'}${Math.round(percent)}% position`;
   if (!scrubbing) {
     $('position').textContent = label; $('position').title = `${label} · Go to location (Ctrl+G)`;
     scrubber.min = p.scrub.unit === 'percent' ? '0' : '1';
@@ -262,7 +262,7 @@ const pillStrip = () => {
   return Math.max(workspace.classList.contains('has-page-strip') ? covered(pageStrip.element) : 0, workspace.classList.contains('has-image-navigation') ? covered(workspace.querySelector('.library-image-navigation')) : 0);
 };
 function drawerBand() {
-  // The compact sheet covers the whole layout over a scrim; only the side-by-side info rail, and the icon rail it stands beside, are steered around.
+  // The compact sheet covers the whole layout over a scrim; only the docked panel, and the icon rail it stands beside, are steered around.
   if (matchMedia('(max-width: 719px)').matches) return null;
   const boxes = [$('library-rail').getBoundingClientRect(), ...($('reader-layout').classList.contains('library-open') ? [$('library-root').getBoundingClientRect()] : [])], panel = workspace.getBoundingClientRect();
   return { left: Math.min(...boxes.map(box => box.left)) - panel.left - workspace.clientLeft, right: Math.max(...boxes.map(box => box.right)) - panel.left - workspace.clientLeft };
@@ -389,13 +389,11 @@ document.querySelectorAll<HTMLDialogElement>('dialog.drop').forEach(dialog => di
   const box = dialog.getBoundingClientRect();
   if (event.target === dialog && (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom)) closeDialog(dialog);
 }));
-// The icon rail is the library's door at 720 px and up (the toolbar button is for compact windows): the info rail opens on the view an icon names.
+// The icon rail is the library's door at 720 px and up (the toolbar button is for compact windows).
 const rail = createIconRail($('library-rail'), {
   view: view => library.showView(view),
-  home: () => selectTab(undefined),
   add: anchor => library.openAddMenu(anchor),
-  appearance: () => appearanceSheet.open(),
-  setSide: side => library.setSide(side),
+  settings: () => appearanceSheet.open(),
 });
 const library = createLibrary($('library-root'), {
   open: path => openPath(path),
@@ -405,8 +403,8 @@ const library = createLibrary($('library-root'), {
   progressChanged: progress => { homeProgress = { ...progress }; if ($('empty').classList.contains('is-home')) paintHome(); },
   settle: () => flush(),
   sideChanged: side => rail.setSide(side),
-  viewChanged: view => rail.setView(view),
-  door: view => rail.button(view),
+  openChanged: open => rail.setOpen(open),
+  door: () => rail.button('library'),
 });
 $('library-toggle').onclick = () => library.toggle();
 rail.setSide(library.side());
@@ -625,7 +623,7 @@ function show(next: Tab | undefined, refreshed = false) {
   if (reader && position) showPosition(position, false); else paintNoDocument();
   activeHost?.focus();
   if (next?.find !== undefined) findBar.open(next.find, false);
-  lastBackground = undefined; rail.setHome(!next); library.setActive(next?.path);
+  lastBackground = undefined; library.setActive(next?.path);
   paintTabState(); paintTabs(); saveSession();
   if (!next) paintHome();
   else if (!next.reader && !next.problem) void reopen(next);

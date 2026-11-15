@@ -11,11 +11,12 @@ const PAGES = 9;
 async function openPdf(page: Page, { count = PAGES, labels = '', viewport = { width: 1080, height: 700 }, name = 'strip.pdf' } = {}) {
   await page.setViewportSize(viewport);
   await page.goto('/');
+  // Closed before the document opens: a library closed after it hands the page its width back, and the page is fitted again.
+  if (await page.locator('#library-root').isVisible()) await libraryToggle(page).click();
+  await expect(page.locator('#library-root')).toBeHidden();
   await page.locator('#file-input').setInputFiles({ name, mimeType: 'application/pdf', buffer: pagedPdf(count, labels) });
   await expect(page.locator('#position')).toContainText(`Page 1 of ${count}`);
   await expect(page.locator('#loading')).toBeHidden();
-  if (await page.locator('#library-root').isVisible()) await libraryToggle(page).click();
-  await expect(page.locator('#library-root')).toBeHidden();
   await page.locator('.pdf-reader').focus();
 }
 
@@ -84,11 +85,14 @@ async function countThumbnailRenders(page: Page) {
 const rendered = (page: Page) => page.evaluate(() => window.thumbnailRenders);
 /** Waits until every thumbnail the strip has asked for is drawn, so nothing is still rendering for it (it asks only for the items it has put in the DOM). */
 const thumbnailsDrawn = (page: Page) => expect.poll(() => page.evaluate(() => { const canvases = [...document.querySelectorAll<HTMLElement>('#page-strip canvas[data-page]')]; return canvases.length > 0 && canvases.every(canvas => canvas.dataset.drawn); })).toBe(true);
-/** The render count once the strip has drawn everything it asked for: the queue has gone quiet. */
+/** The render count once the strip has drawn everything it asked for, look-ahead included: the queue has gone quiet. */
 async function quiet(page: Page) {
   await thumbnailsDrawn(page);
+  await lookedAhead(page);
   return rendered(page);
 }
+/** Waits until the strip has rendered, or found cached, the screenful each side of its view: the state it reports once look-ahead is over. */
+const lookedAhead = (page: Page) => expect(strip(page)).toHaveAttribute('data-look-ahead', 'done');
 
 test('the strip is a centred filmstrip of the whole document: the current page in the middle, ringed, earlier pages to its left', async ({ page }) => {
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
@@ -160,7 +164,7 @@ test('page turns follow in the strip: the middle glides by one page, and jumps w
   await expectPainted(page, [1, 2]);
   await expectCentred(page);
   // The glide lasts 220 ms and counts the frames that fit in it: start it with the page refit and the thumbnails drawn, so no render competes for them.
-  await settledHeight(page); await expect(page.locator('.pdf-render-status')).toHaveCount(0); await thumbnailsDrawn(page);
+  await settledHeight(page); await expect(page.locator('.pdf-render-status')).toHaveCount(0); await thumbnailsDrawn(page); await lookedAhead(page);
   const start = await scrollLeft(page);
   await page.evaluate(() => { window.scrolls.length = 0; });
   await page.keyboard.press('PageDown');
@@ -259,40 +263,117 @@ test('on the last page the strip keeps its height, the page keeps its size, and 
 
 test('only thumbnails near the view are rendered: opening, jumping far and holding PgDn never draw the rest of a long document', async ({ page }) => {
   await countThumbnailRenders(page);
-  await openPdf(page, { count: 60 });
+  await openPdf(page, { count: 200 });
   await page.keyboard.press('Control+4');
   await expectPainted(page, [1, 2, 3, 4]);
   // Turning the strip on refits the page once, after a debounce; a render it supersedes can leave a started thumbnail behind, which is a
   // refit's doing and not a turn's. Wait for the refit to land (and for it to finish drawing) before counting.
   await settledHeight(page);
   await expect(page.locator('.pdf-render-status')).toHaveCount(0);
-  // Page 1 is in the middle: about 7 items to its right are in view, 2 more are look-ahead, and none to its left exist.
+  // Page 1 is in the middle: about 7 items to its right are in view, 2 more are beyond, a screenful more is looked ahead to, and none to its left exist.
   const opened = await quiet(page);
   expect(opened).toBeGreaterThanOrEqual(7);
-  expect(opened).toBeLessThanOrEqual(11);
+  expect(opened).toBeLessThanOrEqual(30);
   expect(await options(page).count()).toBeLessThanOrEqual(12);
-  expect(await page.locator('#page-strip canvas[data-page="30"]').count()).toBe(0);
+  expect(await page.locator('#page-strip canvas[data-page="90"]').count()).toBe(0);
 
   // Seven turns in one task, as a held key delivers them: the strip follows the page it lands on and draws what is new around it.
   await page.evaluate(() => { for (let i = 0; i < 7; i++) document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageDown', bubbles: true })); });
-  await expect(position(page)).toContainText('Page 8 of 60');
+  await expect(position(page)).toContainText('Page 8 of 200');
   await expectCentred(page);
   await expectPainted(page, [8, 12, 15]);
   const held = await quiet(page);
-  expect(held - opened).toBeLessThanOrEqual(10); // The items that came into view; each page at most once, as the cache holds the rest.
-  expect(held).toBeLessThan(20);
+  expect(held - opened).toBeLessThanOrEqual(16); // The screenful ahead moved on by seven pages and the screenful behind is the pages already drawn: each page at most once, as the cache holds the rest.
+  expect(held).toBeLessThan(45);
 
   // A jump a long way off draws the neighbourhood of the landing and nothing in between.
-  await goTo(page, 50);
-  await expect(position(page)).toContainText('Page 50 of 60');
+  await goTo(page, 150);
+  await expect(position(page)).toContainText('Page 150 of 200');
   await expectCentred(page);
-  await expectPainted(page, [50, 47, 53]);
+  await expectPainted(page, [150, 147, 153]);
   const far = await quiet(page);
-  expect(far - held).toBeLessThanOrEqual(20); // About nineteen items are near the middle: half a strip each way, and two more beyond.
-  expect(far).toBeLessThan(45); // Drawing the document eagerly would be 60.
+  expect(far - held).toBeLessThanOrEqual(55); // About nineteen items are near the middle: half a strip each way, and two more beyond; a screenful each side of them is looked ahead to.
+  expect(far).toBeLessThan(100); // Drawing the document eagerly would be 200.
   expect(await options(page).count()).toBeLessThanOrEqual(20);
   expect(await labels(page)).not.toContain('1');
-  expect(await page.locator('#page-strip canvas[data-page="30"]').count()).toBe(0);
+  expect(await page.locator('#page-strip canvas[data-page="90"]').count()).toBe(0);
+});
+
+/** Scrolls the strip to `left` and returns once the strip has handled the scroll event, in the same task: nothing has had time to render for it, so a tile drawn by now was drawn from the cache. */
+const scrollStripTo = (page: Page, left: number) => page.evaluate(async target => {
+  const scroller = document.querySelector<HTMLElement>('.page-strip-scroller')!;
+  const handled = new Promise(resolve => scroller.addEventListener('scroll', resolve, { once: true }));
+  scroller.scrollLeft = target; await handled;
+  const box = scroller.getBoundingClientRect();
+  const tiles = [...document.querySelectorAll<HTMLCanvasElement>('#page-strip canvas[data-page]')].filter(canvas => { const r = canvas.getBoundingClientRect(); return r.right > box.left && r.left < box.right; });
+  return { tiles: tiles.length, blank: tiles.filter(canvas => !canvas.dataset.drawn).map(canvas => Number(canvas.dataset.page)) };
+}, left);
+
+test('once the page has settled the strip renders a screenful ahead and behind without a scroll, so a scroll finds those tiles drawn', async ({ page }) => {
+  await openPdf(page, { count: 60 });
+  await page.keyboard.press('Control+4');
+  await goTo(page, 30);
+  await expect(position(page)).toContainText('Page 30 of 60');
+  await expectCentred(page);
+  await expectPainted(page, [29, 30, 31]);
+  await lookedAhead(page);
+  const start = await scrollLeft(page), width = await listbox(page).evaluate(el => el.clientWidth);
+
+  // A screenful to the right: none of the tiles that come into view is blank.
+  const ahead = await scrollStripTo(page, start + Math.round(width * .9));
+  expect(ahead.tiles).toBeGreaterThanOrEqual(8);
+  expect(ahead.blank).toEqual([]);
+  // Back where it was, and a screenful to the left.
+  await scrollStripTo(page, start); await lookedAhead(page);
+  const behind = await scrollStripTo(page, start - Math.round(width * .9));
+  expect(behind.tiles).toBeGreaterThanOrEqual(8);
+  expect(behind.blank).toEqual([]);
+  // Further than a screenful, the tiles that come into view are blank until the scroll settles and they are rendered.
+  await scrollStripTo(page, start); await lookedAhead(page);
+  const beyond = await scrollStripTo(page, start + Math.round(width * 2));
+  expect(beyond.blank.length).toBeGreaterThan(0);
+  await thumbnailsDrawn(page);
+});
+
+test('a page turn while look-ahead is rendering draws the new page first, and look-ahead waits for it', async ({ page }) => {
+  await page.addInitScript(() => {
+    const w = window as unknown as { renderLog: string[] }, log = w.renderLog = [];
+    const original = HTMLCanvasElement.prototype.getContext;
+    let turned = false;
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, ...args: Parameters<typeof original>) {
+      if (!this.isConnected && !this.dataset.page && this.height >= 80 && this.height <= 100) {
+        log.push('thumbnail');
+        // A thumbnail starting while every tile in the strip is drawn is look-ahead: turn the page right then, with that render in flight.
+        const tiles = [...document.querySelectorAll<HTMLElement>('#page-strip canvas[data-page]')];
+        if (!turned && tiles.length && tiles.every(tile => tile.dataset.drawn)) {
+          turned = true; log.push('turn');
+          document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'PageDown', bubbles: true }));
+        }
+      }
+      return original.apply(this, args) as never;
+    } as typeof original;
+    addEventListener('DOMContentLoaded', () => new MutationObserver(records => {
+      for (const record of records) {
+        for (const node of record.addedNodes) if ((node as Element).classList?.contains('pdf-render-status')) log.push('page start');
+        for (const node of record.removedNodes) if ((node as Element).classList?.contains('pdf-render-status')) log.push('page settled');
+      }
+    }).observe(document.body, { childList: true, subtree: true }));
+  });
+  await openPdf(page, { count: 60 });
+  await page.keyboard.press('Control+4');
+  const log = () => page.evaluate(() => (window as unknown as { renderLog: string[] }).renderLog);
+  await expect.poll(async () => (await log()).includes('turn')).toBe(true);
+  await expect(position(page)).toContainText('Page 2 of 60');
+  await expect(page.locator('.textLayer')).toContainText('2');
+  await expectCentred(page);
+  await expectPainted(page, [2, 3, 4]);
+  await lookedAhead(page);
+  const events = await log(), turn = events.indexOf('turn'), start = events.indexOf('page start', turn), settled = events.indexOf('page settled', start);
+  expect(start).toBeGreaterThan(turn);
+  expect(settled).toBeGreaterThan(start);
+  // Nothing was rendered for the strip while the new page was: its thumbnails, look-ahead included, began only after the page had settled.
+  expect(events.slice(start, settled)).not.toContain('thumbnail');
+  expect(events.slice(settled)).toContain('thumbnail');
 });
 
 test('scrolling the strip looks ahead without changing the reading position, and the next turn or a click brings it back', async ({ page }) => {

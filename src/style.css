@@ -265,7 +265,7 @@
   --glass-surface: var(--surface);
   --glass-host: var(--surface);
   --glass-stage: var(--stage);
-  /* The rail and the drawer float over the document, so they must not show it through: in a glow family their
+  /* The rail (and the board) float over the document, so they must not show it through: in a glow family their
      glass is the window's own glow, fixed to the window, beneath a wash of --glass-raise (three image layers:
      wash, glow, glow) on the page colour. Elsewhere it is the plain --raise and no image, so nothing changes. */
   --glass-raise-base: var(--raise);
@@ -864,8 +864,8 @@ h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 1px 0 
 .recent button:first-child { overflow: hidden; text-overflow: ellipsis; text-align: left; flex: 1; padding: 6px 8px; font-size: 12px; min-width: 0; }
 .recent button:last-child { flex: 0; padding: 4px 8px; color: var(--muted); opacity: 0; }
 .recent:hover button:last-child, .recent:focus-within button:last-child { opacity: 1; }
-/* Once there is something to return to, the opening page is a media-player home: file type chips, a "Jump back in" grid and
-   horizontal shelves. Its width, not the window's, decides the grid's columns (4 / 2 / 1), so the rail and the drawer count. */
+/* Once there is something to return to, the opening page is a media-player home: file type chips, a "Recently opened" grid and
+   horizontal shelves. Its width, not the window's, decides the grid's columns (4 / 2 / 1), so the rail and the docked panel count. */
 #empty.is-home { max-width: none; width: 100%; align-items: stretch; padding: 18px 16px 28px; container-type: inline-size; --home-card: var(--hover); }
 /* Over a glow the cards are the opaque card colour: --hover is a translucent white there and would show the glow through. */
 :is([data-palette='aurora'], [data-palette='dusk'], [data-palette='nebula'], [data-palette='solar'], [data-palette='ember'], [data-palette='orchid'], [data-palette='glacier'], [data-palette='peach'], [data-palette='lagoon'], [data-palette='moss']) #empty.is-home { --home-card: var(--card); }
@@ -894,25 +894,25 @@ h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 1px 0 
 .home-card-title { display: block; min-width: 0; font-size: 12px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
 .is-missing .home-open { opacity: .55; }
 /* The covers are the library's (src/cards.ts); at this size only the picture or the generated art shows. */
-.home-jump-open .library-tile-scrim, .home-jump-open .library-cover-text, .home-jump-open .library-tile-format, .home-jump-open .library-tile-note,
+.home-recent-open .library-tile-scrim, .home-recent-open .library-cover-text, .home-recent-open .library-tile-format, .home-recent-open .library-tile-note,
 .home-mosaic .library-tile-scrim, .home-mosaic .library-cover-text, .home-mosaic .library-tile-format, .home-mosaic .library-tile-note,
 .home-card-cover .library-tile-scrim { display: none; }
-.home-jump-open .library-cover-art, .home-mosaic .library-cover-art { height: 100%; }
-/* Jump back in: two columns from 380 px of content width (titles ellipsize), four from 860, one below 380. 52 px cards, the cover 39 x 52 flush left, the title and a 3 px progress line beside it. */
-.home-jump-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
-@container (min-width: 380px) { .home-jump-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@container (min-width: 860px) { .home-jump-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-.home-jump { position: relative; min-width: 0; }
-.home-jump-open { display: flex; align-items: center; gap: 10px; width: 100%; height: 52px; padding: 0 12px 0 0; border-radius: 6px; background: var(--home-card); overflow: hidden; }
-.home-jump-open:hover { background: color-mix(in srgb, var(--home-card) 88%, var(--fg)); }
-.home-jump-open .library-tile-media { flex: none; width: 39px; height: 52px; aspect-ratio: auto; border-radius: 0; }
-.home-jump-text { display: flex; flex: 1 1 0; flex-direction: column; justify-content: center; gap: 5px; min-width: 0; }
-.home-jump-text .home-card-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-recent-open .library-cover-art, .home-mosaic .library-cover-art { height: 100%; }
+/* Recently opened: two columns from 380 px of content width (titles ellipsize), four from 860, one below 380. 52 px cards, the cover 39 x 52 flush left, the title and a 3 px progress line beside it. */
+.home-recent-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+@container (min-width: 380px) { .home-recent-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (min-width: 860px) { .home-recent-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.home-recent { position: relative; min-width: 0; }
+.home-recent-open { display: flex; align-items: center; gap: 10px; width: 100%; height: 52px; padding: 0 12px 0 0; border-radius: 6px; background: var(--home-card); overflow: hidden; }
+.home-recent-open:hover { background: color-mix(in srgb, var(--home-card) 88%, var(--fg)); }
+.home-recent-open .library-tile-media { flex: none; width: 39px; height: 52px; aspect-ratio: auto; border-radius: 0; }
+.home-recent-text { display: flex; flex: 1 1 0; flex-direction: column; justify-content: center; gap: 5px; min-width: 0; }
+.home-recent-text .home-card-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* How far the reader got: --accent on --hairline. */
 .home-progress { display: block; height: 3px; overflow: hidden; border-radius: 2px; background: var(--hairline); }
 .home-progress > i { display: block; height: 100%; background: var(--accent); }
 .home-remove { position: absolute; top: 50%; right: 6px; width: 22px; height: 22px; padding: 0; border-radius: 999px; background: var(--card); color: var(--muted); opacity: 0; transform: translateY(-50%); }
-.home-jump:hover .home-remove, .home-jump:focus-within .home-remove { opacity: 1; }
+.home-recent:hover .home-remove, .home-recent:focus-within .home-remove { opacity: 1; }
 .home-remove:hover { color: var(--fg); }
 /* Shelves: one row of 124 px cards that scrolls sideways and snaps to cards, with no scrollbar; ‹ › show on hover where there is more. */
 .home-shelf-frame { position: relative; min-width: 0; }
@@ -1031,10 +1031,10 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
 #workspace.has-page-strip .reader-host { bottom: var(--page-strip-room); }
 #workspace.has-page-strip #view-controls { bottom: calc(var(--page-strip-room) + 8px); }
 #page-strip { position: absolute; z-index: 4; left: 0; right: 0; bottom: var(--footer-height); height: var(--page-strip-height); background: var(--raise); border-top: 1px solid var(--hairline); box-shadow: 0 var(--footer-height) 0 var(--raise); }
-/* The library drawer, or the rail, floats over the panel's edge, so the strip starts beside it, like the find bar. */
+/* The icon rail floats over the panel's edge while the library is closed, so the strip starts beside it, like the find bar. */
 @media (min-width: 720px) {
-  #reader-layout:not(.library-right) #page-strip { left: var(--library-clear); }
-  #reader-layout.library-right #page-strip { right: var(--library-clear); }
+  #reader-layout:not(.library-right) #page-strip { left: var(--workspace-clear); }
+  #reader-layout.library-right #page-strip { right: var(--workspace-clear); }
 }
 /* The scroller takes the whole band, scrolls sideways without a bar, and fades out at both ends to say there is more. Items are
    placed by src/page-strip.ts, half a viewport in from each end so the first and last page can be centred too. */
@@ -1255,14 +1255,14 @@ dd { margin: 0; color: var(--muted); }
 /* Find in document (Ctrl+F): a strip above the reading surface, which moves down by the strip's
    height so the first line is never covered. It is quiet like the rest of the chrome (one tone and
    a hairline, no card or shadow), the field is sized for a query rather than for the window, and
-   beside the library it starts at the drawer's edge, so the drawer never covers what you typed. */
+   beside the icon rail it starts at the rail's edge, so the rail never covers what you typed. */
 /* The reading surface is absolutely positioned over the whole panel, so the find bar floats
    above it on the stacking axis rather than sharing its layout flow. */
 #find-bar { position: absolute; top: 0; left: 0; right: 0; z-index: 5; height: var(--find-bar-height); display: flex; align-items: center; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--hairline); background: var(--raise); color: var(--muted); }
 #find-bar[hidden] { display: none; }
 @media (min-width: 720px) {
-  #reader-layout:not(.library-right) #find-bar { left: var(--library-clear); }
-  #reader-layout.library-right #find-bar { right: var(--library-clear); }
+  #reader-layout:not(.library-right) #find-bar { left: var(--workspace-clear); }
+  #reader-layout.library-right #find-bar { right: var(--workspace-clear); }
 }
 /* While the bar is open, shift the reading surface down so the first line is never hidden. */
 #workspace:has(#find-bar:not([hidden])) .reader-host { top: var(--find-bar-height); }

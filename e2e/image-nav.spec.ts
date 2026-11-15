@@ -3,7 +3,7 @@ import { pngFixture } from './png-fixture';
 import { libraryToggle } from './library-controls';
 
 // Image documents in a library collection get a previous/next pill. It lives in the footer's lane (above the open footer), the view
-// controls stand above it, and the icon rail (and the info rail beside it, when open) is beside it: none may overlap, whatever the window width.
+// controls stand above it, and the icon rail (and the panel beside it, when open) is beside it: none may overlap, whatever the window width.
 
 type Box = { x: number; y: number; width: number; height: number };
 const boxOf = async (locator: Locator) => (await locator.boundingBox())!;
@@ -58,7 +58,7 @@ for (const side of ['left', 'right'] as const) {
       // Closed: the icon rail stands at the edge from 720 px up; a compact window has nothing there.
       if (await drawer.isVisible()) await libraryToggle(page).click();
       await expectClear(page, width, compact ? [] : [rail]);
-      // Open: the info rail stands beside the icon rail (a compact window's is a sheet over a scrim, covering everything, so only the wide ones are measured).
+      // Open: the panel stands beside the icon rail (a compact window's is a sheet over a scrim, covering everything, so only the wide ones are measured).
       if (!compact) {
         await page.mouse.move(width / 2, HEIGHT / 2);
         await libraryToggle(page).click(); await expect(drawer).toBeVisible();
@@ -88,7 +88,7 @@ for (const side of ['left', 'right'] as const) {
           await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
           await page.mouse.down(); await page.mouse.move(target.x, target.y, { steps: 8 }); await page.mouse.up();
           await openFooter(page, width);
-          const at = `at ${width} px (${drawerOpen ? 'info rail' : 'icon rail'}, drag to ${Math.round(target.x)},${Math.round(target.y)})`;
+          const at = `at ${width} px (${drawerOpen ? 'panel' : 'icon rail'}, drag to ${Math.round(target.x)},${Math.round(target.y)})`;
           const [pillBox, footerBox, navNow, asideNow] = [await boxOf(pill), await boxOf(footer), await boxOf(nav), await boxOf(aside)];
           expect(apart(pillBox, navNow), `pill ${JSON.stringify(pillBox)} over nav ${JSON.stringify(navNow)} ${at}`).toBe(true);
           expect(apart(pillBox, footerBox), `pill over footer ${at}`).toBe(true);

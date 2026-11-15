@@ -59,8 +59,9 @@ where you stopped. PDF, EPUB, Markdown, text and images. Your files never leave 
     </td>
     <td valign="top">
       <h3>Your folders, as a tree</h3>
-      A slim icon rail and a nested folder tree: watched folders, subfolders, documents, each with how
-      far you got (<code>p. 62 / 88</code>, <code>37 %</code>, <code>Finished</code>). Type to filter.
+      A slim icon rail (Library, Search, Add files, Settings) and one docked library panel: favorites,
+      collections, then watched folders, subfolders and documents, each with how far you got
+      (<code>p. 62 / 88</code>, <code>37 %</code>, <code>Finished</code>). Type to filter.
       A scan called <code>source.pdf</code> goes by its folder's name.
     </td>
   </tr>
@@ -99,13 +100,13 @@ where you stopped. PDF, EPUB, Markdown, text and images. Your files never leave 
   </tr>
 </table>
 
-**Home** is a tab, always first, laid out like a media player's front page: **Jump back in** (your eight
+**Home** is a tab, always first, laid out like a media player's front page: **Recently opened** (your eight
 latest documents), then shelves that scroll sideways: **Continue reading**, **Favorites** and
-**Collections**. **Show all** opens the library on that selection. Chips filter PDFs, EPUBs, Markdown,
+**Collections**. **Open in library** opens the library on that selection. Chips filter PDFs, EPUBs, Markdown,
 text and images separately; opening a reference keeps its original format.
 
 <p align="center">
-  <img src="docs/media/home.png" alt="The Home tab: Jump back in as two rows of cards with progress lines, then Continue reading with the half-tone manual, Pride and Prejudice and three generated covers, each showing its page or percentage" width="880">
+  <img src="docs/media/home.png" alt="The Home tab: Recently opened as two rows of cards with progress lines, then Continue reading with the half-tone manual, Pride and Prejudice and three generated covers, each showing its page or percentage" width="880">
   <br><sub><b>Home</b>: what you looked at last, with how far you got</sub>
 </p>
 

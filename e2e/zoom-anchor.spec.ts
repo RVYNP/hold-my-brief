@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { crc32, deflateSync } from 'node:zlib';
 import { pagedPdf } from './paged-pdf';
-import { libraryToggle } from './library-controls';
+import { chooseLibrarySide, libraryToggle } from './library-controls';
 
 /**
  * A zoom must not snap the view to the page's centre or top. Discrete zooms (buttons, shortcuts, a typed percentage, the presets,
@@ -20,14 +20,15 @@ type Side = 'left' | 'right';
 async function open(page: Page, layout: Layout, side: Side) {
   await page.setViewportSize({ width: 1080, height: 680 });
   await page.goto('/');
+  // Side and library are settled before the document opens: a library closed after it hands the page its width back, and the page is fitted again.
+  if (side === 'right') await chooseLibrarySide(page, 'right');
+  if (await page.locator('#library-root').isVisible()) await libraryToggle(page).click();
+  await expect(page.locator('#library-root')).toBeHidden();
+  await expect(page.locator('#library-rail')).toHaveAttribute('data-library-side', side);
   await page.locator('#file-input').setInputFiles({ name: 'anchor.pdf', mimeType: 'application/pdf', buffer: pagedPdf(3) });
   await expect(page.locator('#position')).toContainText('Page 1 of');
   await expect(page.locator('#loading')).toBeHidden();
   await expect(page.locator('#view-controls')).toBeVisible();
-  if (side === 'right') await page.locator('#library-rail').getByRole('button', { name: 'Move library to the right' }).click();
-  if (await page.locator('#library-root').isVisible()) await libraryToggle(page).click();
-  await expect(page.locator('#library-root')).toBeHidden();
-  await expect(page.locator('#library-rail')).toHaveAttribute('data-library-side', side);
   if (layout === 'spread') {
     await page.locator('#view-spread').click();
     await page.locator(HOST).focus(); await page.keyboard.press('PageDown');
@@ -484,11 +485,12 @@ test('an image holds the viewport centre through a zoom too', async ({ page }) =
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
   await page.setViewportSize({ width: 1080, height: 680 });
   await page.goto('/');
+  if (await page.locator('#library-root').isVisible()) await libraryToggle(page).click();
+  await expect(page.locator('#library-root')).toBeHidden();
   await page.locator('#file-input').setInputFiles({ name: 'plate.png', mimeType: 'image/png', buffer: png(600, 400) });
   await expect(page.locator('#filename')).toHaveText('plate.png');
   await expect(page.locator('#view-controls')).toBeVisible();
   await expect(level(page)).toHaveAttribute('data-fit', 'page');
-  if (await page.locator('#library-root').isVisible()) await libraryToggle(page).click();
   await typeZoom(page, 300); await settled(page, 'image'); await page.locator('.image-reader').focus(); // 1800 x 1200: past the panel both ways.
   await scrollTo(page, 'image', .8, .7);
   const before = await view(page, 'image');

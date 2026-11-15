@@ -26,15 +26,15 @@ const columns = (grid: Locator) => grid.evaluate(node => getComputedStyle(node).
 const chip = (page: Page, name: string) => page.getByRole('button', { name, exact: true });
 const cardPaths = async (scope: Locator) => { await scope.locator('[data-home-path]').first().waitFor(); return scope.locator('[data-home-path]').evaluateAll(nodes => nodes.map(node => (node as HTMLElement).dataset.homePath!.split('/').pop())); };
 
-test('the sections are labelled regions in order: chips, Jump back in, then shelves; empty ones are not drawn', async ({ page }) => {
+test('the sections are labelled regions in order: chips, Recently opened, then shelves; empty ones are not drawn', async ({ page }) => {
   await seedLibrary(page, mixed, mixedCollections);
   await expect(page.getByRole('heading', { name: 'Home', level: 1 })).toBeVisible();
-  await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Jump back in', 'Continue reading', 'Favorites', 'Collections']);
-  for (const name of ['Jump back in', 'Continue reading', 'Favorites', 'Collections']) await expect(region(page, name)).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Recently opened', 'Continue reading', 'Favorites', 'Collections']);
+  for (const name of ['Recently opened', 'Continue reading', 'Favorites', 'Collections']) await expect(region(page, name)).toBeVisible();
   await expect(page.locator('.home-chip')).toHaveText(['All', 'PDF', 'EPUB', 'Markdown', 'Text', 'Images']);
   // The old masonry sections and the File type select are gone.
   await expect(page.locator('#home-format, .home-grid, .home-tile')).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: /Recently opened|Library$/ })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: /Library$/ })).toHaveCount(0);
   // Shelves are lists, and each card is a button named by its title.
   await expect(region(page, 'Favorites').getByRole('list')).toBeVisible();
   await expect(region(page, 'Favorites').getByRole('listitem')).toHaveCount(2);
@@ -46,8 +46,8 @@ test('the sections are labelled regions in order: chips, Jump back in, then shel
 
 test('a library with nothing starred, in progress or collected leaves those sections out; one with no opened file says so', async ({ page }) => {
   await seedLibrary(page, [{ name: 'a.txt', format: 'txt', opened: 1 }, { name: 'b.txt', format: 'txt', opened: 2 }]);
-  await expect(region(page, 'Jump back in')).toBeVisible();
-  await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Jump back in']);
+  await expect(region(page, 'Recently opened')).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Recently opened']);
   await expect(page.locator('.home-chip')).toHaveCount(0); // One type: nothing to choose between.
   await seedLibrary(page, [{ name: 'a.txt', format: 'txt' }]);
   await expect(page.locator('#empty.is-home')).toBeVisible();
@@ -62,7 +62,7 @@ test('the chips offer only the types the library has, and filter every section',
   await chip(page, 'PDF').click();
   await expect(chip(page, 'PDF')).toHaveAttribute('aria-pressed', 'true');
   await expect(chip(page, 'PDF')).toBeFocused();
-  expect(await cardPaths(region(page, 'Jump back in'))).toEqual(['Alpha.pdf', 'Done.pdf']);
+  expect(await cardPaths(region(page, 'Recently opened'))).toEqual(['Alpha.pdf', 'Done.pdf']);
   expect(await cardPaths(region(page, 'Continue reading'))).toEqual(['Alpha.pdf']);
   expect(await cardPaths(region(page, 'Favorites'))).toEqual(['Alpha.pdf']);
   // Collections count only PDFs: Reading list has none, so it goes.
@@ -70,15 +70,15 @@ test('the chips offer only the types the library has, and filter every section',
   await expect(region(page, 'Collections')).toContainText('Alpha shelf');
   await expect(region(page, 'Collections')).toContainText('2 references');
   await chip(page, 'Text').click();
-  expect(await cardPaths(region(page, 'Jump back in'))).toEqual(['Plain.txt', 'Extra 1.txt', 'Extra 2.txt', 'Extra 3.txt', 'Extra 4.txt', 'Extra 5.txt', 'Extra 6.txt']);
+  expect(await cardPaths(region(page, 'Recently opened'))).toEqual(['Plain.txt', 'Extra 1.txt', 'Extra 2.txt', 'Extra 3.txt', 'Extra 4.txt', 'Extra 5.txt', 'Extra 6.txt']);
   await expect(page.getByRole('heading', { name: 'Favorites' })).toHaveCount(0);
   await chip(page, 'All').click();
-  await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Jump back in', 'Continue reading', 'Favorites', 'Collections']);
+  await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Recently opened', 'Continue reading', 'Favorites', 'Collections']);
 });
 
-test('Jump back in is the 8 most recently opened, in 4, 2 (also at 420) or 1 columns, as 52 px cards with a 39 x 52 cover and a progress line', async ({ page }) => {
+test('Recently opened is the 8 most recently opened, in 4, 2 (also at 420) or 1 columns, as 52 px cards with a 39 x 52 cover and a progress line', async ({ page }) => {
   await seedLibrary(page, mixed, mixedCollections);
-  const grid = region(page, 'Jump back in').getByRole('list');
+  const grid = region(page, 'Recently opened').getByRole('list');
   const cards = grid.getByRole('listitem');
   await expect(cards).toHaveCount(8);
   expect(await cardPaths(grid)).toEqual(['Alpha.pdf', 'Beta.epub', 'Notes.md', 'Plain.txt', 'Photo.png', 'Done.pdf', 'Extra 1.txt', 'Extra 2.txt']);
@@ -111,15 +111,15 @@ test('Jump back in is the 8 most recently opened, in 4, 2 (also at 420) or 1 col
   expect(await page.locator('#empty').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
 });
 
-test('Jump back in is at most 8 however many were opened, and a card with a long title ellipsizes on one line', async ({ page }) => {
+test('Recently opened is at most 8 however many were opened, and a card with a long title ellipsizes on one line', async ({ page }) => {
   const long = 'A very long title that cannot possibly fit on one line of a narrow card at all.txt';
   await seedLibrary(page, [{ name: long, format: 'txt', opened: 1 }, ...Array.from({ length: 12 }, (_, index): FixtureDocument => ({ name: `n${index}.txt`, format: 'txt', opened: index + 2 }))]);
-  await expect(region(page, 'Jump back in').getByRole('listitem')).toHaveCount(8);
-  const title = region(page, 'Jump back in').locator('.home-card-title').first();
+  await expect(region(page, 'Recently opened').getByRole('listitem')).toHaveCount(8);
+  const title = region(page, 'Recently opened').locator('.home-card-title').first();
   expect(await title.evaluate(node => node.scrollWidth > node.clientWidth && getComputedStyle(node).textOverflow === 'ellipsis' && getComputedStyle(node).whiteSpace === 'nowrap')).toBe(true);
 });
 
-test('a Jump back in card opens its document in a tab', async ({ page }) => {
+test('a Recently opened card opens its document in a tab', async ({ page }) => {
   await seedLibrary(page, mixed, mixedCollections);
   await page.getByRole('button', { name: 'Open Notes.md', exact: true }).first().click();
   await expect(page.locator('#tab-list .tab.is-active .tab-title')).toHaveText('Notes.md');
@@ -161,21 +161,21 @@ test('shelf cards: Continue reading carries progress, Favorites the format, Coll
   expect(await empty.evaluate(node => getComputedStyle(node).backgroundColor)).toBe(await page.locator('#empty').evaluate(() => { const probe = document.createElement('i'); probe.style.background = 'var(--hover)'; document.body.append(probe); const color = getComputedStyle(probe).backgroundColor; probe.remove(); return color; }));
 });
 
-test('Show all and a collection card open the library on that scope', async ({ page }) => {
+test('Open in library and a collection card open the library on that scope', async ({ page }) => {
   await seedLibrary(page, mixed, mixedCollections);
   const scope = page.locator('.library-filter[aria-pressed=true] .library-filter-name');
-  await region(page, 'Continue reading').getByRole('button', { name: 'Show all: Continue reading' }).click();
+  await region(page, 'Continue reading').getByRole('button', { name: 'Open in library: Continue reading' }).click();
   await expect(scope).toHaveText('Continue reading');
   await expect(page.locator('#library-root.is-board')).toBeVisible(); // The board, where there is room.
   await expect(page.locator('[data-doc-path]')).toHaveCount(3);
   await expect(page.locator('[data-doc-path]').filter({ hasText: 'Done.pdf' })).toHaveCount(0);
   await libraryToggle(page).click(); // Back to Home.
   await expect(page.locator('#library-root')).toBeHidden();
-  await region(page, 'Favorites').getByRole('button', { name: 'Show all: Favorites' }).click();
+  await region(page, 'Favorites').getByRole('button', { name: 'Open in library: Favorites' }).click();
   await expect(scope).toHaveText('Favorites');
   await expect(page.locator('[data-doc-path]')).toHaveCount(2);
   await libraryToggle(page).click();
-  await region(page, 'Collections').getByRole('button', { name: 'Show all: Collections' }).click();
+  await region(page, 'Collections').getByRole('button', { name: 'Open in library: Collections' }).click();
   await expect(scope).toHaveText('All references');
   await libraryToggle(page).click();
   await region(page, 'Collections').getByRole('button', { name: /Collection Alpha shelf/ }).click();
@@ -255,7 +255,7 @@ test.describe('shelf scrolling', () => {
     await expect.poll(() => left(page)).toBeGreaterThan(0); // The last card was brought into view.
     await page.keyboard.press('Home');
     await expect(cards.first()).toBeFocused();
-    // One tab stop per shelf: Tab leaves for "Show all"'s neighbour, not the second card.
+    // One tab stop per shelf: Tab leaves for "Open in library"'s neighbour, not the second card.
     await page.keyboard.press('Tab');
     await expect(cards.nth(1)).not.toBeFocused();
     await expect(region(page, 'Collections').getByRole('button', { name: /Collection Z/ })).toHaveAttribute('tabindex', '0');
@@ -289,8 +289,8 @@ test('a document dragged up or down from Home still opens in a new tab', async (
 test('Home with a 300-document library renders at once and scrolls', async ({ page }) => {
   const { documents, collections } = bigLibrary(300);
   await seedLibrary(page, documents, collections);
-  await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Jump back in', 'Continue reading', 'Favorites', 'Collections']);
-  await expect(region(page, 'Jump back in').getByRole('listitem')).toHaveCount(8);
+  await expect(page.getByRole('heading', { level: 2 })).toHaveText(['Recently opened', 'Continue reading', 'Favorites', 'Collections']);
+  await expect(region(page, 'Recently opened').getByRole('listitem')).toHaveCount(8);
   await expect(region(page, 'Collections').getByRole('listitem')).toHaveCount(25);
   expect(await region(page, 'Continue reading').getByRole('listitem').count()).toBeGreaterThan(5);
   // A repaint (a chip) of the whole page is quick.
@@ -319,7 +319,7 @@ test('a glow theme renders the cards on the card colour, and the chips and progr
   const tokens = () => page.evaluate(() => {
     const colour = (variable: string) => { const probe = document.createElement('i'); probe.style.background = `var(${variable})`; document.body.append(probe); const value = getComputedStyle(probe).backgroundColor; probe.remove(); return value; };
     const paint = (selector: string) => getComputedStyle(document.querySelector(selector)!).backgroundColor;
-    return { card: paint('.home-jump-open'), fill: paint('.home-chip[aria-pressed=true]'), idle: paint('.home-chip[aria-pressed=false]'), line: paint('.home-progress'), accent: getComputedStyle(document.querySelector('.home-progress > i')!).backgroundColor, hover: colour('--hover'), cardToken: colour('--card'), fg: colour('--fg'), hairline: colour('--hairline'), accentToken: colour('--accent') };
+    return { card: paint('.home-recent-open'), fill: paint('.home-chip[aria-pressed=true]'), idle: paint('.home-chip[aria-pressed=false]'), line: paint('.home-progress'), accent: getComputedStyle(document.querySelector('.home-progress > i')!).backgroundColor, hover: colour('--hover'), cardToken: colour('--card'), fg: colour('--fg'), hairline: colour('--hairline'), accentToken: colour('--accent') };
   });
   const plain = await tokens();
   expect(plain.card).toBe(plain.hover);
@@ -328,7 +328,7 @@ test('a glow theme renders the cards on the card colour, and the chips and progr
   const glow = await tokens();
   expect(glow.card).toBe(glow.cardToken);
   expect(glow.fill).toBe(glow.fg);
-  await expect(page.locator('.home-jump-open').first()).toBeVisible();
+  await expect(page.locator('.home-recent-open').first()).toBeVisible();
   await page.evaluate(() => { document.documentElement.dataset.palette = 'peach'; document.documentElement.dataset.theme = 'light'; });
   expect((await tokens()).card).toBe((await tokens()).cardToken);
 });
