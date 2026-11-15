@@ -240,7 +240,7 @@
  *   card (alpha)      --glass-raise                  library rail and drawer (over the window's own glow, never over the document)
  *   card (opaque)     --card                         card composited over page: menus, sheets, popovers
  *   raise             --raise                        find bar, page strip, loading bar
- *   (page, no fill)   --glass-chrome, --glass-host, --glass-stage   toolbar; the page-based reader host and the PDF stage (the workspace's panel shows)
+ *   (page, no fill)   --glass-host, --glass-stage   the page-based reader host and the PDF stage (the workspace's panel shows); --glass-chrome (toolbar) too in the glow themes, while the seven families keep it opaque
  *   l1 / l2 / l3      --hairline / --border / --hover, --track (= l3)
  *   t1 / t2 / t4      --fg and --ink / --muted / --faint   (t3 has no HMB role: two text tiers above faint)
  *   accent            --accent, --accent-ink; accent-fill --accent-fill; on-accent --on-accent
@@ -287,7 +287,7 @@
 :is(:root:not([data-palette]), [data-palette='brief'], [data-palette='lilac'], [data-palette='birch'], [data-palette='graphite'], [data-palette='arctic'], [data-palette='blossom'], [data-palette='peony']) {
   --glow-paint: var(--glow-image);
   --glow-attach: fixed;
-  --glass-chrome: transparent;
+  --glass-chrome: var(--chrome);
   --glass-surface: color-mix(in srgb, var(--surface) 70%, transparent);
   --glass-host: transparent;
   --glass-stage: transparent;
