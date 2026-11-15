@@ -23,7 +23,8 @@ async function openBook(page: Page, options: Book, width = 1440) {
   await openFile(page, await bookFile(options));
 }
 const footer = (page: Page) => page.locator('#position');
-const flowOf = (page: Page) => page.evaluate(() => (document.querySelector('foliate-view') as unknown as { renderer: HTMLElement }).renderer.getAttribute('flow'));
+/** The flow of the book in front: a reload restores the earlier tab's host too, and it comes first in the DOM, hidden. */
+const flowOf = (page: Page) => page.evaluate(() => (document.querySelector('.reader-host:not(.staging):not(.tab-hidden) foliate-view') as unknown as { renderer: HTMLElement }).renderer.getAttribute('flow'));
 const percent = async (page: Page) => Number(/(\d+(?:\.\d+)?)%/.exec(await footer(page).innerText())![1]);
 /** The font size the book's text is drawn at, read from the content frame. */
 const renderedFont = (page: Page) => page.evaluate(() => {
