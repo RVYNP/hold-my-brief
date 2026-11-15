@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { contrast, glowSchemes, glows, palettes, type Glow, type Rgb } from '../src/theme';
+import { accentVars, contrast, glowSchemes, glows, palettes, toOklch, type Glow, type Rgb } from '../src/theme';
 
 // Read from disk: Vitest replaces CSS imports (even ?raw) with empty modules.
 const css = readFileSync(new URL('../src/style.css', import.meta.url), 'utf8');
@@ -257,5 +257,55 @@ describe('the family glow', () => {
     const sample = (token: string): Rgba => ({ r: get(token)[0], g: get(token)[1], b: get(token)[2], a: 1 });
     const washed = over({ ...sample('surface'), a: glassAlpha('surface') }, over({ ...familyGlow('brief')![0][0], a: 1 }, sample('chrome'), false), false);
     expect(contrast(get('muted'), asRgb(washed))).toBeLessThan(4.5);
+  });
+});
+
+/**
+ * The sheen: the accent gradient, drawn in six places (style.css). Only the primary button carries text on it, so that is
+ * the one held to a contrast line: --on-accent stays at 4.5:1 along the whole fill, from --accent-fill to the far end
+ * that mixes in --sheen-b (checked at eleven points, exactly and rounded to 8 bits), and the mix is the highest whole
+ * percent up to 60 that holds, so a theme cannot quietly give up gradient or contrast.
+ */
+const along = (fill: Rgb, far: Rgb, percent: number): Rgb[] => Array.from({ length: 11 }, (_, step) => fill.map((channel, i) => channel + (far[i] - channel) * percent * step / 1000) as Rgb);
+const readsAlong = (on: Rgb, fill: Rgb, far: Rgb, percent: number) => along(fill, far, percent).every(colour => contrast(on, colour) >= 4.5 && contrast(on, colour.map(Math.round) as Rgb) >= 4.5);
+const highestMix = (on: Rgb, fill: Rgb, far: Rgb, percent: number) => readsAlong(on, fill, far, percent) && (percent === 60 || !readsAlong(on, fill, far, percent + 1));
+const percentToken = (block: string | undefined, token: string) => Number(new RegExp(`--${token}: (\\d+)%;`).exec(block ?? '')?.[1] ?? NaN);
+
+describe.each(palettes.flatMap(name => (['light', 'dark'] as const).map((mode, column) => ({ name, mode, column }))))('sheen $name $mode', ({ name, column }) => {
+  const own = family(name);
+  const block = new RegExp(`\\[data-palette='${name}'\\] \\{([^}]*)\\}`).exec(css)?.[1];
+  const percent = percentToken(block, column ? 'sheen-mix-dark' : 'sheen-mix-light');
+  it('keeps --on-accent at 4.5:1 along the primary gradient, at the highest mix, and also on hover in light', () => {
+    expect(Number.isInteger(percent), 'the mix token').toBe(true);
+    expect(highestMix(white, own['accent-fill'][column], own['sheen-b'][column], percent)).toBe(true);
+    if (column === 0) expect(readsAlong(white, own['accent-ink'][0], own['sheen-b'][0], percent)).toBe(true);
+  });
+});
+
+describe.each(glowCases)('sheen $name', ({ name, get, raw }) => {
+  it('keeps --on-accent at 4.5:1 along the primary gradient, at the highest mix', () => {
+    const [light, dark] = [percentToken(`--sheen-mix-light: ${raw['sheen-mix-light']};`, 'sheen-mix-light'), percentToken(`--sheen-mix-dark: ${raw['sheen-mix-dark']};`, 'sheen-mix-dark')];
+    expect(light, `${name} has one scheme, so both mixes are the same`).toBe(dark);
+    expect(highestMix(asRgb(get('on-accent')), asRgb(get('accent-fill')), asRgb(get('sheen-b')), light)).toBe(true);
+  });
+});
+
+describe.each(['#6358d8', '#a86af4', '#ffd400', '#00c2a8', '#e8e8e8', '#141414', '#ff0000', '#2f7d4f'])('sheen of the custom accent %s', accent => {
+  const vars = accentVars(accent);
+  const pair = (value: string) => /^light-dark\((#[0-9a-f]{6}), (#[0-9a-f]{6})\)$/.exec(value)!.slice(1).map(hex);
+  const [fill] = pair(vars['--accent-fill']);
+  it('keeps --on-accent at 4.5:1 along the primary gradient, in both schemes, at the highest mix', () => {
+    const mixes = [vars['--sheen-mix-light'], vars['--sheen-mix-dark']].map(value => Number(/^(\d+)%$/.exec(value)![1]));
+    pair(vars['--sheen-b']).forEach((far, column) => expect(highestMix(white, fill, far, mixes[column]), column ? 'dark' : 'light').toBe(true));
+  });
+  it('starts at the accent and turns its hue 30° at the same lightness', () => {
+    expect(vars['--sheen-a']).toBe(vars['--accent']);
+    const near = pair(vars['--sheen-a']), far = pair(vars['--sheen-b']);
+    for (const column of [0, 1]) {
+      const [L1, C1, H1] = toOklch(near[column]), [L2, C2, H2] = toOklch(far[column]);
+      expect(Math.abs(L2 - L1), 'lightness').toBeLessThan(0.02);
+      // A grey has no hue to turn, and a color at the edge of sRGB loses chroma and drifts: judge hue only where both have some.
+      if (C1 > 0.06 && C2 > 0.06) expect(((H2 - H1) * 180 / Math.PI + 540) % 360 - 180, 'hue').toBeCloseTo(30, -1);
+    }
   });
 });

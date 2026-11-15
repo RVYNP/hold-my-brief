@@ -3,7 +3,7 @@
    and the page re-fits as it does for a window resize. Nothing is drawn under it. Below 720 px it is a sheet over a scrim (see the end
    of this file). The Library tab's page is not part of it: it fills the reading panel (see `.library-page` below). */
 .library-root { --library-width: 270px; position: absolute; z-index: 20; top: 0; bottom: 0; left: 0; display: flex; flex: 0 0 auto; width: calc(var(--library-width) + 10px); min-width: 0; min-height: 0; margin: 0 0 0 6px; }
-.library-panel { position: relative; container: library-panel / inline-size; display: flex; flex-direction: column; flex: 1 1 auto; height: 100%; min-width: 0; min-height: 0; padding: 8px 8px 6px; overflow: auto; border: 1px solid var(--border); border-radius: 9px; background-color: var(--glass-raise-base); background-image: var(--glass-raise-paint); background-attachment: var(--glass-raise-attach); box-shadow: var(--shadow-drawer); scrollbar-width: thin; scrollbar-color: var(--faint) transparent; }
+.library-panel { position: relative; container: library-panel / inline-size; display: flex; flex-direction: column; flex: 1 1 auto; height: 100%; min-width: 0; min-height: 0; padding: 8px 8px 6px; overflow: auto; border: 1px solid var(--border); border-radius: 9px; background-color: var(--glass-raise-base); background-image: var(--sheen-edge), var(--glass-raise-paint); background-size: 100% 1px, auto, auto, auto; background-position: top, 0 0, 0 0, 0 0; background-repeat: no-repeat, repeat, repeat, repeat; background-attachment: scroll, var(--glass-raise-attach); box-shadow: var(--shadow-drawer); scrollbar-width: thin; scrollbar-color: var(--faint) transparent; }
 .library-panel button, .library-panel input, .library-panel select, .library-page button, .library-page input, .library-page select { font-size: 12px; }
 /* Header, one line: the title (the button that opens the Library tab) and the count, then + (add files; compact windows) and close (compact). */
 .library-header { display: flex; align-items: center; gap: 7px; flex-shrink: 0; margin: 0 0 6px 8px; }
@@ -354,8 +354,8 @@
 .tree-row:hover { background: var(--hover-subtle); }
 .tree-row:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
 .tree-row.is-menu-open { background: var(--hover); }
-.tree-row.is-active, .tree-row.is-scope { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
-.tree-row.is-active:hover, .tree-row.is-scope:hover { background: var(--accent-soft-hover); }
+.tree-row.is-active, .tree-row.is-scope { background-color: var(--accent-soft); background-image: var(--sheen-wash); color: var(--accent-ink); font-weight: 600; }
+.tree-row.is-active:hover, .tree-row.is-scope:hover { background-color: var(--accent-soft-hover); }
 .tree-chevron { display: grid; flex: none; place-items: center; width: 12px; color: var(--muted); }
 .tree-chevron-icon { transition: rotate .12s; }
 .tree-row[aria-expanded=true] > .tree-chevron .tree-chevron-icon { rotate: 90deg; }
@@ -395,8 +395,8 @@
 .icon-rail-group { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .icon-rail-button { position: relative; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--muted); }
 .icon-rail-button:hover { background: var(--hover-subtle); color: var(--fg); }
-.icon-rail-button[aria-pressed=true] { background: var(--accent-soft); color: var(--accent-ink); }
-.icon-rail-button[aria-pressed=true]:hover { background: var(--accent-soft-hover); }
+.icon-rail-button[aria-pressed=true] { background-color: var(--accent-soft); background-image: var(--sheen-wash); color: var(--accent-ink); }
+.icon-rail-button[aria-pressed=true]:hover { background-color: var(--accent-soft-hover); }
 .icon-rail-button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 /* Light: the design's dark ink pill. Dark: a raised card. Drawn on the side away from the rail's edge, after a short hover, and only while the
    panel is closed: an open panel's header already names the view, and the tip would be drawn over its title and filter field. */
@@ -409,4 +409,6 @@
 @media (prefers-reduced-motion: reduce) { .icon-rail-button:hover::after, .icon-rail-button:focus-visible::after { transition: none; } }
 /* The rail's right-click menu: one item, fixed at the pointer. */
 .icon-rail-menu { position: fixed; z-index: 40; display: flex; flex-direction: column; min-width: 150px; padding: 4px; border: 1px solid var(--border); border-radius: 7px; background: var(--card); box-shadow: var(--shadow-popover); }
+/* The sheen's top hairline, as for the other popovers (style.css). */
+.library-item-menu, .icon-rail-menu { background-image: var(--sheen-edge); background-size: 100% 1px; background-position: top; background-repeat: no-repeat; }
 .icon-rail-menu button { padding: 6px 10px; text-align: left; font-size: 12px; }

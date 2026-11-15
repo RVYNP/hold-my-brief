@@ -35,7 +35,7 @@ export const allPalettes: readonly Palette[] = [...palettes, ...glows];
 export const isGlow = (palette: Palette): palette is Glow => palette in glowSchemes;
 export const pageTones: readonly PageTone[] = ['theme', 'white', 'sepia', 'dim'];
 export const defaultAppearance: Appearance = { mode: 'system', palette: 'brief', accent: null, page: 'theme' };
-const accentTokens = ['--accent', '--accent-ink', '--accent-fill', '--accent-fill-hover', '--accent-soft', '--accent-soft-hover', '--accent-border'] as const;
+const accentTokens = ['--accent', '--accent-ink', '--accent-fill', '--accent-fill-hover', '--accent-soft', '--accent-soft-hover', '--accent-border', '--sheen-a', '--sheen-b', '--sheen-mix-light', '--sheen-mix-dark'] as const;
 const hexColor = /^#[0-9a-f]{6}$/i;
 
 let current: Appearance = defaultAppearance;
@@ -51,7 +51,7 @@ export const rgbToHex = (rgb: Rgb) => `#${rgb.map(c => Math.round(c).toString(16
 function luminance([r, g, b]: Rgb) { return 0.2126 * toLinear(r / 255) + 0.7152 * toLinear(g / 255) + 0.0722 * toLinear(b / 255); }
 export function contrast(a: Rgb, b: Rgb) { const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); }
 
-function toOklch([r8, g8, b8]: Rgb): Rgb {
+export function toOklch([r8, g8, b8]: Rgb): Rgb {
   const [r, g, b] = [r8, g8, b8].map(c => toLinear(c / 255));
   const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
   const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
@@ -97,6 +97,21 @@ const white: Rgb = [255, 255, 255];
 /** Reference dark reading surface for dark-mode accent contrast (the darkest palette surface would only raise it). */
 const darkSurface: Rgb = [0x22, 0x21, 0x27];
 
+/** A color's hue turned 30° in OKLCH at the same lightness (chroma only reduced to fit sRGB): the far stop of a custom accent's sheen. */
+const sheenFar = (color: Rgb): Rgb => { const [L, C, H] = toOklch(color); return fromOklch([L, C, H + Math.PI / 6]); };
+/** The most of `far`, in whole percent up to 60, the primary button's gradient may take at its far end while `on` stays at 4.5:1 along the whole fill. */
+export function sheenMix(fill: Rgb, far: Rgb, on: Rgb): number {
+  for (let percent = 60; percent > 0; percent--) {
+    let reads = true;
+    for (let step = 0; step <= 10 && reads; step++) {
+      const along = fill.map((channel, i) => channel + (far[i] - channel) * percent * step / 1000) as Rgb;
+      reads = contrast(on, along) >= 4.5 && contrast(on, along.map(Math.round) as Rgb) >= 4.5;
+    }
+    if (reads) return percent;
+  }
+  return 0;
+}
+
 /**
  * Expands one accent into the token set for both modes. Marks need 3.5:1, text 5.5:1 on
  * light and 4.5–7:1 on dark, and fills carry white text at 4.5:1; soft tints mix with the
@@ -113,6 +128,7 @@ export function accentVars(hex: string): Record<(typeof accentTokens)[number], s
   const inkDark = reach(fromOklch([Math.max(L, 0.8), Math.min(C, 0.11), H]), darkSurface, 7, 0.01);
   const pair = (light: string, dark: string) => `light-dark(${light}, ${dark})`;
   const [lightMark, darkMark] = [rgbToHex(markLight), rgbToHex(markDark)];
+  const [farLight, farDark] = [sheenFar(markLight), sheenFar(markDark)];
   return {
     '--accent': pair(lightMark, darkMark),
     '--accent-ink': pair(rgbToHex(inkLight), rgbToHex(inkDark)),
@@ -121,6 +137,10 @@ export function accentVars(hex: string): Record<(typeof accentTokens)[number], s
     '--accent-soft': pair(`color-mix(in srgb, ${lightMark} 11%, var(--card))`, `color-mix(in srgb, ${darkMark} 15%, var(--surface))`),
     '--accent-soft-hover': pair(`color-mix(in srgb, ${lightMark} 19%, var(--card))`, `color-mix(in srgb, ${darkMark} 22%, var(--surface))`),
     '--accent-border': pair(`color-mix(in srgb, ${lightMark} 38%, var(--card))`, `color-mix(in srgb, ${darkMark} 40%, var(--surface))`),
+    '--sheen-a': pair(lightMark, darkMark),
+    '--sheen-b': pair(rgbToHex(farLight), rgbToHex(farDark)),
+    '--sheen-mix-light': `${sheenMix(fill, farLight, white)}%`,
+    '--sheen-mix-dark': `${sheenMix(fill, farDark, white)}%`,
   };
 }
 

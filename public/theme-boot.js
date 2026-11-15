@@ -11,5 +11,5 @@
   root.dataset.theme = mode;
   if (typeof saved.palette === 'string') root.dataset.palette = saved.palette;
   if (typeof saved.page === 'string' && saved.page !== 'theme') root.dataset.page = saved.page;
-  for (const [name, value] of Object.entries(saved.vars || {})) if (name.startsWith('--accent')) root.style.setProperty(name, String(value));
+  for (const [name, value] of Object.entries(saved.vars || {})) if (name.startsWith('--accent') || name.startsWith('--sheen')) root.style.setProperty(name, String(value));
 })();
