@@ -3,8 +3,10 @@ import { ZipWriter, Uint8ArrayWriter, TextReader } from '@zip.js/zip.js';
 /**
  * A synthetic multi-chapter reflowable EPUB. The title page is in the contents under the book's own title (it is
  * not a chapter); the chapters carry "CHAPTER <roman>" in the way some Project Gutenberg contents do.
+ * `code` puts a `<pre>` sample and a table at the head of every chapter, as a reference book has them; `nested` lists a
+ * subsection under the first chapter's contents entry, pointing part-way into that chapter.
  */
-export async function chapterBook({ chapters = 4, paragraphs = 40, pageList = false } = {}) {
+export async function chapterBook({ chapters = 4, paragraphs = 40, pageList = false, code = false, nested = false } = {}) {
   const roman = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
   const writer = new ZipWriter(new Uint8ArrayWriter(), { useWebWorkers: false });
   const ids = Array.from({ length: chapters }, (_, i) => `c${i + 1}`);
@@ -19,6 +21,9 @@ export async function chapterBook({ chapters = 4, paragraphs = 40, pageList = fa
   ids.forEach((id, i) => {
     files[`OPS/${id}.xhtml`] = `<html xmlns="http://www.w3.org/1999/xhtml"><head><title>${id}</title></head><body><h1>Chapter heading ${i + 1}</h1>${Array.from({ length: paragraphs }, (_, n) => `<p id="p${n}">Passage ${n + 1} of chapter ${i + 1}: the reader keeps a stable place beside your work, and this paragraph supplies natural flowing text across several displayed pages of the generated book.</p>`).join('')}</body></html>`;
   });
+  if (code) for (const id of ids) files[`OPS/${id}.xhtml`] = files[`OPS/${id}.xhtml`].replace('</h1>', `</h1><pre>${Array.from({ length: 12 }, (_, n) => `const total${n} = values.reduce((sum, value) => sum + value * ${n}, 0);`).join('\n')}</pre><table><tr><th>Name</th><th>Meaning</th></tr><tr><td>total</td><td>a running sum</td></tr></table>`);
+  if (nested) files['OPS/nav.xhtml'] = files['OPS/nav.xhtml'].replace(/(<a href="c1\.xhtml">[^<]*<\/a>)/, '$1<ol><li><a href="c1.xhtml#p20">A subsection</a></li></ol>');
+  files['OPS/book.opf'] = files['OPS/book.opf'].replace('</dc:identifier>', `-${code}-${nested}</dc:identifier>`);
   for (const [name, text] of Object.entries(files)) await writer.add(name, new TextReader(text), { level: name === 'mimetype' ? 0 : 6, lastModDate: new Date('2026-01-01T00:00:00Z'), extendedTimestamp: false });
   return Buffer.from(await writer.close());
 }

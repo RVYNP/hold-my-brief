@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chapterMap, chapterNumber, cleanChapterLabel, estimatedPage, footerLabel, formatPage, formatPercent, formatTimeLeft, numberedChapters, readingMeasure } from '../src/epub-position';
+import { chapterMap, chapterNumber, cleanChapterLabel, contentsLabel, estimatedPage, footerLabel, formatPage, formatPercent, formatTimeLeft, numberedChapters, readingMeasure } from '../src/epub-position';
 
 describe('cleanChapterLabel', () => {
   it('keeps the chapter a "CHAPTER <roman>" token names and drops the rest', () => {
@@ -20,6 +20,21 @@ describe('cleanChapterLabel', () => {
     expect(cleanChapterLabel('  \n ')).toBeUndefined();
     expect(cleanChapterLabel(undefined)).toBeUndefined();
     expect(cleanChapterLabel('Chapters in brief')).toBe('Chapters in brief');
+  });
+});
+
+describe('contentsLabel', () => {
+  it('keeps the title after a chapter token', () => {
+    expect(contentsLabel('Chapter 3: Working with Pointers')).toBe('Chapter 3: Working with Pointers');
+    expect(contentsLabel('CHAPTER I. Down the Rabbit-Hole')).toBe('Chapter 1: Down the Rabbit-Hole');
+    expect(contentsLabel('Chapter 9 – The End.')).toBe('Chapter 9: The End');
+  });
+  it('still drops text before the token, and gives a bare number when nothing follows', () => {
+    expect(contentsLabel('I hope Mr. Bingley will like it. CHAPTER II.')).toBe('Chapter 2');
+  });
+  it('cleans other labels as cleanChapterLabel does and keeps the title page raw', () => {
+    expect(contentsLabel('  A  Scandal\n in   Bohemia. ')).toBe('A Scandal in Bohemia');
+    expect(contentsLabel('PRIDE. and PREJUDICE', 'Pride and Prejudice')).toBe('PRIDE. and PREJUDICE');
   });
 });
 
