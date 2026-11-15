@@ -27,15 +27,17 @@ for (const filename of ['paginator.js', 'fixed-layout.js']) {
   await writeFile(path, patched);
 }
 // Foliate lays the section on show out again whenever flow, margin, gap or size change (Paginator.render), and its content observer and font
-// callbacks resize it (View.expand). Both take the frame's documentElement unchecked, so a call that lands while that frame has no root (between
-// two navigations, or as it is torn down) throws "Cannot destructure property 'style' of 'el' as it is null" from setStylesImportant, and the scroll
-// that follows would read the same missing root. A frame without a root has nothing to lay out, and its load handler lays it out when it has one.
+// callbacks resize it (View.expand). They take the frame's documentElement and body unchecked, so a call that lands while that frame has no root or
+// no body (between two navigations, or as it is torn down) throws "Cannot destructure property 'style' of 'el' as it is null" from setStylesImportant,
+// and the scroll that follows would read the same missing root. A frame without a body has nothing to lay out, and its load handler lays it out when it has one.
 {
   const path = resolve('node_modules/foliate-js', 'paginator.js');
   const original = await readFile(path, 'utf8');
   const edits = [
     ['    render() {\n        if (!this.#view) return\n', '    render() {\n        if (!this.#view?.document?.documentElement) return\n'],
     ['    expand() {\n        const { documentElement } = this.document\n', '    expand() {\n        const documentElement = this.document?.documentElement\n        if (!documentElement) return\n'],
+    ['    scrolled({ margin, gap, columnWidth }) {\n        const vertical = this.#vertical\n        const doc = this.document\n', '    scrolled({ margin, gap, columnWidth }) {\n        if (!this.document?.body) return\n        const vertical = this.#vertical\n        const doc = this.document\n'],
+    ['    columnize({ width, height, margin, gap, columnWidth }) {\n        const vertical = this.#vertical\n', '    columnize({ width, height, margin, gap, columnWidth }) {\n        if (!this.document?.body) return\n        const vertical = this.#vertical\n'],
   ];
   let patched = original;
   for (const [unguarded, guarded] of edits) {
@@ -48,4 +50,4 @@ await mkdir('public/pdfjs', { recursive: true });
 for (const directory of ['cmaps', 'standard_fonts', 'wasm']) {
   await cp(resolve('node_modules/pdfjs-dist', directory), resolve('public/pdfjs', directory), { recursive: true });
 }
-console.log('EPUB frames prohibit scripts, a closed section view is not repainted, a frame without a root is not laid out; PDF auxiliary assets copied for offline use.');
+console.log('EPUB frames prohibit scripts, a closed section view is not repainted, a frame without a root or body is not laid out; PDF auxiliary assets copied for offline use.');
