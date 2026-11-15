@@ -9,7 +9,7 @@ import { markUnavailable, showPicture, tileMedia, type Appearance } from './card
 import { OPEN_DRAG_SLOP } from './open-drag';
 import type { Thumbnail } from './thumbnails';
 import { formatProgress, inProgress, type Progress } from './progress';
-import { bannerGrid, bannerStrength, localDay, renderBanner, reshuffled, seedFor, type BannerSeed } from './home-banner';
+import { bannerGrid, bannerPixel, bannerStrength, localDay, renderBanner, reshuffled, seedFor, type BannerSeed } from './home-banner';
 import { rememberRecent } from './covers';
 import type { Banner } from './theme';
 
@@ -290,6 +290,7 @@ function paintBannerGrid(grid: ReturnType<typeof renderBanner>): HTMLCanvasEleme
 function bannerCopy(picture: HTMLCanvasElement): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = picture.width; canvas.height = picture.height;
+  canvas.style.width = `${picture.width * bannerPixel}px`; canvas.style.height = `${picture.height * bannerPixel}px`;
   canvas.getContext('2d')?.drawImage(picture, 0, 0);
   return canvas;
 }

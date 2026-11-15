@@ -47,7 +47,7 @@ test('Home shows the band with the title, both buttons and Reshuffle, over a pix
       height: box.height, radius: style.borderTopLeftRadius, contain: style.contain, plate: plate.height, fromPage: box.top - top, pageGap: top - toolbar, toChips: chip ? chip.top - box.bottom : null,
       blend: canvas.mixBlendMode, opacity: canvas.opacity, rendering: canvas.imageRendering, width: box.width, content: document.querySelector('.home-section')!.getBoundingClientRect().width,
       backdrop: [node, ...node.querySelectorAll('*')].map(item => getComputedStyle(item).backdropFilter).filter(value => value && value !== 'none'),
-      grid: [(node.querySelector('canvas') as HTMLCanvasElement).width, (node.querySelector('canvas') as HTMLCanvasElement).height],
+      grid: [(node.querySelector('canvas') as HTMLCanvasElement).width, (node.querySelector('canvas') as HTMLCanvasElement).height], shown: node.querySelector('canvas')!.getBoundingClientRect().width,
     };
   });
   expect(look.height).toBe(140);
@@ -65,6 +65,7 @@ test('Home shows the band with the title, both buttons and Reshuffle, over a pix
   expect(look.grid[1]).toBe(70); // one dither pixel per 2 CSS px
   expect(look.grid[0]).toBeGreaterThanOrEqual(look.width / 2);
   expect(look.grid[0]).toBeLessThan(look.width / 2 + 16);
+  expect(look.shown).toBe(look.grid[0] * 2); // never stretched: the extra bucket width is clipped
 });
 
 test('the dark theme screens the art over the band at .85', async ({ page }) => {
