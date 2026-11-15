@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { homeIsEmpty, homeSections, homeTypes, jumpLimit, openedAt, openedOrder, recentTiles, shelfLimit, shelfRatio, type HomeCollection, type HomeDocument, type HomeRecent } from '../src/home';
+import { homeIsEmpty, homeSections, homeTypes, recentLimit, openedAt, openedOrder, recentTiles, shelfLimit, shelfRatio, type HomeCollection, type HomeDocument, type HomeRecent } from '../src/home';
 
 const recent = (path: string, name = path, format = 'pdf'): HomeRecent => ({ path, name, format, lastOpened: 1 });
 const doc = (path: string, lastOpened = 0, extra: Partial<HomeDocument> = {}): HomeDocument => ({ path, name: path, format: 'pdf', lastOpened, ...extra });
@@ -18,40 +18,40 @@ describe('openedAt', () => {
   });
 });
 
-describe('Jump back in', () => {
+describe('Recently opened', () => {
   it('is empty when nothing has been opened', () => {
     const sections = homeSections({ recents: [], documents: [doc('a.pdf')] });
-    expect(sections.jump).toEqual([]);
+    expect(sections.recent).toEqual([]);
   });
 
   it('keeps the recents in the store\'s order and stops at eight', () => {
-    const recents = Array.from({ length: jumpLimit + 4 }, (_, index) => recent(`b${index}.pdf`, `Book ${index}.pdf`));
-    const { jump } = homeSections({ recents, documents: [] });
-    expect(jump).toHaveLength(8);
-    expect(paths(jump)).toEqual(recents.slice(0, 8).map(item => item.path));
-    expect(jump[0].title).toBe('Book 0');
+    const recents = Array.from({ length: recentLimit + 4 }, (_, index) => recent(`b${index}.pdf`, `Book ${index}.pdf`));
+    const { recent: tiles } = homeSections({ recents, documents: [] });
+    expect(tiles).toHaveLength(8);
+    expect(paths(tiles)).toEqual(recents.slice(0, 8).map(item => item.path));
+    expect(tiles[0].title).toBe('Book 0');
   });
 
   it('borrows the library cover seed and shelf for a recent that is also a library entry', () => {
-    const { jump } = homeSections({ recents: [recent('a.pdf')], documents: [doc('a.pdf', 9, { coverSeed: 77, collectionIds: ['shelf'] })] });
-    expect(jump[0]).toMatchObject({ seed: 77, shelfId: 'shelf', title: 'a' });
+    const { recent: tiles } = homeSections({ recents: [recent('a.pdf')], documents: [doc('a.pdf', 9, { coverSeed: 77, collectionIds: ['shelf'] })] });
+    expect(tiles[0]).toMatchObject({ seed: 77, shelfId: 'shelf', title: 'a' });
   });
 
   it('prefers a known book title over the file name for the cover and the label', () => {
-    const { jump } = homeSections({ recents: [recent('book.epub', 'book_v2.epub', 'epub')], documents: [], titleOf: () => 'The Real Title' });
-    expect(jump[0]).toMatchObject({ title: 'The Real Title', label: 'The Real Title', name: 'book_v2.epub' });
+    const { recent: tiles } = homeSections({ recents: [recent('book.epub', 'book_v2.epub', 'epub')], documents: [], titleOf: () => 'The Real Title' });
+    expect(tiles[0]).toMatchObject({ title: 'The Real Title', label: 'The Real Title', name: 'book_v2.epub' });
   });
 
   it('still shows a missing original: it was looked at', () => {
-    const { jump } = homeSections({ recents: [recent('gone.pdf')], documents: [doc('gone.pdf', 3, { availability: 'missing' })] });
-    expect(jump[0].missing).toBe(true);
+    const { recent: tiles } = homeSections({ recents: [recent('gone.pdf')], documents: [doc('gone.pdf', 3, { availability: 'missing' })] });
+    expect(tiles[0].missing).toBe(true);
   });
 
   it('carries progress onto the card, and none where there is none', () => {
     const progress = { 'a.pdf': { fraction: .25, page: 3, pages: 12 } };
-    const { jump } = homeSections({ recents: [recent('a.pdf'), recent('b.pdf')], documents: [], progress });
-    expect(jump[0].progress).toEqual(progress['a.pdf']);
-    expect(jump[1]).not.toHaveProperty('progress');
+    const { recent: tiles } = homeSections({ recents: [recent('a.pdf'), recent('b.pdf')], documents: [], progress });
+    expect(tiles[0].progress).toEqual(progress['a.pdf']);
+    expect(tiles[1]).not.toHaveProperty('progress');
   });
 });
 
@@ -92,7 +92,7 @@ describe('Favorites', () => {
     const documents = [doc('r.pdf', 5, { favorite: true }), doc('f.pdf', 3, { favorite: true }), doc('other.pdf', 9), doc('g.pdf', 8, { favorite: true })];
     const sections = homeSections({ recents: [recent('r.pdf')], documents });
     expect(paths(sections.favorites)).toEqual(['g.pdf', 'r.pdf', 'f.pdf']);
-    expect(paths(sections.jump)).toEqual(['r.pdf']);
+    expect(paths(sections.recent)).toEqual(['r.pdf']);
   });
 });
 
@@ -138,16 +138,16 @@ describe('the file type chips', () => {
     const starred = files.map(file => ({ ...file, favorite: true, collectionIds: ['all'] }));
     const everything = Object.fromEntries(files.map(file => [file.path, { fraction: .5 }]));
     const sections = homeSections({ recents: files, documents: starred, collections: [shelf('all')], format: selected, progress: everything });
-    expect(paths(sections.jump).sort()).toEqual([...expected].sort());
+    expect(paths(sections.recent).sort()).toEqual([...expected].sort());
     expect(paths(sections.reading).sort()).toEqual([...expected].sort());
     expect(paths(sections.favorites).sort()).toEqual([...expected].sort());
     expect(sections.collections.flatMap(card => paths(card.covers)).sort()).toEqual([...expected].sort());
   });
 
   it('filters recents before the cap', () => {
-    const texts = Array.from({ length: jumpLimit + 1 }, (_, index) => recent(`notes-${index}.txt`, undefined, 'txt'));
-    const { jump } = homeSections({ recents: [...texts, recent('scan.pdf')], documents: [], format: 'pdf' });
-    expect(paths(jump)).toEqual(['scan.pdf']);
+    const texts = Array.from({ length: recentLimit + 1 }, (_, index) => recent(`notes-${index}.txt`, undefined, 'txt'));
+    const { recent: tiles } = homeSections({ recents: [...texts, recent('scan.pdf')], documents: [], format: 'pdf' });
+    expect(paths(tiles)).toEqual(['scan.pdf']);
   });
 
   it('offers All and each type the library has, in a fixed order, and nothing when there is no choice', () => {
@@ -166,7 +166,7 @@ describe('Home as a whole', () => {
   });
 
   it('has no "Recently added" shelf: the catalog keeps no added time per document', () => {
-    expect(Object.keys(homeSections({ recents: [], documents: [] })).sort()).toEqual(['collections', 'favorites', 'jump', 'reading']);
+    expect(Object.keys(homeSections({ recents: [], documents: [] })).sort()).toEqual(['collections', 'favorites', 'reading', 'recent']);
   });
 });
 
