@@ -9,6 +9,9 @@ import { markUnavailable, showPicture, tileMedia, type Appearance } from './card
 import { OPEN_DRAG_SLOP } from './open-drag';
 import type { Thumbnail } from './thumbnails';
 import { formatProgress, inProgress, type Progress } from './progress';
+import { bannerGrid, bannerPixel, bannerStrength, localDay, renderBanner, reshuffled, seedFor, type BannerSeed } from './home-banner';
+import { rememberRecent } from './covers';
+import type { Banner } from './theme';
 
 /** Most cards in "Recently opened" (4 columns by 2 rows on a wide window). */
 export const recentLimit = 8;
@@ -184,6 +187,8 @@ export type HomeActions = {
   selectFormat: (value: string) => void;
   /** Whether a picture can be made for a format, and what is already known about it (proportions, a finished picture). */
   picture: { can: (format: string) => boolean; ratio: (path: string) => number | undefined; peek: (path: string) => Thumbnail | undefined };
+  /** The Appearance's BANNER choice: a cover family draws the dithered banner, `none` the plain bar. */
+  banner: Banner;
   /** Present for "Recently opened", whose entries can leave the recent list without leaving the library. */
   remove?: (path: string, name: string) => void;
 };
@@ -202,12 +207,150 @@ function control(className: string, label?: string, text?: string): HTMLButtonEl
 }
 
 type Shelf = { track: HTMLElement; previous: HTMLButtonElement; next: HTMLButtonElement };
-let current: { shelves: Shelf[]; chips?: HTMLElement; resize: ResizeObserver; lazy?: IntersectionObserver; frame: number; reduced: MediaQueryList } | undefined;
+/** The banner on screen: its band, the canvas shown (and its key), the family drawn, the pending idle job. */
+type BannerView = { band: HTMLElement; art: HTMLElement; family: string; canvas?: HTMLCanvasElement; key: string; cancel?: () => void; resize: ResizeObserver };
+let current: { shelves: Shelf[]; chips?: HTMLElement; resize: ResizeObserver; lazy?: IntersectionObserver; frame: number; reduced: MediaQueryList; banner?: BannerView } | undefined;
 
 function disposeHome() {
   if (!current) return;
-  current.resize.disconnect(); current.lazy?.disconnect(); cancelAnimationFrame(current.frame); current = undefined;
+  current.resize.disconnect(); current.lazy?.disconnect(); cancelAnimationFrame(current.frame);
+  current.banner?.cancel?.(); current.banner?.resize.disconnect();
+  current = undefined;
 }
+
+// ---- the banner ---------------------------------------------------------------------------------------------
+// Painted in an idle callback while Home is the tab on show, once per (theme colours, family, seed, size bucket); a change
+// cross-fades two stacked canvases by a CSS transition. Nothing here runs a frame loop.
+
+const bannerSeedKey = 'hold-my-brief:home-banner';
+const bannerCacheSize = 8;
+const bannerFade = 650; // ms: the 600 ms transition and a margin
+let bannerSeed: BannerSeed | undefined;
+/** Rendered pictures, newest last; the key holds everything the pixels depend on. */
+const bannerPictures = new Map<string, HTMLCanvasElement>();
+/** What the last banner showed, so a repainted Home starts from it rather than from an empty band. */
+let lastBanner: { key: string; picture: HTMLCanvasElement } | undefined;
+
+function saveBannerSeed(next: BannerSeed) {
+  bannerSeed = next;
+  try { localStorage.setItem(bannerSeedKey, JSON.stringify(next)); } catch { /* Optional preference. */ }
+}
+/** Today's seed: the saved one while it is from today, otherwise a new day's. */
+function bannerSeedNow(): BannerSeed {
+  const today = localDay(new Date());
+  if (bannerSeed?.day === today) return bannerSeed;
+  let saved: unknown = null;
+  try { saved = JSON.parse(localStorage.getItem(bannerSeedKey) ?? 'null'); } catch { /* A new day's seed stands. */ }
+  const next = seedFor(saved, today);
+  if (JSON.stringify(saved) !== JSON.stringify(next)) saveBannerSeed(next); else bannerSeed = next;
+  return next;
+}
+
+const later = (run: () => void): (() => void) => {
+  if (typeof requestIdleCallback === 'function') { const id = requestIdleCallback(run, { timeout: 500 }); return () => cancelIdleCallback(id); }
+  const id = setTimeout(run, 0);
+  return () => clearTimeout(id);
+};
+
+type Channels = [number, number, number];
+/** A computed `rgb()` / `rgba()` colour as opaque channels, and whether it had any alpha at all; other syntaxes are null. */
+function opaque(value: string): { rgb: Channels; visible: boolean } | null {
+  const match = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,/]+([\d.]+)(%?))?\s*\)$/.exec(value);
+  if (!match) return null;
+  const alpha = match[4] === undefined ? 1 : Number(match[4]) / (match[5] ? 100 : 1);
+  return { rgb: [Number(match[1]), Number(match[2]), Number(match[3])], visible: alpha > 0 };
+}
+/** The banner's three colours as the page shows them now: `--home-card`, and the glow's two hues (the sheen's where the glow is not drawn). */
+function bannerColours(band: HTMLElement): [Channels, Channels, Channels] {
+  const probe = element('span');
+  probe.hidden = true;
+  band.append(probe);
+  const read = (token: string) => { probe.style.color = ''; probe.style.color = `var(${token})`; return opaque(getComputedStyle(probe).color); };
+  const ground = read('--home-card')?.rgb ?? [128, 128, 128];
+  const hue = (glow: string, sheen: string) => { const grad = read(glow); return (grad?.visible ? grad : read(sheen))?.rgb ?? ground; };
+  const colours: [Channels, Channels, Channels] = [ground, hue('--grad-a', '--sheen-a'), hue('--grad-b', '--sheen-b')];
+  probe.remove();
+  return colours;
+}
+
+function bannerPicture(key: string, make: () => HTMLCanvasElement): HTMLCanvasElement {
+  return rememberRecent(bannerPictures, key, bannerPictures.get(key) ?? make(), bannerCacheSize);
+}
+function paintBannerGrid(grid: ReturnType<typeof renderBanner>): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = grid.width; canvas.height = grid.height;
+  const context = canvas.getContext('2d');
+  if (!context) return canvas;
+  const image = context.createImageData(grid.width, grid.height);
+  grid.pixels.forEach((tone, index) => { const [r, g, b] = grid.palette[tone]; image.data.set([r, g, b, 255], index * 4); });
+  context.putImageData(image, 0, 0);
+  return canvas;
+}
+/** A fresh on-screen canvas with the picture's pixels (a picture itself may be on screen only once). */
+function bannerCopy(picture: HTMLCanvasElement): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = picture.width; canvas.height = picture.height;
+  canvas.style.width = `${picture.width * bannerPixel}px`; canvas.style.height = `${picture.height * bannerPixel}px`;
+  canvas.getContext('2d')?.drawImage(picture, 0, 0);
+  return canvas;
+}
+
+function showBanner(view: BannerView, key: string, picture: HTMLCanvasElement) {
+  const next = bannerCopy(picture), before = view.canvas;
+  for (const stale of Array.from(view.art.children)) if (stale !== before) stale.remove();
+  view.canvas = next; view.key = key; lastBanner = { key, picture };
+  if (!before || matchMedia('(prefers-reduced-motion: reduce)').matches) { before?.remove(); view.art.append(next); return; }
+  next.classList.add('is-entering');
+  view.art.append(next);
+  void next.offsetWidth; // the transition starts from the hidden state
+  next.classList.remove('is-entering'); before.classList.add('is-leaving');
+  setTimeout(() => before.remove(), bannerFade);
+}
+
+/** Draws what the band should show now, unless it already shows it, is not laid out, or Home is not the tab on show. */
+function drawBanner(view: BannerView) {
+  const { band } = view;
+  if (!band.isConnected || band.closest('[hidden]')) return;
+  const width = band.clientWidth, height = band.clientHeight;
+  if (!width || !height) return;
+  const scheme = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light', grid = bannerGrid(width, height), colours = bannerColours(band), seed = bannerSeedNow().seed;
+  const key = [scheme, view.family, seed, grid.width, grid.height, ...colours.map(channels => channels.join(','))].join('|');
+  if (key === view.key) return;
+  const [ground, a, b] = colours;
+  showBanner(view, key, bannerPicture(key, () => paintBannerGrid(renderBanner({ seed, family: view.family, ...grid, ground, a, b, strength: bannerStrength[scheme] }))));
+}
+function scheduleBanner(view: BannerView) {
+  view.cancel?.();
+  view.cancel = later(() => { view.cancel = undefined; drawBanner(view); });
+}
+
+/** The band: a sheen base, the art, and over them a ground plate that carries the title and the buttons (and is the whole band where the band is short). */
+function bannerBand(family: Banner, buttons: HTMLElement): BannerView {
+  const band = element('div', 'home-banner'), art = element('div', 'home-banner-art'), plate = element('div', 'home-banner-plate');
+  const view: BannerView = { band, art, family, key: '', resize: new ResizeObserver(() => scheduleBanner(view)) };
+  const reshuffle = control('home-reshuffle', 'New banner pattern');
+  reshuffle.title = 'New banner pattern';
+  reshuffle.innerHTML = reshuffleIcon;
+  reshuffle.onclick = () => { saveBannerSeed(reshuffled(bannerSeedNow(), localDay(new Date()), Math.random)); scheduleBanner(view); };
+  buttons.append(reshuffle);
+  plate.append(element('h1', '', 'Home'), buttons);
+  band.append(element('div', 'home-banner-sheen'), art, plate);
+  if (lastBanner) { view.canvas = bannerCopy(lastBanner.picture); view.key = lastBanner.key; art.append(view.canvas); }
+  return view;
+}
+
+/**
+ * Called when the theme or the BANNER choice changed. Returns false when the page has to be painted again (the band is
+ * there or gone); otherwise the band repaints itself in an idle moment.
+ */
+export function repaintBanner(banner: Banner): boolean {
+  const view = current?.banner;
+  if (!current || (banner === 'none') === Boolean(view)) return false;
+  if (view) { view.family = banner; scheduleBanner(view); }
+  return true;
+}
+
+const reshuffleIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 14 4 4-4 4"/><path d="m18 2 4 4-4 4"/><path d="M2 18h1.97a4 4 0 0 0 3.26-1.68L12 10l4.77-6.32A4 4 0 0 1 20.03 2H22"/><path d="M2 6h1.97a4 4 0 0 1 3.26 1.68l.62.83"/><path d="M22 18h-1.97a4 4 0 0 1-3.26-1.68l-.62-.83"/></svg>';
 
 /** The ‹ › buttons are there only while there is more to scroll to in their direction. */
 function syncShelf({ track, previous, next }: Shelf) {
@@ -404,7 +547,6 @@ export function renderHome(root: HTMLElement, sections: HomeSections, actions: H
   disposeHome();
   root.classList.add('is-home');
   root.replaceChildren();
-  const bar = element('div', 'home-bar');
   const openFile = control('home-file', undefined, 'Open files');
   openFile.id = 'empty-open';
   openFile.onclick = () => actions.openFile();
@@ -413,8 +555,13 @@ export function renderHome(root: HTMLElement, sections: HomeSections, actions: H
   browse.onclick = () => actions.viewAll('all');
   const buttons = element('div', 'home-actions');
   buttons.append(openFile, browse);
-  bar.append(element('h1', '', 'Home'), buttons);
-  root.append(bar);
+  const bannerView = actions.banner === 'none' ? undefined : bannerBand(actions.banner, buttons);
+  if (bannerView) root.append(bannerView.band);
+  else {
+    const bar = element('div', 'home-bar');
+    bar.append(element('h1', '', 'Home'), buttons);
+    root.append(bar);
+  }
   let chipRow: HTMLElement | undefined;
   if (actions.types.length) {
     const chips = chipRow = element('div', 'home-chips');
@@ -436,7 +583,7 @@ export function renderHome(root: HTMLElement, sections: HomeSections, actions: H
     empty.setAttribute('role', 'status');
     root.append(empty);
   }
-  const view = { shelves: [] as Shelf[], frame: 0, reduced: matchMedia('(prefers-reduced-motion: reduce)'), resize: new ResizeObserver(() => scheduleSync(view)) } as NonNullable<typeof current>;
+  const view = { shelves: [] as Shelf[], frame: 0, reduced: matchMedia('(prefers-reduced-motion: reduce)'), resize: new ResizeObserver(() => scheduleSync(view)), banner: bannerView } as NonNullable<typeof current>;
   const painter: Painter = { actions, appearance, view };
   if (sections.recent.length) {
     const { region } = section('recent', 'Recently opened');
@@ -453,6 +600,7 @@ export function renderHome(root: HTMLElement, sections: HomeSections, actions: H
   if (sections.favorites.length) root.append(shelf('favorites', 'Favorites', sections.favorites.map(item => documentCard(item, painter, item.format.toUpperCase())), { label: 'Open in library: Favorites', run: () => actions.viewAll('favorites') }, painter));
   if (sections.collections.length) root.append(shelf('collections', 'Collections', sections.collections.map(card => collectionCard(card, painter)), { label: 'Open in library: Collections', run: () => actions.viewAll('all') }, painter));
   current = view;
+  bannerView?.resize.observe(bannerView.band);
   if (chipRow) { view.chips = chipRow; view.resize.observe(chipRow); chipRow.addEventListener('scroll', () => scheduleSync(view), { passive: true }); }
   for (const { track } of view.shelves) { view.resize.observe(track); track.addEventListener('scroll', () => scheduleSync(view), { passive: true }); }
   scheduleSync(view);

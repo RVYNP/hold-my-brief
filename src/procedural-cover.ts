@@ -171,7 +171,8 @@ const makers: Record<CoverFamily, Maker> = {
 
 const bayer4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
 
-function bayer8(x: number, y: number): number {
+/** Threshold in (0, 1) of the 8 x 8 Bayer matrix at a pixel: (m + .5) / 64. */
+export function bayer8(x: number, y: number): number {
   let value = 0;
   for (let level = 0; level < 3; level++) value |= (((x ^ y) >> level & 1) << (5 - 2 * level)) | ((y >> level & 1) << (4 - 2 * level));
   return (value + .5) / 64;
