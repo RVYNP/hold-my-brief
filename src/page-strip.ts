@@ -13,8 +13,13 @@ import type { PageThumbnails, PreviewSink, PreviewView } from './types';
 
 /** Thumbnail height in CSS px. The strip's own height (`--page-strip-height`) adds its padding; the footer's lane lies below the strip, not in it. */
 export const THUMBNAIL_HEIGHT = 88;
-/** Bitmaps kept for thumbnails, a fraction of the page cache: a thumbnail is ~100 KB at 2x, so this holds the strip's window and then some. */
-export const PREVIEW_CACHE_BYTES = 8 * 1024 * 1024;
+/**
+ * Bitmaps kept for thumbnails, a fraction of the page cache. A thumbnail is 176 px tall at 2x, ~93 KB for an upright page, and that is
+ * ~1.3 KB per CSS px of strip width whatever the page's shape. The strip shows its width plus two items each side and looks ahead a
+ * screenful each side, so it holds about three widths: 16 MB covers a strip up to ~3900 px wide (a 2-page spread layout on a 4K screen).
+ * At the same 2x the old 8 MB stopped at ~1900 px, which a look-ahead screenful each side would have overrun on a full-HD window.
+ */
+export const PREVIEW_CACHE_BYTES = 16 * 1024 * 1024;
 /**
  * Reading-panel height (CSS px) below which the strip stays hidden. It is measured on the panel, which the strip
  * never resizes (the page area loses its height to the strip, the panel does not), so showing it cannot hide it again.
@@ -33,30 +38,54 @@ const GLIDE_VIEWPORTS = 1.5;
 /** How long (ms) a glide to the middle takes. */
 const GLIDE_MS = 220;
 
-/** Decoded bitmaps kept under a byte budget; the least recently used go first, and a hit counts as a use. */
+/** How firmly the cache holds a bitmap: not at all, as look-ahead the strip wants next, or as something the strip is showing. */
+export type Hold = 0 | 1 | 2;
+
+/**
+ * Decoded bitmaps kept under a byte budget; the least recently used go first, and a hit counts as a use. The strip
+ * says which keys it shows and which it looks ahead to: a bitmap is evicted only after every less held one, and a
+ * store can say how much it may evict (`reach`), so look-ahead can never push out what is on screen.
+ */
 export class BitmapCache<T extends { width: number; height: number }> {
   private readonly entries = new Map<string, T>();
   private total = 0;
+  private shown: ReadonlySet<string> = new Set();
+  private ahead: ReadonlySet<string> = new Set();
   constructor(private readonly limit: number) {}
   private static cost(bitmap: { width: number; height: number }) { return bitmap.width * bitmap.height * 4; }
   get bytes() { return this.total; }
+  /** Replaces what is held: `shown` keys outlast `ahead` keys, which outlast the rest. */
+  hold(shown: ReadonlySet<string>, ahead: ReadonlySet<string> = new Set()) { this.shown = shown; this.ahead = ahead; }
+  private held(key: string): Hold { return this.shown.has(key) ? 2 : this.ahead.has(key) ? 1 : 0; }
   get(key: string): T | undefined {
     const hit = this.entries.get(key);
     if (hit) { this.entries.delete(key); this.entries.set(key, hit); }
     return hit;
   }
-  set(key: string, bitmap: T) {
-    this.delete(key);
+  /** Whether `bitmap` would be stored, as `set` with the same `reach` decides it. */
+  fits(bitmap: { width: number; height: number }, reach: Hold = 2): boolean {
     const cost = BitmapCache.cost(bitmap);
-    if (cost > this.limit) return;
-    for (const oldest of this.entries.keys()) { if (this.total + cost <= this.limit) break; this.delete(oldest); }
+    if (cost > this.limit) return false;
+    let free = this.limit - this.total;
+    for (const [key, held] of this.entries) if (this.held(key) <= reach) free += BitmapCache.cost(held);
+    return cost <= free;
+  }
+  /** Stores `bitmap`, evicting least recently used first among the least held. Held more than `reach`, nothing is evicted for it and it is refused (`false`) if that leaves no room. */
+  set(key: string, bitmap: T, reach: Hold = 2): boolean {
+    this.delete(key);
+    if (!this.fits(bitmap, reach)) return false;
+    const cost = BitmapCache.cost(bitmap);
+    for (let hold = 0; hold <= reach && this.total + cost > this.limit; hold++) {
+      for (const oldest of this.entries.keys()) { if (this.total + cost <= this.limit) break; if (this.held(oldest) === hold) this.delete(oldest); }
+    }
     this.entries.set(key, bitmap); this.total += cost;
+    return true;
   }
   private delete(key: string) {
     const old = this.entries.get(key);
     if (old && this.entries.delete(key)) this.total -= BitmapCache.cost(old);
   }
-  clear() { this.entries.clear(); this.total = 0; }
+  clear() { this.entries.clear(); this.total = 0; this.shown = new Set(); this.ahead = new Set(); }
 }
 
 /**
@@ -100,6 +129,9 @@ export function createPageStrip(onError: (error: unknown) => void): PageStrip {
   const items = new Map<number, HTMLElement>();
   /** Thumbnail requests in flight, by page; aborted when the page leaves the drawn range. */
   const requests = new Map<number, AbortController>();
+  /** Look-ahead requests in flight, by page: the pages beside the view, which the adapter renders only while nothing else waits. */
+  const ahead = new Map<number, AbortController>();
+  let aheadStarted = false, ready = false, shown: number[] = [];
   let settleTimer: ReturnType<typeof setTimeout> | undefined;
 
   const itemId = (index: number) => `page-strip-item-${index}`;
@@ -164,7 +196,9 @@ export function createPageStrip(onError: (error: unknown) => void): PageStrip {
       const distance = Math.abs(itemLeft(lay, index) + itemWidth(lay, index) / 2 - middle);
       for (const page of itemPages(lay, index)) pages.push({ page, distance });
     }
-    const want = new Set(pages.map(entry => entry.page));
+    shown = pages.map(entry => entry.page); ready = true;
+    source.keep(shown);
+    const want = new Set(shown);
     for (const [page, controller] of requests) if (!want.has(page)) { controller.abort(); requests.delete(page); }
     for (const { page } of pages.sort((a, b) => a.distance - b.distance)) {
       if (requests.has(page)) continue;
@@ -177,8 +211,50 @@ export function createPageStrip(onError: (error: unknown) => void): PageStrip {
       void source.render(page, controller.signal).then(bitmap => {
         if (requests.get(page) === controller) requests.delete(page);
         if (bitmap && !controller.signal.aborted) paint(page, bitmap);
+        if (!controller.signal.aborted) lookAhead();
       });
     }
+    lookAhead();
+  }
+  /** Aborts every thumbnail request, the strip's own and look-ahead. */
+  function cancelThumbnails() {
+    for (const controller of requests.values()) controller.abort();
+    requests.clear(); cancelLookAhead();
+  }
+  function cancelLookAhead() {
+    for (const controller of ahead.values()) controller.abort();
+    ahead.clear(); aheadStarted = false; reportLookAhead();
+  }
+  /** `data-look-ahead` is `done` once the screenfuls beside the view have been rendered or found in the cache, `pending` until then. */
+  function reportLookAhead() { element.dataset.lookAhead = aheadStarted && !ahead.size ? 'done' : 'pending'; }
+  /**
+   * Once everything in view is drawn, asks for the next screenful each side of it, nearest first, at idle priority. The adapter
+   * renders those only while the page is settled and nothing else waits, never evicts a thumbnail in view for them, and any
+   * scroll, page turn or new request cancels them (`update`), so they cost the strip nothing it would have used.
+   */
+  function lookAhead() {
+    const lay = layout, source = view?.source, width = scroller.clientWidth;
+    if (!lay || !source || !width || !ready || aheadStarted || requests.size) return;
+    aheadStarted = true;
+    const middle = scroller.scrollLeft, beside: { page: number; distance: number }[] = [];
+    for (const side of [-1, 1]) {
+      const span = itemsInView(lay, middle + side * width, width);
+      for (let index = span?.first ?? 0; span && index <= span.last; index++) {
+        const distance = Math.abs(itemLeft(lay, index) + itemWidth(lay, index) / 2 - middle);
+        for (const page of itemPages(lay, index)) beside.push({ page, distance });
+      }
+    }
+    const pages = [...new Set(beside.sort((a, b) => a.distance - b.distance).map(entry => entry.page))].filter(page => !shown.includes(page));
+    source.keep(shown, pages);
+    for (const page of pages) {
+      if (source.cached(page)) continue;
+      const controller = new AbortController();
+      ahead.set(page, controller);
+      void source.render(page, controller.signal, 'idle').then(() => {
+        if (ahead.get(page) === controller) { ahead.delete(page); reportLookAhead(); }
+      });
+    }
+    reportLookAhead();
   }
   function draw(canvas: HTMLCanvasElement, bitmap: HTMLCanvasElement) {
     drawThumbnail(canvas, bitmap, layout?.page); canvas.dataset.drawn = '1';
@@ -190,6 +266,7 @@ export function createPageStrip(onError: (error: unknown) => void): PageStrip {
   /** Items draw at once; their thumbnails wait for the scroll to settle, so gliding past a page never fetches it. */
   function update(immediate = false) {
     sync();
+    cancelLookAhead(); ready = false; // The strip moved or changed: what it asks for now comes first, and look-ahead starts over once that is drawn.
     clearTimeout(settleTimer);
     if (immediate) requestThumbnails(); else settleTimer = setTimeout(requestThumbnails, SETTLE_MS);
   }
@@ -297,8 +374,7 @@ export function createPageStrip(onError: (error: unknown) => void): PageStrip {
       const key = `${next.revision}:${lay.count}:${lay.spread}:${lay.cover}:${lay.page}`, first = !view, rebuilt = view?.source !== next.source || key !== layoutKey;
       view = next; layout = lay; layoutKey = key;
       if (rebuilt) {
-        for (const controller of requests.values()) controller.abort();
-        requests.clear(); for (const item of items.values()) item.remove(); items.clear();
+        cancelThumbnails(); for (const item of items.values()) item.remove(); items.clear();
         pad = scroller.clientWidth / 2; track.style.width = `${spanWidth(lay) + scroller.clientWidth}px`;
       }
       const index = itemIndex(lay, next.pages[0]), moved = index !== current || rebuilt;
@@ -310,8 +386,7 @@ export function createPageStrip(onError: (error: unknown) => void): PageStrip {
   };
 
   function clear() {
-    for (const controller of requests.values()) controller.abort();
-    requests.clear(); clearTimeout(settleTimer); cancelAnimationFrame(glide);
+    view?.source.keep([]); cancelThumbnails(); clearTimeout(settleTimer); cancelAnimationFrame(glide);
     for (const item of items.values()) item.remove();
     items.clear(); view = undefined; layout = undefined; layoutKey = ''; active = undefined; centred = true;
     scroller.removeAttribute('aria-activedescendant'); scroller.scrollLeft = 0;
