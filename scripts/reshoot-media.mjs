@@ -334,7 +334,7 @@ if (want('shelf', 'intake')) {
   })]));
   const { ctx, page } = await open(browser, { viewport: { width: 1440, height: 900 } });
   await setInfoRail(page, true);
-  await page.getByRole('button', { name: 'Open library board' }).click();
+  await page.locator('#library-root').getByRole('button', { name: 'Library', exact: true }).click();
   await page.waitForSelector('#library-root.is-board');
   const addFiles = async paths => {
     await page.locator('#library-rail').getByRole('button', { name: 'Add files', exact: true }).click();
