@@ -15,7 +15,7 @@ import { appearanceSummary, createAppearanceSheet, paletteIcon } from './appeara
 import { createAssistantPanel } from './assistant-panel';
 import { DRAG_SLOP, Panner, type Offset } from './pan';
 import { MIN_SPREAD_WIDTH, pagesLabel, spreadPages } from './spread';
-import { assignShelfSlots, closeHome, fillHomePictures, homeSections, homeTypes, openedOrder, renderHome } from './home';
+import { assignShelfSlots, closeHome, fillHomePictures, homeSections, homeTypes, openedOrder, renderHome, repaintBanner } from './home';
 import { displayTitle } from './shelf';
 import { repaintCovers } from './cards';
 import { canThumbnail, createThumbnailStore } from './thumbnails';
@@ -33,6 +33,7 @@ import { attachOpenDrag } from './open-drag';
 import { createReadingControls } from './reading-controls';
 import { fillContents } from './contents';
 import { steppedFontSize } from './text-size';
+import { createWindowControls, wireWindowControls } from './window-controls';
 initAppearance();
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
@@ -59,9 +60,11 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <dialog id="shortcuts" aria-labelledby="shortcuts-title" tabindex="-1" autofocus><div class="dialog-head"><h2 id="shortcuts-title">Keyboard shortcuts</h2><button data-close aria-label="Close shortcuts">×</button></div><div id="shortcut-list"></div></dialog>
   <dialog id="delete-data"><h2>Delete saved reading data?</h2><p>This removes saved positions and reading settings. Your documents and recent-file list remain. The current position will be saved again when you navigate.</p><div class="dialog-actions"><button data-close>Cancel</button><button id="confirm-delete" class="danger">Delete reading data</button></div></dialog>
   <input id="file-input" type="file" accept=".pdf,.epub,.md,.markdown,.txt,.png,.jpg,.jpeg,.webp,.gif,.avif,.bmp" hidden>`;
-// The window frame is drawn by the reader on both desktop systems. macOS keeps its own traffic lights
-// over the toolbar's left end (titleBarStyle Overlay); Windows loses its native caption (see
-// windows::restore) and gets minimize, maximize and close buttons at the toolbar's right end.
+const windowControls = createWindowControls();
+document.querySelector('.toolbar')!.prepend(windowControls);
+// The window frame is drawn by the reader on both desktop systems. macOS hides its own traffic lights and the reader
+// draws quiet ones at the toolbar's left end (src/window-controls.ts, windows::hide_native_buttons); Windows loses its
+// native caption (see windows::restore) and gets minimize, maximize and close buttons at the toolbar's right end.
 const platform = !desktop ? undefined : navigator.userAgent.includes('Mac') ? 'mac' : navigator.userAgent.includes('Windows') ? 'windows' : undefined;
 if (platform) document.documentElement.classList.add(`${platform}-titlebar`);
 
@@ -1065,6 +1068,7 @@ function paintHome() {
     viewCollection: id => library.browse({ collection: id }),
     picture: { can: canThumbnail, ratio: path => homeThumbs.ratio(path), peek: path => homeThumbs.peek(path) },
     types,
+    banner: appearance().banner,
     format: homeFormat,
     selectFormat: value => { homeFormat = value; paintHome(); empty.querySelector<HTMLElement>(`.home-chip[data-type="${value}"]`)?.focus(); },
     ...(desktop ? { remove: (path: string) => { void native('remove_recent', { path }).then(() => { homeRecents = homeRecents.filter(item => item.path !== path); paintHome(); }).catch(fail); } } : {}),
@@ -1078,9 +1082,12 @@ function paintHome() {
     ratio: path => homeThumbs.ratio(path),
   }, () => generation === homePicture);
 }
-onAppearanceChange(() => {
+onAppearanceChange(next => {
   const home = $('empty');
-  if (home.classList.contains('is-home')) repaintCovers(home, scheme());
+  if (!home.classList.contains('is-home')) return;
+  repaintCovers(home, scheme());
+  // The banner repaints itself; choosing none or a pattern after the other changes the page's shape, so Home is painted again.
+  if (!repaintBanner(next.banner)) paintHome();
 });
 async function initialize() {
   const saved = await state(); updateWindow(saved.window); if (saved.warning) notify(saved.warning);
@@ -1129,7 +1136,15 @@ async function initialize() {
     // The native focus event, not the page's blur: clicking into an EPUB frame blurs the page too.
     await appWindow.onFocusChanged(({ payload: focused }) => document.documentElement.classList.toggle('window-inactive', !focused));
     if (platform === 'mac') {
-      const syncFullscreen = async () => document.documentElement.classList.toggle('window-fullscreen', await appWindow.isFullscreen());
+      wireWindowControls(windowControls, appWindow, fail);
+      // AppKit can bring its own buttons back as the window enters or leaves full screen; the page hears of that after the native
+      // resize event does, so it asks the native side to hide them again once more.
+      let wasFullscreen = false;
+      const syncFullscreen = async () => {
+        const fullscreen = await appWindow.isFullscreen();
+        document.documentElement.classList.toggle('window-fullscreen', fullscreen);
+        if (fullscreen !== wasFullscreen) { wasFullscreen = fullscreen; void native('reapply_window_chrome').catch(fail); }
+      };
       await appWindow.onResized(() => void syncFullscreen());
       await syncFullscreen();
     }

@@ -1,5 +1,5 @@
 import { FONT_MAX, FONT_MIN } from './text-size';
-import { appearance, applyAppearance, glows, glowSchemes, isGlow, palettes, readingColors, rgbToHex, saveAppearance, schemeOf, type Appearance, type AppearanceMode, type PageTone, type Palette } from './theme';
+import { appearance, applyAppearance, glows, glowSchemes, isGlow, palettes, readingColors, rgbToHex, saveAppearance, schemeOf, type Appearance, type AppearanceMode, type Banner, type PageTone, type Palette } from './theme';
 
 const icon = (size: number, body: string) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 export const paletteIcon = icon(14, '<circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.84-.44-1.13-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.67h2c3.05 0 5.55-2.5 5.55-5.55C21.97 6.01 17.46 2 12 2z"/>');
@@ -12,6 +12,7 @@ const modes: [AppearanceMode, string, string][] = [
 /** Accent presets offered beside the theme's own accent; any other color is a custom accent. */
 const presets: [string, string][] = [['Acid', '#e13a3a'], ['Iris', '#a86af4'], ['Blue', '#3d6fff'], ['Teal', '#2b8a84'], ['Rose', '#c2456b'], ['Moss', '#5f8a3a'], ['Amber', '#c27a1a']];
 const tones: [PageTone, string][] = [['theme', 'Match theme'], ['white', 'White'], ['sepia', 'Sepia'], ['dim', 'Dim']];
+const bannerChoices: [Banner, string][] = [['flow', 'Flow'], ['arcs', 'Arcs'], ['stripes', 'Stripes'], ['contours', 'Contours'], ['truchet', 'Truchet'], ['none', 'None']];
 const spacings: [number, string][] = [[1.4, 'Tight'], [1.65, 'Normal'], [1.9, 'Relaxed'], [2.2, 'Loose']];
 const margins: [number, string][] = [[12, 'Narrow'], [24, 'Medium'], [40, 'Wide']];
 const restingHint = 'Hover to preview, click to keep.';
@@ -76,6 +77,8 @@ export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextContr
       </div></div>
     <div class="appearance-row"><span class="sheet-label" id="appearance-page-label">PAGE</span>
       <div class="choices" role="radiogroup" aria-labelledby="appearance-page-label">${tones.map(([tone, label]) => `<button role="radio" data-tone="${tone}">${label}</button>`).join('')}</div></div>
+    <div class="appearance-row"><span class="sheet-label" id="appearance-banner-label">BANNER</span>
+      <div class="choices" role="radiogroup" aria-labelledby="appearance-banner-label">${bannerChoices.map(([banner, label]) => `<button role="radio" data-banner="${banner}">${label}</button>`).join('')}</div></div>
     <hr class="appearance-rule">
     <div class="appearance-text">
       <div class="appearance-preview" aria-hidden="true">${previewCopy}</div>
@@ -95,6 +98,7 @@ export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextContr
   const swatches = dialog.querySelector<HTMLElement>('.swatches')!, themeSwatch = dialog.querySelector<HTMLElement>('.swatch-theme')!;
   const custom = dialog.querySelector<HTMLButtonElement>('.swatch-custom')!, picker = dialog.querySelector<HTMLInputElement>('.swatch-input')!;
   const toneGroup = dialog.querySelector<HTMLElement>('[aria-labelledby=appearance-page-label]')!;
+  const bannerGroup = dialog.querySelector<HTMLElement>('[aria-labelledby=appearance-banner-label]')!;
   const textSection = dialog.querySelector<HTMLElement>('.appearance-text')!, textNote = dialog.querySelector<HTMLElement>('.appearance-note')!, previewBox = dialog.querySelector<HTMLElement>('.appearance-preview')!;
   const sizeValue = dialog.querySelector<HTMLOutputElement>('.stepper-value')!;
   const spacingGroup = dialog.querySelector<HTMLElement>('[aria-labelledby=appearance-spacing-label]')!, marginGroup = dialog.querySelector<HTMLElement>('[aria-labelledby=appearance-margin-label]')!;
@@ -114,6 +118,7 @@ export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextContr
     custom.style.setProperty('--swatch', kept.accent ?? 'transparent');
     custom.setAttribute('aria-label', preset ? 'Custom accent color…' : `Custom accent ${kept.accent}`);
     check(toneGroup, item => item.dataset.tone === kept.page);
+    check(bannerGroup, item => item.dataset.banner === kept.banner);
     // The line under the swatches names the kept theme; while another is previewed it names that one and says how to get back. A glow theme keeps one mode, so at rest it says so.
     const name = document.createElement('span'); name.className = 'appearance-name'; name.textContent = names[shown.palette];
     hint.toggleAttribute('data-previewing', previewing);
@@ -150,10 +155,11 @@ export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextContr
   }
   function restore() { if (appearance() !== kept) { applyAppearance(kept); render(); } }
 
-  for (const group of [modeGroup, swatches, toneGroup, spacingGroup, marginGroup, wrapGroup]) radioGroup(group, true);
+  for (const group of [modeGroup, swatches, toneGroup, bannerGroup, spacingGroup, marginGroup, wrapGroup]) radioGroup(group, true);
   for (const row of themeRows) radioGroup(row, false);
   modeGroup.addEventListener('click', event => { const mode = (event.target as Element).closest<HTMLElement>('[data-mode]')?.dataset.mode as AppearanceMode | undefined; if (mode) keep({ mode }); });
   toneGroup.addEventListener('click', event => { const page = (event.target as Element).closest<HTMLElement>('[data-tone]')?.dataset.tone as PageTone | undefined; if (page) keep({ page }); });
+  bannerGroup.addEventListener('click', event => { const banner = (event.target as Element).closest<HTMLElement>('[data-banner]')?.dataset.banner as Banner | undefined; if (banner) keep({ banner }); });
   spacingGroup.addEventListener('click', event => { const value = (event.target as Element).closest<HTMLElement>('[data-spacing]')?.dataset.spacing; if (value) editText({ lineHeight: Number(value) }); });
   marginGroup.addEventListener('click', event => { const value = (event.target as Element).closest<HTMLElement>('[data-margin]')?.dataset.margin; if (value) editText({ margin: Number(value) }); });
   wrapGroup.addEventListener('click', event => { const value = (event.target as Element).closest<HTMLElement>('[data-wrap]')?.dataset.wrap; if (value) editText({ wrap: value === 'true' }); });
