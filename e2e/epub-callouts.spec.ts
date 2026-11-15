@@ -52,6 +52,12 @@ const measure = (page: Page) => page.evaluate(() => {
 });
 
 const named = (m: Awaited<ReturnType<typeof measure>>, name: string) => m.boxes.find(box => box.name === name)!;
+/** The computed background of a text-free rule: it holds no text, so no theme may map it. */
+const ruleBackground = (page: Page, selector: string) => page.evaluate(selector => {
+  const view = document.querySelector('.reader-host:not(.staging):not(.tab-hidden) foliate-view') as unknown as Frame;
+  const doc = view.renderer.getContents()[0].doc;
+  return doc.defaultView!.getComputedStyle(doc.querySelector(selector)!).backgroundColor;
+}, selector);
 const luminanceOf = ([r, g, b]: number[]) => [r, g, b].map(c => c / 255).map(c => c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4).reduce((sum, c, i) => sum + c * [0.2126, 0.7152, 0.0722][i], 0);
 
 for (const theme of themes) for (const flow of ['pages', 'scroll'] as const) {
@@ -66,6 +72,7 @@ for (const theme of themes) for (const flow of ['pages', 'scroll'] as const) {
       await page.waitForTimeout(400);
       await page.screenshot({ path: `${shots}/${theme.name.toLowerCase().replace(' ', '-')}-${flow}.png` });
     }
+    expect(await ruleBackground(page, 'hr.rule'), 'a text-free rule keeps the publisher colour in every theme').toBe('rgb(204, 204, 204)');
     expect(m.boxes.map(box => box.name)).toEqual(['div.note', 'div.warning', 'th.', 'th.', 'aside.']);
     for (const box of m.boxes) for (const text of box.texts) expect(text.ratio, `${box.name} ${text.name}`).toBeGreaterThanOrEqual(4.5);
     if (theme.mode === 'dark') {
@@ -97,4 +104,5 @@ test('a publisher-dark callout on a light page is mapped to a light box and its 
   expect(night.texts.length).toBeGreaterThan(0);
   for (const text of night.texts) expect(text.ratio).toBeGreaterThanOrEqual(4.5);
   expect(night.rule, 'its rule shows').toBeGreaterThanOrEqual(3);
+  expect(await ruleBackground(page, 'hr.dark-rule'), 'a text-free dark rule keeps the publisher colour on a light page').toBe('rgb(51, 51, 51)');
 });
