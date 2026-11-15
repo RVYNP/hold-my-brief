@@ -156,9 +156,9 @@ export class EpubAdapter implements ReaderAdapter {
   private position: Position = { label: 'Opening EPUB…', fraction: 0, locator: { kind: 'epub' }, scrub: { current: 0, total: 100, unit: 'percent' } };
   private explicitEnd = false;
   private unsubscribe?: () => void;
-  /** Inline colors replaced to keep publication text legible on a dark page, restored on light pages. */
   /** The code sheet over the reading surface, while one is open. */
   private sheet?: Sheet;
+  /** Inline colors replaced to keep publication text legible on a dark page, restored on light pages. */
   private lifted = new WeakMap<Document, [element: HTMLElement, property: string, value: string, priority: string][]>();
   private styles = '';
 
