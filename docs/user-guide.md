@@ -114,9 +114,9 @@ reader and everything returns.
 
 Open the menu and choose **Appearance and text…** to open the Appearance panel at the bottom of the
 window. Colour and text are on one page, top to bottom: **Mode** is at the top, beside the title; every other
-setting is a labelled row below it. Themes, glows and accents are plain color discs with no names under them;
-hover over one (or focus it) and its name is on the line beneath the glows, and it is also the disc's tooltip and
-accessible name. One ring marks the kept choice in all three rows.
+setting is a labelled row below it. Themes, glows and accents are plain color discs with no names under them.
+Hover over or focus a theme or glow disc and its name is on the line beneath the glows; it is also that disc's
+tooltip and accessible name. One ring marks the kept choice in all three rows.
 
 - **Mode:** System (default; follows the operating system as it changes), Light or Dark.
 - **Theme:** Brief (default), Lilac, Birch, Graphite, Arctic, and two pinks: Blossom (soft blush with a
