@@ -860,7 +860,8 @@ function applyLayout() {
     divider.hidden = workspace.classList.contains('is-single');
     paintDivider(divider, ratio);
   } else {
-    delete workspace.dataset.active; workspace.classList.remove('is-single'); workspace.style.removeProperty('--ratio'); divider.hidden = true;
+    // `classList.remove` writes the attribute even when the class is absent, which the class observer would see: this runs on every layout pass, so it must change nothing it does not have to.
+    delete workspace.dataset.active; workspace.classList.toggle('is-single', false); workspace.style.removeProperty('--ratio'); divider.hidden = true;
   }
   placeFooter();
 }
