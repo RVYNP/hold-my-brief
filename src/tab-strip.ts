@@ -19,6 +19,8 @@ export type TabHandlers = {
   newTab: () => void;
   /** A dragged tab was dropped; `to` is its index among the tabs. */
   move: (path: string, to: number) => void;
+  /** The context menu of a tab was asked for (right-click, the menu key, Shift+F10), at `at` or, from the keyboard, beside `anchor`. */
+  menu: (path: string, anchor: HTMLElement, at: { x: number; y: number } | undefined) => void;
 };
 
 /** A press that travels less than this (CSS px) is a click, not a drag. */
@@ -168,10 +170,17 @@ export function createTabStrip(elements: { strip: HTMLElement; home?: HTMLElemen
     const tab = (event.target as Element).closest<HTMLElement>('.tab');
     if (event.button === 1 && tab) { event.preventDefault(); handlers.close(tab.dataset.path!); }
   });
+  list.addEventListener('contextmenu', event => {
+    const tab = (event.target as Element).closest<HTMLElement>('.tab');
+    if (!tab) return;
+    event.preventDefault();
+    handlers.menu(tab.dataset.path!, tab, event.clientX || event.clientY ? { x: event.clientX, y: event.clientY } : undefined);
+  });
   list.addEventListener('keydown', event => {
     const tab = (event.target as Element).closest<HTMLElement>('.tab');
     if (!tab || event.target !== tab) return;
     if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); handlers.select(tab.dataset.path!); }
+    else if (event.key === 'ContextMenu' || event.key === 'F10' && event.shiftKey) { event.preventDefault(); handlers.menu(tab.dataset.path!, tab, undefined); }
     else if (event.key === 'Delete') { event.preventDefault(); handlers.close(tab.dataset.path!); }
     else if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
       const next = (event.key === 'ArrowRight' ? tab.nextElementSibling : tab.previousElementSibling) as HTMLElement | null;
@@ -237,7 +246,10 @@ export function createTabStrip(elements: { strip: HTMLElement; home?: HTMLElemen
   }
   function fillMenu() {
     const rows: HTMLElement[] = home ? [row('Home', undefined, homeActive, icons.home, () => handlers.select(undefined))] : [];
-    for (const view of views) rows.push(row(view.title, view.library ? undefined : [view.format.toUpperCase(), view.progress].filter(Boolean).join(' · '), view.active, view.library ? icons.library : icons.document, () => handlers.select(view.path), () => handlers.close(view.path), view.hint, view.library ? view.title : `${view.title}\n${view.path}`));
+    for (const view of views) {
+      const item = row(view.title, view.library ? undefined : [view.format.toUpperCase(), view.progress].filter(Boolean).join(' · '), view.active, view.library ? icons.library : icons.document, () => handlers.select(view.path), () => handlers.close(view.path), view.hint, view.library ? view.title : `${view.title}\n${view.path}`);
+      item.dataset.path = view.path; rows.push(item);
+    }
     const separator = document.createElement('div'); separator.className = 'tab-menu-separator'; separator.setAttribute('role', 'separator');
     const fresh = row('New tab…', undefined, false, icons.plus, () => handlers.newTab());
     fresh.append(text('kbd', 'tab-menu-key', newTabKeys));
@@ -260,9 +272,17 @@ export function createTabStrip(elements: { strip: HTMLElement; home?: HTMLElemen
   }
   document.addEventListener('pointerdown', event => { if (!menu.hidden && !menu.contains(event.target as Node) && !anchor?.contains(event.target as Node)) closeMenu(); }, true);
   window.addEventListener('resize', () => closeMenu());
+  /** A row's own menu: this list closes, and the tab's menu opens at the pointer or beside the button that opened this list. */
+  function rowMenu(item: HTMLElement | null, at: { x: number; y: number } | undefined) {
+    if (!item?.dataset.path) return;
+    const owner = anchor ?? overflow;
+    closeMenu(); handlers.menu(item.dataset.path, owner, at);
+  }
+  menu.addEventListener('contextmenu', event => { event.preventDefault(); rowMenu((event.target as Element).closest<HTMLElement>('.tab-menu-row'), event.clientX || event.clientY ? { x: event.clientX, y: event.clientY } : undefined); });
   menu.addEventListener('keydown', event => {
     const items = [...menu.querySelectorAll<HTMLElement>('.tab-menu-row')], at = items.indexOf(document.activeElement as HTMLElement);
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); const back = anchor; closeMenu(); back?.focus(); }
+    else if (event.key === 'ContextMenu' || event.key === 'F10' && event.shiftKey) { event.preventDefault(); rowMenu(items[at] ?? null, undefined); }
     else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); items[(at + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus(); }
     else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); (document.activeElement as HTMLElement).click(); }
   });

@@ -128,10 +128,11 @@
 .library-grid .library-tile-scrim { display: none; }
 /* An EPUB's generated cover prints its own title; its caption (space is reserved) appears only once the cover image has replaced it. */
 .library-tile.is-cover .library-tile-media:not(.is-loaded) ~ .library-tile-caption { visibility: hidden; }
-.library-item-menu { position: fixed; z-index: 40; display: flex; flex-direction: column; min-width: 150px; padding: 4px; border: 1px solid var(--border); border-radius: 7px; background: var(--card); box-shadow: var(--shadow-popover); }
-.library-item-menu[hidden] { display: none; }
+.library-item-menu, .context-menu { position: fixed; z-index: 40; display: flex; flex-direction: column; min-width: 150px; padding: 4px; border: 1px solid var(--border); border-radius: 7px; background: var(--card); box-shadow: var(--shadow-popover); }
+.library-item-menu[hidden], .context-menu[hidden] { display: none; }
 .library-scope-menu .library-menu-heading { margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--hairline); }
-.library-item-menu button { padding: 6px 10px; text-align: left; }
+.library-item-menu button, .context-menu button { padding: 6px 10px; text-align: left; }
+.library-item-menu button:disabled, .context-menu button:disabled { color: var(--muted); opacity: .6; cursor: default; }
 /* The marker after the last document rendered; reaching it renders the next batch (see `sentinelObserver` in library.ts). */
 .library-sentinel { height: 1px; pointer-events: none; }
 .library-documents { flex: 1 1 0; min-height: 78px; overflow-y: auto; overflow-x: hidden; padding: 2px; margin: -2px; scrollbar-width: thin; scrollbar-gutter: stable; }
@@ -431,5 +432,5 @@
 /* The rail's right-click menu: one item, fixed at the pointer. */
 .icon-rail-menu { position: fixed; z-index: 40; display: flex; flex-direction: column; min-width: 150px; padding: 4px; border: 1px solid var(--border); border-radius: 7px; background: var(--card); box-shadow: var(--shadow-popover); }
 /* The sheen's top hairline, as for the other popovers (style.css). */
-.library-item-menu, .icon-rail-menu { background-image: var(--sheen-edge); background-size: 100% 1px; background-position: top; background-repeat: no-repeat; }
+.library-item-menu, .context-menu, .icon-rail-menu { background-image: var(--sheen-edge); background-size: 100% 1px; background-position: top; background-repeat: no-repeat; }
 .icon-rail-menu button { padding: 6px 10px; text-align: left; font-size: 12px; }

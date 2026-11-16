@@ -6,6 +6,7 @@ import { clampLibraryWidth, defaultLibraryView, libraryGrid, libraryGridColumns,
 import { canThumbnail, createThumbnailStore, type Thumbnail } from './thumbnails';
 import { colourHex, colourMatches, colourNames, colourSwatches, nameColour, parseColourName, type ColourName } from './colour';
 import { shortcutFor } from './commands';
+import { createContextMenu, placeMenu, type MenuEntry } from './context-menu';
 import { buildLibraryTree, filterTree, type LibraryTree, type TreeNode } from './library-tree';
 import { createTreeView } from './library-tree-view';
 import type { RailView } from './icon-rail';
@@ -27,6 +28,10 @@ type Callbacks = {
   /** Gives a document a tab beside the one showing without showing it (⌘/Ctrl-click in the tree). */
   openBackground: (doc: LibraryDocument) => void;
   error: (error: unknown) => void;
+  /** Opens a document in the right pane, splitting the window first when it is not split (the tree's and the list's context menu). */
+  openSplit: (doc: LibraryDocument) => void;
+  /** Why `openSplit` cannot run for `doc` now (no other document open, no room), or undefined. */
+  splitReason: (doc: LibraryDocument) => string | undefined;
   /** The library changed (an edit, a refresh): the opening page shows part of it too. */
   changed?: (library: Library, progress: Readonly<Record<string, Progress>>) => void;
   /** Reading progress changed since it was last shown (the drawer was opened after some reading): Home and the rail show it too. */
@@ -150,7 +155,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   let collectionMatches = new Map<string, Set<string>>();
   let searchable = new Map<string, string>();
   const busyDisabled = new Map<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLButtonElement, boolean>();
-  let view: LibraryView = 'list'; let menuAnchor: HTMLElement | undefined;
+  let view: LibraryView = 'list';
   // The sort, the availability and the file type are what the Recent menu and the chips set (the Library tab's controls).
   let sortMode: 'recent' | 'name' = 'recent'; let availabilityFilter = ''; let fileType = ''; let chromeMenu: { menu: HTMLElement; anchor: HTMLElement } | undefined;
   // The Library tab's page is what shows documents; `pageOpen` is true while that tab is in front. The panel is only the tree.
@@ -203,7 +208,13 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   const viewButton = button('', undefined, 'view-menu'); viewButton.className = 'library-view-button'; viewButton.setAttribute('aria-haspopup', 'menu'); viewButton.setAttribute('aria-expanded', 'false');
   const viewLabel = element('span', 'library-view-label'); viewButton.append(viewLabel); viewButton.insertAdjacentHTML('beforeend', menuIcon);
   searchRow.append(searchField, colourSelect, viewToggle, viewButton);
-  const itemMenu = element('div', 'library-item-menu'); itemMenu.setAttribute('role', 'menu'); itemMenu.hidden = true;
+  // The context menu of a row, tile or tree row: what can be done with a document, a folder or a collection. Its component is shared with the tabs and Home.
+  const itemMenu = createContextMenu({
+    className: 'library-item-menu',
+    opened: anchor => anchor.closest('.library-document, .tree-row')?.classList.add('is-menu-open'),
+    closed: anchor => anchor.closest('.library-document, .tree-row')?.classList.remove('is-menu-open'),
+    blocked: () => busy || Boolean(modal?.open),
+  });
   // One menu: Sort by, Show and, for the grid, Size (the list/grid toggle is beside it).
   const viewMenu = element('div', 'library-item-menu library-view-menu'); viewMenu.setAttribute('role', 'menu'); viewMenu.hidden = true;
   // What the title's menu offers: the scopes the panel's tree has no row for.
@@ -228,7 +239,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   const pageMain = element('div', 'library-page-main'); pageMain.append(scope, searchRow, documents);
   const page = element('section', 'library-page'); page.id = 'library-page'; page.hidden = true; page.setAttribute('aria-label', 'Library'); page.append(pageMain, detail);
   panel.replaceChildren(header, treeFilterRow, treeRoot, treeEmpty, fileInput);
-  (layout ?? root).append(itemMenu, viewMenu, scopeMenu); workspace?.append(page);
+  (layout ?? root).append(itemMenu.element, viewMenu, scopeMenu); workspace?.append(page);
   const resizeHandle = element('div', 'library-resize'); resizeHandle.tabIndex = 0;
   for (const [name, value] of [['role', 'separator'], ['aria-orientation', 'vertical'], ['aria-label', 'Resize library'], ['aria-controls', root.id]]) resizeHandle.setAttribute(name, value);
   const grip = element('span', 'library-resize-grip'); grip.append(element('span'), element('span'), element('span'));
@@ -302,7 +313,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     root.hidden = !visible; layout?.classList.toggle('library-open', visible); toggleButton?.setAttribute('aria-expanded', String(visible));
     if (workspace) workspace.inert = visible && !wide.matches;
     if (visible && loaded) void refreshProgress();
-    if (!visible) { closeItemMenu(false); closeChromeMenu(false); }
+    if (!visible) { itemMenu.close(false); closeChromeMenu(false); }
     callbacks.openChanged?.(visible);
   }
   /** Where focus goes when the panel closes: the icon that opened it, or the toolbar's button in a compact window. */
@@ -320,7 +331,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   backdrop.onclick = close.onclick = () => { if (!busy) setVisible(false); };
   wide.addEventListener('change', () => { const hadFocus = root.contains(document.activeElement); visible = modal?.open ? true : preference(); applyVisibility(); if (!visible && hadFocus) focusDoor(); });
   root.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && (!itemMenu.hidden || chromeMenu)) { event.preventDefault(); event.stopPropagation(); if (!itemMenu.hidden) closeItemMenu(); else closeChromeMenu(); return; }
+    if (event.key === 'Escape' && (itemMenu.isOpen() || chromeMenu)) { event.preventDefault(); event.stopPropagation(); if (itemMenu.isOpen()) itemMenu.close(); else closeChromeMenu(); return; }
     // In the filter field Escape clears what was typed; with nothing typed it closes the panel like anywhere else.
     if (event.key === 'Escape' && event.target === treeFilter && !modal?.open && treeFilter.value) { event.preventDefault(); event.stopPropagation(); setTreeQuery(''); return; }
     if (event.key === 'Escape' && !modal?.open) { event.preventDefault(); event.stopPropagation(); if (!busy) setVisible(false); }
@@ -639,7 +650,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   /** The Library tab comes to the front or goes behind another tab: its page is drawn afresh as it comes up (the library may have changed while it was away) and its thumbnail work stops when it goes. */
   function showPage(open: boolean) {
     if (open === pageOpen) return;
-    closeItemMenu(false); closeChromeMenu(false);
+    itemMenu.close(false); closeChromeMenu(false);
     if (!open) { savedScroll = documents.scrollTop; pageOpen = false; page.hidden = true; clearThumbnails(); }
     else { pageOpen = true; page.hidden = false; thumbs.retryFailed(); for (const media of documents.querySelectorAll('.is-unavailable')) media.classList.remove('is-unavailable'); renderDocuments(savedScroll); }
     paintTree(); updateAddTitle();
@@ -687,34 +698,24 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     }
   }
 
-  // The context menu of a row, tile or tree row: what can be done with a document, a folder or a collection.
-  function closeItemMenu(refocus = true) {
-    if (itemMenu.hidden) return; itemMenu.hidden = true; const anchor = menuAnchor; menuAnchor = undefined;
-    anchor?.closest('.library-document, .tree-row')?.classList.remove('is-menu-open'); if (anchor?.matches('button')) anchor.setAttribute('aria-expanded', 'false');
-    if (refocus && anchor?.isConnected) anchor.focus();
-  }
-  function showItemMenu(entries: [string, () => void][], anchor: HTMLElement, at?: { x: number; y: number }) {
-    if (busy || modal?.open) return; if (!at && !itemMenu.hidden && menuAnchor === anchor) { closeItemMenu(); return; }
-    closeItemMenu(false); closeChromeMenu(false); itemMenu.replaceChildren();
-    for (const [label, run] of entries) { const item = button(label); item.setAttribute('role', 'menuitem'); item.onclick = () => { closeItemMenu(false); run(); }; itemMenu.append(item); }
-    menuAnchor = anchor; if (anchor.matches('button')) anchor.setAttribute('aria-expanded', 'true'); anchor.closest('.library-document, .tree-row')?.classList.add('is-menu-open'); itemMenu.hidden = false;
-    if (at) placeMenuAt(itemMenu, at.x, at.y); else placeMenu(itemMenu, anchor);
-    itemMenu.querySelector<HTMLElement>('button')?.focus();
+  function showItemMenu(entries: readonly MenuEntry[], anchor: HTMLElement, at?: { x: number; y: number }) {
+    if (busy || modal?.open) return;
+    closeChromeMenu(false); itemMenu.show(entries, anchor, at);
   }
   const toggleFavorite = (doc: LibraryDocument) => void mutate(() => editLibrary({ action: 'updateDocument', path: doc.path, collectionIds: doc.collectionIds, favorite: !doc.favorite, tags: doc.tags, notes: doc.notes }));
   function openItemMenu(doc: LibraryDocument, anchor: HTMLElement, at?: { x: number; y: number }) {
-    const entries: [string, () => void][] = [['Open in new tab', () => callbacks.openBackground(doc)], [doc.favorite ? 'Remove from favorites' : 'Add to favorites', () => toggleFavorite(doc)], ['Details', () => referenceDetails(doc, anchor)], ['Organize…', () => organize(doc, anchor)], ['Remove from library…', () => removeReference(doc, anchor)]];
-    if (hasCover(doc) && !thumbs.peek(doc.path)) { entries.push(['New cover pattern', () => void rerollCovers([doc.path])]); if (doc.coverSeed !== undefined) entries.push(['Reset cover', () => void rerollCovers([doc.path], true)]); }
-    if (desktop) entries.push(['Locate original…', () => locateOriginal(doc)]);
+    const entries: MenuEntry[] = [{ label: 'Open in new tab', run: () => callbacks.openBackground(doc) }, { label: 'Open in split right', run: () => callbacks.openSplit(doc), unavailable: callbacks.splitReason(doc) }, { label: doc.favorite ? 'Remove from favorites' : 'Add to favorites', run: () => toggleFavorite(doc) }, { label: 'Details', run: () => referenceDetails(doc, anchor) }, { label: 'Organize…', run: () => organize(doc, anchor) }, { label: 'Remove from library…', run: () => removeReference(doc, anchor) }];
+    if (hasCover(doc) && !thumbs.peek(doc.path)) { entries.push({ label: 'New cover pattern', run: () => void rerollCovers([doc.path]) }); if (doc.coverSeed !== undefined) entries.push({ label: 'Reset cover', run: () => void rerollCovers([doc.path], true) }); }
+    if (desktop) entries.push({ label: 'Locate original…', run: () => locateOriginal(doc) });
     showItemMenu(entries, anchor, at);
   }
   function openNodeMenu(node: TreeNode, anchor: HTMLElement, at?: { x: number; y: number }) {
-    const entries: [string, () => void][] = [];
-    if (node.kind === 'section') entries.push(['New collection…', () => collectionForm(anchor)]);
+    const entries: MenuEntry[] = [];
+    if (node.kind === 'section') entries.push({ label: 'New collection…', run: () => collectionForm(anchor) });
     const collection = node.scope?.kind === 'collection' ? library.collections.find(item => item.id === (node.scope as { id: string }).id) : undefined;
-    if (collection && !collection.sourceId) entries.push(['Edit collection…', () => collectionForm(anchor, collection)]);
+    if (collection && !collection.sourceId) entries.push({ label: 'Edit collection…', run: () => collectionForm(anchor, collection) });
     const target = node.scope;
-    if (target) entries.push(['Open in Library tab', () => openScope(target.kind === 'folder' ? { kind: 'folder', id: target.rootId, path: target.path } : { kind: 'collection', id: target.id })]);
+    if (target) entries.push({ label: 'Open in Library tab', run: () => openScope(target.kind === 'folder' ? { kind: 'folder', id: target.rootId, path: target.path } : { kind: 'collection', id: target.id }) });
     if (entries.length) showItemMenu(entries, anchor, at);
   }
   function removeReference(doc: LibraryDocument, trigger: HTMLElement) {
@@ -722,17 +723,6 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     view.content.append(element('p', 'library-dialog-document', docLabel(doc)), element('p', 'library-dialog-help', 'Remove only this library entry? The original file and saved reading position will not be deleted. Re-indexing its folder may add it again.'));
     const confirm = button('Remove entry'); confirm.className = 'danger'; confirm.onclick = () => void mutate(() => editLibrary({ action: 'removeDocument', path: doc.path }), () => view.dialog.close());
     view.actions.append(confirm); view.dialog.showModal();
-  }
-  /** Puts `menu` (already shown, and fixed to the window) under `anchor`, its right edge (or its left, for `align` left) on the anchor's, or above it when it would run past the window. */
-  function placeMenu(menu: HTMLElement, anchor: HTMLElement, align: 'left' | 'right' = 'right') {
-    const at = anchor.getBoundingClientRect(), below = at.bottom + 2;
-    menu.style.left = `${Math.max(4, Math.min(align === 'right' ? at.right - menu.offsetWidth : at.left, window.innerWidth - menu.offsetWidth - 4))}px`;
-    menu.style.top = `${below + menu.offsetHeight > window.innerHeight - 4 ? Math.max(4, at.top - menu.offsetHeight - 2) : below}px`;
-  }
-  /** Puts `menu` (already shown) at the window point (x, y), kept inside the window. */
-  function placeMenuAt(menu: HTMLElement, x: number, y: number) {
-    menu.style.left = `${Math.max(4, Math.min(x, window.innerWidth - menu.offsetWidth - 4))}px`;
-    menu.style.top = `${Math.max(4, Math.min(y, window.innerHeight - menu.offsetHeight - 4))}px`;
   }
   /** Puts the fixed Add files menu beside the icon rail button (on the side away from the rail's edge), or under a header button. */
   function placeBeside(menu: HTMLElement, anchor: HTMLElement) {
@@ -748,7 +738,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   }
   function openChromeMenu(menu: HTMLElement, anchor: HTMLElement) {
     if (busy || modal?.open) return; if (chromeMenu?.menu === menu) { closeChromeMenu(); return; }
-    closeChromeMenu(false); closeItemMenu(false);
+    closeChromeMenu(false); itemMenu.close(false);
     chromeMenu = { menu, anchor }; anchor.setAttribute('aria-expanded', 'true'); menu.hidden = false; if (menu === addMenu) placeBeside(menu, anchor); else placeMenu(menu, anchor, menu === scopeMenu ? 'left' : 'right');
     menu.querySelector<HTMLElement>('[aria-checked=true], button')?.focus();
   }
@@ -763,17 +753,8 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); items[(index + (event.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]?.focus(); }
     else if (event.key === 'Home' || event.key === 'End') { event.preventDefault(); items[event.key === 'Home' ? 0 : items.length - 1]?.focus(); }
   });
-  itemMenu.addEventListener('keydown', event => {
-    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); closeItemMenu(); return; }
-    if (shortcutFor(event) !== 'command-palette') event.stopPropagation();
-    const items = Array.from(itemMenu.querySelectorAll<HTMLElement>('button')); const index = items.indexOf(document.activeElement as HTMLElement);
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); items[(index + (event.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]?.focus(); }
-    else if (event.key === 'Home' || event.key === 'End') { event.preventDefault(); items[event.key === 'Home' ? 0 : items.length - 1]?.focus(); }
-    else if (event.key === 'Tab') closeItemMenu(false);
-  });
   document.addEventListener('pointerdown', event => {
     const target = event.target as Node;
-    if (!itemMenu.hidden && !itemMenu.contains(target) && !menuAnchor?.contains(target)) closeItemMenu(false);
     if (chromeMenu && !chromeMenu.menu.contains(target) && !chromeMenu.anchor.contains(target)) closeChromeMenu(false);
   });
 
@@ -1022,7 +1003,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     // The page is drawn only while it shows. A render that waits keeps `fromTop`, so the tab that comes up starts where the scope asked.
     if (!pageOpen) { renderImageNavigation(); return; }
     const scrolled = restore ?? documents.scrollTop, fresh = fromTop, keep = fresh ? 0 : rendered; fromTop = false;
-    clearThumbnails(); documents.replaceChildren(); tiles = []; sections = []; tileByPath.clear(); coverShelf.clear(); columnCount = 0; rendered = 0; closeItemMenu(false); const generation = ++renderGeneration;
+    clearThumbnails(); documents.replaceChildren(); tiles = []; sections = []; tileByPath.clear(); coverShelf.clear(); columnCount = 0; rendered = 0; itemMenu.close(false); const generation = ++renderGeneration;
     if (colourFilter) analyseColours(unknown, generation);
     documents.classList.toggle('library-grid', view === 'grid'); documents.classList.toggle('library-list', view === 'list');
     if (!matches.length) {
@@ -1145,7 +1126,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     if (colourTimer) return;
     colourTimer = window.setTimeout(() => {
       colourTimer = 0; if (!colourFilter || !pageOpen) return;
-      if (!itemMenu.hidden || modal?.open || busy) { scheduleColourRender(); return; }
+      if (itemMenu.isOpen() || modal?.open || busy) { scheduleColourRender(); return; }
       const key = focusKey(), scrolled = documents.scrollTop, hadFocus = root.contains(document.activeElement);
       renderDocuments(); documents.scrollTop = scrolled;
       if (hadFocus && key) restoreFocus(key);

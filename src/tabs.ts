@@ -20,14 +20,45 @@ export const LIBRARY_PATH = 'hold-my-brief:library';
 
 /** The part of a tab that survives a restart: enough to draw it and to reopen its document. The Library tab (format `library`) also saves its `scope`. */
 export type SavedTab = { path: string; name: string; format: string; scope?: string };
-/** The saved session: the tabs in order, and which one was showing (an index into `tabs`; none means Home). */
-export type TabSession = { tabs: SavedTab[]; active: number | null };
+/** One pane of a saved split: the documents it holds, in order (by `path`), and the one it shows. */
+export type SavedPane = { tabs: string[]; shown: string };
+/** A saved split: what each pane holds and shows, the divider's place (the left pane's percent of the room the panes share) and the pane that was active. */
+export type SavedSplit = { left: SavedPane; right: SavedPane; ratio: number; active: 'left' | 'right' };
+/**
+ * The saved session: the tabs in order, and which one was showing (an index into `tabs`; none means Home). While split, `tabs` is the Library tab (if open),
+ * the left pane's tabs, then the right pane's, so a build that does not know `split` still restores every document, in one strip; `active` is then the tab
+ * the active pane shows, or the Library tab or none (Home) while one of them covers the panes.
+ */
+export type TabSession = { tabs: SavedTab[]; active: number | null; split?: SavedSplit };
 
 export const emptySession = (): TabSession => ({ tabs: [], active: null });
 
-/** Reads a session from untrusted storage: malformed entries and duplicates are dropped and `active` is kept pointing at the same tab. */
+const record = (value: unknown): Record<string, unknown> => typeof value === 'object' && value !== null ? Object.fromEntries(Object.entries(value)) : {};
+
+/**
+ * Reads a saved split against the tabs that were kept: each pane keeps the documents it names that are open (once, in the order named), a document no pane
+ * names joins the left one, and a pane shows the tab it names or else its first. A split that leaves a pane with no document is no split; a ratio or an
+ * active pane that is not valid takes its default.
+ */
+function readSplit(value: unknown, tabs: readonly SavedTab[]): SavedSplit | undefined {
+  const raw = record(value);
+  const documents = tabs.filter(tab => tab.path !== LIBRARY_PATH).map(tab => tab.path), taken = new Set<string>();
+  const pane = (entry: unknown) => {
+    const named = record(entry), paths: string[] = [];
+    if (Array.isArray(named.tabs)) for (const path of named.tabs) if (typeof path === 'string' && documents.includes(path) && !taken.has(path)) { taken.add(path); paths.push(path); }
+    return { paths, shown: named.shown };
+  };
+  const right = pane(raw.right), left = pane(raw.left);
+  left.paths.push(...documents.filter(path => !taken.has(path)));
+  if (!left.paths.length || !right.paths.length) return undefined;
+  const shownOf = (side: { paths: string[]; shown: unknown }) => typeof side.shown === 'string' && side.paths.includes(side.shown) ? side.shown : side.paths[0];
+  const ratio = typeof raw.ratio === 'number' && Number.isFinite(raw.ratio) ? Math.max(0, Math.min(100, raw.ratio)) : 50;
+  return { left: { tabs: left.paths, shown: shownOf(left) }, right: { tabs: right.paths, shown: shownOf(right) }, ratio, active: raw.active === 'right' ? 'right' : 'left' };
+}
+
+/** Reads a session from untrusted storage: malformed entries and duplicates are dropped and `active` is kept pointing at the same tab; a saved split is kept when it still holds a document on each side. */
 export function readSession(value: unknown): TabSession {
-  const raw = value as { tabs?: unknown; active?: unknown } | null | undefined;
+  const raw = value as { tabs?: unknown; active?: unknown; split?: unknown } | null | undefined;
   if (!raw || !Array.isArray(raw.tabs)) return emptySession();
   const tabs: SavedTab[] = [];
   let active: number | null = null;
@@ -37,7 +68,8 @@ export function readSession(value: unknown): TabSession {
     if (index === raw.active) active = tabs.length;
     tabs.push({ path: tab.path, name: typeof tab.name === 'string' && tab.name ? tab.name : tab.path.split(/[\\/]/).pop() ?? tab.path, format: typeof tab.format === 'string' ? tab.format : '', ...(typeof tab.scope === 'string' && tab.scope ? { scope: tab.scope } : {}) });
   });
-  return { tabs, active };
+  const split = readSplit(raw.split, tabs);
+  return { tabs, active, ...(split ? { split } : {}) };
 }
 
 export class TabList<T extends TabBase> {
@@ -186,13 +218,14 @@ export function slotAt(centres: readonly number[], x: number): number {
 
 /**
  * Split right: the tab at `path` leaves `list` for a new list of its own, which shows it. Every other tab stays, and `list` shows the one of them
- * that was shown most recently (the neighbour the closing rule picks when none was). Undefined, and nothing changed, when `path` is not in `list`.
+ * that was shown most recently (the neighbour the closing rule picks when none was; the first tab when Home was showing and none ever was). Undefined,
+ * and nothing changed, when `path` is not in `list`.
  */
 export function splitOff<T extends TabBase>(list: TabList<T>, path: string): TabList<T> | undefined {
   const taken = list.detach(path);
   if (!taken) return undefined;
   const recent = list.mostRecent();
-  if (recent) list.activate(recent.path);
+  if (recent) list.activate(recent.path); else if (!list.active && list.size) list.activate(list.tabs[0].path);
   const right = new TabList<T>();
   right.add(taken.tab); if (taken.live) right.markLive(path);
   right.activate(path);
@@ -218,4 +251,18 @@ export function mergeLists<T extends TabBase>(left: TabList<T>, right: TabList<T
   }
   left.activate(showing);
   return left;
+}
+
+/**
+ * Starts a saved split from `list`, which holds every document tab: the tabs `split.right` names leave for a new list, in the order saved, and each list
+ * shows the tab saved for it. Undefined, and nothing changed, when that would leave a side with no tab (a split that no longer holds a document on each side).
+ */
+export function restoreSplit<T extends TabBase>(list: TabList<T>, split: SavedSplit): TabList<T> | undefined {
+  const named = split.right.tabs.filter(path => list.find(path));
+  if (!named.length || named.length >= list.size) return undefined;
+  const right = new TabList<T>();
+  for (const path of named) right.add(list.detach(path)!.tab);
+  const shown = (side: SavedPane, tabs: TabList<T>) => tabs.find(side.shown) ? side.shown : tabs.tabs[0].path;
+  list.activate(shown(split.left, list)); right.activate(shown(split.right, right));
+  return right;
 }

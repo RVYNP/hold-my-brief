@@ -7,8 +7,8 @@ import { DEFAULT_PERCENT, nudgePercent, percentAt, shareOf, snapPercent } from '
 
 export type SideLetter = 'a' | 'b';
 
-/** What a side is drawn with. `body` is the layer over the pane's reading surface, `row` its tabs, `state` the placeholder of a tab with no page, `ghost` a still copy of the view controls while the side is not the active one. */
-export type SideView = { letter: SideLetter; body: HTMLElement; row: HTMLElement; list: HTMLElement; add: HTMLElement; overflow: HTMLElement; state: HTMLElement; ghost?: HTMLElement };
+/** What a side is drawn with. `body` is the layer over the pane's reading surface, `row` its tabs, `fold` the button at the row's end that swaps the panes while only one shows, `state` the placeholder of a tab with no page, `ghost` a still copy of the view controls while the side is not the active one. */
+export type SideView = { letter: SideLetter; body: HTMLElement; row: HTMLElement; list: HTMLElement; add: HTMLElement; overflow: HTMLElement; fold: HTMLElement; state: HTMLElement; ghost?: HTMLElement };
 
 const make = <K extends keyof HTMLElementTagNameMap>(tag: K, className: string, attributes: Record<string, string> = {}) => {
   const node = document.createElement(tag);
@@ -33,8 +33,10 @@ export function createRow(letter: SideLetter) {
   const add = make('button', 'tab-add', { type: 'button', 'aria-label': `New tab, ${sideName(letter)}`, title: 'New tab' });
   const overflow = make('button', 'tab-overflow', { type: 'button', 'aria-label': `All tabs, ${sideName(letter)}`, title: 'All tabs', 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
   overflow.hidden = true;
-  row.append(list, add, overflow);
-  return { row, list, add, overflow };
+  const fold = make('button', 'pane-fold', { type: 'button' });
+  fold.hidden = true;
+  row.append(list, add, overflow, fold);
+  return { row, list, add, overflow, fold };
 }
 
 /** The layer over a pane's reading surface. It takes no pointer; what is laid on it does. */
@@ -82,4 +84,14 @@ export function createDivider(handlers: DividerHandlers) {
 export function paintDivider(divider: HTMLElement, percent: number) {
   divider.setAttribute('aria-valuenow', String(Math.round(percent)));
   divider.setAttribute('aria-valuetext', `${Math.round(percent)} % left, ${100 - Math.round(percent)} % right`);
+}
+
+/** The button at the end of a folded split's row: "⫴ Other side (n)", n being the documents the pane that is out of sight holds. Hidden when the panes are side by side. */
+export function paintFold(fold: HTMLElement, folded: boolean, others: number) {
+  fold.hidden = !folded;
+  if (!folded) return;
+  const label = `⫴ Other side (${others})`;
+  if (fold.textContent !== label) fold.textContent = label;
+  fold.setAttribute('aria-label', `Other side, ${others} ${others === 1 ? 'document' : 'documents'}`);
+  fold.title = 'Show the other side (Ctrl \\)';
 }
