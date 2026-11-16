@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LIBRARY_PATH, MAX_LIVE_TABS, MAX_TABS, TabList, emptySession, readSession, slotAt } from '../src/tabs';
+import { LIBRARY_PATH, MAX_LIVE_TABS, MAX_TABS, TabList, emptySession, mergeLists, moveAcross, readSession, restoreSplit, slotAt, splitOff } from '../src/tabs';
 
 type Tab = { path: string; name: string };
 const tab = (path: string): Tab => ({ path, name: path.toUpperCase() });
@@ -264,6 +264,71 @@ describe('the saved session', () => {
   });
 });
 
+describe('the saved split', () => {
+  const docs = ['a', 'b', 'c', 'd'].map(path => ({ path, name: path.toUpperCase(), format: 'pdf' }));
+  const split = { left: { tabs: ['a', 'b'], shown: 'b' }, right: { tabs: ['c', 'd'], shown: 'c' }, ratio: 60, active: 'right' };
+
+  it('reads each pane\'s tabs and shown tab, the ratio and the active pane back as they were saved', () => {
+    const saved = { tabs: docs, active: 2, split };
+    expect(readSession(JSON.parse(JSON.stringify(saved)))).toEqual(saved);
+  });
+
+  it('reads a session with no split, or written before there was one, as it always was', () => {
+    const old = { tabs: docs, active: 1 };
+    expect(readSession(old)).toEqual(old);
+    expect(readSession({ ...old, split: null })).toEqual(old);
+    expect('split' in readSession(old)).toBe(false);
+  });
+
+  it('ignores a split that is not one: no pane, a pane with no open document, wrong types', () => {
+    const base = { tabs: docs, active: 0 };
+    for (const garbage of [undefined, 3, 'right', [], {}, { left: 1, right: 2 }, { left: { tabs: ['a'] } }, { left: { tabs: ['a'] }, right: { tabs: ['zz'] } }, { left: { tabs: 'a' }, right: { tabs: [4, null] } }]) {
+      expect(readSession({ ...base, split: garbage })).toEqual(base);
+    }
+  });
+
+  it('keeps what is valid inside a split and gives the rest its default', () => {
+    const read = readSession({ tabs: docs, active: 0, split: { left: { tabs: ['a', 'a', 'x'], shown: 'zz' }, right: { tabs: ['b', 'c'], shown: 'c' }, ratio: 'wide', active: 'middle' } });
+    // `d` is named by no pane, so it joins the left one; a repeated or unknown path is dropped; an unknown shown tab becomes the pane's first.
+    expect(read.split).toEqual({ left: { tabs: ['a', 'd'], shown: 'a' }, right: { tabs: ['b', 'c'], shown: 'c' }, ratio: 50, active: 'left' });
+  });
+
+  it('keeps a document in one pane only, the right pane\'s claim first, and never lists the Library tab in a pane', () => {
+    const read = readSession({ tabs: [{ path: LIBRARY_PATH, name: 'All', format: 'library' }, ...docs], active: 1, split: { left: { tabs: [LIBRARY_PATH, 'a', 'b'], shown: 'a' }, right: { tabs: ['b', 'c', 'd'], shown: 'd' }, ratio: 40, active: 'right' } });
+    expect(read.split).toEqual({ left: { tabs: ['a'], shown: 'a' }, right: { tabs: ['b', 'c', 'd'], shown: 'd' }, ratio: 40, active: 'right' });
+  });
+
+  it('clamps a ratio outside 0 to 100', () => {
+    expect(readSession({ tabs: docs, active: 0, split: { ...split, ratio: 400 } }).split?.ratio).toBe(100);
+    expect(readSession({ tabs: docs, active: 0, split: { ...split, ratio: -3 } }).split?.ratio).toBe(0);
+    expect(readSession({ tabs: docs, active: 0, split: { ...split, ratio: Number.NaN } }).split?.ratio).toBe(50);
+  });
+
+  it('starts a split from a list: the right pane\'s tabs leave in the saved order and each pane shows its saved tab', () => {
+    const list = listOf('a', 'b', 'c', 'd');
+    const right = restoreSplit(list, { left: { tabs: ['a', 'b'], shown: 'a' }, right: { tabs: ['d', 'c'], shown: 'c' }, ratio: 50, active: 'left' })!;
+    expect(paths(list)).toEqual(['a', 'b']);
+    expect(list.active?.path).toBe('a');
+    expect(paths(right)).toEqual(['d', 'c']);
+    expect(right.active?.path).toBe('c');
+  });
+
+  it('starts no split, and changes nothing, when a side would be left with no tab', () => {
+    const list = listOf('a', 'b');
+    expect(restoreSplit(list, { left: { tabs: ['a'], shown: 'a' }, right: { tabs: ['gone'], shown: 'gone' }, ratio: 50, active: 'left' })).toBeUndefined();
+    expect(restoreSplit(list, { left: { tabs: [], shown: '' }, right: { tabs: ['a', 'b'], shown: 'a' }, ratio: 50, active: 'left' })).toBeUndefined();
+    expect(paths(list)).toEqual(['a', 'b']);
+  });
+
+  it('shows the first tab on the left when Home was showing and no tab was ever shown', () => {
+    const list = new TabList<Tab>();
+    for (const name of ['a', 'b', 'c']) list.add(tab(name));
+    const right = splitOff(list, 'c')!;
+    expect(right.active?.path).toBe('c');
+    expect(list.active?.path).toBe('a');
+  });
+});
+
 describe('replacing a tab\'s document', () => {
   it('puts the new document in the same slot and keeps showing it when the old one was showing', () => {
     const list = listOf('a', 'b', 'c');
@@ -294,5 +359,84 @@ describe('replacing a tab\'s document', () => {
     expect(list.replace('a', tab('b'))).toBe(false);
     expect(list.replace('zzz', tab('x'))).toBe(false);
     expect(paths(list)).toEqual(['a', 'b']);
+  });
+});
+
+describe('splitting and merging tab lists', () => {
+  it('splits the shown tab off to the right and keeps every other tab on the left, in order', () => {
+    const left = listOf('a', 'b', 'c', 'd');
+    left.activate('c');
+    const right = splitOff(left, 'c')!;
+    expect(paths(left)).toEqual(['a', 'b', 'd']);
+    expect(paths(right)).toEqual(['c']);
+    expect(right.active?.path).toBe('c');
+  });
+
+  it('shows the most recently shown of the remaining tabs on the left, not the tab beside the one that left', () => {
+    const left = listOf('a', 'b', 'c', 'd');
+    left.activate('a'); left.activate('c');
+    splitOff(left, 'c');
+    expect(left.active?.path).toBe('a');
+  });
+
+  it('shows the closing neighbour when none of the rest was ever shown', () => {
+    const left = new TabList<Tab>();
+    for (const name of ['a', 'b', 'c']) left.add(tab(name));
+    left.activate('b');
+    splitOff(left, 'b');
+    expect(left.active?.path).toBe('c');
+  });
+
+  it('splits nothing off a path the list does not hold', () => {
+    const left = listOf('a', 'b');
+    expect(splitOff(left, 'z')).toBeUndefined();
+    expect(paths(left)).toEqual(['a', 'b']);
+  });
+
+  it('takes a live reader along when a tab moves, so it is not reopened', () => {
+    const left = listOf('a', 'b', 'c');
+    left.markLive('b');
+    const right = splitOff(left, 'b')!;
+    expect(right.isLive('b')).toBe(true);
+    expect(left.isLive('b')).toBe(false);
+    left.markLive('a');
+    expect(moveAcross(left, right, 'a')).toBe(true);
+    expect(right.isLive('a')).toBe(true);
+  });
+
+  it('moves a tab to the other side at the end, shows it there, and shows what closing it would show on the side it left', () => {
+    const left = listOf('a', 'b', 'c');
+    const right = splitOff(left, 'c')!;
+    left.activate('a');
+    expect(moveAcross(left, right, 'a')).toBe(true);
+    expect(paths(left)).toEqual(['b']);
+    expect(left.active?.path).toBe('b');
+    expect(paths(right)).toEqual(['c', 'a']);
+    expect(right.active?.path).toBe('a');
+  });
+
+  it('does not move a tab to a list that already holds it, or one the source does not hold', () => {
+    const left = listOf('a', 'b'), right = listOf('b');
+    expect(moveAcross(left, right, 'b')).toBe(false);
+    expect(moveAcross(left, right, 'z')).toBe(false);
+    expect(paths(left)).toEqual(['a', 'b']);
+  });
+
+  it('merges the right tabs after the left ones, in order, and shows the one asked for', () => {
+    const left = listOf('a', 'b', 'c');
+    const right = splitOff(left, 'c')!;
+    right.add(tab('d')); right.add(tab('e'));
+    mergeLists(left, right, 'd');
+    expect(paths(left)).toEqual(['a', 'b', 'c', 'd', 'e']);
+    expect(left.active?.path).toBe('d');
+    expect(right.size).toBe(0);
+  });
+
+  it('keeps live readers live through a merge', () => {
+    const left = listOf('w'), right = listOf('x', 'y');
+    right.markLive('y');
+    mergeLists(left, right, 'w');
+    expect(left.isLive('y')).toBe(true);
+    expect(left.isLive('x')).toBe(false);
   });
 });

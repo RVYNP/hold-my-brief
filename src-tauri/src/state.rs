@@ -317,18 +317,22 @@ pub struct SavedTab {
     pub scope: Option<String>,
 }
 
-/// The tabs open when the reader last ran, in order, and which one was showing (an index into `tabs`; `None` is Home).
+/// The tabs open when the reader last ran, in order, and which one was showing (an index into `tabs`; `None` is Home). `split` is the split view's layout
+/// (each pane's tabs and shown tab, the divider's place, the active pane): the frontend writes and checks it (`readSession` in src/tabs.ts), so it is kept as
+/// it came, when it is an object, and left out when there is no split.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct TabSession {
     pub tabs: Vec<SavedTab>,
     pub active: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub split: Option<Value>,
 }
 
 pub const MAX_TABS: usize = 64;
 
 impl TabSession {
-    /// Drops what cannot be a tab (no path, a repeated document, anything past the cap) and keeps `active` on the same tab.
+    /// Drops what cannot be a tab (no path, a repeated document, anything past the cap) and keeps `active` on the same tab; a `split` that is not an object goes too.
     pub fn sanitized(self) -> Self {
         let mut tabs: Vec<SavedTab> = Vec::new();
         let mut active = None;
@@ -341,7 +345,7 @@ impl TabSession {
             }
             tabs.push(tab);
         }
-        Self { tabs, active }
+        Self { tabs, active, split: self.split.filter(Value::is_object) }
     }
 }
 
@@ -884,7 +888,7 @@ mod tests {
         let file = dir.path().join("state.json");
         let mut store = Store::load(file.clone());
         assert_eq!(store.saved.tabs, TabSession::default());
-        let session = TabSession { tabs: vec![tab("/c"), tab("/a"), tab("/b")], active: Some(1) };
+        let session = TabSession { tabs: vec![tab("/c"), tab("/a"), tab("/b")], active: Some(1), split: None };
         store.save_tabs(session.clone()).unwrap();
         let loaded = Store::load(file.clone());
         assert_eq!(loaded.saved.tabs, session);
@@ -893,8 +897,8 @@ mod tests {
         assert_eq!(json["tabs"]["tabs"][0]["path"], "/c");
         assert_eq!(json["tabs"]["active"], 1);
         // Home showing is saved as no active tab, and closing the last tab saves an empty list.
-        store.save_tabs(TabSession { tabs: vec![tab("/a")], active: None }).unwrap();
-        assert_eq!(Store::load(file.clone()).saved.tabs, TabSession { tabs: vec![tab("/a")], active: None });
+        store.save_tabs(TabSession { tabs: vec![tab("/a")], active: None, split: None }).unwrap();
+        assert_eq!(Store::load(file.clone()).saved.tabs, TabSession { tabs: vec![tab("/a")], active: None, split: None });
         store.save_tabs(TabSession::default()).unwrap();
         assert_eq!(Store::load(file).saved.tabs, TabSession::default());
     }
@@ -905,12 +909,29 @@ mod tests {
         let file = dir.path().join("state.json");
         let mut store = Store::load(file.clone());
         let library = SavedTab { path: "hold-my-brief:library".into(), name: "Favorites".into(), format: "library".into(), scope: Some("favorites".into()) };
-        let session = TabSession { tabs: vec![library, tab("/a")], active: Some(0) };
+        let session = TabSession { tabs: vec![library, tab("/a")], active: Some(0), split: None };
         store.save_tabs(session.clone()).unwrap();
         assert_eq!(Store::load(file.clone()).saved.tabs, session);
         let json: Value = serde_json::from_slice(&fs::read(&file).unwrap()).unwrap();
         assert_eq!(json["tabs"]["tabs"][0]["scope"], "favorites");
         assert!(json["tabs"]["tabs"][1].get("scope").is_none());
+    }
+
+    #[test]
+    fn a_split_is_kept_with_the_tabs_and_a_session_without_one_writes_none() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("state.json");
+        let mut store = Store::load(file.clone());
+        let layout = serde_json::json!({ "left": { "tabs": ["/a"], "shown": "/a" }, "right": { "tabs": ["/b"], "shown": "/b" }, "ratio": 60.0, "active": "right" });
+        store.save_tabs(TabSession { tabs: vec![tab("/a"), tab("/b")], active: Some(1), split: Some(layout.clone()) }).unwrap();
+        assert_eq!(Store::load(file.clone()).saved.tabs.split, Some(layout));
+        let json: Value = serde_json::from_slice(&fs::read(&file).unwrap()).unwrap();
+        assert_eq!(json["tabs"]["split"]["right"]["shown"], "/b");
+        // Anything but an object is dropped, and no split writes no key (an older build reads the file as it always did).
+        store.save_tabs(TabSession { tabs: vec![tab("/a")], active: None, split: Some(Value::from("nope")) }).unwrap();
+        assert_eq!(store.saved.tabs.split, None);
+        let json: Value = serde_json::from_slice(&fs::read(&file).unwrap()).unwrap();
+        assert!(json["tabs"].get("split").is_none());
     }
 
     #[test]
@@ -939,10 +960,10 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("state.json");
         let mut store = Store::load(file.clone());
-        let messy = TabSession { tabs: vec![tab("/a"), tab(""), tab("/a"), tab("/b")], active: Some(3) };
+        let messy = TabSession { tabs: vec![tab("/a"), tab(""), tab("/a"), tab("/b")], active: Some(3), split: None };
         store.save_tabs(messy.clone()).unwrap();
-        assert_eq!(store.saved.tabs, TabSession { tabs: vec![tab("/a"), tab("/b")], active: Some(1) });
-        let many = TabSession { tabs: (0..MAX_TABS + 5).map(|i| tab(&format!("/{i}"))).collect(), active: Some(MAX_TABS + 2) };
+        assert_eq!(store.saved.tabs, TabSession { tabs: vec![tab("/a"), tab("/b")], active: Some(1), split: None });
+        let many = TabSession { tabs: (0..MAX_TABS + 5).map(|i| tab(&format!("/{i}"))).collect(), active: Some(MAX_TABS + 2), split: None };
         store.save_tabs(many).unwrap();
         assert_eq!(store.saved.tabs.tabs.len(), MAX_TABS);
         assert_eq!(store.saved.tabs.active, None);

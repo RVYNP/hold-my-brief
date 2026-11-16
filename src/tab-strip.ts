@@ -13,12 +13,14 @@ import { middleTruncate } from './tab-titles';
 export type TabView = { path: string; title: string; hint: string; format: string; where: string; progress: string; active: boolean; problem: boolean; library: boolean; image: boolean };
 
 export type TabHandlers = {
-  /** A tab was chosen; `undefined` is Home. */
+  /** A tab was chosen; `undefined` is Home (only a strip with a Home button says so). */
   select: (path: string | undefined) => void;
   close: (path: string) => void;
   newTab: () => void;
   /** A dragged tab was dropped; `to` is its index among the tabs. */
   move: (path: string, to: number) => void;
+  /** The context menu of a tab was asked for (right-click, the menu key, Shift+F10), at `at` or, from the keyboard, beside `anchor`. */
+  menu: (path: string, anchor: HTMLElement, at: { x: number; y: number } | undefined) => void;
 };
 
 /** A press that travels less than this (CSS px) is a click, not a drag. */
@@ -78,15 +80,15 @@ export type TabStrip = {
 
 /**
  * `elements` are the static parts of the toolbar markup: the Home button, the scrolling list of tabs, the + button and the
- * overflow button. `newTabKeys` is how the New tab command's shortcut is written on this platform.
+ * overflow button. `newTabKeys` is how the New tab command's shortcut is written on this platform. A strip without a Home button is a
+ * pane's own row of tabs (a split view): its menu has no Home row, and only the toolbar's menu carries the `tab-menu` id.
  */
-export function createTabStrip(elements: { strip: HTMLElement; home: HTMLElement; list: HTMLElement; add: HTMLElement; overflow: HTMLElement }, handlers: TabHandlers, newTabKeys: string): TabStrip {
+export function createTabStrip(elements: { strip: HTMLElement; home?: HTMLElement; list: HTMLElement; add: HTMLElement; overflow: HTMLElement }, handlers: TabHandlers, newTabKeys: string): TabStrip {
   const { strip, home, list, add, overflow } = elements;
   const nodes = new Map<string, HTMLElement>();
   let views: readonly TabView[] = [], homeActive = true, dragging = false, repaint = false;
 
-  home.replaceChildren(icon(icons.home, 16));
-  home.onclick = () => handlers.select(undefined);
+  if (home) { home.replaceChildren(icon(icons.home, 16)); home.onclick = () => handlers.select(undefined); }
   add.replaceChildren(icon(icons.plus, 14, 2));
   add.onclick = () => handlers.newTab();
   overflow.replaceChildren(icon(icons.chevron, 14, 2));
@@ -143,7 +145,7 @@ export function createTabStrip(elements: { strip: HTMLElement; home: HTMLElement
   function paint(next: readonly TabView[], atHome: boolean) {
     views = next; homeActive = atHome;
     if (dragging) { repaint = true; return; }
-    home.classList.toggle('is-active', atHome); home.setAttribute('aria-selected', String(atHome));
+    if (home) { home.classList.toggle('is-active', atHome); home.setAttribute('aria-selected', String(atHome)); }
     const wanted = new Set(next.map(view => view.path));
     for (const [path, node] of nodes) if (!wanted.has(path)) { node.remove(); nodes.delete(path); }
     next.forEach((view, index) => {
@@ -168,10 +170,17 @@ export function createTabStrip(elements: { strip: HTMLElement; home: HTMLElement
     const tab = (event.target as Element).closest<HTMLElement>('.tab');
     if (event.button === 1 && tab) { event.preventDefault(); handlers.close(tab.dataset.path!); }
   });
+  list.addEventListener('contextmenu', event => {
+    const tab = (event.target as Element).closest<HTMLElement>('.tab');
+    if (!tab) return;
+    event.preventDefault();
+    handlers.menu(tab.dataset.path!, tab, event.clientX || event.clientY ? { x: event.clientX, y: event.clientY } : undefined);
+  });
   list.addEventListener('keydown', event => {
     const tab = (event.target as Element).closest<HTMLElement>('.tab');
     if (!tab || event.target !== tab) return;
     if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); handlers.select(tab.dataset.path!); }
+    else if (event.key === 'ContextMenu' || event.key === 'F10' && event.shiftKey) { event.preventDefault(); handlers.menu(tab.dataset.path!, tab, undefined); }
     else if (event.key === 'Delete') { event.preventDefault(); handlers.close(tab.dataset.path!); }
     else if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
       const next = (event.key === 'ArrowRight' ? tab.nextElementSibling : tab.previousElementSibling) as HTMLElement | null;
@@ -220,7 +229,8 @@ export function createTabStrip(elements: { strip: HTMLElement; home: HTMLElement
 
   // The menu of open tabs: Home, every document, then New tab. The compact title opens it, and so does the strip's overflow button.
   const menu = document.createElement('div');
-  menu.id = 'tab-menu'; menu.className = 'tab-menu'; menu.hidden = true; menu.setAttribute('role', 'menu'); menu.setAttribute('aria-label', 'Open tabs');
+  if (home) menu.id = 'tab-menu';
+  menu.className = 'tab-menu'; menu.hidden = true; menu.setAttribute('role', 'menu'); menu.setAttribute('aria-label', 'Open tabs');
   document.body.append(menu);
   let anchor: HTMLElement | undefined;
   function row(label: string, meta: string | undefined, active: boolean, glyph: string, onChoose: () => void, onClose?: () => void, hint = '', tip = '') {
@@ -235,8 +245,11 @@ export function createTabStrip(elements: { strip: HTMLElement; home: HTMLElement
     return item;
   }
   function fillMenu() {
-    const rows: HTMLElement[] = [row('Home', undefined, homeActive, icons.home, () => handlers.select(undefined))];
-    for (const view of views) rows.push(row(view.title, view.library ? undefined : [view.format.toUpperCase(), view.progress].filter(Boolean).join(' · '), view.active, view.library ? icons.library : icons.document, () => handlers.select(view.path), () => handlers.close(view.path), view.hint, view.library ? view.title : `${view.title}\n${view.path}`));
+    const rows: HTMLElement[] = home ? [row('Home', undefined, homeActive, icons.home, () => handlers.select(undefined))] : [];
+    for (const view of views) {
+      const item = row(view.title, view.library ? undefined : [view.format.toUpperCase(), view.progress].filter(Boolean).join(' · '), view.active, view.library ? icons.library : icons.document, () => handlers.select(view.path), () => handlers.close(view.path), view.hint, view.library ? view.title : `${view.title}\n${view.path}`);
+      item.dataset.path = view.path; rows.push(item);
+    }
     const separator = document.createElement('div'); separator.className = 'tab-menu-separator'; separator.setAttribute('role', 'separator');
     const fresh = row('New tab…', undefined, false, icons.plus, () => handlers.newTab());
     fresh.append(text('kbd', 'tab-menu-key', newTabKeys));
@@ -259,9 +272,17 @@ export function createTabStrip(elements: { strip: HTMLElement; home: HTMLElement
   }
   document.addEventListener('pointerdown', event => { if (!menu.hidden && !menu.contains(event.target as Node) && !anchor?.contains(event.target as Node)) closeMenu(); }, true);
   window.addEventListener('resize', () => closeMenu());
+  /** A row's own menu: this list closes, and the tab's menu opens at the pointer or beside the button that opened this list. */
+  function rowMenu(item: HTMLElement | null, at: { x: number; y: number } | undefined) {
+    if (!item?.dataset.path) return;
+    const owner = anchor ?? overflow;
+    closeMenu(); handlers.menu(item.dataset.path, owner, at);
+  }
+  menu.addEventListener('contextmenu', event => { event.preventDefault(); rowMenu((event.target as Element).closest<HTMLElement>('.tab-menu-row'), event.clientX || event.clientY ? { x: event.clientX, y: event.clientY } : undefined); });
   menu.addEventListener('keydown', event => {
     const items = [...menu.querySelectorAll<HTMLElement>('.tab-menu-row')], at = items.indexOf(document.activeElement as HTMLElement);
     if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); const back = anchor; closeMenu(); back?.focus(); }
+    else if (event.key === 'ContextMenu' || event.key === 'F10' && event.shiftKey) { event.preventDefault(); rowMenu(items[at] ?? null, undefined); }
     else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); items[(at + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus(); }
     else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); (document.activeElement as HTMLElement).click(); }
   });

@@ -9,7 +9,7 @@ import { markUnavailable, showPicture, tileMedia, type Appearance } from './card
 import { OPEN_DRAG_SLOP } from './open-drag';
 import type { Thumbnail } from './thumbnails';
 import { formatProgress, inProgress, type Progress } from './progress';
-import { bannerGrid, bannerPixel, localDay, renderBanner, reshuffled, seedFor, type BannerSeed } from './home-banner';
+import { bannerGrid, bannerPixel, localDay, renderBanner, seedFor, type BannerSeed } from './home-banner';
 import type { Cover } from './procedural-cover';
 import { rememberRecent } from './covers';
 import type { Banner } from './theme';
@@ -177,6 +177,8 @@ export const shelfRatio = (ratio: number) => Math.min(1, Math.max(shelfCover.wid
 
 export type HomeActions = {
   open: (path: string, name: string) => void;
+  /** The context menu of a document card or row was asked for (right-click, the menu key, Shift+F10), at `at` or, from the keyboard, beside `anchor`. */
+  menu: (item: { path: string; name: string; format: string }, anchor: HTMLElement, at: { x: number; y: number } | undefined) => void;
   openFile: () => void;
   /** Opens the full library: on all references, its favorites, or the documents still being read. */
   viewAll: (scope: 'all' | 'favorites' | 'reading') => void;
@@ -354,7 +356,7 @@ function groundView(root: HTMLElement, family: Banner): GroundView {
 
 /**
  * Called when the theme or the BACKGROUND choice changed. Returns false when the page has to be painted again (the ground
- * and its shuffle button are there or gone); otherwise the ground repaints itself in an idle moment.
+ * is there or gone); otherwise the ground repaints itself in an idle moment.
  */
 export function repaintGround(banner: Banner): boolean {
   const view = current?.ground;
@@ -363,7 +365,6 @@ export function repaintGround(banner: Banner): boolean {
   return true;
 }
 
-const reshuffleIcon = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 14 4 4-4 4"/><path d="m18 2 4 4-4 4"/><path d="M2 18h1.97a4 4 0 0 0 3.26-1.68L12 10l4.77-6.32A4 4 0 0 1 20.03 2H22"/><path d="M2 6h1.97a4 4 0 0 1 3.26 1.68l.62.83"/><path d="M22 18h-1.97a4 4 0 0 1-3.26-1.68l-.62-.83"/></svg>';
 
 /** The ‹ › buttons are there only while there is more to scroll to in their direction. */
 function syncShelf({ track, previous, next }: Shelf) {
@@ -455,6 +456,8 @@ function opener(item: HomeTile, className: string, actions: HomeActions): HTMLBu
   const reached = formatProgress(item.progress);
   open.title = reached ? `${item.name} · ${reached}` : item.name;
   open.onclick = () => actions.open(item.path, item.name);
+  open.addEventListener('contextmenu', event => { event.preventDefault(); actions.menu(item, open, event.clientX || event.clientY ? { x: event.clientX, y: event.clientY } : undefined); });
+  open.addEventListener('keydown', event => { if (event.key === 'ContextMenu' || event.key === 'F10' && event.shiftKey) { event.preventDefault(); actions.menu(item, open, undefined); } });
   return open;
 }
 
@@ -569,13 +572,6 @@ export function renderHome(root: HTMLElement, sections: HomeSections, actions: H
   const buttons = element('div', 'home-actions');
   buttons.append(openFile, browse);
   const ground = actions.banner === 'none' ? undefined : groundView(root, actions.banner);
-  if (ground) {
-    const shuffle = control('home-reshuffle', 'Shuffle background');
-    shuffle.title = 'Shuffle background';
-    shuffle.innerHTML = reshuffleIcon;
-    shuffle.onclick = () => { saveBannerSeed(reshuffled(bannerSeedNow(), localDay(new Date()), Math.random)); scheduleGround(ground); };
-    buttons.append(shuffle);
-  }
   const bar = element('div', 'home-bar');
   bar.append(element('h1', '', 'Home'), buttons);
   root.append(bar);

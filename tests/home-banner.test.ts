@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bannerGrid, bannerPalette, renderBanner, reshuffled, seedFor, localDay, type BannerSpec } from '../src/home-banner';
+import { bannerGrid, bannerPalette, renderBanner, seedFor, localDay, type BannerSpec } from '../src/home-banner';
 import type { Cover } from '../src/procedural-cover';
 
 const spec: BannerSpec = { seed: 12345, family: 'flow', width: 125, height: 35, ground: [233, 227, 214], a: [225, 58, 58], b: [240, 138, 60], strength: .55 };
@@ -75,11 +75,6 @@ describe('the seed', () => {
     expect(seedFor(monday, '2026-11-17').day).toBe('2026-11-17');
     expect(seedFor({ day: '2026-11-16', seed: 'x' }, '2026-11-16')).toEqual(monday);
     expect(seedFor('nope', '2026-11-16')).toEqual(monday);
-  });
-  it('reshuffles to another seed on the same day', () => {
-    const today = seedFor(null, '2026-11-16');
-    expect(reshuffled(today, today.day, () => .5)).toEqual({ day: today.day, seed: 2 ** 31 });
-    expect(reshuffled({ day: today.day, seed: 2 ** 31 }, today.day, () => .5).seed).not.toBe(2 ** 31);
   });
   it('names the local calendar day', () => {
     expect(localDay(new Date(2026, 10, 5, 23, 59))).toBe('2026-11-05');

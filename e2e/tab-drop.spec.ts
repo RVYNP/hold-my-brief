@@ -57,7 +57,7 @@ test('a dropped file that is already open is shown instead of opened twice, and 
 test('over the strip a marker shows the slot and a ghost tab counts the files; dropping there opens them at that index', async ({ page }) => {
   await page.goto('/');
   await openAll(page, 'a.txt', 'b.txt', 'c.txt');
-  const marker = page.locator('.tab-drop-marker'), ghost = page.locator('.tab-drop-ghost'), overlay = page.locator('#drop-overlay');
+  const marker = page.locator('#tab-strip .tab-drop-marker'), ghost = page.locator('#tab-strip .tab-drop-ghost'), overlay = page.locator('#drop-overlay');
   const first = await afterTab(page, 0);
   await drag(page, 'dragenter', ['p.txt', 'q.txt'], first.x, first.y);
   await drag(page, 'dragover', ['p.txt', 'q.txt'], first.x, first.y);
@@ -89,7 +89,7 @@ test('over the reading area an overlay invites the drop, and it goes when the dr
   await drag(page, 'dragenter', ['one.txt', 'two.txt'], READING.x, READING.y);
   await expect(overlay).toBeVisible();
   await expect(overlay).toContainText('Drop to open in a new tab');
-  await expect(page.locator('.tab-drop-marker')).toBeHidden();
+  await expect(page.locator('#tab-strip .tab-drop-marker')).toBeHidden();
   const box = (await overlay.boundingBox())!, panel = (await page.locator('#workspace').boundingBox())!;
   expect(Math.round(box.x - panel.x)).toBe(12); expect(Math.round(box.y - panel.y)).toBe(13); // 12 px inside the panel's 1 px top border.
   await page.dispatchEvent('body', 'dragleave', { relatedTarget: null });
@@ -127,13 +127,13 @@ test('a library row dragged onto the strip opens in a new tab at that spot, or a
   await expect(page.locator('.open-drag-ghost')).toHaveCount(0); // Under the threshold it is still a click.
   await page.mouse.move(target.x, target.y, { steps: 10 });
   await expect(page.locator('.open-drag-ghost')).toHaveCount(1);
-  await expect(page.locator('.tab-drop-marker')).toBeVisible();
-  await expect(page.locator('.tab-drop-ghost')).toHaveText('+ 1 file');
+  await expect(page.locator('#tab-strip .tab-drop-marker')).toBeVisible();
+  await expect(page.locator('#tab-strip .tab-drop-ghost')).toHaveText('+ 1 file');
   await page.mouse.up();
   await expect(titles(page)).toHaveText(['a.txt', 'lib1.txt', 'b.txt', 'c.txt']);
   await shown(page, 'lib1.txt');
   await expect(page.locator('.open-drag-ghost')).toHaveCount(0);
-  await expect(page.locator('.tab-drop-marker')).toBeHidden();
+  await expect(page.locator('#tab-strip .tab-drop-marker')).toBeHidden();
   // Released over the reading area: after the tab being read.
   await tab(page, 'c.txt').click(); await shown(page, 'c.txt');
   const second = await centre(row('lib2.txt'));
@@ -154,7 +154,7 @@ test('a library row dragged onto the strip opens in a new tab at that spot, or a
   await page.mouse.move(target.x, target.y, { steps: 6 });
   await page.keyboard.press('Escape');
   await expect(page.locator('.open-drag-ghost')).toHaveCount(0);
-  await expect(page.locator('.tab-drop-marker')).toBeHidden();
+  await expect(page.locator('#tab-strip .tab-drop-marker')).toBeHidden();
   await page.mouse.up();
   await expect(titles(page)).toHaveCount(5);
 });
@@ -201,7 +201,7 @@ test('a Home tile dragged to the reading area opens in a new tab, after the tab 
   const from = await centre(dragged), target = await afterTab(page, 0);
   await page.mouse.move(from.x, from.y); await page.mouse.down();
   await page.mouse.move(target.x, target.y, { steps: 10 });
-  await expect(page.locator('.tab-drop-marker')).toBeVisible();
+  await expect(page.locator('#tab-strip .tab-drop-marker')).toBeVisible();
   await page.mouse.up();
   await expect(titles(page)).toHaveText(['a.txt', 'lib1.txt', 'b.txt']);
   await libraryToggle(page).click();

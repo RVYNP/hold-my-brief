@@ -53,7 +53,7 @@ shown most recently); the others are put away and reopen at the place you left t
 "Opening…" notice, the next time you select them. Switching between the three live tabs is instant.
 
 The open tabs, their order and the one showing are remembered and restored at the next launch (in the browser preview, in this
-browser's storage). Only the tab that was showing opens at once; the others open when selected. A tab whose file has gone shows
+browser's storage). Only the tab that was showing opens at once (while split, the tab each pane showed); the others open when selected. A tab whose file has gone shows
 **File not found** with **Locate…** and **Close tab**, rather than failing the launch. The Library tab comes back drawn from the library as it is then.
 
 With nothing saved, the window opens on **Hand it over.** Once documents have been opened, it opens
@@ -74,8 +74,8 @@ on **Home**:
 
 A faint **background** lies behind Home: a dithered picture of the theme's window glow that covers the whole window below the
 toolbar (the tab strip and the window buttons never show any of it), under the library rail and Home's content, at 6 %
-strength by default. The bar holds the title, **Open files**, **Browse library** and **Shuffle background**, a quiet button that
-draws another pattern at once. The pattern also changes once a day (by your local date) and the last one is remembered. It takes its colours
+strength by default. The bar holds the title, **Open files** and **Browse library**.
+The picture changes once a day (by your local date) and stays the same until the day ends. It takes its colours
 from the theme and follows theme changes, and it is drawn only while Home is showing, once and still: nothing on it moves
 on its own, and a change fades from one picture to the next over 0.6 s (not at all with reduced motion). Reading
 surfaces (PDF, EPUB, Markdown, text and image tabs) and the Library tab stay plain. Choose its pattern, turn it off, or set
@@ -96,6 +96,37 @@ or searched. Nothing is drawn over the page; the subtitle's tooltip says "Image-
 is on screen, and the first time you drag to select on one, a notice explains why nothing is
 selected. Hold My Brief doesn't run OCR in
 this build, so run the PDF through an OCR tool first if you need its text. This is a known limit.
+
+## Two documents side by side
+
+Read two documents at once: each side has its own row of tabs, its own page, zoom, position and view controls. Split the window by any of these:
+
+- **Right-click a document tab ▸ Split right** (the context-menu key or Shift+F10 on a focused tab does the same). That tab moves to a new pane on the
+  right and every other tab stays on the left. The menu has **Close** too.
+- **Split right** in the command palette, or **Ctrl+\\** (⌘\\ on macOS) when the window is not split.
+- **Right-click a document in the library tree ▸ Open in split right**: it opens in the right pane (it moves there when it is open already), and the
+  split is made first when there is none, with the document you were reading, or the one you read last, staying on the left.
+- **Right-click a document card or row on Home ▸ Open in split right** (**Open** is the other choice there). From Home the document you read last stays on the left.
+
+Split right is unavailable, and its menu entry is greyed out with the reason as its tooltip, when only one document tab is open (a tree row or Home card
+needs one other document open), or when the window has no room: each pane needs 360 px, so the reading area (the window less the icon rail, or the
+library panel while it is docked) must be 728 px wide, and the window at least 720 px.
+
+While split, **Ctrl+\\** moves between the panes. Click a pane, or its tabs, to make it the active one: the toolbar's title, find, the footer, the progress line and
+the keyboard act on it, and its shown tab carries the accent. A tab's menu is then **Move to the other side**, **Close** and **Close the split** (also in the
+palette as *Move tab to the other side* and *Close the split*). Closing a pane's last tab ends the split, and the tabs of both sides go back to the one row, the right
+side's after the left's. Home and the Library tab belong to the window: they stay in the toolbar and cover both panes, and a pane's tab brings the split back as it was.
+Opening a document puts it in the active pane; one that is open on the other side is shown there.
+
+Drag the **divider** between the panes to resize them; it snaps to 40, 50 and 60 % when you let go near them, keeps each pane at least 360 px wide, goes back to 50 % on
+a double-click and moves 2 % with ← and → when it has focus (Home and End go to the limits).
+
+**Folding.** When the reading area is narrower than 728 px (2 × 360 plus the 8 px divider), for example after docking the library or in a narrower window, only the
+active pane shows and its row ends with **⫴ Other side (n)**, n being the tabs on the other side. Press it, or Ctrl+\\, to swap the panes. The two panes appear
+again by themselves as soon as there is room. In a window under 720 px a split is always folded.
+
+The split is remembered with the tabs: at the next launch both rows, the divider's place, the active pane and the document each pane showed come back, each shown
+document at the place you left it (the other tabs open when selected). A session saved before the split existed opens as it always did.
 
 ## The window
 
@@ -146,9 +177,12 @@ tooltip and accessible name. One ring marks the kept choice in all three rows.
 - **Page:** Match theme, White, Sepia or Dim for text documents (Markdown, TXT and reflowable EPUB).
   PDF pages, fixed-layout EPUB pages and images always keep their original colors.
 - **Background:** the pattern of Home's background: Flow (default), Arcs, Stripes, Contours or Truchet, the same families as the
-  generated covers; **None** turns it off (and hides Shuffle background).
-- **Strength:** how strongly the background shows, from 2 % to 10 % (6 % by default); live, and greyed while Background is None.
-  10 % is the most at which Home's text keeps 4.5:1 contrast on the strongest part of the picture in every theme.
+  generated covers; **None** turns it off.
+- **Strength:** how strongly the background shows, from 2 % to 30 % (6 % by default); live, and greyed while Background is None.
+  Up to 8 % Home's text keeps its usual colours: it is the most at which the muted text keeps 4.5:1 contrast on the strongest part of
+  the picture in every theme. Above 8 % the muted text (**Open files**, **Browse library**, **Open in library**, the small lines under
+  cards) deepens toward the main text colour as you go, reaching it at 30 %, so it keeps that contrast in every theme. 30 % is the top
+  of the slider.
 
 Below a hairline, a **preview** of a page of text in the reading font shows the settings the open document uses, live,
 and under it are **Size**, **Spacing**, **Margins** and, for plain text, **Lines**. **Text size & spacing…** in the palette

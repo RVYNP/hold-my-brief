@@ -35,11 +35,14 @@
   /* The window glow must not show bare, as a stripe between two glass surfaces, beside the docked panel. Two strips carry the panel's own glass
      (the same wash over the same fixed glow, so they match it pixel for pixel): the rail's zone (from the window's edge to the panel's, 52 px, under
      the rail); and the panel's 10 px handle with the 2 px after it, over the panel's shadow, which
-     then falls on the reading panel from the gap's edge. The handle, and its hover state, stand above the strip. Neither takes the pointer. */
-  #reader-layout.library-open::before, .library-root::after { content: ''; position: absolute; top: 0; bottom: 6px; background-color: var(--glass-raise-base); background-image: var(--glass-raise-paint); background-attachment: var(--glass-raise-attach); pointer-events: none; }
+     then falls on the reading panel from the gap's edge. The handle, and its hover state, stand above the strip. Neither takes the pointer.
+     The strips run to the window's bottom: the panel's box keeps its 6 px margin there, and a third strip (over the panel's shadow, under its box's
+     6 px margin) shows the same glass in it, so the column has no band of another tone at its foot. */
+  #reader-layout.library-open::before, .library-root::before, .library-root::after { content: ''; position: absolute; top: 0; bottom: 0; background-color: var(--glass-raise-base); background-image: var(--glass-raise-paint); background-attachment: var(--glass-raise-attach); pointer-events: none; }
   #reader-layout.library-open::before { z-index: 0; left: 0; width: 52px; }
   #reader-layout.library-open.library-right::before { left: auto; right: 0; }
-  .library-root::after { bottom: 0; left: calc(100% - 10px); width: 12px; }
+  .library-root::before { z-index: 1; top: auto; bottom: -6px; left: 0; right: 0; height: 6px; }
+  .library-root::after { bottom: -6px; left: calc(100% - 10px); width: 12px; }
   .library-right > .library-root::after { left: auto; right: calc(100% - 10px); }
   #reader-layout { --library-clear: 48px; --workspace-clear: 48px; }
   #reader-layout.library-open { --library-clear: calc(var(--library-width, 270px) + 64px); --workspace-clear: 0px; }
@@ -125,10 +128,11 @@
 .library-grid .library-tile-scrim { display: none; }
 /* An EPUB's generated cover prints its own title; its caption (space is reserved) appears only once the cover image has replaced it. */
 .library-tile.is-cover .library-tile-media:not(.is-loaded) ~ .library-tile-caption { visibility: hidden; }
-.library-item-menu { position: fixed; z-index: 40; display: flex; flex-direction: column; min-width: 150px; padding: 4px; border: 1px solid var(--border); border-radius: 7px; background: var(--card); box-shadow: var(--shadow-popover); }
-.library-item-menu[hidden] { display: none; }
+.library-item-menu, .context-menu { position: fixed; z-index: 40; display: flex; flex-direction: column; min-width: 150px; padding: 4px; border: 1px solid var(--border); border-radius: 7px; background: var(--card); box-shadow: var(--shadow-popover); }
+.library-item-menu[hidden], .context-menu[hidden] { display: none; }
 .library-scope-menu .library-menu-heading { margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--hairline); }
-.library-item-menu button { padding: 6px 10px; text-align: left; }
+.library-item-menu button, .context-menu button { padding: 6px 10px; text-align: left; }
+.library-item-menu button:disabled, .context-menu button:disabled { color: var(--muted); opacity: .6; cursor: default; }
 /* The marker after the last document rendered; reaching it renders the next batch (see `sentinelObserver` in library.ts). */
 .library-sentinel { height: 1px; pointer-events: none; }
 .library-documents { flex: 1 1 0; min-height: 78px; overflow-y: auto; overflow-x: hidden; padding: 2px; margin: -2px; scrollbar-width: thin; scrollbar-gutter: stable; }
@@ -402,9 +406,9 @@
   #reader-layout > .icon-rail { position: absolute; z-index: 21; top: 0; bottom: 6px; left: 2px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; box-sizing: border-box; width: 36px; padding: 8px 0; }
   /* The rail has no box: a wash from the window's edge implies it (D3). It runs from the toolbar's bottom edge to the window's bottom, 44 px from
      the edge, and fades to nothing at its inner edge; the buttons stand on it (the rail is a stacking context, the wash is its lowest layer). */
-  #reader-layout > .icon-rail::before { content: ''; position: absolute; z-index: -1; top: 0; bottom: -6px; left: -2px; width: 44px; background: linear-gradient(to right, var(--glass-raise), transparent); pointer-events: none; }
+  #reader-layout > .icon-rail::before { content: ''; position: absolute; z-index: -1; top: 0; bottom: -6px; left: -2px; width: 44px; background: linear-gradient(to right, var(--rail-wash), transparent); pointer-events: none; }
   #reader-layout.library-right > .icon-rail { left: auto; right: 2px; }
-  #reader-layout.library-right > .icon-rail::before { left: auto; right: -2px; background: linear-gradient(to left, var(--glass-raise), transparent); }
+  #reader-layout.library-right > .icon-rail::before { left: auto; right: -2px; background: linear-gradient(to left, var(--rail-wash), transparent); }
   #reader-layout:not(.library-right):not(.library-open) #empty.is-home { padding-left: 52px; }
   #reader-layout.library-right:not(.library-open) #empty.is-home { padding-right: 52px; }
   /* The toolbar's library button is the compact window's door; here the icon rail is. */
@@ -428,5 +432,5 @@
 /* The rail's right-click menu: one item, fixed at the pointer. */
 .icon-rail-menu { position: fixed; z-index: 40; display: flex; flex-direction: column; min-width: 150px; padding: 4px; border: 1px solid var(--border); border-radius: 7px; background: var(--card); box-shadow: var(--shadow-popover); }
 /* The sheen's top hairline, as for the other popovers (style.css). */
-.library-item-menu, .icon-rail-menu { background-image: var(--sheen-edge); background-size: 100% 1px; background-position: top; background-repeat: no-repeat; }
+.library-item-menu, .context-menu, .icon-rail-menu { background-image: var(--sheen-edge); background-size: 100% 1px; background-position: top; background-repeat: no-repeat; }
 .icon-rail-menu button { padding: 6px 10px; text-align: left; font-size: 12px; }
