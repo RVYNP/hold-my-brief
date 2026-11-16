@@ -97,6 +97,26 @@ export class TabList<T extends TabBase> {
   }
 
   /**
+   * Takes a tab out without closing its document: the tab itself is returned (so another list can adopt it) with whether it held a live reader.
+   * What the list shows follows the way closing does, and nothing is shown once the list is empty.
+   */
+  detach(path: string): { tab: T; live: boolean } | undefined {
+    const index = this.indexOf(path);
+    if (index < 0) return undefined;
+    const [tab] = this.items.splice(index, 1), live = this.live.delete(path);
+    this.used.delete(path);
+    if (this.showing === path) this.showing = (this.items[index] ?? this.items[index - 1])?.path; // The neighbour is not counted as used: only a tab that was shown is.
+    return { tab, live };
+  }
+
+  /** The tab shown most recently, leaving out `path`; undefined when none of the others was ever shown. */
+  mostRecent(path?: string): T | undefined {
+    let best: T | undefined, at = 0;
+    for (const tab of this.items) { const when = tab.path === path ? 0 : this.used.get(tab.path) ?? 0; if (when > at) { at = when; best = tab; } }
+    return best;
+  }
+
+  /**
    * Puts `tab` where the tab at `path` is, showing it if that one was showing, and drops the old one: the same slot with another
    * document in it. Nothing changes when `path` is not open, or when `tab`'s document is already open in another tab.
    */
@@ -162,4 +182,40 @@ export function slotAt(centres: readonly number[], x: number): number {
   let slot = 0;
   for (const centre of centres) if (x > centre) slot++;
   return slot;
+}
+
+/**
+ * Split right: the tab at `path` leaves `list` for a new list of its own, which shows it. Every other tab stays, and `list` shows the one of them
+ * that was shown most recently (the neighbour the closing rule picks when none was). Undefined, and nothing changed, when `path` is not in `list`.
+ */
+export function splitOff<T extends TabBase>(list: TabList<T>, path: string): TabList<T> | undefined {
+  const taken = list.detach(path);
+  if (!taken) return undefined;
+  const recent = list.mostRecent();
+  if (recent) list.activate(recent.path);
+  const right = new TabList<T>();
+  right.add(taken.tab); if (taken.live) right.markLive(path);
+  right.activate(path);
+  return right;
+}
+
+/** Moves the tab at `path` from one list to another, at `at` (the end by default), and shows it there; the list it left shows the tab it would show after closing it. */
+export function moveAcross<T extends TabBase>(from: TabList<T>, to: TabList<T>, path: string, at?: number): boolean {
+  if (to.find(path)) return false;
+  const taken = from.detach(path);
+  if (!taken) return false;
+  to.add(taken.tab, at); if (taken.live) to.markLive(path);
+  to.activate(path);
+  return true;
+}
+
+/** Ends a split: every tab of `right` follows those of `left`, in order, and `showing` (a path of either) is the one shown. Returns `left`. */
+export function mergeLists<T extends TabBase>(left: TabList<T>, right: TabList<T>, showing: string | undefined): TabList<T> {
+  for (const tab of [...right.tabs]) {
+    const live = right.isLive(tab.path);
+    right.detach(tab.path);
+    left.add(tab); if (live) left.markLive(tab.path);
+  }
+  left.activate(showing);
+  return left;
 }

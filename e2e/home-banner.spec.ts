@@ -53,13 +53,14 @@ const themes: [string, object][] = [
   ['Peach', { palette: 'peach' }],
 ];
 
-test('Home is a plain bar again: the title, Open files, Browse library and a quiet Shuffle background; no band, sheen or plate', async ({ page }) => {
+test('Home is a plain bar again: the title, Open files and Browse library; no band, sheen or plate', async ({ page }) => {
   await seedLibrary(page, documents, collections);
   const bar = page.locator('.home-bar');
   await expect(bar.getByRole('heading', { name: 'Home', level: 1 })).toBeVisible();
   await expect(bar.getByRole('button', { name: 'Open files' })).toBeVisible();
   await expect(bar.getByRole('button', { name: 'Browse library' })).toBeVisible();
-  await expect(bar.locator('.home-actions').getByRole('button', { name: 'Shuffle background' })).toBeVisible();
+  await expect(bar.locator('h1, button')).toHaveCount(3);
+  await expect(page.getByRole('button', { name: 'Shuffle background' })).toHaveCount(0);
   await expect(page.locator('.home-banner, .home-banner-art, .home-banner-plate, .home-banner-sheen')).toHaveCount(0);
   await expect(page.locator('#empty-open')).toHaveText('Open files');
   await expect(page.locator('#home-browse')).toHaveText('Browse library');
@@ -123,14 +124,16 @@ test('the blend follows the scheme only: multiply in light schemes (Peach includ
 test('the ground paints over the workspace surface and under the content: at the maximum the window differs from the same one with BACKGROUND None', async ({ page }) => {
   await seedLibrary(page, documents, collections);
   for (const [name, record] of [themes[0], themes[1], themes[2]] as [string, object][]) {
-    await keepAppearance(page, { ...record, banner: 'flow', backgroundStrength: .1 });
-    await pixels(page);
     const clip = { x: 0, y: 40, width: 1080, height: 720 };
-    const withGround = await page.screenshot({ clip, animations: 'disabled' });
     await keepAppearance(page, { ...record, banner: 'none', backgroundStrength: .1 });
     await expect(canvases(page)).toHaveCount(0);
     const without = await page.screenshot({ clip, animations: 'disabled' });
-    expect(withGround.equals(without), name).toBe(false);
+    await keepAppearance(page, { ...record, banner: 'flow', backgroundStrength: .1 });
+    await pixels(page);
+    await expect(shown(page)).toHaveCSS('opacity', '0.1');
+    // A repaint after the first draw (a theme colour that settled late) cross-fades two canvases, and a screenshot inside that fade can see neither at any strength:
+    // the window differs from the one without a ground as soon as the picture is on screen, so the screenshot is retaken until it does.
+    await expect.poll(async () => (await page.screenshot({ clip, animations: 'disabled' })).equals(without), { message: name }).toBe(false);
   }
 });
 
@@ -220,7 +223,7 @@ test('STRENGTH sets the opacity live, from 2 to 30 %, and is kept', async ({ pag
   await expect(again.locator('.strength-value')).toHaveText('30 %');
 });
 
-test('BACKGROUND None removes the ground and the shuffle button, greys STRENGTH, and a pattern brings them back', async ({ page }) => {
+test('BACKGROUND None removes the ground, greys STRENGTH, and a pattern brings them back', async ({ page }) => {
   await seedLibrary(page, documents, collections);
   await pixels(page);
   const sheet = await openSheet(page);
@@ -228,7 +231,6 @@ test('BACKGROUND None removes the ground and the shuffle button, greys STRENGTH,
   await expect(sheet.locator('[data-banner=flow]')).toHaveAttribute('aria-checked', 'true');
   await sheet.locator('[data-banner=none]').click();
   await expect(canvases(page)).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Shuffle background' })).toHaveCount(0);
   await expect(page.locator('.home-bar').getByRole('heading', { name: 'Home' })).toBeVisible();
   const slider = sheet.locator('input[type=range]');
   await expect(slider).toBeDisabled();
@@ -242,14 +244,12 @@ test('BACKGROUND None removes the ground and the shuffle button, greys STRENGTH,
   await expect(again.locator('input[type=range]')).toBeEnabled();
   await expect(again.locator('input[type=range]')).toHaveAttribute('aria-disabled', 'false');
   await pixels(page);
-  await expect(page.getByRole('button', { name: 'Shuffle background' })).toBeVisible();
 });
 
 test('a saved record with banner none and no strength shows no ground; STRENGTH reads 6 % and is disabled', async ({ page }) => {
   await seedLibrary(page, documents, collections);
   await keepAppearance(page, { mode: 'light', palette: 'brief', accent: null, page: 'theme', banner: 'none' });
   await expect(canvases(page)).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Shuffle background' })).toHaveCount(0);
   const sheet = await openSheet(page);
   await expect(sheet.locator('[data-banner=none]')).toHaveAttribute('aria-checked', 'true');
   await expect(sheet.locator('input[type=range]')).toHaveValue('6');
@@ -270,16 +270,24 @@ test('a saved record from before the strength shows its pattern at 6 %; an out-o
   }
 });
 
-test('Shuffle background changes the canvas pixels, and the seed survives a reload', async ({ page }) => {
+test('the picture is the day\'s: a seed saved today stays on show after a reload, and another day\'s is replaced', async ({ page }) => {
   await seedLibrary(page, documents, collections);
-  const before = await pixels(page);
-  await page.getByRole('button', { name: 'Shuffle background' }).click();
-  await expect.poll(() => canvases(page).count()).toBeGreaterThan(0);
-  await expect.poll(async () => await pixels(page) !== before).toBe(true);
-  await expect(canvases(page)).toHaveCount(1); // the leaving canvas is removed once the fade is over
-  const after = await pixels(page);
+  const key = 'hold-my-brief:home-banner';
+  const day = (offset: number) => page.evaluate(offset => {
+    const date = new Date(); date.setDate(date.getDate() + offset);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  }, offset);
+  const today = await day(0);
+  await page.evaluate(([key, today]) => localStorage.setItem(key, JSON.stringify({ day: today, seed: 12345 })), [key, today]);
   await page.reload();
-  expect(await pixels(page)).toBe(after);
+  const kept = await pixels(page);
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), key)).toEqual({ day: today, seed: 12345 });
+  await page.reload();
+  expect(await pixels(page)).toBe(kept);
+  await page.evaluate(([key, yesterday]) => localStorage.setItem(key, JSON.stringify({ day: yesterday, seed: 12345 })), [key, await day(-1)]);
+  await page.reload();
+  expect(await pixels(page)).not.toBe(kept);
+  expect((await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), key)).day).toBe(today);
 });
 
 test('a pattern choice repaints the ground in place, and so does a theme change', async ({ page }) => {
@@ -312,13 +320,14 @@ test('the ground has no tone of its own: its pixels are fully transparent or opa
 test('a changed picture cross-fades two canvases over 600 ms, and skips the fade under reduced motion', async ({ page }) => {
   await seedLibrary(page, documents, collections);
   await pixels(page);
-  await page.getByRole('button', { name: 'Shuffle background' }).click();
+  const sheet = await openSheet(page);
+  await sheet.locator('[data-banner=stripes]').click();
   await expect(canvases(page)).toHaveCount(2);
   expect(await canvases(page).first().evaluate(node => getComputedStyle(node).transitionDuration)).toBe('0.6s');
   await expect(canvases(page)).toHaveCount(1);
   const still = await pixels(page);
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.getByRole('button', { name: 'Shuffle background' }).click();
+  await sheet.locator('[data-banner=contours]').click();
   const swapped = () => canvases(page).evaluateAll((nodes, old) => ({ count: nodes.length, changed: (nodes.at(-1) as HTMLCanvasElement).toDataURL() !== old }), still);
   let first = 0;
   await expect.poll(async () => { const now = await swapped(); if (now.changed && !first) first = now.count; return first; }).toBeGreaterThan(0);
@@ -335,8 +344,23 @@ test('no animation frame fires while Home sits idle for 2 s', async ({ page }) =
   });
   await seedLibrary(page, documents, collections);
   await pixels(page);
-  await page.waitForTimeout(500); // the first paint's own frame
-  await page.evaluate(() => { (window as unknown as { __frames: number }).__frames = 0; });
+  // Settle on state, not a sleep: fonts, every Home thumbnail (pdf.js paints it over a few frames of its own) and every Home image are
+  // loaded and decoded, and one 500 ms window has had no frame.
+  // A tile far below the fold is never asked for (Home fills tiles within 120 px of the viewport), so only the ones the lazy fill would reach count.
+  await expect.poll(() => page.evaluate(() => new Promise<number>(done => {
+    const pending = [...document.querySelectorAll('.library-tile-media[data-path]:not(.is-loaded):not(.is-unavailable)')];
+    const look = new IntersectionObserver(entries => { look.disconnect(); done(entries.filter(entry => entry.isIntersecting).length); }, { rootMargin: '120px' });
+    if (pending.length) for (const media of pending) look.observe(media); else done(0);
+  }))).toBe(0);
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await Promise.all([...document.querySelectorAll('img')].map(async image => { if (!image.complete) await new Promise(done => { image.addEventListener('load', done, { once: true }); image.addEventListener('error', done, { once: true }); }); await image.decode().catch(() => undefined); }));
+  });
+  await expect.poll(async () => {
+    await page.evaluate(() => { (window as unknown as { __frames: number }).__frames = 0; });
+    await page.waitForTimeout(500);
+    return page.evaluate(() => (window as unknown as { __frames: number }).__frames);
+  }, { timeout: 5000, intervals: [0] }).toBe(0);
   await page.waitForTimeout(2000);
   expect(await page.evaluate(() => (window as unknown as { __frames: number }).__frames)).toBe(0);
   expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);

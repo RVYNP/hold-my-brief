@@ -69,10 +69,3 @@ export function seedFor(saved: unknown, today: string): BannerSeed {
   if (kept && typeof kept === 'object' && kept.day === today && typeof kept.seed === 'number' && Number.isInteger(kept.seed) && kept.seed >= 0 && kept.seed < 2 ** 32) return { day: today, seed: kept.seed };
   return { day: today, seed: seedFrom(today) };
 }
-
-/** A new seed for today, different from `from`. `random` is in [0, 1). */
-export function reshuffled(from: BannerSeed, today: string, random: () => number): BannerSeed {
-  let seed = Math.floor(random() * 2 ** 32) >>> 0;
-  if (seed === from.seed) seed = (seed + 0x9e3779b1) >>> 0;
-  return { day: today, seed };
-}

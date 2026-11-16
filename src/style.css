@@ -265,7 +265,7 @@
  *   page              --chrome, --stage              opaque; the native window colour (src/theme.ts)
  *   panel (alpha)     --glass-surface                #workspace: Home, the stage around PDF pages
  *   panel (opaque)    --surface, --paper             panel composited over page: dialogs, EPUB/text paper
- *   card (alpha)      --glass-raise                  library rail's edge wash and the drawer (over the window's own glow; the document never runs under the rail: .reader-host is inset by --workspace-clear)
+ *   card (alpha)      --glass-raise                  the drawer, over the window's own glow; the rail's edge wash is --rail-wash: --glass-raise in the glow themes, the toolbar's --chrome pulled 8 % toward --fg in the families (the document never runs under the rail: .reader-host is inset by --workspace-clear)
  *   card (opaque)     --card                         card composited over page: menus, sheets, popovers
  *   raise             --raise                        find bar, page strip, loading bar
  *   (page, no fill)   --glass-host, --glass-stage   the page-based reader host and the PDF stage (the workspace's panel shows); --glass-chrome (toolbar) too in the glow themes, while the seven families keep it opaque
@@ -300,6 +300,8 @@
   --glass-raise-base: var(--raise);
   --glass-raise-paint: none;
   --glass-raise-attach: scroll;
+  /* The icon rail's edge wash (library.css). The glow themes keep --glass-raise; the seven families override it below with the toolbar's own colour, pulled 8 % toward the text colour (the smallest pull that gives every family, mode and side 6 levels at 2 px). */
+  --rail-wash: var(--glass-raise);
   /* The sheen: each theme's two-stop accent gradient (--sheen-a to --sheen-b), drawn in six places and nowhere else (see the end of this
      file). --sheen-mix-light and --sheen-mix-dark are how much of --sheen-b the primary button's far end takes, the most that keeps
      --on-accent at 4.5:1 along the whole fill; tests/palette-contrast.test.ts holds them to it. Text, icons, borders and chips stay flat. */
@@ -332,6 +334,7 @@
   --glass-raise-base: var(--chrome);
   --glass-raise-paint: linear-gradient(var(--glass-raise), var(--glass-raise)), var(--glow-paint);
   --glass-raise-attach: scroll, fixed, fixed;
+  --rail-wash: color-mix(in srgb, var(--chrome) 92%, var(--fg));
 }
 [data-palette='aurora'] {
   color-scheme: dark;
@@ -1018,8 +1021,6 @@ h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 1px 0 
 /* Home's muted ink: --muted up to 8 % STRENGTH (data-ground-deep is set by theme.ts above it), then mixed toward --fg in step with the strength, whole at the slider's maximum (30 %), so the text stays at 4.5:1 on a stronger ground. .08 is groundInkStrength and .22 is backgroundStrengthMax - groundInkStrength in theme.ts: change them together. */
 #empty.is-home { --home-muted: var(--muted); }
 :root[data-ground-deep] #empty.is-home { --home-muted: color-mix(in oklab, var(--muted), var(--fg) clamp(0%, calc((var(--ground-strength, .06) - .08) / .22 * 100%), 100%)); }
-.home-reshuffle { display: grid; place-items: center; flex: none; width: 28px; height: 28px; padding: 0; border-radius: 6px; color: var(--muted); }
-.home-reshuffle:hover { color: var(--fg); background: var(--hover-subtle); }
 .home-file { padding: 6px 10px; border-radius: 6px; color: var(--home-muted); font-size: 12px; }
 .home-file:hover { color: var(--fg); background: var(--hover-subtle); }
 /* #empty-open is also the splash's large button; in the header it is a peer of Browse library. */
@@ -1162,7 +1163,7 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
 /* Subtle while idle: the card stays opaque so page text never shows through; only its contents fade. */
 #view-controls:hover, #view-controls:focus-within { --idle: 1; }
 #view-controls > * { opacity: var(--idle); transition: opacity .15s; }
-@container workspace (min-width: 720px) { #view-controls { left: auto; right: 16px; translate: none; } }
+@container pane (min-width: 720px) { #view-controls { left: auto; right: 16px; translate: none; } }
 #view-controls button { display: grid; place-items: center; width: 28px; height: 26px; padding: 0; border-radius: 6px; color: var(--muted); }
 #view-controls button[aria-pressed=true] { color: var(--accent-ink); background-color: var(--accent-soft); background-image: var(--sheen-wash); }
 #view-controls button[aria-pressed=true]:hover { background-color: var(--accent-soft-hover); }
@@ -1199,8 +1200,8 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
    open footer nor the hover band that opens it ever lies over a thumbnail; the lane under the strip is painted
    in the strip's own colour (a shadow, so it takes no room). The pill's default spot rises with it (see clampPoint). */
 #reader-layout { --page-strip-height: 106px; --page-strip-room: calc(var(--page-strip-height) + var(--footer-height)); }
-#workspace.has-page-strip .reader-host { bottom: var(--page-strip-room); }
-#workspace.has-page-strip #view-controls { bottom: calc(var(--page-strip-room) + 8px); }
+#workspace:has(.pane-body[data-pane='a'].has-page-strip) .reader-host[data-pane='a'], #workspace:has(.pane-body[data-pane='b'].has-page-strip) .reader-host[data-pane='b'] { bottom: var(--page-strip-room); }
+.pane-body.has-page-strip #view-controls { bottom: calc(var(--page-strip-room) + 8px); }
 #page-strip { position: absolute; z-index: 4; left: 0; right: 0; bottom: var(--footer-height); height: var(--page-strip-height); background: var(--raise); border-top: 1px solid var(--hairline); box-shadow: 0 var(--footer-height) 0 var(--raise); }
 /* The icon rail floats over the panel's edge while the library is closed, so the strip starts beside it, like the find bar. */
 @media (min-width: 720px) {
@@ -1445,7 +1446,7 @@ dd { margin: 0; color: var(--muted); }
   #reader-layout.library-right #find-bar { right: var(--workspace-clear); }
 }
 /* While the bar is open, shift the reading surface down so the first line is never hidden. */
-#workspace:has(#find-bar:not([hidden])) .reader-host { top: var(--find-bar-height); }
+#workspace:has(.pane-body[data-pane='a'] > #find-bar:not([hidden])) .reader-host[data-pane='a'], #workspace:has(.pane-body[data-pane='b'] > #find-bar:not([hidden])) .reader-host[data-pane='b'] { top: calc(var(--pane-tabs, 0px) + var(--find-bar-height)); }
 #find-bar svg { flex-shrink: 0; margin-right: 2px; }
 #find-query { flex: 0 1 320px; min-width: 0; padding: 4px 8px; border: 0; border-radius: 6px; background: var(--hover-subtle); color: var(--fg); font: inherit; font-size: 12px; }
 #find-query::placeholder { color: var(--muted); }
@@ -1495,3 +1496,50 @@ dialog, dialog.drop, #menu, #appearance, .tab-menu, .zoom-menu { background-imag
   footer::after { background: linear-gradient(to right, var(--accent) var(--scrub-fill), var(--track) var(--scrub-fill)); }
   .tab.is-active::before, #home-tab.is-active::before { display: none; }
 }
+
+/* Split view: two documents side by side, each pane with a row of tabs. Not split, the one pane's layer (`.pane-body`) fills the reading panel and the row,
+   the second pane and the divider are not drawn, so nothing differs from a single reader. The reading surfaces stay children of #workspace (a page
+   that moves in the document reloads its frames) and take their box from their pane's `data-pane`; what belongs to a pane (find bar, view controls,
+   page strip, the placeholder for a tab with no page) is laid on its layer. The panes share the reading width less the icon rail's or the docked
+   panel's room (--split-start / --split-end) and the 8 px divider; --ratio is the left pane's part of it. */
+.pane-strip, .pane-divider { display: none; }
+.pane-body { position: absolute; z-index: 6; inset: var(--pane-tabs, 0px) 0 0 0; container: pane / inline-size; pointer-events: none; }
+.pane-body > * { pointer-events: auto; }
+#workspace.is-split { --pane-tabs: 28px; --split-start: 0px; --split-end: 0px; --split-share: calc(100% - var(--split-start) - var(--split-end) - 8px); --split-a: calc(var(--split-share) * var(--ratio, .5)); }
+@media (min-width: 720px) {
+  #reader-layout:not(.library-right) #workspace.is-split { --split-start: var(--workspace-clear); }
+  #reader-layout.library-right #workspace.is-split { --split-end: var(--workspace-clear); }
+}
+/* Beaten otherwise by library.css's `#reader-layout:not(.library-right) .reader-host { left: var(--workspace-clear) }`, which loads later with the same weight. */
+#reader-layout #workspace.is-split [data-pane='a'] { --workspace-clear: 0px; left: var(--split-start); right: auto; width: var(--split-a); }
+#reader-layout #workspace.is-split [data-pane='b'] { --workspace-clear: 0px; left: calc(var(--split-start) + var(--split-a) + 8px); right: var(--split-end); width: auto; }
+#reader-layout #workspace.is-split .reader-host { top: var(--pane-tabs); }
+#workspace.is-split .pane-strip { position: absolute; z-index: 7; top: 0; height: 28px; display: flex; align-items: center; gap: 2px; padding: 0 4px; background: var(--chrome); border-bottom: 1px solid var(--hairline); }
+#workspace.is-split .pane-strip .tab, #workspace.is-split .pane-strip .tab-add, #workspace.is-split .pane-strip .tab-overflow { height: 24px; }
+#workspace.is-split .pane-strip .tab-add, #workspace.is-split .pane-strip .tab-overflow { width: 24px; }
+#workspace.is-split .pane-strip .tab-list { flex: 0 1 auto; }
+/* The shown tab of the pane that is not the active one is selected, without the sheen. */
+.pane-strip.is-inactive .tab.is-active::before { display: none; }
+#workspace.is-split .pane-divider { display: block; position: absolute; z-index: 7; top: 0; bottom: 0; left: calc(var(--split-start) + var(--split-a)); width: 8px; background: var(--chrome); cursor: col-resize; touch-action: none; }
+.pane-divider::before { content: ''; position: absolute; left: 50%; top: 50%; width: 3px; height: 36px; translate: -50% -50%; border-radius: 2px; background: var(--track); }
+.pane-divider:hover::before, .pane-divider:focus-visible::before, .pane-divider.is-dragging::before { background: var(--accent); }
+.pane-divider:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* Too narrow for two panes (a window that shrank): only the active pane shows, and Ctrl \ swaps them. */
+#reader-layout #workspace.is-split.is-single [data-pane] { left: var(--split-start); right: var(--split-end); width: auto; }
+#workspace.is-split.is-single[data-active='a'] [data-pane='b'], #workspace.is-split.is-single[data-active='b'] [data-pane='a'] { visibility: hidden; pointer-events: none; }
+#workspace.is-split.is-single .pane-divider { display: none; }
+/* Home and the Library page take the reading area below the panes' rows, which stay so that a tab of either pane brings the split back as it was. */
+#workspace.is-covered :is(.pane-body, .reader-host, .pane-divider) { visibility: hidden; pointer-events: none; }
+#workspace.is-split.is-covered #empty { height: calc(100% - var(--pane-tabs)); margin-top: var(--pane-tabs); }
+#workspace.is-split.is-covered .library-page { top: var(--pane-tabs); }
+/* The view controls of the pane that is not the active one: a still copy of how they last were (the live ones are the active pane's). */
+.pill-ghost { position: absolute; z-index: 6; bottom: 36px; left: 50%; translate: -50% 0; display: flex; align-items: center; gap: 2px; padding: 3px; background: var(--card); border: 1px solid var(--border); border-radius: 9px; box-shadow: var(--shadow-page); pointer-events: none; }
+@container pane (min-width: 720px) { .pill-ghost { left: auto; right: 16px; translate: none; } }
+.pill-ghost > * { opacity: .7; }
+.pill-ghost button, .pill-ghost output { display: grid; place-items: center; min-width: 28px; height: 26px; padding: 0; border-radius: 6px; color: var(--muted); font: 11px/1 var(--font-mono); }
+.pill-ghost button[aria-pressed=true] { color: var(--accent-ink); background-color: var(--accent-soft); }
+.pill-ghost [data-was='zoom-level'] { display: flex; align-items: center; justify-content: center; gap: 4px; width: 56px; color: var(--fg); }
+.pill-ghost [data-was='view-grip'] { width: 14px; }
+.pill-ghost .view-group, .pill-ghost .view-segmented, .pill-ghost .view-size, .pill-ghost [data-was='view-reading'] { display: flex; align-items: center; gap: 2px; }
+.pill-ghost .view-sep { width: 1px; height: 16px; background: var(--hairline); }
+.pill-ghost .view-text { width: auto; padding: 0 8px; font: 500 12px/1 var(--font-ui); white-space: nowrap; }

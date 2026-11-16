@@ -9,7 +9,7 @@ import { createIconRail } from './icon-rail';
 import { ImageAdapter } from './adapters/image';
 import { createPalette } from './palette';
 import { createFindBar } from './find-bar';
-import { COMMANDS, shortcutFor, shortcutReference, tabDigit, unavailableReason } from './commands';
+import { COMMANDS, shortcutFor, shortcutReference, tabDigit, unavailableReason, type SplitContext } from './commands';
 import { appearance, initAppearance, onAppearanceChange, allPalettes, pageTones, saveAppearance, scheme, type AppearanceMode } from './theme';
 import { appearanceSummary, createAppearanceSheet, paletteIcon } from './appearance';
 import { createAssistantPanel } from './assistant-panel';
@@ -25,8 +25,8 @@ import { createZoomGesture } from './zoom-gesture';
 import type { Hold, Spot } from './zoom-anchor';
 import { createZoomMenu } from './zoom-menu';
 import { createProgressPreview } from './progress-preview';
-import { LIBRARY_PATH, TabList, type SavedTab } from './tabs';
-import { createTabStrip, type TabView } from './tab-strip';
+import { LIBRARY_PATH, TabList, mergeLists, moveAcross, splitOff, type SavedTab } from './tabs';
+import { createTabStrip, type TabStrip, type TabView } from './tab-strip';
 import { titleHints } from './tab-titles';
 import { baseName, ghostLabel, insertionIndex, overlayNames, splitDropped, unsupportedNotice } from './drop';
 import { attachOpenDrag } from './open-drag';
@@ -35,6 +35,8 @@ import { fillContents } from './contents';
 import { steppedFontSize } from './text-size';
 import { createWindowControls, wireWindowControls } from './window-controls';
 import { Pane } from './pane';
+import { DEFAULT_PERCENT, canSplit, clampPercent, shareOf } from './split';
+import { createBody, createDivider, createRow, paintDivider, withoutIds, type SideLetter, type SideView } from './split-view';
 initAppearance();
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
@@ -100,12 +102,50 @@ let splashHtml: string | undefined;
 let homePicture = 0;
 const homeThumbs = createThumbnailStore();
 const pan = new Panner();
-/** The panes: each holds one document's reading state. There is one for now; `activePane()` is the one commands, keys, the footer and the pill act on. */
-const panes = [new Pane<Tab>({ persist, notify })];
-const activePane = () => panes[0];
+const workspace = $('workspace'), pill = $('view-controls');
 /**
- * The documents open as tabs. The active pane's `reader`, `active`, `options`, `position`, `host` and `pannedScroller`, and `scanNoticeShown` below,
- * are the working copy of the tab that is showing (`shown`); `leave` takes them back into the tab, `show` loads the next tab's into them.
+ * A side is one pane of the window: its reading state (`pane`), the tabs it holds (`tabs`) and the one it shows (`shown`), and what it is drawn with (`view`).
+ * Not split, the window has one side and its tabs are the toolbar's, the Library tab among them. Split, it has two, each with a row of tabs of its own, and
+ * the Library tab and Home (`cover`) belong to the window and take the whole reading area. `focused` is the side that commands, keys, the footer, the find
+ * bar and the view controls act on: the last one clicked or focused. `activePane()` is its reading state.
+ */
+type Side = { pane: Pane<Tab>; tabs: TabList<Tab>; shown: Tab | undefined; scanNoticeShown: boolean; view: SideView; strip: TabStrip };
+const sides: Side[] = [];
+let focused!: Side;
+const activePane = () => focused.pane;
+const isSplit = () => sides.length === 2;
+/** What takes the whole reading area while split: Home, or the Library page. */
+let cover: 'home' | 'library' | undefined;
+/** The Library tab while split (not split, it is the first tab of the one side). */
+let libraryTab: Tab | undefined;
+/** The divider's position: the left pane's percent of the room the two panes share. Kept for as long as the split lasts. */
+let ratio = DEFAULT_PERCENT;
+/** The right side while no split is open: its row, layer and tab strip are made once and put back on the next split. */
+let spare: Side | undefined;
+/** The tab of a document (or the Library tab) wherever it is open. */
+const known = (path: string): Tab | undefined => { for (const side of sides) { const tab = side.tabs.find(path); if (tab) return tab; } return path === LIBRARY_PATH ? libraryTab : undefined; };
+/** The side whose tabs hold `path`. */
+const holder = (path: string) => sides.find(side => side.tabs.find(path));
+/** The side an event target is in (a reading surface, a row of tabs, or a pane's layer). */
+const sideAt = (target: EventTarget | null) => { const letter = target instanceof Element ? target.closest<HTMLElement>('[data-pane]')?.dataset.pane : undefined; return sides.find(side => side.view.letter === letter); };
+function makeSide(letter: SideLetter): Side {
+  const parts = createRow(letter), body = createBody(letter);
+  let state: HTMLElement;
+  if (letter === 'a') { state = $('tab-state'); body.append(state, pill); } else { state = withoutIds($('tab-state').cloneNode(true) as HTMLElement); state.hidden = true; body.append(state); }
+  workspace.append(parts.row, body);
+  const tabsRow = createTabStrip({ strip: parts.row, list: parts.list, add: parts.add, overflow: parts.overflow }, { select: path => selectTab(path), close: closeTab, newTab: () => { activateSide(side); openFile(); }, move: (path, to) => { side.tabs.move(path, to); paintTabs(); saveSession(); } }, platform === 'mac' ? '⌘T' : 'Ctrl T');
+  const side: Side = { pane: new Pane<Tab>({ persist, notify }), tabs: new TabList<Tab>(), shown: undefined, scanNoticeShown: false, view: { letter, body, state, ...parts }, strip: tabsRow };
+  state.querySelector<HTMLElement>('.primary')!.onclick = () => stateAction(side);
+  state.querySelector<HTMLElement>('.tab-state-actions button:not(.primary)')!.onclick = () => { if (side.shown) closeTab(side.shown.path); };
+  return side;
+}
+sides.push(makeSide('a'));
+focused = sides[0];
+const divider = createDivider({ percent: () => ratio, set: percent => setRatio(percent), bounds: () => { const a = sides[0].view.body.getBoundingClientRect(), b = sides[1]?.view.body.getBoundingClientRect(); return b && !workspace.classList.contains('is-single') ? { left: a.left, right: b.right } : undefined; } });
+workspace.append(divider);
+/**
+ * The documents open as tabs. A side's pane (`reader`, `active`, `options`, `position`, `host` and `pannedScroller`) and its `scanNoticeShown` below,
+ * are the working copy of the tab that side is showing (`shown`); `leave` takes them back into the tab, `show` loads the next tab's into them.
  * Every other tab holds its own reader and host (live) or only its saved place (hibernated), see `hibernate`.
  */
 type Tab = {
@@ -118,23 +158,19 @@ type Tab = {
   /** The Library tab (`path` is `LIBRARY_PATH`, `format` `library`) holds no reader: its `name` is the scope's title and `scope` what it shows, in the form library-scope.ts saves. */
   scope?: string;
 };
-const tabs = new TabList<Tab>();
-let shown: Tab | undefined;
-/** The scan notice is shown once per opened document; opening a document re-arms it. */
-let scanNoticeShown = false;
 
 function notify(message: string, retry = false) { $('notice').hidden = false; $('notice').querySelector('span')!.textContent = message; $('retry-save').hidden = !retry; }
 // A select-drag on a page without text selects nothing. Say why, once, when the user shows that intent:
 // primary button, hand tool off, past the same slop a pan uses, on a page marked image-only.
 document.addEventListener('pointerdown', down => {
   const target = down.target, pane = activePane();
-  if (scanNoticeShown || down.button !== 0 || !down.isPrimary || down.pointerType === 'touch' || pan.hand || !(target instanceof Element)
+  if (focused.scanNoticeShown || down.button !== 0 || !down.isPrimary || down.pointerType === 'touch' || pan.hand || !(target instanceof Element)
     || !pane.host?.contains(target) || !target.closest('[data-image-only]') || !pane.reader?.getPosition().imageOnly) return;
   const move = (e: PointerEvent) => {
     if (e.pointerId !== down.pointerId) return;
     if (!(e.buttons & 1)) return end();
     if (Math.hypot(e.clientX - down.clientX, e.clientY - down.clientY) < DRAG_SLOP) return;
-    end(); scanNoticeShown = true; notify("This page is a scanned image, so its text can't be selected or searched.");
+    end(); focused.scanNoticeShown = true; notify("This page is a scanned image, so its text can't be selected or searched.");
   };
   const end = () => { for (const type of ['pointermove', 'pointerup', 'pointercancel']) window.removeEventListener(type, move as EventListener, true); };
   window.addEventListener('pointermove', move, true); window.addEventListener('pointerup', end, true); window.addEventListener('pointercancel', end, true);
@@ -171,9 +207,26 @@ function updateScrubValue(preview = false) {
   scrubber.setAttribute('aria-valuetext', label);
   if (preview) $('position').textContent = `${label} · release to jump`;
 }
-/** The level the open document is drawn at; before it is drawn, 100 %. */
-const zoomLevel = () => { const { reader, options } = activePane(); return reader?.zoomLevel?.() ?? (options.fitted ? 1 : options.zoom); };
-const zoomLimits = () => activePane().reader?.zoomLimits?.() ?? DEFAULT_LIMITS;
+/** The level `pane`'s document is drawn at; before it is drawn, 100 %. */
+const zoomLevel = (pane: Pane<Tab> = activePane()) => { const { reader, options } = pane; return reader?.zoomLevel?.() ?? (options.fitted ? 1 : options.zoom); };
+const zoomLimits = (pane: Pane<Tab> = activePane()) => pane.reader?.zoomLimits?.() ?? DEFAULT_LIMITS;
+/** Writes `pane`'s zoom level, its tooltip and its step buttons into `root`: the live view controls, or the still copy that belongs to a pane that is not the focused one. */
+function paintZoom(pane: Pane<Tab>, root: ParentNode) {
+  const part = <T extends HTMLElement>(id: string) => root.querySelector<T>(`#${id}, [data-was=${id}]`);
+  const { options } = pane, fitted = options.fitted, width = options.fit === 'width', current = zoomLevel(pane), level = `${zoomPercent(current)}%`;
+  // The level opens the zoom menu; double-clicking it still toggles fit page/fit width (while zoomed it first returns to the current fit).
+  const next = fitted && !width ? 'fit-width' : fitted ? 'fit-page' : `fit-${options.fit}`;
+  const levelButton = part('zoom-level'), limits = zoomLimits(pane), canZoomOut = stepZoom(current, -1, limits) < current - .004, canZoomIn = stepZoom(current, 1, limits) > current + .004;
+  if (levelButton) {
+    levelButton.querySelector('span')!.textContent = level; levelButton.dataset.next = next; levelButton.dataset.fit = fitted ? options.fit : '';
+    levelButton.setAttribute('aria-label', `Zoom menu, ${level}${fitted ? `, ${width ? 'fit width' : 'fit page'}` : ''}`);
+    levelButton.title = `${fitted ? `${width ? 'Fit width' : 'Fit page'} · ${level}` : `Zoom ${level}`} · click for zoom options · double-click for ${next === 'fit-width' ? 'fit width (Ctrl 2)' : 'fit page (Ctrl 0)'}`;
+  }
+  const out = part<HTMLButtonElement>('zoom-out'), into = part<HTMLButtonElement>('zoom-in');
+  if (out) out.disabled = !canZoomOut;
+  if (into) into.disabled = !canZoomIn;
+  return { current, limits, canZoomIn, canZoomOut };
+}
 /** Syncs the view-controls pill, page-layout toggles and the title subtitle with the current position, zoom, layout and hand-tool state. */
 function updateViewControls() {
   const pane = activePane(), { reader, active, options, position } = pane;
@@ -216,7 +269,7 @@ function updateViewControls() {
   cover.hidden = !spreads || reader.mode !== 'fixed';
   $('view-layout').hidden = !spreads;
   // Page previews are a PDF feature: the toggle is offered only where the adapter has them, and says why when a short panel hides the strip.
-  const previewable = Boolean(reader.setPreviews), hidden = previewable && stripWanted && workspace.clientHeight < MIN_PANEL_HEIGHT ? `Hidden while the reading area is shorter than ${MIN_PANEL_HEIGHT} px` : '';
+  const previewable = Boolean(reader.setPreviews), hidden = previewable && stripWanted && focused.view.body.clientHeight < MIN_PANEL_HEIGHT ? `Hidden while the reading area is shorter than ${MIN_PANEL_HEIGHT} px` : '';
   $('view-previews').hidden = !previewable;
   $('page-strip-toggle').setAttribute('aria-pressed', String(stripWanted));
   $('page-strip-toggle').title = hidden ? `Page previews (Ctrl 4) · ${hidden}` : 'Page previews (Ctrl 4)';
@@ -227,15 +280,7 @@ function updateViewControls() {
   $('view-controls').hidden = !pan.pannable && !reflowable;
   if (reflowable) readingControls.update({ flow: reader.flow?.() ?? 'paginated', fontSize: options.fontSize });
   if (!pan.pannable) { zoomMenu.close(); return; }
-  // The level opens the zoom menu; double-clicking it still toggles fit page/fit width (while zoomed it first returns to the current fit).
-  const next = fitted && !width ? 'fit-width' : fitted ? 'fit-page' : `fit-${options.fit}`;
-  const levelButton = $('zoom-level');
-  levelButton.querySelector('span')!.textContent = level; levelButton.dataset.next = next; levelButton.dataset.fit = fitted ? options.fit : '';
-  levelButton.setAttribute('aria-label', `Zoom menu, ${level}${fitted ? `, ${width ? 'fit width' : 'fit page'}` : ''}`);
-  levelButton.title = `${fitted ? `${width ? 'Fit width' : 'Fit page'} · ${level}` : `Zoom ${level}`} · click for zoom options · double-click for ${next === 'fit-width' ? 'fit width (Ctrl 2)' : 'fit page (Ctrl 0)'}`;
-  const limits = zoomLimits(), canZoomOut = stepZoom(current, -1, limits) < current - .004, canZoomIn = stepZoom(current, 1, limits) > current + .004;
-  $<HTMLButtonElement>('zoom-out').disabled = !canZoomOut;
-  $<HTMLButtonElement>('zoom-in').disabled = !canZoomIn;
+  const { limits, canZoomIn, canZoomOut } = paintZoom(pane, pill);
   zoomMenu.update({ level: current, fit: fitted ? options.fit : undefined, limits, canZoomIn, canZoomOut });
   // The hand tool is always available while the pill is shown: it scrolls an overflowing page and slides a fitting one.
   $('hand-tool').setAttribute('aria-pressed', String(pan.hand));
@@ -261,24 +306,24 @@ $('page-strip-toggle').onclick = () => void command('page-strip').catch(fail);
 // Movable pill: the grip drags it anywhere in the reading panel. Without a stored position the CSS
 // placement stands untouched; with one, inline left/top (kept as centre fractions of the panel so a
 // resize keeps it proportional) win, clamped inside the panel and clear of an open library drawer.
-const pillKey = 'hold-my-brief:view-controls', pill = $('view-controls'), grip = $('view-grip'), workspace = $('workspace');
+const pillKey = 'hold-my-brief:view-controls', grip = $('view-grip');
 try { activePane().pillPlacement = parsePlacement(localStorage.getItem(pillKey)); } catch { /* Optional preference. */ }
-const pillPanel = () => ({ width: workspace.clientWidth, height: workspace.clientHeight });
+const pillPanel = () => ({ width: focused.view.body.clientWidth, height: focused.view.body.clientHeight });
 const pillBox = () => ({ width: pill.offsetWidth, height: pill.offsetHeight });
 /**
  * How much of the panel's bottom the pill keeps above: the page-preview strip and the footer lane under it, or the image-navigation
  * pill and the footer lane under that (an image document has the second, a PDF the first, never both).
  */
 const pillStrip = () => {
-  const bottom = workspace.getBoundingClientRect().bottom;
+  const body = focused.view.body, bottom = body.getBoundingClientRect().bottom;
   const covered = (element: Element | null) => element ? Math.max(0, bottom - element.getBoundingClientRect().top) : 0;
-  return Math.max(workspace.classList.contains('has-page-strip') ? covered(pageStrip.element) : 0, workspace.classList.contains('has-image-navigation') ? covered(workspace.querySelector('.library-image-navigation')) : 0);
+  return Math.max(body.classList.contains('has-page-strip') ? covered(pageStrip.element) : 0, workspace.classList.contains('has-image-navigation') ? covered(workspace.querySelector('.library-image-navigation')) : 0);
 };
 function drawerBand() {
   // The compact sheet covers the whole layout over a scrim; only the docked panel, and the icon rail it stands beside, are steered around.
   if (matchMedia('(max-width: 719px)').matches) return null;
-  const boxes = [$('library-rail').getBoundingClientRect(), ...($('reader-layout').classList.contains('library-open') ? [$('library-root').getBoundingClientRect()] : [])], panel = workspace.getBoundingClientRect();
-  return { left: Math.min(...boxes.map(box => box.left)) - panel.left - workspace.clientLeft, right: Math.max(...boxes.map(box => box.right)) - panel.left - workspace.clientLeft };
+  const boxes = [$('library-rail').getBoundingClientRect(), ...($('reader-layout').classList.contains('library-open') ? [$('library-root').getBoundingClientRect()] : [])], panel = focused.view.body.getBoundingClientRect();
+  return { left: Math.min(...boxes.map(box => box.left)) - panel.left - focused.view.body.clientLeft, right: Math.max(...boxes.map(box => box.right)) - panel.left - focused.view.body.clientLeft };
 }
 function showPill(point: Point | null) {
   const values = point ? [`${point.left}px`, `${point.top}px`, 'auto', 'auto', 'none'] : ['', '', '', '', ''];
@@ -300,8 +345,8 @@ function movePill(point: Point, save: boolean) {
 function resetPill() { activePane().pillPlacement = null; showPill(null); try { localStorage.removeItem(pillKey); } catch { /* Optional preference. */ } }
 /** The pill's rendered top-left in panel pixels, wherever the CSS or a stored position put it. */
 function pillPoint(): Point {
-  const box = pill.getBoundingClientRect(), panel = workspace.getBoundingClientRect();
-  return { left: box.left - panel.left - workspace.clientLeft, top: box.top - panel.top - workspace.clientTop };
+  const box = pill.getBoundingClientRect(), panel = focused.view.body.getBoundingClientRect();
+  return { left: box.left - panel.left - focused.view.body.clientLeft, top: box.top - panel.top - focused.view.body.clientTop };
 }
 let pillDrag: { x: number; y: number; from: Point; moved: boolean } | null = null;
 const endPillDrag = () => { if (pillDrag?.moved) movePill(pillPoint(), true); pillDrag = null; };
@@ -324,12 +369,15 @@ grip.addEventListener('keydown', event => {
   else if (nudge) { event.preventDefault(); const at = pillPoint(); movePill({ left: at.left + nudge.dx, top: at.top + nudge.dy }, true); }
 });
 let viewFrame = 0;
-const viewChanged = () => { cancelAnimationFrame(viewFrame); viewFrame = requestAnimationFrame(() => { updateViewControls(); placePill(); }); };
+const viewChanged = () => { cancelAnimationFrame(viewFrame); viewFrame = requestAnimationFrame(() => { applyLayout(); updateViewControls(); placePill(); }); };
 // The panel, the pill itself (shown, or resized by the layout toggle) and the library drawer all change where it may sit.
 const viewObserver = new ResizeObserver(viewChanged);
 for (const element of [workspace, pill, $('library-root')]) viewObserver.observe(element);
 new MutationObserver(viewChanged).observe($('reader-layout'), { attributes: true, attributeFilter: ['class'] });
 new MutationObserver(viewChanged).observe(workspace, { attributes: true, attributeFilter: ['class'] }); // The image navigation appearing or going takes or gives back the pill's lane.
+/** A pane's layer changes size when the panes are laid out, and its class when it takes or gives up the page strip. */
+const watchSide = (side: Side) => { viewObserver.observe(side.view.body); new MutationObserver(viewChanged).observe(side.view.body, { attributes: true, attributeFilter: ['class'] }); };
+sides.forEach(watchSide);
 // Page previews (PDF): a filmstrip of the document in a fixed band under the reading surface. The preference is global and
 // off until chosen; the band is shown only for a document that has previews and a panel tall enough to spare
 // it. It is room the reading surface leaves (CSS, `has-page-strip`), not a row in the page's flow, so turning
@@ -337,13 +385,13 @@ new MutationObserver(viewChanged).observe(workspace, { attributes: true, attribu
 const stripKey = 'hold-my-brief:page-strip', pageStrip = createPageStrip(fail);
 let stripWanted = false;
 try { stripWanted = localStorage.getItem(stripKey) === 'on'; } catch { /* Optional preference. */ }
-workspace.append(pageStrip.element);
+focused.view.body.append(pageStrip.element);
 /** Reserves or releases the strip's room for the document `adapter` shows; true when the strip is shown. */
 function stripSpace(adapter: ReaderAdapter | undefined) {
   // Measured on the panel, which the strip never resizes, so showing the strip cannot hide it again.
-  const shown = Boolean(adapter?.setPreviews) && stripWanted && workspace.clientHeight >= MIN_PANEL_HEIGHT;
-  if (workspace.classList.contains('has-page-strip') !== shown) {
-    workspace.classList.toggle('has-page-strip', shown); pageStrip.element.hidden = !shown;
+  const shown = Boolean(adapter?.setPreviews) && stripWanted && focused.view.body.clientHeight >= MIN_PANEL_HEIGHT;
+  if (focused.view.body.classList.contains('has-page-strip') !== shown) {
+    focused.view.body.classList.toggle('has-page-strip', shown); pageStrip.element.hidden = !shown;
     placePill();
   }
   return shown;
@@ -377,7 +425,7 @@ scrubber.onpointercancel = () => {
   const { reader } = activePane();
   if (reader) showPosition(reader.getPosition());
 };
-setInterval(() => { for (const pane of panes) if (pane.dirty) void pane.flush(); }, 1500);
+setInterval(() => { for (const side of sides) if (side.pane.dirty) void side.pane.flush(); }, 1500);
 // Go to and Contents drop from the toolbar under the title, like the palette, instead of centring on a
 // dimmed page; a click outside closes them.
 /** `anchor` stands a popover on that box, above it where there is room and below it where there is not; without one it drops from the toolbar. */
@@ -445,7 +493,7 @@ function openPalette() {
     // Created on first use, and appended after the static dialogs, so the shared close handler
     // above (which focuses the reading surface) never attaches to it; the palette owns its focus.
     palette = createPalette({
-      hasDocument: () => Boolean(activePane().reader), format: () => activePane().active?.format, desktop, run: id => command(id),
+      hasDocument: () => Boolean(activePane().reader), format: () => activePane().active?.format, desktop, split: splitContext, run: id => command(id),
       goTo: target => { const current = activePane().reader; return current?.goTo(target).then(() => activePane().host?.focus(), error => { if (activePane().reader === current) fail(error); }); },
       find: text => findBar.open(text),
       assistant,
@@ -465,7 +513,7 @@ const findBar = createFindBar({
   onError: fail,
 });
 // Inside the reading panel, so it pushes the document down rather than covering it.
-$('workspace').prepend(findBar.element);
+focused.view.body.prepend(findBar.element);
 
 /**
  * The opt-in assistant (desktop only, off until the user saves an Anthropic key). It reaches the
@@ -519,11 +567,14 @@ async function command(id: string) {
   // The catalog's declared requirements are enforced here rather than by each caller, so the
   // keyboard, the menu and the palette cannot drift into different behaviour.
   const entry = COMMANDS.find(candidate => candidate.id === id);
-  const reason = entry && unavailableReason(entry, { hasDocument: Boolean(activePane().reader), desktop, format: activePane().active?.format });
+  const reason = entry && unavailableReason(entry, { hasDocument: Boolean(activePane().reader), desktop, format: activePane().active?.format, split: splitContext() });
   if (reason) { notify(reason); return; }
   if (id === 'open' || id === 'new-tab') openFile();
-  else if (id === 'close-tab') { if (shown) closeTab(shown.path); }
-  else if (id === 'next-tab' || id === 'previous-tab') { const next = tabs.neighbour(id === 'next-tab' ? 1 : -1); if (next) selectTab(next.path); }
+  else if (id === 'close-tab') { const tab = closableTab(); if (tab) closeTab(tab.path); }
+  else if (id === 'next-tab' || id === 'previous-tab') { const next = focused.tabs.neighbour(id === 'next-tab' ? 1 : -1); if (next) selectTab(next.path); }
+  else if (id === 'split-right') splitRight();
+  else if (id === 'move-tab-side') moveTabToOtherSide();
+  else if (id === 'close-split') endSplit();
   else if (id === 'library') library.toggle();
   else if (id === 'library-search') library.showView('search');
   else if (id === 'library-board') openLibraryTab();
@@ -556,7 +607,7 @@ async function adapter(format: string): Promise<ReaderAdapter> {
  * (its place and view are saved first); when that tab is no longer showing by then, the document opens as a new tab at `at`.
  */
 async function load(open: () => Promise<Opened | null>, label = 'document', { target, at, replace }: { target?: Tab; at?: number; replace?: Tab } = {}): Promise<boolean> {
-  const pane = activePane(), token = pane.beginLoad(target);
+  const side = focused, pane = side.pane, token = pane.beginLoad(target);
   paintTabState();
   $('loading').hidden = false; $('loading').querySelector('span')!.textContent = `Opening ${label}…`;
   let candidate: ReaderAdapter | undefined, staging: HTMLElement | undefined, opening = true;
@@ -566,20 +617,25 @@ async function load(open: () => Promise<Opened | null>, label = 'document', { ta
     await pane.flush(); const doc = await open(); if (!doc || !pane.isCurrent(token)) return false;
     opening = false;
     // A dialog or a CLI request only now says which document it is: if it is already open, that tab is the one to fill or show.
-    const tab = target ?? tabs.find(doc.path) ?? { path: doc.path, name: doc.name, format: doc.format, options: { ...defaultOptions }, hand: false, scanNoticeShown: false };
-    if (tab.reader) { doc.bytes = new Uint8Array(); selectTab(tab.path); void touch(tab); return true; }
+    const tab = target ?? known(doc.path) ?? { path: doc.path, name: doc.name, format: doc.format, options: { ...defaultOptions }, hand: false, scanNoticeShown: false };
+    if (tab.reader || (holder(tab.path) && holder(tab.path) !== side)) { doc.bytes = new Uint8Array(); selectTab(tab.path); void touch(tab); return true; }
     if (tab.resume) doc.previousState = { locator: tab.resume.locator, options: tab.resume.options };
     $('loading').querySelector('span')!.textContent = `Opening ${doc.name}…`;
     candidate = await adapter(doc.format); if (!pane.isCurrent(token)) return false;
     stripSpace(candidate); // A page-preview strip's room is there before the document is fitted, so opening never refits it.
-    staging = document.createElement('section'); staging.className = 'reader-host staging'; staging.tabIndex = 0; staging.setAttribute('aria-label', 'Reading surface'); $('view-controls').before(staging);
+    staging = document.createElement('section'); staging.className = 'reader-host staging'; staging.tabIndex = 0; staging.setAttribute('aria-label', 'Reading surface'); staging.dataset.pane = side.view.letter; workspace.insertBefore(staging, sides[0].view.row);
     // Options saved before zoom was a true scale hold a multiplier of the fit. They open fitted and are converted below, once the document is drawn, so the page keeps its size; saving then writes the new form.
     const saved = doc.previousState?.options, legacy = Boolean(saved) && saved!.zoomModel !== ZOOM_MODEL, legacyZoom = Number(saved?.zoom);
     const prefs: ReaderOptions = { ...defaultOptions, ...saved, zoomModel: ZOOM_MODEL, ...(legacy ? { fitted: true, zoom: 1 } : {}) };
     const current = candidate;
     await candidate.open({ ...doc, bytes: doc.bytes }, staging, {
       // The tab showing hears its reader fully; a live tab out of sight only keeps the place.
-      onPosition: p => { if (pane.reader === current) showPosition(p); else if (tab.reader === current) tab.position = p; }, onError: fail, openExternal, requestPassword: password, onFrame: doc => { pan.watchFrame(doc); watchFrameZoom(doc); },
+      // The tab may have crossed to the other side since it opened: the side that holds it now is the one that hears its reader.
+      onPosition: p => {
+        const owner = holder(tab.path) ?? side;
+        if (owner.pane.reader === current) { if (owner === focused) showPosition(p); else { owner.pane.position = p; owner.pane.markDirty(); paintTabs(); refreshGhost(owner); } }
+        else if (tab.reader === current) tab.position = p;
+      }, onError: fail, openExternal, requestPassword: password, onFrame: doc => { pan.watchFrame(doc); watchFrameZoom(doc); doc.addEventListener('pointerdown', () => { const owner = holder(tab.path); if (owner && isSplit()) activateSide(owner); }, true); },
       resolveImage: desktop ? async relative => { const result = await native<{bytes: number[]; mime: string}>('read_relative_image', { path: doc.path, relative }); const url = URL.createObjectURL(new Blob([new Uint8Array(result.bytes)], { type: result.mime })); urls.push(url); return url; } : undefined,
     }, prefs);
     // A reflowable book opens in the flow the reader last chose; with none saved the adapter picked one from the book, and it is kept from here on.
@@ -595,7 +651,8 @@ async function load(open: () => Promise<Opened | null>, label = 'document', { ta
     await pane.flush();
     if (!pane.isCurrent(token)) return false;
     doc.bytes = new Uint8Array();
-    const swapping = replace && !tabs.find(tab.path) && shown === replace && tabs.find(replace.path) === replace ? replace : undefined;
+    if (focused !== side) activateSide(side); // The reader asked for another side while this one opened: the document goes where it was asked for.
+    const swapping = replace && !side.tabs.find(tab.path) && side.shown === replace && side.tabs.find(replace.path) === replace ? replace : undefined;
     Object.assign(tab, { name: doc.name, format: doc.format, doc, reader: candidate, host: staging, options: prefs, position: candidate.getPosition(), hand: false, stripScroll: undefined, find: undefined, scanNoticeShown: false, resume: undefined, problem: undefined });
     staging.classList.remove('staging'); staging.classList.add('tab-hidden'); // `enter` shows it
     if (swapping) {
@@ -603,14 +660,14 @@ async function load(open: () => Promise<Opened | null>, label = 'document', { ta
       void pane.flush(); swapping.find = undefined; findBar.close(); zoomGesture.cancel();
       pane.reader = undefined; syncPageStrip();
       swapping.reader?.destroy(); swapping.host?.remove(); swapping.reader = swapping.host = undefined;
-      tabs.replace(swapping.path, tab); shown = undefined;
-    } else if (!tabs.find(tab.path)) tabs.open(tab, at);
-    tabs.markLive(tab.path);
+      side.tabs.replace(swapping.path, tab); side.shown = undefined;
+    } else if (!side.tabs.find(tab.path)) side.tabs.open(tab, at);
+    side.tabs.markLive(tab.path);
     show(tab, true);
     showPosition(candidate.getPosition()); // A reopened or converted document saves its place and options again.
     staging.focus(); candidate = undefined; staging = undefined; pane.cancelPending = undefined;
     if (doc.warning) notify(doc.warning);
-    if (tab.format === 'epub') void homeThumbs.loadEpub(tab.path, () => Boolean(tabs.find(tab.path))).then(() => paintTabs());
+    if (tab.format === 'epub') void homeThumbs.loadEpub(tab.path, () => Boolean(known(tab.path))).then(() => paintTabs());
     if (desktop) homeRecents = (await state()).recents; // The store moves the opened document to the front.
     await library.refresh(doc.path).catch(fail);
     return true;
@@ -624,42 +681,47 @@ async function load(open: () => Promise<Opened | null>, label = 'document', { ta
   finally { candidate?.destroy(); staging?.remove(); if (pane.endLoad(token)) { $('loading').hidden = true; syncPageStrip(); paintTabState(); } }
 }
 
+/** Writes what `side`'s pane holds of the tab it shows back into the tab, and saves its place. `side` is the focused one: the hand tool, the page strip and the find bar are its. */
+function syncBack(side: Side) {
+  const tab = side.shown, pane = side.pane;
+  void pane.flush();
+  if (tab?.reader && tab.reader === pane.reader) { tab.options = pane.options; tab.position = pane.position; tab.hand = pan.hand; tab.scanNoticeShown = side.scanNoticeShown; tab.stripScroll = pageStrip.scrollPosition(); }
+  if (tab) tab.find = findBar.isOpen() ? findBar.query() : undefined;
+}
+
 /** Takes the showing tab's working copy back into the tab, saves its place, and puts it out of sight. */
 function leave(tab: Tab) {
-  const pane = activePane();
-  void pane.flush();
-  if (tab.reader && tab.reader === pane.reader) { tab.options = pane.options; tab.position = pane.position; tab.hand = pan.hand; tab.scanNoticeShown = scanNoticeShown; tab.stripScroll = pageStrip.scrollPosition(); }
-  tab.find = findBar.isOpen() ? findBar.query() : undefined;
+  syncBack(focused);
   tab.host?.classList.add('tab-hidden');
   findBar.close(); zoomGesture.cancel();
 }
 
 /** Frees a tab's reader and host, keeping where it was (and how it was viewed) so showing it again reopens it there. */
-function hibernate(tab: Tab) {
+function hibernate(side: Side, tab: Tab) {
   if (!tab.reader) return;
   let locator = tab.position?.locator;
   try { locator = tab.reader.getPosition().locator; } catch { /* Keep the last reported place. */ }
   if (locator) tab.resume = { locator: structuredClone(locator), options: { ...tab.options } };
   tab.reader.destroy(); tab.host?.remove();
   tab.reader = tab.host = undefined;
-  tabs.markHibernated(tab.path);
+  side.tabs.markHibernated(tab.path);
 }
 
-/** Shows `next` (or Home, for none): the one place the working copy changes hands. */
+/** Shows `next` (or Home, for none) in the focused side: the one place the working copy changes hands. */
 function show(next: Tab | undefined, refreshed = false) {
-  if (shown === next && !refreshed) return;
-  const pane = activePane();
-  if (shown && shown !== next) leave(shown);
-  shown = next; tabs.activate(next?.path);
+  const side = focused, pane = side.pane;
+  if (side.shown === next && !refreshed && !cover) return;
+  clearCover();
+  if (side.shown && side.shown !== next) leave(side.shown);
+  side.shown = next; side.tabs.activate(next?.path);
   pane.show(next);
-  scanNoticeShown = next?.scanNoticeShown ?? false; ++scrubRequest; scrubbing = false;
-  for (const path of tabs.hibernation()) hibernate(tabs.find(path)!);
+  side.scanNoticeShown = next?.scanNoticeShown ?? false; ++scrubRequest; scrubbing = false;
+  for (const path of side.tabs.hibernation()) hibernate(side, side.tabs.find(path)!);
   next?.host?.classList.remove('tab-hidden');
   pane.pannedScroller = pane.reader?.scroller?.(); pan.attach(pane.pannedScroller, pane.host); if (next) pan.setHand(next.hand);
   $('empty').hidden = Boolean(next);
   syncPageStrip(); if (next?.stripScroll !== undefined) pageStrip.restoreScroll(next.stripScroll);
-  for (const id of ['previous', 'position', 'next']) $<HTMLButtonElement>(id).disabled = !pane.reader;
-  if (pane.reader && pane.position) showPosition(pane.position, false); else paintNoDocument();
+  syncFooter();
   pane.host?.focus();
   if (next?.find !== undefined) findBar.open(next.find, false);
   lastBackground = undefined;
@@ -668,6 +730,13 @@ function show(next: Tab | undefined, refreshed = false) {
   paintTabState(); paintTabs(); saveSession();
   if (!next) paintHome();
   else if (!next.reader && !next.problem && next.path !== LIBRARY_PATH) void reopen(next);
+}
+
+/** The footer follows the focused pane: its arrows, position and progress line, or the resting text when it shows no document (or Home or the Library page covers it). */
+function syncFooter() {
+  const pane = focused.pane, live = Boolean(pane.reader) && !cover;
+  for (const id of ['previous', 'position', 'next']) $<HTMLButtonElement>(id).disabled = !live;
+  if (live && pane.position) showPosition(pane.position, false); else paintNoDocument();
 }
 
 /** What the reading area, footer and title show while no document does: Home, or a tab waiting to open. */
@@ -683,68 +752,86 @@ function reopen(tab: Tab) { return load(() => openLibraryDocument(tab.path), tab
 
 const tabTitle = (tab: Tab) => tab.path === LIBRARY_PATH ? tab.name : displayTitle(tab, tab.format === 'epub' ? homeThumbs.epub(tab.path)?.title : undefined);
 /** Where a tab is, short: "40 / 146" for pages and lines, a percentage for the rest. */
-function tabWhere(tab: Tab) {
-  const place = tab === shown ? activePane().position : tab.position;
+function tabWhere(side: Side, tab: Tab) {
+  const place = tab === side.shown ? side.pane.position : tab.position;
   if (!place) return '';
   const pages = place.label.match(/^(?:Pages?|Line) ([\d–-]+) of (\d+)/);
   return pages ? `${pages[1]} / ${pages[2]}` : `${Math.round(Math.max(0, Math.min(100, place.fraction * 100)))} %`;
 }
 let paintedTabs = '';
 function paintTabs() {
-  const hints = titleHints(tabs.tabs.filter(tab => tab.path !== LIBRARY_PATH).map(tab => ({ path: tab.path, title: tabTitle(tab) })));
-  const views: TabView[] = tabs.tabs.map(tab => ({ path: tab.path, title: tabTitle(tab), hint: hints.get(tab.path) ?? '', format: tab.format, where: tabWhere(tab), progress: formatProgress(progressOf((tab === shown ? activePane().position : tab.position) ?? { fraction: NaN, scrub: { current: 0, total: 0, unit: 'line' } })) ?? '', active: tab === tabs.active, problem: Boolean(tab.problem), library: tab.path === LIBRARY_PATH, image: Object.hasOwn(imageFormats, tab.format) }));
-  const key = JSON.stringify([views, tabs.size]);
+  const all = [...(libraryTab ? [libraryTab] : []), ...sides.flatMap(side => side.tabs.tabs)];
+  const hints = titleHints(all.filter(tab => tab.path !== LIBRARY_PATH).map(tab => ({ path: tab.path, title: tabTitle(tab) })));
+  const viewOf = (side: Side, tab: Tab, active: boolean): TabView => ({ path: tab.path, title: tabTitle(tab), hint: hints.get(tab.path) ?? '', format: tab.format, where: tabWhere(side, tab), progress: formatProgress(progressOf((tab === side.shown ? side.pane.position : tab.position) ?? { fraction: NaN, scrub: { current: 0, total: 0, unit: 'line' } })) ?? '', active, problem: Boolean(tab.problem), library: tab.path === LIBRARY_PATH, image: Object.hasOwn(imageFormats, tab.format) });
+  const rows = sides.map(side => side.tabs.tabs.map(tab => viewOf(side, tab, tab === side.tabs.active)));
+  const bar = isSplit() ? (libraryTab ? [viewOf(sides[0], libraryTab, cover === 'library')] : []) : rows[0], home = isSplit() ? cover === 'home' : !sides[0].tabs.active;
+  const key = JSON.stringify([bar, home, isSplit() ? [rows, focused.view.letter] : 0, all.length]);
   if (key === paintedTabs) return;
   paintedTabs = key;
-  strip.paint(views, !tabs.active);
-  const here = tabs.active;
+  strip.paint(bar, home);
+  if (isSplit()) sides.forEach((side, index) => { side.strip.paint(rows[index], false); side.view.row.classList.toggle('is-inactive', side !== focused || Boolean(cover)); });
+  const here = isSplit() ? (cover ? (cover === 'library' ? libraryTab : undefined) : focused.shown) : sides[0].tabs.active;
   $('filename').textContent = here ? tabTitle(here) : 'Hold My Brief'; $('filename').title = here?.path ?? '';
-  $('tab-count').textContent = tabs.size ? String(tabs.size) : '';
+  $('tab-count').textContent = all.length ? String(all.length) : '';
 }
 
-/** The placeholder for a showing tab that has no page: its file is missing, its open failed, or it is not opened yet. */
+/** The placeholder for a showing tab that has no page: its file is missing, its open failed, or it is not opened yet. Each side has its own. */
 function paintTabState() {
-  const tab = tabs.active, waiting = Boolean(tab && !tab.reader && activePane().loadingTarget !== tab && tab.path !== LIBRARY_PATH);
-  $('tab-state').hidden = !waiting || !tab;
-  if (!waiting || !tab) return;
-  const problem = tab.problem;
-  $('tab-state-title').textContent = problem?.kind === 'missing' ? 'File not found' : problem ? 'This document could not be opened' : 'Not opened yet';
-  $('tab-state-detail').textContent = problem ? `${tab.name} — ${problem.message}` : tab.name;
-  $('tab-state-primary').textContent = problem?.kind === 'missing' ? 'Locate…' : problem ? 'Try again' : 'Open';
+  for (const side of sides) {
+    const tab = side.shown, waiting = Boolean(tab && !tab.reader && side.pane.loadingTarget !== tab && tab.path !== LIBRARY_PATH), state = side.view.state;
+    state.hidden = !waiting || !tab;
+    if (!waiting || !tab) continue;
+    const problem = tab.problem;
+    state.querySelector('h2')!.textContent = problem?.kind === 'missing' ? 'File not found' : problem ? 'This document could not be opened' : 'Not opened yet';
+    state.querySelector('p')!.textContent = problem ? `${tab.name} — ${problem.message}` : tab.name;
+    state.querySelector('.primary')!.textContent = problem?.kind === 'missing' ? 'Locate…' : problem ? 'Try again' : 'Open';
+  }
 }
-$('tab-state-primary').onclick = () => {
-  const tab = tabs.active;
+function stateAction(side: Side) {
+  const tab = side.shown;
   if (!tab) return;
+  activateSide(side);
   if (tab.problem?.kind === 'missing' && desktop) {
     void locateLibraryDocument(tab.path).then(() => { tab.problem = undefined; void reopen(tab); }).catch(fail);
   } else if (tab.problem?.kind === 'missing') openFile();
   else { tab.problem = undefined; void reopen(tab); }
-};
-$('tab-state-close').onclick = () => { if (tabs.active) closeTab(tabs.active.path); };
+}
 
 /** Tab 1…8, or 9 for the last one: reached by Alt+digit and ⌘+digit as keys and, on macOS, by the Window menu's items. No such tab: nothing happens. */
-function selectTabNumber(digit: number) { const tab = tabs.byNumber(digit); if (tab) selectTab(tab.path); }
-/** Shows a tab, or Home for none. A tab with no page yet starts opening; opening something else meanwhile is given up. */
+function selectTabNumber(digit: number) { const tab = focused.tabs.byNumber(digit); if (tab) selectTab(tab.path); }
+/** Shows a tab, or Home for none. A tab with no page yet starts opening; opening something else meanwhile is given up. While split, a tab of either side
+ *  returns the split as it was (leaving Home or the Library page) and makes its side the focused one; Home and the Library tab cover the split. */
 function selectTab(path: string | undefined) {
-  const tab = path === undefined ? undefined : tabs.find(path);
+  if (isSplit() && (path === undefined || path === LIBRARY_PATH)) { showCover(path === undefined ? 'home' : 'library'); return; }
+  const side = path === undefined ? focused : holder(path), tab = path === undefined ? undefined : side?.tabs.find(path);
   if (path !== undefined && !tab) return;
-  if (tab === shown) return;
-  if (activePane().loadingTarget !== tab) cancelOpen();
+  if (isSplit()) { clearCover(); if (side) activateSide(side); }
+  if (tab === focused.shown) return;
+  if (focused.pane.loadingTarget !== tab) cancelOpen();
   show(tab);
 }
 
 function closeTab(path: string) {
-  const tab = tabs.find(path);
-  if (!tab) return;
-  if (activePane().loadingTarget === tab) cancelOpen();
-  const wasShown = shown === tab;
+  if (path === LIBRARY_PATH && isSplit()) {
+    libraryTab = undefined; library.forgetScope();
+    if (cover === 'library') clearCover();
+    paintTabs(); saveSession();
+    return;
+  }
+  const side = holder(path), tab = side?.tabs.find(path);
+  if (!side || !tab) return;
+  if (side !== focused) activateSide(side);
+  const pane = side.pane;
+  if (pane.loadingTarget === tab) cancelOpen();
+  const wasShown = side.shown === tab;
   if (wasShown) {
-    void activePane().flush(); tab.find = undefined; findBar.close(); zoomGesture.cancel();
-    activePane().reader = undefined; syncPageStrip(); // The strip lets go of the reader before it is destroyed.
+    void pane.flush(); tab.find = undefined; findBar.close(); zoomGesture.cancel();
+    pane.reader = undefined; syncPageStrip(); // The strip lets go of the reader before it is destroyed.
   }
   tab.reader?.destroy(); tab.host?.remove(); tab.reader = tab.host = undefined;
-  const next = tabs.close(path);
-  if (wasShown) { shown = undefined; show(next, true); } else { paintTabs(); saveSession(); }
+  const next = side.tabs.close(path);
+  if (isSplit() && !side.tabs.size) { side.shown = undefined; pane.show(undefined); endSplit(); }
+  else if (wasShown) { side.shown = undefined; show(next, true); } else { paintTabs(); saveSession(); }
   if (path === LIBRARY_PATH) library.forgetScope();
 }
 
@@ -754,33 +841,211 @@ function saveSession() {
   if (sessionTimer) return;
   sessionTimer = setTimeout(() => {
     sessionTimer = undefined;
-    const session = tabs.session((tab): SavedTab => ({ path: tab.path, name: tab.name, format: tab.format, ...(tab.scope ? { scope: tab.scope } : {}) }));
+    const session = sessionOf();
     void saveTabs(session).catch(fail);
   });
 }
 
+const savedTab = (tab: Tab): SavedTab => ({ path: tab.path, name: tab.name, format: tab.format, ...(tab.scope ? { scope: tab.scope } : {}) });
+/** The tabs as they are saved: split or not, one strip in order (the Library tab, the left pane's tabs, then the right pane's), so a restart brings back every document. */
+function sessionOf() {
+  if (!isSplit()) return focused.tabs.session(savedTab);
+  const ordered = [...(libraryTab ? [libraryTab] : []), ...sides.flatMap(side => side.tabs.tabs)];
+  const showing = cover === 'library' ? libraryTab : cover ? undefined : focused.shown;
+  return { tabs: ordered.map(savedTab), active: showing ? ordered.indexOf(showing) : null };
+}
+/** The tab Close tab (Ctrl W) closes: the one the reader sees, which is the Library tab while its page covers the split. */
+const closableTab = () => cover === 'library' ? libraryTab : cover ? undefined : focused.shown;
+
+/** What the split commands need to know. */
+const documentCount = () => sides.reduce((total, side) => total + side.tabs.tabs.filter(tab => tab.path !== LIBRARY_PATH).length, 0);
+/** The width the panes really share: the reading area less the icon rail's room (`--workspace-clear`, which only applies from 720 px up). */
+const paneRoom = () => workspace.clientWidth - (matchMedia('(min-width: 720px)').matches ? parseFloat(getComputedStyle(workspace).getPropertyValue('--workspace-clear')) || 0 : 0);
+const splitContext = (): SplitContext => ({ active: isSplit(), room: canSplit(paneRoom(), innerWidth), documents: documentCount() });
+/** Why Split right cannot run now, or undefined. */
+const splitReason = () => unavailableReason(COMMANDS.find(entry => entry.id === 'split-right')!, { hasDocument: Boolean(focused.shown && focused.shown.path !== LIBRARY_PATH), desktop, split: splitContext() });
+
+/** Lays the panes out: the split's classes, the divider's place, and the footer under the focused pane. */
+function applyLayout() {
+  const split = isSplit();
+  workspace.classList.toggle('is-split', split);
+  if (split) {
+    workspace.dataset.active = focused.view.letter;
+    const room = paneRoom(), shown = clampPercent(ratio, shareOf(room));
+    workspace.style.setProperty('--ratio', String(shown / 100));
+    workspace.classList.toggle('is-single', !canSplit(room, innerWidth));
+    divider.hidden = workspace.classList.contains('is-single');
+    paintDivider(divider, shown);
+  } else {
+    // `classList.remove` writes the attribute even when the class is absent, which the class observer would see: this runs on every layout pass, so it must change nothing it does not have to.
+    delete workspace.dataset.active; workspace.classList.toggle('is-single', false); workspace.style.removeProperty('--ratio'); divider.hidden = true;
+  }
+  placeFooter();
+}
+function setRatio(percent: number) { ratio = percent; applyLayout(); }
+/** The progress line and scrubber sit under the focused pane only. */
+function placeFooter() {
+  if (!isSplit()) { footer.style.removeProperty('left'); footer.style.removeProperty('right'); return; }
+  const layout = $('reader-layout').getBoundingClientRect(), box = focused.view.body.getBoundingClientRect();
+  footer.style.left = `${box.left - layout.left}px`; footer.style.right = `${layout.right - box.right}px`;
+}
+
+/** A still copy of the view controls for the side that is not the focused one (the live ones are the focused pane's), so each pane keeps its own. */
+function ghostOf(side: Side) {
+  side.view.ghost?.remove(); side.view.ghost = undefined;
+  if (pill.hidden || pill.parentElement !== side.view.body || !isSplit()) return;
+  const copy = pill.cloneNode(true) as HTMLElement, live = [pill, ...pill.querySelectorAll<HTMLElement>('*')], still = [copy, ...copy.querySelectorAll<HTMLElement>('*')];
+  live.forEach((node, index) => {
+    if (index && getComputedStyle(node).display === 'none') { still[index].remove(); return; }
+    if (node.id) still[index].dataset.was = node.id;
+    still[index].removeAttribute('id');
+  });
+  copy.classList.add('pill-ghost'); copy.inert = true; copy.setAttribute('aria-hidden', 'true');
+  side.view.body.append(copy); side.view.ghost = copy;
+}
+/** The reader of a pane that is not the focused one drew itself again (its size changed): its still view controls follow it. */
+function refreshGhost(side: Side) { if (side.view.ghost) paintZoom(side.pane, side.view.ghost); }
+/** The focused side stops being it: its find bar, page strip and view controls are put away, and its tab keeps what they held. */
+function parkSide(side: Side) {
+  syncBack(side);
+  findBar.close(); zoomGesture.cancel(); zoomMenu.close();
+  const pane = side.pane;
+  pane.stripReader?.setPreviews?.(undefined); pane.stripReader = undefined; pageStrip.clear();
+  side.view.body.classList.remove('has-page-strip'); pageStrip.element.hidden = true;
+  ghostOf(side);
+}
+/** The side becomes the focused one: the find bar, page strip, view controls, hand tool and footer are its. */
+function adoptSide(side: Side) {
+  const pane = side.pane, tab = side.shown;
+  side.view.ghost?.remove(); side.view.ghost = undefined;
+  side.view.body.append(pill, pageStrip.element); side.view.body.prepend(findBar.element);
+  ++scrubRequest; scrubbing = false;
+  pane.pannedScroller = pane.reader?.scroller?.(); pan.attach(pane.pannedScroller, pane.host); pan.setHand(tab?.hand ?? false);
+  syncPageStrip(); if (tab?.stripScroll !== undefined) pageStrip.restoreScroll(tab.stripScroll);
+  syncFooter(); placePill();
+  if (tab?.find !== undefined) findBar.open(tab.find, false);
+  lastBackground = undefined;
+  library.setActive(cover ? undefined : tab?.path);
+  paintTabState(); paintTabs(); applyLayout();
+}
+function activateSide(side: Side) {
+  if (side === focused || !sides.includes(side)) return;
+  parkSide(focused); focused = side; adoptSide(side);
+}
+// The pane last clicked or focused is the active one. A press inside a book's frame never reaches the page (a fixed-layout book's frames report theirs, see `onFrame` in `load`),
+// but it moves the focus into the frame, which blurs the page: the pane that holds the element the page then reports as focused is the one.
+for (const type of ['pointerdown', 'focusin']) workspace.addEventListener(type, event => { const side = isSplit() ? sideAt(event.target) : undefined; if (side) activateSide(side); }, true);
+window.addEventListener('blur', () => setTimeout(() => { const side = isSplit() ? sideAt(document.activeElement) : undefined; if (side) activateSide(side); }));
+
+/** While split, Home or the Library page takes the whole reading area; the panes, and what they show, stay as they were. */
+function showCover(kind: 'home' | 'library') {
+  if (cover === kind || (kind === 'library' && !libraryTab)) return;
+  if (focused.pane.cancelPending) cancelOpen();
+  cover = kind;
+  findBar.close(); zoomMenu.close();
+  workspace.classList.add('is-covered'); $('empty').hidden = kind !== 'home';
+  library.setActive(undefined); library.showPage(kind === 'library');
+  syncFooter(); paintTabs(); saveSession();
+  if (kind === 'home') paintHome();
+}
+/** Gives the reading area back to the panes. */
+function clearCover() {
+  if (!cover) return;
+  cover = undefined;
+  workspace.classList.remove('is-covered'); $('empty').hidden = true;
+  library.showPage(false); library.setActive(focused.shown?.path);
+  syncFooter(); paintTabs();
+}
+
+/** Split right: the shown tab moves to a new pane on the right, which becomes the focused one; every other document tab stays on the left, showing the one shown most recently. */
+function splitRight() {
+  const reason = splitReason();
+  if (reason) { notify(reason); return; }
+  const left = focused, tab = left.shown!;
+  clearCover();
+  if (left.pane.cancelPending) cancelOpen();
+  syncBack(left); findBar.close(); zoomGesture.cancel();
+  const entry = left.tabs.find(LIBRARY_PATH);
+  if (entry) { left.tabs.detach(LIBRARY_PATH); libraryTab = entry; }
+  const moved = splitOff(left.tabs, tab.path)!, right = spare ?? makeSide('b');
+  if (spare) { workspace.append(right.view.row, right.view.body); right.pane = new Pane<Tab>({ persist, notify }); right.shown = undefined; right.scanNoticeShown = false; } else watchSide(right);
+  spare = undefined;
+  right.tabs = moved; right.pane.pillPlacement = left.pane.pillPlacement;
+  sides.push(right);
+  tab.host?.setAttribute('data-pane', 'b');
+  left.shown = undefined; ratio = DEFAULT_PERCENT; applyLayout();
+  show(left.tabs.active, true);
+  right.shown = tab; right.pane.show(tab); right.scanNoticeShown = tab.scanNoticeShown;
+  activateSide(right);
+  if (!tab.reader && !tab.problem) void reopen(tab);
+  right.pane.host?.focus();
+}
+/** Moves the shown tab to the other pane, which shows it and becomes the focused one; a pane left with no tab ends the split. */
+function moveTabToOtherSide() {
+  if (!isSplit()) return;
+  clearCover();
+  const from = focused, to = sides.find(side => side !== from)!, tab = from.shown;
+  if (!tab) return;
+  if (from.pane.cancelPending) cancelOpen();
+  syncBack(from); findBar.close(); zoomGesture.cancel();
+  moveAcross(from.tabs, to.tabs, tab.path);
+  tab.host?.setAttribute('data-pane', to.view.letter);
+  from.shown = undefined;
+  if (from.tabs.size) show(from.tabs.active, true); else from.pane.show(undefined);
+  activateSide(to);
+  show(tab, true);
+  if (!from.tabs.size) endSplit();
+  focused.pane.host?.focus();
+}
+/** Moves the focus to the other pane. */
+function focusOtherSide() {
+  const other = sides.find(side => side !== focused);
+  if (!other) return;
+  clearCover(); activateSide(other); other.pane.host?.focus();
+}
+/** Ends the split: the right pane's tabs follow the left pane's (the Library tab first), and the tab the focused pane shows stays shown. */
+function endSplit() {
+  if (!isSplit()) return;
+  const keep = cover === 'library' ? libraryTab : cover === 'home' ? undefined : focused.shown ?? sides.find(side => side !== focused)?.shown;
+  clearCover();
+  activateSide(sides[0]);
+  const [left, right] = sides;
+  if (right.pane.cancelPending && !left.pane.cancelPending) $('loading').hidden = true;
+  right.pane.cancelLoad(); void right.pane.flush(); right.strip.closeMenu();
+  for (const tab of right.tabs.tabs) tab.host?.classList.add('tab-hidden');
+  for (const side of sides) { side.view.ghost?.remove(); side.view.ghost = undefined; }
+  right.view.row.remove(); right.view.body.remove(); right.view.state.hidden = true; spare = right;
+  mergeLists(left.tabs, right.tabs, keep?.path);
+  if (libraryTab) { left.tabs.add(libraryTab, 0); libraryTab = undefined; }
+  for (const tab of left.tabs.tabs) tab.host?.setAttribute('data-pane', 'a');
+  sides.pop();
+  applyLayout();
+  show(keep, true);
+}
+
 const strip = createTabStrip(
   { strip: $('tab-strip'), home: $('home-tab'), list: $('tab-list'), add: $('tab-add'), overflow: $('tab-overflow') },
-  { select: selectTab, close: closeTab, newTab: () => openFile(), move: (path, to) => { tabs.move(path, to); paintTabs(); saveSession(); } },
+  { select: selectTab, close: closeTab, newTab: () => openFile(), move: (path, to) => { if (isSplit()) return; sides[0].tabs.move(path, to); paintTabs(); saveSession(); } },
   platform === 'mac' ? '⌘T' : 'Ctrl T',
 );
-$('title').onclick = () => (strip.isMenuOpen() ? strip.closeMenu() : strip.openMenu($('title')));
+$('title').onclick = () => { const menu = isSplit() ? focused.strip : strip; if (menu.isMenuOpen()) menu.closeMenu(); else menu.openMenu($('title')); };
 
 /**
  * The Library tab: at most one, at the front of the strip. Opening it names a scope (a double-click in the panel, Home's Open in library, the panel's
  * title); a tab that is already open is shown and retargeted rather than opened again. With no scope named, an open tab is only shown.
  */
 function openLibraryTab(place?: LibraryPlace) {
-  const existing = tabs.find(LIBRARY_PATH);
+  const existing = known(LIBRARY_PATH);
   if (!place) { if (existing) selectTab(LIBRARY_PATH); else library.browse('all'); return; }
   if (existing) { retargetLibraryTab(place); selectTab(LIBRARY_PATH); return; }
   cancelOpen();
   const tab: Tab = { path: LIBRARY_PATH, name: place.title, format: 'library', scope: place.scope, options: { ...defaultOptions }, hand: false, scanNoticeShown: false };
-  tabs.open(tab, 0); show(tab, true);
+  if (isSplit()) { libraryTab = tab; showCover('library'); paintTabs(); saveSession(); return; }
+  sides[0].tabs.open(tab, 0); show(tab, true);
 }
 /** The Library tab's title and saved scope follow what the library shows; with no such tab, nothing is kept. */
 function retargetLibraryTab(place: LibraryPlace) {
-  const tab = tabs.find(LIBRARY_PATH);
+  const tab = known(LIBRARY_PATH);
   if (!tab || tab.name === place.title && tab.scope === place.scope) return;
   tab.name = place.title; tab.scope = place.scope; paintTabs(); saveSession();
 }
@@ -791,23 +1056,23 @@ function openPath(path: string, name = path.split(/[\\/]/).pop()) { return openT
  * tab, which is then shown and the showing one left as it is. With no showing image tab it opens like any other document.
  */
 function stepImage(path: string) {
-  const here = shown && shown.path !== LIBRARY_PATH && Object.hasOwn(imageFormats, shown.format) && shown.path !== path ? shown : undefined;
+  const shown = focused.shown, here = shown && shown.path !== LIBRARY_PATH && Object.hasOwn(imageFormats, shown.format) && shown.path !== path ? shown : undefined;
   return openTab(path, () => openLibraryDocument(path), path.split(/[\\/]/).pop(), undefined, here);
 }
 /** The tab a background open added last, so the next one lands after it (as a browser's middle clicks do); forgotten when another tab is shown. */
 let lastBackground: string | undefined;
 /** Gives a library document a tab beside the one showing without showing it; it opens when it is first shown. */
 function openInBackground(doc: { path: string; name: string; format: string }) {
-  const at = lastBackground && tabs.find(lastBackground) ? tabs.indexOf(lastBackground) + 1 : insertionIndex(undefined, tabs.activeIndex, tabs.size);
-  if (!tabs.add({ path: doc.path, name: doc.name, format: doc.format, options: { ...defaultOptions }, hand: false, scanNoticeShown: false }, at)) return;
+  const tabs = focused.tabs, at = lastBackground && tabs.find(lastBackground) ? tabs.indexOf(lastBackground) + 1 : insertionIndex(undefined, tabs.activeIndex, tabs.size);
+  if (known(doc.path) || !tabs.add({ path: doc.path, name: doc.name, format: doc.format, options: { ...defaultOptions }, hand: false, scanNoticeShown: false }, at)) return;
   lastBackground = doc.path; paintTabs(); saveSession();
 }
 /** `path` is the document's identity when it is known before it is read (a library path, or the path a request named). */
 async function openTab(path: string | undefined, open: () => Promise<Opened | null>, label?: string, at?: number, replace?: Tab) {
-  const existing = path ? tabs.find(path) : undefined;
+  const existing = path ? known(path) : undefined;
   if (!existing) return load(open, label, { at, replace });
   existing.problem = undefined;
-  if (shown === existing) { if (!existing.reader) void reopen(existing); } else selectTab(existing.path);
+  if (focused.shown === existing && !cover && holder(existing.path) === focused) { if (!existing.reader) void reopen(existing); } else { selectTab(existing.path); if (!existing.reader && focused.shown === existing && !focused.pane.loadingTarget) void reopen(existing); }
   if (existing.reader) void touch(existing);
   return true;
 }
@@ -815,14 +1080,16 @@ async function openTab(path: string | undefined, open: () => Promise<Opened | nu
 type Opener = { path?: string; open: () => Promise<Opened | null>; label: string };
 /** What is being opened now: an open is single-flight (a new one cancels the one in progress), so batches wait for each other. */
 let openBatches: Promise<unknown> = Promise.resolve();
-/** Opens each in turn, the first at tab index `at` (after the active tab when not given), and each new tab after the one before it. */
-function openMany(items: readonly Opener[], at?: number): Promise<void> {
+/** Opens each in turn, the first at tab index `at` of `side` (the focused one when not given; after its shown tab when `at` is not given), and each new tab after the one before it. */
+function openMany(items: readonly Opener[], at?: number, side?: Side): Promise<void> {
   const run = openBatches.then(async () => {
-    let next = at ?? insertionIndex(undefined, tabs.activeIndex, tabs.size);
+    const target = side ?? focused;
+    if (sides.includes(target)) activateSide(target);
+    let next = at ?? insertionIndex(undefined, focused.tabs.activeIndex, focused.tabs.size);
     for (const item of items) {
-      const before = tabs.size;
+      const before = focused.tabs.size;
       await openTab(item.path, item.open, item.label, next);
-      if (tabs.size > before && shown) next = tabs.indexOf(shown.path) + 1;
+      if (focused.tabs.size > before && focused.shown) next = focused.tabs.indexOf(focused.shown.path) + 1;
     }
   });
   openBatches = run.catch(() => undefined);
@@ -835,34 +1102,39 @@ function openRequested(paths: readonly string[]) {
 
 /** Where a drag at `point` would land: over the tab strip a marked slot, else the reading area. An app-internal drag lands only on those two. */
 function dropPlace(point: { x: number; y: number }, internal: boolean) {
-  const slot = strip.dropSlot(point.x, point.y);
   const target = document.elementFromPoint(point.x, point.y);
+  let side = focused, slot = isSplit() ? undefined : strip.dropSlot(point.x, point.y);
+  if (isSplit()) {
+    for (const candidate of sides) { const over = candidate.strip.dropSlot(point.x, point.y); if (over !== undefined) { side = candidate; slot = over; } }
+    if (slot === undefined) side = sideAt(target) ?? focused;
+  }
   const reading = Boolean(target?.closest('#workspace')) && !target?.closest('#library-root, #library-rail');
-  return { slot, accepted: slot !== undefined || !internal || reading, at: insertionIndex(slot, tabs.activeIndex, tabs.size) };
+  return { side, slot, accepted: slot !== undefined || !internal || reading, at: insertionIndex(slot, side.tabs.activeIndex, side.tabs.size) };
 }
 const overlay = $('drop-overlay');
 /** Shows where a drag would drop: the marker and a ghost tab over the strip, the overlay over the reading area. */
 function dragOver(point: { x: number; y: number }, names: readonly string[], count: number, internal: boolean) {
-  const { slot, accepted } = dropPlace(point, internal);
-  strip.showDrop(accepted ? slot : undefined, ghostLabel(count));
+  const { side, slot, accepted } = dropPlace(point, internal);
+  dragEnd();
+  (isSplit() ? side.strip : strip).showDrop(accepted ? slot : undefined, ghostLabel(count));
   overlay.hidden = !accepted || slot !== undefined;
   $('drop-names').textContent = overlayNames(names);
 }
-function dragEnd() { strip.showDrop(undefined); overlay.hidden = true; }
+function dragEnd() { for (const target of [strip, ...sides.map(side => side.strip)]) target.showDrop(undefined); overlay.hidden = true; }
 /** Opens what was dropped, in drop order, at the tab index the drop chose; what cannot be opened is named in one notice. */
-function dropped<T>(items: readonly T[], nameOf: (item: T) => string, opener: (item: T) => Opener, at: number) {
+function dropped<T>(items: readonly T[], nameOf: (item: T) => string, opener: (item: T) => Opener, place: { at: number; side: Side }) {
   const { openable, unsupported } = splitDropped(items, nameOf);
   const notice = unsupportedNotice(unsupported);
   if (notice) notify(notice);
-  void openMany(openable.map(opener), at);
+  void openMany(openable.map(opener), place.at, place.side);
 }
 // A document dragged out of the library, the rail or Home onto the strip or the reading area.
 attachOpenDrag({
   over: (point, source) => dragOver(point, [source.name], 1, true),
   drop: (point, source) => {
-    const { accepted, at } = dropPlace(point, true);
+    const { accepted, at, side } = dropPlace(point, true);
     dragEnd();
-    if (accepted) void openMany([{ path: source.path, open: () => openLibraryDocument(source.path), label: source.name }], at);
+    if (accepted) void openMany([{ path: source.path, open: () => openLibraryDocument(source.path), label: source.name }], at, side);
   },
   cancel: dragEnd,
 });
@@ -951,7 +1223,7 @@ async function action(name: string) {
   else if (['back', 'start', 'end', 'screen-next', 'screen-previous'].includes(name)) await navigate(name as Parameters<ReaderAdapter['navigate']>[0]);
 }
 document.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(button => button.onclick = () => { closeDialog($<HTMLDialogElement>('menu')); void command(button.dataset.action!).catch(fail); });
-$('confirm-delete').onclick = () => { void (async () => { await activePane().flush(); if (desktop) await native('clear_reading_data'); else for (const key of Object.keys(localStorage)) if (key.startsWith('hold-my-brief:')) localStorage.removeItem(key); activePane().dirty = false; closeDialog($<HTMLDialogElement>('delete-data')); notify('Saved reading data deleted. Your documents are unchanged.'); })().catch(fail); };
+$('confirm-delete').onclick = () => { void (async () => { await Promise.all(sides.map(side => side.pane.flush())); if (desktop) await native('clear_reading_data'); else for (const key of Object.keys(localStorage)) if (key.startsWith('hold-my-brief:')) localStorage.removeItem(key); for (const side of sides) side.pane.dirty = false; closeDialog($<HTMLDialogElement>('delete-data')); notify('Saved reading data deleted. Your documents are unchanged.'); })().catch(fail); };
 
 // Tab marks keyboard navigation (the page's focus ring returns); a pointer press clears it.
 document.addEventListener('keydown', event => { if (event.key === 'Tab') document.documentElement.classList.add('keyboard-focus'); }, true);
@@ -1024,6 +1296,7 @@ document.addEventListener('keydown', event => {
   if (digit) operation = () => selectTabNumber(digit);
   else if (shortcut === 'back') operation = () => void navigate('back');
   else if (shortcut === 'page-strip' && reader && !reader.setPreviews) return; // Only a PDF has previews; for any other document the key is not ours.
+  else if (shortcut === 'split-right') operation = () => { if (isSplit()) focusOtherSide(); else void command('split-right').catch(fail); };
   else if (shortcut) operation = () => void command(shortcut).catch(fail);
   else if (key === 'h' && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey && !event.repeat && pan.pannable && (target === document.body || target instanceof Node && (host?.contains(target) || $('view-controls').contains(target)))) operation = toggleHand;
   else if (!event.ctrlKey && !event.altKey && host && (target === document.body || target instanceof Node && (host.contains(target) || inStrip))) {
@@ -1045,7 +1318,7 @@ if (!desktop) {
   document.addEventListener('drop', event => {
     event.preventDefault(); dragEnd();
     const files = [...(event.dataTransfer?.files ?? [])];
-    if (files.length) dropped(files, file => file.name, file => ({ open: () => browserFile(file), label: file.name }), dropPlace({ x: event.clientX, y: event.clientY }, false).at);
+    if (files.length) dropped(files, file => file.name, file => ({ open: () => browserFile(file), label: file.name }), dropPlace({ x: event.clientX, y: event.clientY }, false));
   });
 }
 /** What was opened last: the store's recents, or in the browser build the library's opened documents. */
@@ -1088,7 +1361,7 @@ onAppearanceChange(next => {
   const home = $('empty');
   if (!home.classList.contains('is-home')) return;
   repaintCovers(home, scheme());
-  // The ground repaints itself; choosing none or a pattern after the other adds or removes the shuffle button, so Home is painted again.
+  // The ground repaints itself; choosing none or a pattern after the other adds or removes the ground, so Home is painted again.
   if (!repaintGround(next.banner)) paintHome();
 });
 async function initialize() {
@@ -1097,9 +1370,9 @@ async function initialize() {
   await library.refresh().catch(fail);
   homeLibrary = await getLibrary().catch(() => emptyLibrary());
   paintHome();
-  for (const entry of saved.tabs.tabs) tabs.open({ ...entry, options: { ...defaultOptions }, hand: false, scanNoticeShown: false });
-  library.restoreScope(tabs.find(LIBRARY_PATH)?.scope);
-  show(saved.tabs.active === null ? undefined : tabs.tabs[saved.tabs.active], true);
+  for (const entry of saved.tabs.tabs) focused.tabs.open({ ...entry, options: { ...defaultOptions }, hand: false, scanNoticeShown: false });
+  library.restoreScope(known(LIBRARY_PATH)?.scope);
+  show(saved.tabs.active === null ? undefined : focused.tabs.tabs[saved.tabs.active], true);
   if (desktop) {
     const { listen } = await import('@tauri-apps/api/event');
     const { getCurrentWindow } = await import('@tauri-apps/api/window');
@@ -1108,10 +1381,10 @@ async function initialize() {
     // macOS routes ⌘W through its menu (see install_menu in main.rs). With no tab to close, it closes the window as it always did.
     // macOS also routes ⌘1…⌘9 through its menu; the number arrives here instead of as a key event.
     await listen<number>('select-tab-request', event => { if (!document.querySelector('dialog[open]')) selectTabNumber(event.payload); });
-    await listen('close-tab-request', () => { if (shown) closeTab(shown.path); else void getCurrentWindow().close(); });
+    await listen('close-tab-request', () => { const tab = closableTab(); if (tab) closeTab(tab.path); else void getCurrentWindow().close(); });
     await listen<string | null>('reader-warning', event => { if (event.payload) notify(event.payload); });
     const appWindow = getCurrentWindow();
-    let closing = false; await appWindow.onCloseRequested(async event => { if (closing) return; event.preventDefault(); await activePane().flush(); closing = true; await appWindow.close(); });
+    let closing = false; await appWindow.onCloseRequested(async event => { if (closing) return; event.preventDefault(); await Promise.all(sides.map(side => side.pane.flush())); closing = true; await appWindow.close(); });
     if (platform === 'windows') {
       const maximize = $('caption-maximize');
       const syncMaximized = async () => { const maximized = await appWindow.isMaximized(); document.documentElement.classList.toggle('window-maximized', maximized); maximize.setAttribute('aria-label', maximized ? 'Restore' : 'Maximize'); maximize.title = maximized ? 'Restore down' : 'Maximize'; };
@@ -1133,7 +1406,7 @@ async function initialize() {
       if (payload.type === 'enter') incoming = payload.paths.map(baseName);
       if (payload.type !== 'drop') return dragOver(point, incoming, incoming.length || 1, false);
       dragEnd();
-      dropped(payload.paths, baseName, path => ({ path, open: () => chooseDocument(path), label: baseName(path) }), dropPlace(point, false).at);
+      dropped(payload.paths, baseName, path => ({ path, open: () => chooseDocument(path), label: baseName(path) }), dropPlace(point, false));
     });
     // The native focus event, not the page's blur: clicking into an EPUB frame blurs the page too.
     await appWindow.onFocusChanged(({ payload: focused }) => document.documentElement.classList.toggle('window-inactive', !focused));
@@ -1154,4 +1427,4 @@ async function initialize() {
   }
 }
 void initialize().catch(fail);
-window.addEventListener('beforeunload', () => { void activePane().flush(); });
+window.addEventListener('beforeunload', () => { for (const side of sides) void side.pane.flush(); });
