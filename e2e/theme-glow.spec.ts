@@ -95,8 +95,8 @@ for (const [palette, mode] of [['brief', 'light'], ['aurora', 'dark']] as const)
     await expect.poll(async () => { const at = (await workspace.boundingBox())!; return Math.round(side === 'left' ? at.x : 1080 - at.x - at.width); }).toBeGreaterThan(300);
     await page.mouse.move(540, 400);
     const panelBox = (await panel.boundingBox())!, workspaceBox = (await workspace.boundingBox())!;
-    // One row high up, one near the panel's bottom (below its rounded corner), where the gap must still carry the glass.
-    const rows = [Math.round(760 * 0.25), Math.round(panelBox.y + panelBox.height - 15)];
+    // One row high up, one lower (66 % down the window, below the panel's rounded corner), where the gap must still carry the glass. Neither is in the window's bottom corner: the glow there changes steeply with x, so the margin and the reference 300 px apart differ by more than the wash.
+    const rows = [Math.round(760 * 0.25), Math.round(760 * 0.66)];
     const [edge, gapStart, gapEnd] = side === 'left'
       ? [panelBox.x + panelBox.width - 4, panelBox.x + panelBox.width, workspaceBox.x]
       : [panelBox.x + 4, workspaceBox.x + workspaceBox.width, panelBox.x];

@@ -180,7 +180,8 @@ advancing. Ctrl+G jumps to a physical page, EPUB chapter/percentage or source li
 the kind of view. It reports **position**, never material actually read: the library's **Finished** means the saved position reached
 the last page or the end of the text, not that it was read.
 
-While you read, the footer is just the progress line along the window's bottom edge. Move the
+While you read, the footer is just the progress line along the reading area's bottom edge, a thin
+line that fades out at both ends. Move the
 pointer to the bottom of the page, or Tab to it, and the previous/next arrows and the full position
 slide up over the page; clicking the position opens Go to. The line scrubs the entire document: click
 it to jump, or drag its thumb to preview
@@ -492,8 +493,8 @@ is always in view. The tree is a keyboard tree across all four sections: one Tab
 section, folder or collection or enters it, Left closes it or goes to its parent, Home and End jump, Enter opens a
 document or toggles a section or folder, and typing a name jumps to it.
 
-The panel and the icon rail end above the footer's strip along the bottom edge, so the footer is never under them;
-the view controls, page previews, find bar and image navigation sit beside them.
+The panel and the icon rail reach the window's bottom edge, a small margin short of it, and the footer and its progress line
+span only the reading area beside them, so neither is under them; the view controls, page previews, find bar and image navigation sit beside them.
 
 An image opened from a collection shows a small **previous / next** pill at the bottom of the reading panel, just
 above the footer's strip, so the footer never covers it when it opens. The view controls stand directly above it
