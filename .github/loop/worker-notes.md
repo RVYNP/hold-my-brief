@@ -56,3 +56,5 @@ Refresh the timings when specs are added, removed or change a lot (not on every 
 e2e-report-macOS-1 -D reports/1`, and likewise for 2 and 3), then
 `node scripts/e2e-timings.mjs reports/1/e2e-report.json reports/2/e2e-report.json reports/3/e2e-report.json`
 rewrites `e2e/timings.json`. Commit it with the change; do not commit `reports/`.
+
+Refresh `e2e/timings.json` whenever a spec file is added or a shard runs over 8 min.
