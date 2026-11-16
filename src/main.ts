@@ -15,7 +15,7 @@ import { appearanceSummary, createAppearanceSheet, paletteIcon } from './appeara
 import { createAssistantPanel } from './assistant-panel';
 import { DRAG_SLOP, Panner, type Offset } from './pan';
 import { MIN_SPREAD_WIDTH, pagesLabel, spreadPages } from './spread';
-import { assignShelfSlots, closeHome, fillHomePictures, homeSections, homeTypes, openedOrder, renderHome, repaintBanner } from './home';
+import { assignShelfSlots, closeHome, fillHomePictures, homeSections, homeTypes, openedOrder, renderHome, repaintGround } from './home';
 import { displayTitle } from './shelf';
 import { repaintCovers } from './cards';
 import { canThumbnail, createThumbnailStore } from './thumbnails';
@@ -1104,8 +1104,8 @@ onAppearanceChange(next => {
   const home = $('empty');
   if (!home.classList.contains('is-home')) return;
   repaintCovers(home, scheme());
-  // The banner repaints itself; choosing none or a pattern after the other changes the page's shape, so Home is painted again.
-  if (!repaintBanner(next.banner)) paintHome();
+  // The ground repaints itself; choosing none or a pattern after the other adds or removes the shuffle button, so Home is painted again.
+  if (!repaintGround(next.banner)) paintHome();
 });
 async function initialize() {
   const saved = await state(); updateWindow(saved.window); if (saved.warning) notify(saved.warning);
