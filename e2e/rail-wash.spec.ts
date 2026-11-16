@@ -106,20 +106,43 @@ for (const side of ['left', 'right'] as const) test(`the wash fades out: the pix
   for (const name of ['Aurora', 'Peach']) expect(edge[name], `${name}: the window edge has the wash`).toBeGreaterThan(2);
 });
 
+interface RailIcon { label: string; rect: number[]; colour: number[]; pressed: string | null }
+/** Each rail icon: its box, its resting colour (--muted) as rgba, and whether it is pressed. */
+const railIcons = (page: Page): Promise<RailIcon[]> => page.evaluate(() => {
+  const swatch = document.createElement('canvas').getContext('2d', { willReadFrequently: true })!; swatch.canvas.width = swatch.canvas.height = 1;
+  return [...document.querySelectorAll<HTMLElement>('.icon-rail-button')].map(button => {
+    const svg = button.querySelector('svg')!.getBoundingClientRect(), colour = getComputedStyle(button).color;
+    swatch.clearRect(0, 0, 1, 1); swatch.fillStyle = colour; swatch.fillRect(0, 0, 1, 1);
+    const [r, g, b, a] = swatch.getImageData(0, 0, 1, 1).data;
+    return { label: button.dataset.rail!, rect: [svg.left, svg.top, svg.right, svg.bottom], colour: [r, g, b, a / 255], pressed: button.getAttribute('aria-pressed') };
+  });
+});
+
+/** The lowest contrast ratio of each icon's colour against the pixels of a screenshot taken with the icons' own drawing hidden. */
+const contrastOf = (page: Page, png: Buffer | string, icons: RailIcon[]) => page.evaluate(async ({ png, icons }) => {
+  const image = new Image(); image.src = `data:image/png;base64,${png}`; await image.decode();
+  const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height;
+  const context = canvas.getContext('2d', { willReadFrequently: true })!; context.drawImage(image, 0, 0);
+  const lin = (value: number) => { const c = value / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+  const lum = (r: number, g: number, b: number) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  return icons.map(icon => {
+    const [left, top, right, bottom] = icon.rect.map((value, index) => index < 2 ? Math.floor(value) : Math.ceil(value));
+    const data = context.getImageData(left, top, right - left, bottom - top).data, [r, g, b, a] = icon.colour;
+    let lowest = Infinity;
+    for (let index = 0; index < data.length; index += 4) {
+      const ink = [r, g, b].map((channel, i) => channel * a + data[index + i]! * (1 - a)), back = lum(data[index]!, data[index + 1]!, data[index + 2]!), glyph = lum(ink[0]!, ink[1]!, ink[2]!);
+      lowest = Math.min(lowest, (Math.max(back, glyph) + 0.05) / (Math.min(back, glyph) + 0.05));
+    }
+    return { label: icon.label, ratio: lowest };
+  });
+}, { png: typeof png === 'string' ? png : png.toString('base64'), icons });
+
 // Non-text contrast (WCAG 1.4.11): each rail icon at rest (--muted) against the pixels around it: the wash over Home's ground at 6 %, each of its three tones.
 for (const side of ['left', 'right'] as const) test(`every rail icon reads at 3:1 over the wash and Home's ground at 6 %, library on the ${side}, in Brief light, Brief dark, Aurora and Peach`, async ({ page }) => {
   const worst: Record<string, string> = {};
   for (const [name, record] of themes) {
     await openHome(page, side, record);
-    const icons = await page.evaluate(() => {
-      const swatch = document.createElement('canvas').getContext('2d', { willReadFrequently: true })!; swatch.canvas.width = swatch.canvas.height = 1;
-      return [...document.querySelectorAll<HTMLElement>('.icon-rail-button')].map(button => {
-        const svg = button.querySelector('svg')!.getBoundingClientRect(), colour = getComputedStyle(button).color;
-        swatch.clearRect(0, 0, 1, 1); swatch.fillStyle = colour; swatch.fillRect(0, 0, 1, 1);
-        const [r, g, b, a] = swatch.getImageData(0, 0, 1, 1).data;
-        return { label: button.dataset.rail!, rect: [svg.left, svg.top, svg.right, svg.bottom], colour: [r, g, b, a / 255], pressed: button.getAttribute('aria-pressed') };
-      });
-    });
+    const icons = await railIcons(page);
     expect(icons.length).toBe(4);
     for (const icon of icons) expect(icon.pressed, 'at rest: the panel is closed').not.toBe('true');
     const tones = await page.evaluate(() => {
@@ -133,23 +156,7 @@ for (const side of ['left', 'right'] as const) test(`every rail icon reads at 3:
     for (const tone of tones) {
       await page.evaluate(fill => { const canvas = document.querySelector<HTMLCanvasElement>('canvas.home-ground:not(.is-leaving)')!, context = canvas.getContext('2d')!; context.globalCompositeOperation = 'source-over'; context.fillStyle = fill; context.fillRect(0, 0, canvas.width, canvas.height); }, tone);
       const png = (await page.screenshot({ animations: 'disabled' })).toString('base64');
-      const ratios = await page.evaluate(async ({ png, icons }) => {
-        const image = new Image(); image.src = `data:image/png;base64,${png}`; await image.decode();
-        const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height;
-        const context = canvas.getContext('2d', { willReadFrequently: true })!; context.drawImage(image, 0, 0);
-        const lin = (value: number) => { const c = value / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
-        const lum = (r: number, g: number, b: number) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-        return icons.map(icon => {
-          const [left, top, right, bottom] = icon.rect.map((value, index) => index < 2 ? Math.floor(value) : Math.ceil(value));
-          const data = context.getImageData(left, top, right - left, bottom - top).data, [r, g, b, a] = icon.colour;
-          let lowest = Infinity;
-          for (let index = 0; index < data.length; index += 4) {
-            const ink = [r, g, b].map((channel, i) => channel * a + data[index + i]! * (1 - a)), back = lum(data[index]!, data[index + 1]!, data[index + 2]!), glyph = lum(ink[0]!, ink[1]!, ink[2]!);
-            lowest = Math.min(lowest, (Math.max(back, glyph) + 0.05) / (Math.min(back, glyph) + 0.05));
-          }
-          return { label: icon.label, ratio: lowest };
-        });
-      }, { png, icons });
+      const ratios = await contrastOf(page, png, icons);
       for (const item of ratios) if (item.ratio < lowest.ratio) lowest = { ...item, tone };
     }
     await hide.evaluate(node => (node as Element).remove());
@@ -157,4 +164,30 @@ for (const side of ['left', 'right'] as const) test(`every rail icon reads at 3:
     expect(lowest.ratio, `${name}: ${worst[name]}`).toBeGreaterThanOrEqual(3);
   }
   console.log(`worst rail icon contrast, library on the ${side}:`, JSON.stringify(worst));
+});
+
+// The rail is drawn over a document too (the panel closed: the reading surface starts after it, it never runs under the icons). A PDF at fit width in Brief dark
+// is the worst case: white paper beside muted icons. Alpha.pdf is opened from Home, fitted to width, and every icon is held to 3:1 against the pixels under it.
+for (const side of ['left', 'right'] as const) test(`a PDF at fit width, the panel closed, library on the ${side}: the page stays out from under the rail and every rail icon reads at 3:1 in Brief dark`, async ({ page }) => {
+  await openHome(page, side, themes[1]![1]);
+  await page.locator('#empty [data-home-path]').first().click();
+  await expect(page.locator('#position')).toContainText(/Page \d of 3/);
+  await expect(page.locator('#loading')).toBeHidden();
+  await expect(page.locator('.pdf-render-status')).toHaveCount(0);
+  const host = page.locator('.pdf-reader');
+  await host.focus(); await page.keyboard.press('Control+2');
+  await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', 'width');
+  await page.mouse.move(540, 400);
+  // Settled: the fitted page does not move for 300 ms.
+  const sheet = () => page.locator('.pdf-page canvas').first().evaluate(canvas => { const box = canvas.getBoundingClientRect(); return [box.left, box.right].join(); });
+  await expect.poll(async () => { const before = await sheet(); await page.waitForTimeout(300); return before === await sheet(); }).toBe(true);
+  const [left, right] = (await sheet()).split(',').map(Number) as [number, number];
+  const icons = await railIcons(page);
+  expect(icons.length).toBe(4);
+  const hide = await page.addStyleTag({ content: '.icon-rail-button svg { visibility: hidden !important; }' });
+  const ratios = await contrastOf(page, await page.screenshot({ animations: 'disabled' }), icons);
+  await hide.evaluate(node => (node as Element).remove());
+  console.log(`rail icons over a PDF at fit width, Brief dark, library on the ${side}:`, JSON.stringify(ratios.map(item => `${item.label} ${item.ratio.toFixed(2)}`)));
+  for (const item of ratios) expect(item.ratio, `${item.label}`).toBeGreaterThanOrEqual(3);
+  expect(side === 'left' ? left : 1080 - right, 'the page starts after the rail (48 px) and its 16 px margin').toBeGreaterThanOrEqual(48 + 16 - .5);
 });
