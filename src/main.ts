@@ -207,9 +207,26 @@ function updateScrubValue(preview = false) {
   scrubber.setAttribute('aria-valuetext', label);
   if (preview) $('position').textContent = `${label} · release to jump`;
 }
-/** The level the open document is drawn at; before it is drawn, 100 %. */
-const zoomLevel = () => { const { reader, options } = activePane(); return reader?.zoomLevel?.() ?? (options.fitted ? 1 : options.zoom); };
-const zoomLimits = () => activePane().reader?.zoomLimits?.() ?? DEFAULT_LIMITS;
+/** The level `pane`'s document is drawn at; before it is drawn, 100 %. */
+const zoomLevel = (pane: Pane<Tab> = activePane()) => { const { reader, options } = pane; return reader?.zoomLevel?.() ?? (options.fitted ? 1 : options.zoom); };
+const zoomLimits = (pane: Pane<Tab> = activePane()) => pane.reader?.zoomLimits?.() ?? DEFAULT_LIMITS;
+/** Writes `pane`'s zoom level, its tooltip and its step buttons into `root`: the live view controls, or the still copy that belongs to a pane that is not the focused one. */
+function paintZoom(pane: Pane<Tab>, root: ParentNode) {
+  const part = <T extends HTMLElement>(id: string) => root.querySelector<T>(`#${id}, [data-was=${id}]`);
+  const { options } = pane, fitted = options.fitted, width = options.fit === 'width', current = zoomLevel(pane), level = `${zoomPercent(current)}%`;
+  // The level opens the zoom menu; double-clicking it still toggles fit page/fit width (while zoomed it first returns to the current fit).
+  const next = fitted && !width ? 'fit-width' : fitted ? 'fit-page' : `fit-${options.fit}`;
+  const levelButton = part('zoom-level'), limits = zoomLimits(pane), canZoomOut = stepZoom(current, -1, limits) < current - .004, canZoomIn = stepZoom(current, 1, limits) > current + .004;
+  if (levelButton) {
+    levelButton.querySelector('span')!.textContent = level; levelButton.dataset.next = next; levelButton.dataset.fit = fitted ? options.fit : '';
+    levelButton.setAttribute('aria-label', `Zoom menu, ${level}${fitted ? `, ${width ? 'fit width' : 'fit page'}` : ''}`);
+    levelButton.title = `${fitted ? `${width ? 'Fit width' : 'Fit page'} · ${level}` : `Zoom ${level}`} · click for zoom options · double-click for ${next === 'fit-width' ? 'fit width (Ctrl 2)' : 'fit page (Ctrl 0)'}`;
+  }
+  const out = part<HTMLButtonElement>('zoom-out'), into = part<HTMLButtonElement>('zoom-in');
+  if (out) out.disabled = !canZoomOut;
+  if (into) into.disabled = !canZoomIn;
+  return { current, limits, canZoomIn, canZoomOut };
+}
 /** Syncs the view-controls pill, page-layout toggles and the title subtitle with the current position, zoom, layout and hand-tool state. */
 function updateViewControls() {
   const pane = activePane(), { reader, active, options, position } = pane;
@@ -263,15 +280,7 @@ function updateViewControls() {
   $('view-controls').hidden = !pan.pannable && !reflowable;
   if (reflowable) readingControls.update({ flow: reader.flow?.() ?? 'paginated', fontSize: options.fontSize });
   if (!pan.pannable) { zoomMenu.close(); return; }
-  // The level opens the zoom menu; double-clicking it still toggles fit page/fit width (while zoomed it first returns to the current fit).
-  const next = fitted && !width ? 'fit-width' : fitted ? 'fit-page' : `fit-${options.fit}`;
-  const levelButton = $('zoom-level');
-  levelButton.querySelector('span')!.textContent = level; levelButton.dataset.next = next; levelButton.dataset.fit = fitted ? options.fit : '';
-  levelButton.setAttribute('aria-label', `Zoom menu, ${level}${fitted ? `, ${width ? 'fit width' : 'fit page'}` : ''}`);
-  levelButton.title = `${fitted ? `${width ? 'Fit width' : 'Fit page'} · ${level}` : `Zoom ${level}`} · click for zoom options · double-click for ${next === 'fit-width' ? 'fit width (Ctrl 2)' : 'fit page (Ctrl 0)'}`;
-  const limits = zoomLimits(), canZoomOut = stepZoom(current, -1, limits) < current - .004, canZoomIn = stepZoom(current, 1, limits) > current + .004;
-  $<HTMLButtonElement>('zoom-out').disabled = !canZoomOut;
-  $<HTMLButtonElement>('zoom-in').disabled = !canZoomIn;
+  const { limits, canZoomIn, canZoomOut } = paintZoom(pane, pill);
   zoomMenu.update({ level: current, fit: fitted ? options.fit : undefined, limits, canZoomIn, canZoomOut });
   // The hand tool is always available while the pill is shown: it scrolls an overflowing page and slides a fitting one.
   $('hand-tool').setAttribute('aria-pressed', String(pan.hand));
@@ -621,7 +630,12 @@ async function load(open: () => Promise<Opened | null>, label = 'document', { ta
     const current = candidate;
     await candidate.open({ ...doc, bytes: doc.bytes }, staging, {
       // The tab showing hears its reader fully; a live tab out of sight only keeps the place.
-      onPosition: p => { if (pane.reader === current) { if (side === focused) showPosition(p); else { pane.position = p; pane.markDirty(); paintTabs(); } } else if (tab.reader === current) tab.position = p; }, onError: fail, openExternal, requestPassword: password, onFrame: doc => { pan.watchFrame(doc); watchFrameZoom(doc); doc.addEventListener('pointerdown', () => { const owner = holder(tab.path); if (owner && isSplit()) activateSide(owner); }, true); },
+      // The tab may have crossed to the other side since it opened: the side that holds it now is the one that hears its reader.
+      onPosition: p => {
+        const owner = holder(tab.path) ?? side;
+        if (owner.pane.reader === current) { if (owner === focused) showPosition(p); else { owner.pane.position = p; owner.pane.markDirty(); paintTabs(); refreshGhost(owner); } }
+        else if (tab.reader === current) tab.position = p;
+      }, onError: fail, openExternal, requestPassword: password, onFrame: doc => { pan.watchFrame(doc); watchFrameZoom(doc); doc.addEventListener('pointerdown', () => { const owner = holder(tab.path); if (owner && isSplit()) activateSide(owner); }, true); },
       resolveImage: desktop ? async relative => { const result = await native<{bytes: number[]; mime: string}>('read_relative_image', { path: doc.path, relative }); const url = URL.createObjectURL(new Blob([new Uint8Array(result.bytes)], { type: result.mime })); urls.push(url); return url; } : undefined,
     }, prefs);
     // A reflowable book opens in the flow the reader last chose; with none saved the adapter picked one from the book, and it is kept from here on.
@@ -886,6 +900,8 @@ function ghostOf(side: Side) {
   copy.classList.add('pill-ghost'); copy.inert = true; copy.setAttribute('aria-hidden', 'true');
   side.view.body.append(copy); side.view.ghost = copy;
 }
+/** The reader of a pane that is not the focused one drew itself again (its size changed): its still view controls follow it. */
+function refreshGhost(side: Side) { if (side.view.ghost) paintZoom(side.pane, side.view.ghost); }
 /** The focused side stops being it: its find bar, page strip and view controls are put away, and its tab keeps what they held. */
 function parkSide(side: Side) {
   syncBack(side);

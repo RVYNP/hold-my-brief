@@ -310,6 +310,59 @@ test('the Library tab stays in the top bar while split, covers the panes, and cl
   await expect(barTabs(page)).toHaveCount(4);
 });
 
+test('each pane\'s zoom label follows its own page through a split, a divider drag, a dock and a window resize', async ({ page }) => {
+  const second = { name: 'second.pdf', mimeType: 'application/pdf', buffer: pagedPdf(6) };
+  await page.goto('/');
+  for (const [file, count] of [[pdf, 1], [second, 2]] as const) {
+    await page.locator('#file-input').setInputFiles(file);
+    await expect(page.locator('#tab-list .tab[data-path]')).toHaveCount(count);
+    await expect(page.locator('#tab-list .tab.is-active')).toContainText(file.name.replace('.pdf', ''));
+  }
+  await expect(page.locator('#position')).toContainText('Page 1 of 6');
+  // 0 while the page is being redrawn (it is replaced, not resized).
+  const pageWidth = async (side: 'a' | 'b') => (await page.locator(`.reader-host[data-pane=${side}]:not(.tab-hidden) .pdf-page`).first().boundingBox({ timeout: 1000 }).catch(() => null))?.width ?? 0;
+  const label = async (text: string) => Number(/(\d+)\s*%/.exec(text)![1]) / 100;
+  const live = async () => label((await page.locator('#zoom-level span').textContent())!);
+  const still = async (side: 'a' | 'b') => label((await page.locator(`.pane-body[data-pane=${side}] .pill-ghost [data-was=zoom-level] span`).textContent())!);
+  // The page's width at 100 %, read once from the unsplit page: every later label must give the same figure from the width on screen.
+  const full = (await pageWidth('a')) / await live();
+  const agree = async (side: 'a' | 'b', read: () => Promise<number>, step: string) => {
+    await expect.poll(async () => Math.abs((await pageWidth(side)) / await read() / full - 1), { message: `${side}: ${step}`, timeout: 5000 }).toBeLessThan(.01);
+  };
+  // A page is redrawn a moment after its pane changes size: wait until both have stopped moving, then compare.
+  const settle = async (sides: ('a' | 'b')[] = ['a', 'b']) => {
+    let last = '', still = 0;
+    while (still < 3) { await page.waitForTimeout(150); const now = (await Promise.all(sides.map(pageWidth))).join(':'); still = now === last ? still + 1 : 0; last = now; }
+  };
+  const both = async (step: string) => {
+    await settle();
+    await agree('b', live, `live, ${step}`);
+    await agree('a', () => still('a'), `still, ${step}`);
+  };
+  await run(page, 'Split right');
+  await expect(row(page, 'b')).toHaveCount(1);
+  await both('after the split');
+  await page.keyboard.press('Control+b');
+  await both('library docked');
+  const handle = divider(page), at = await box(handle);
+  await page.mouse.move(at.x + 4, at.y + at.height / 2); await page.mouse.down(); await page.mouse.move(at.x + 4 + 150, at.y + at.height / 2, { steps: 6 }); await page.mouse.up();
+  await both('after a divider drag');
+  await handle.focus(); await page.keyboard.press('Home');
+  await both('divider at the left limit');
+  await page.keyboard.press('End');
+  await both('divider at the right limit');
+  await handle.dblclick();
+  await both('after a snap back to 50 %');
+  await page.keyboard.press('Control+b');
+  await both('library closed');
+  await page.setViewportSize({ width: 1100, height: 800 });
+  await both('window resized');
+  await run(page, 'Close the split');
+  await expect(row(page, 'b')).toHaveCount(0);
+  await settle(['a']);
+  await agree('a', live, 'split ended');
+});
+
 // A still, not a check: `HMB_SHOT=1 npx playwright test e2e/split.spec.ts -g "split view still"` writes docs/media/split-view.png (Brief, light, 1440 × 900; documents built by the fixtures).
 test('split view still', async ({ page }) => {
   test.skip(!process.env.HMB_SHOT, 'writes docs/media/split-view.png only when HMB_SHOT is set');
