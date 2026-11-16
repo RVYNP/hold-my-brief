@@ -1083,7 +1083,7 @@ function restoreSplitView(session: TabSession, split: SavedSplit): boolean {
   applyLayout(); paintTabState(); paintTabs();
   // Anything else that changes the panes while the documents load (a file the app was launched with, a click on a tab, Home or a pane) ends the restore.
   const expected = sides.map(side => side.shown);
-  const changed = () => sides.length !== 2 || sides.some((side, index) => side.shown !== expected[index]) || cover !== undefined;
+  const changed = () => sides.length !== 2 || sides.some((side, index) => side.shown !== expected[index] || side.pane.cancelPending !== undefined) || cover !== undefined;
   void (async () => {
     for (const side of split.active === 'right' ? [left, right] : [right, left]) {
       if (changed()) return;
