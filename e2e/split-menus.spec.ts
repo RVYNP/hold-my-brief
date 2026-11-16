@@ -423,3 +423,37 @@ test.describe('the split after a restart', () => {
     }
   });
 });
+
+test.describe('stills for the pull request', () => {
+  test.skip(!process.env.HMB_SHOT, 'writes test-results/sv2b-*.png only when HMB_SHOT is set');
+  test.beforeEach(async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.addInitScript(() => localStorage.setItem('hold-my-brief:appearance', JSON.stringify({ mode: 'dark', palette: 'brief', accent: null, page: 'theme' })));
+  });
+
+  test('Brief dark, library docked, a 60 / 40 split', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openSplit(page);
+    await expect(page.locator('#reader-layout.library-open')).toHaveCount(1);
+    await page.locator('.pane-divider').focus();
+    for (let step = 0; step < 5; step++) await page.keyboard.press('ArrowRight');
+    await expect(page.locator('.pane-divider')).toHaveAttribute('aria-valuenow', '60');
+    await page.locator('.reader-host[data-pane=a]:not(.tab-hidden)').click({ position: { x: 40, y: 200 } });
+    await page.mouse.move(700, 880);
+    await page.screenshot({ path: 'test-results/sv2b-split-60-40-library-docked.png' });
+  });
+
+  test('a folded split at 1080 × 760 with the library docked', async ({ page }) => {
+    await page.setViewportSize({ width: 1080, height: 760 });
+    await page.addInitScript(() => localStorage.setItem('hold-my-brief:library-width', '340'));
+    await openThree(page);
+    await setLibrary(page, false);
+    await run(page, 'Split right');
+    await expect(row(page, 'b')).toHaveCount(1);
+    await setLibrary(page, true);
+    await expect(workspace(page)).toHaveClass(/is-single/);
+    await expect(page.getByRole('button', { name: /Other side/ })).toBeVisible();
+    await page.mouse.move(700, 740);
+    await page.screenshot({ path: 'test-results/sv2b-split-folded-1080.png' });
+  });
+});

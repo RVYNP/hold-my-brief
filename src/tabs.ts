@@ -252,3 +252,17 @@ export function mergeLists<T extends TabBase>(left: TabList<T>, right: TabList<T
   left.activate(showing);
   return left;
 }
+
+/**
+ * Starts a saved split from `list`, which holds every document tab: the tabs `split.right` names leave for a new list, in the order saved, and each list
+ * shows the tab saved for it. Undefined, and nothing changed, when that would leave a side with no tab (a split that no longer holds a document on each side).
+ */
+export function restoreSplit<T extends TabBase>(list: TabList<T>, split: SavedSplit): TabList<T> | undefined {
+  const named = split.right.tabs.filter(path => list.find(path));
+  if (!named.length || named.length >= list.size) return undefined;
+  const right = new TabList<T>();
+  for (const path of named) right.add(list.detach(path)!.tab);
+  const shown = (side: SavedPane, tabs: TabList<T>) => tabs.find(side.shown) ? side.shown : tabs.tabs[0].path;
+  list.activate(shown(split.left, list)); right.activate(shown(split.right, right));
+  return right;
+}

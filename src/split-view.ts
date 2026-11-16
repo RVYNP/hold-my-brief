@@ -85,3 +85,13 @@ export function paintDivider(divider: HTMLElement, percent: number) {
   divider.setAttribute('aria-valuenow', String(Math.round(percent)));
   divider.setAttribute('aria-valuetext', `${Math.round(percent)} % left, ${100 - Math.round(percent)} % right`);
 }
+
+/** The button at the end of a folded split's row: "⫴ Other side (n)", n being the documents the pane that is out of sight holds. Hidden when the panes are side by side. */
+export function paintFold(fold: HTMLElement, folded: boolean, others: number) {
+  fold.hidden = !folded;
+  if (!folded) return;
+  const label = `⫴ Other side (${others})`;
+  if (fold.textContent !== label) fold.textContent = label;
+  fold.setAttribute('aria-label', `Other side, ${others} ${others === 1 ? 'document' : 'documents'}`);
+  fold.title = 'Show the other side (Ctrl \\)';
+}
