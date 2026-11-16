@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { titleHints } from '../src/tab-titles';
+import { middleTruncate, titleHints } from '../src/tab-titles';
 
 const tab = (path: string, title = path.split(/[\\/]/).pop()!) => ({ path, title });
 const hints = (...tabs: ReturnType<typeof tab>[]) => Object.fromEntries(titleHints(tabs));
@@ -49,5 +49,55 @@ describe('tab titles that need telling apart', () => {
   it('shortens the content id a browser-build path starts with', () => {
     const idA = 'a'.repeat(64), idB = 'b'.repeat(64);
     expect(hints(tab(`${idA}/source.pdf`), tab(`${idB}/source.pdf`))).toEqual({ [`${idA}/source.pdf`]: 'aaaaaa', [`${idB}/source.pdf`]: 'bbbbbb' });
+  });
+});
+
+describe('cutting a name in the middle', () => {
+  // One unit per character, so the budget is easy to read.
+  const within = (limit: number) => (candidate: string) => candidate.length <= limit;
+
+  it('leaves a name that fits as it is', () => {
+    expect(middleTruncate('plate 15.jpg', within(12))).toBe('plate 15.jpg');
+    expect(middleTruncate('plate 15.jpg', within(40))).toBe('plate 15.jpg');
+  });
+
+  it('keeps the start and the end of a long name, as wide as the limit allows', () => {
+    const cut = middleTruncate('Haeckel - Kunstformen der Natur, plate 15.jpg', within(26));
+    expect(cut.length).toBeGreaterThanOrEqual(25); expect(cut.length).toBeLessThanOrEqual(26);
+    expect(cut.startsWith('Haeckel -')).toBe(true);
+    expect(cut.endsWith('plate 15.jpg')).toBe(true);
+    expect(cut).toContain('…');
+  });
+
+  it('tells two names that share their start apart by their ends', () => {
+    const a = middleTruncate('Haeckel - Hexacoralla (Kunstformen der Natur).jpg', within(24));
+    const b = middleTruncate('Haeckel - Kunstformen der Natur, plate 15.jpg', within(24));
+    expect(a).not.toBe(b);
+    expect(a.endsWith('Natur).jpg')).toBe(true);
+    expect(b.endsWith('plate 15.jpg')).toBe(true);
+  });
+
+  it('always shows the extension, even when only it fits', () => {
+    expect(middleTruncate('a-very-long-name-indeed.jpeg', within(6))).toBe('….jpeg');
+    expect(middleTruncate('a-very-long-name-indeed.jpeg', within(1))).toBe('….jpeg');
+  });
+
+  it('cuts a name without an extension, and a dotfile, like any other', () => {
+    expect(middleTruncate('README-for-the-whole-collection', within(11))).toMatch(/^.+….+$/);
+    expect(middleTruncate('README-for-the-whole-collection', within(11)).length).toBeLessThanOrEqual(11);
+    expect(middleTruncate('.hidden-file-with-a-long-name', within(9)).length).toBeLessThanOrEqual(9);
+  });
+
+  it('handles an empty name and a single character that does not fit', () => {
+    expect(middleTruncate('', within(0))).toBe('');
+    expect(middleTruncate('W', () => false)).toBe('W');
+    expect(middleTruncate('', () => false)).toBe('');
+  });
+
+  it('keeps a measure that is not one unit per character honest', () => {
+    const wide = (candidate: string) => [...candidate].reduce((sum, letter) => sum + (letter === 'W' || letter === '…' ? 2 : 1), 0) <= 12;
+    const cut = middleTruncate('WWWWWWWWWWWW-WWWWWWWWWWWW.png', wide);
+    expect(wide(cut)).toBe(true);
+    expect(cut.endsWith('.png')).toBe(true);
   });
 });

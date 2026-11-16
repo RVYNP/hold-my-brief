@@ -15,7 +15,7 @@ import { appearanceSummary, createAppearanceSheet, paletteIcon } from './appeara
 import { createAssistantPanel } from './assistant-panel';
 import { DRAG_SLOP, Panner, type Offset } from './pan';
 import { MIN_SPREAD_WIDTH, pagesLabel, spreadPages } from './spread';
-import { assignShelfSlots, closeHome, fillHomePictures, homeSections, homeTypes, openedOrder, renderHome, repaintBanner } from './home';
+import { assignShelfSlots, closeHome, fillHomePictures, homeSections, homeTypes, openedOrder, renderHome, repaintGround } from './home';
 import { displayTitle } from './shelf';
 import { repaintCovers } from './cards';
 import { canThumbnail, createThumbnailStore } from './thumbnails';
@@ -424,6 +424,7 @@ const rail = createIconRail($('library-rail'), {
 });
 const library = createLibrary($('library-root'), {
   open: path => openPath(path),
+  replace: path => stepImage(path),
   error: fail,
   openBackground: doc => openInBackground(doc),
   changed: (next, progress) => { homeLibrary = next; homeProgress = { ...progress }; if ($('empty').classList.contains('is-home')) paintHome(); },
@@ -558,8 +559,10 @@ async function adapter(format: string): Promise<ReaderAdapter> {
  * Opens a document into a tab: a new one at `at` (the end by default), or `target`, a tab that is showing but holds nothing yet
  * (restored, hibernated, or one whose open failed). A document that is already open in a live tab is only shown. The page is built
  * off screen first and swapped in only once it is ready, so a slow or cancelled open leaves every other tab exactly as it was.
+ * With `replace`, the document takes the place of that showing tab, in the same slot, and the tab it replaces is closed the way closing it would
+ * (its place and view are saved first); when that tab is no longer showing by then, the document opens as a new tab at `at`.
  */
-async function load(open: () => Promise<Opened | null>, label = 'document', { target, at }: { target?: Tab; at?: number } = {}): Promise<boolean> {
+async function load(open: () => Promise<Opened | null>, label = 'document', { target, at, replace }: { target?: Tab; at?: number; replace?: Tab } = {}): Promise<boolean> {
   const token = ++request; cancelPending?.();
   loadingTarget = target; paintTabState();
   $('loading').hidden = false; $('loading').querySelector('span')!.textContent = `Opening ${label}…`;
@@ -599,9 +602,16 @@ async function load(open: () => Promise<Opened | null>, label = 'document', { ta
     await flush();
     if (token !== request) return false;
     doc.bytes = new Uint8Array();
+    const swapping = replace && !tabs.find(tab.path) && shown === replace && tabs.find(replace.path) === replace ? replace : undefined;
     Object.assign(tab, { name: doc.name, format: doc.format, doc, reader: candidate, host: staging, options: prefs, position: candidate.getPosition(), hand: false, stripScroll: undefined, find: undefined, scanNoticeShown: false, resume: undefined, problem: undefined });
     staging.classList.remove('staging'); staging.classList.add('tab-hidden'); // `enter` shows it
-    if (!tabs.find(tab.path)) tabs.open(tab, at);
+    if (swapping) {
+      // The tab being replaced goes the way a closed one does: its place and view are saved, its reader lets go, and it is gone from the strip.
+      void flush(); swapping.find = undefined; findBar.close(); zoomGesture.cancel();
+      reader = undefined; syncPageStrip();
+      swapping.reader?.destroy(); swapping.host?.remove(); swapping.reader = swapping.host = undefined;
+      tabs.replace(swapping.path, tab); shown = undefined;
+    } else if (!tabs.find(tab.path)) tabs.open(tab, at);
     tabs.markLive(tab.path);
     show(tab, true);
     showPosition(candidate.getPosition()); // A reopened or converted document saves its place and options again.
@@ -687,7 +697,7 @@ function tabWhere(tab: Tab) {
 let paintedTabs = '';
 function paintTabs() {
   const hints = titleHints(tabs.tabs.filter(tab => tab.path !== LIBRARY_PATH).map(tab => ({ path: tab.path, title: tabTitle(tab) })));
-  const views: TabView[] = tabs.tabs.map(tab => ({ path: tab.path, title: tabTitle(tab), hint: hints.get(tab.path) ?? '', format: tab.format, where: tabWhere(tab), progress: formatProgress(progressOf((tab === shown ? position : tab.position) ?? { fraction: NaN, scrub: { current: 0, total: 0, unit: 'line' } })) ?? '', active: tab === tabs.active, problem: Boolean(tab.problem), library: tab.path === LIBRARY_PATH }));
+  const views: TabView[] = tabs.tabs.map(tab => ({ path: tab.path, title: tabTitle(tab), hint: hints.get(tab.path) ?? '', format: tab.format, where: tabWhere(tab), progress: formatProgress(progressOf((tab === shown ? position : tab.position) ?? { fraction: NaN, scrub: { current: 0, total: 0, unit: 'line' } })) ?? '', active: tab === tabs.active, problem: Boolean(tab.problem), library: tab.path === LIBRARY_PATH, image: Object.hasOwn(imageFormats, tab.format) }));
   const key = JSON.stringify([views, tabs.size]);
   if (key === paintedTabs) return;
   paintedTabs = key;
@@ -781,6 +791,14 @@ function retargetLibraryTab(place: LibraryPlace) {
 }
 /** Opens a library document in a tab, or shows the tab it is already in. */
 function openPath(path: string, name = path.split(/[\\/]/).pop()) { return openTab(path, () => openLibraryDocument(path), name); }
+/**
+ * The image pager's step: the image takes the showing image tab's place (the tab keeps its slot in the strip), unless it is already open in another
+ * tab, which is then shown and the showing one left as it is. With no showing image tab it opens like any other document.
+ */
+function stepImage(path: string) {
+  const here = shown && shown.path !== LIBRARY_PATH && Object.hasOwn(imageFormats, shown.format) && shown.path !== path ? shown : undefined;
+  return openTab(path, () => openLibraryDocument(path), path.split(/[\\/]/).pop(), undefined, here);
+}
 /** The tab a background open added last, so the next one lands after it (as a browser's middle clicks do); forgotten when another tab is shown. */
 let lastBackground: string | undefined;
 /** Gives a library document a tab beside the one showing without showing it; it opens when it is first shown. */
@@ -790,9 +808,9 @@ function openInBackground(doc: { path: string; name: string; format: string }) {
   lastBackground = doc.path; paintTabs(); saveSession();
 }
 /** `path` is the document's identity when it is known before it is read (a library path, or the path a request named). */
-async function openTab(path: string | undefined, open: () => Promise<Opened | null>, label?: string, at?: number) {
+async function openTab(path: string | undefined, open: () => Promise<Opened | null>, label?: string, at?: number, replace?: Tab) {
   const existing = path ? tabs.find(path) : undefined;
-  if (!existing) return load(open, label, { at });
+  if (!existing) return load(open, label, { at, replace });
   existing.problem = undefined;
   if (shown === existing) { if (!existing.reader) void reopen(existing); } else selectTab(existing.path);
   if (existing.reader) void touch(existing);
@@ -1086,8 +1104,8 @@ onAppearanceChange(next => {
   const home = $('empty');
   if (!home.classList.contains('is-home')) return;
   repaintCovers(home, scheme());
-  // The banner repaints itself; choosing none or a pattern after the other changes the page's shape, so Home is painted again.
-  if (!repaintBanner(next.banner)) paintHome();
+  // The ground repaints itself; choosing none or a pattern after the other adds or removes the shuffle button, so Home is painted again.
+  if (!repaintGround(next.banner)) paintHome();
 });
 async function initialize() {
   const saved = await state(); updateWindow(saved.window); if (saved.warning) notify(saved.warning);

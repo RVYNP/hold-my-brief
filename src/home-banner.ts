@@ -1,6 +1,6 @@
-// The art of Home's banner: the window glow of the theme (two soft lights, one high and right of centre, one low in the
+// The art of Home's background: the window glow of the theme (two soft lights, one high and right of centre, one low in the
 // right corner) dithered with an 8 x 8 Bayer matrix, with a procedural cover's texture folded in. Pure (no DOM, no canvas):
-// `renderBanner` returns a palette-indexed grid in the shape of `renderCover`'s; home.ts paints it.
+// `renderBanner` returns a palette-indexed grid in the shape of `renderCover`'s; home.ts paints it over the whole window.
 import { bayer8, renderCover, seedFrom, type Cover } from './procedural-cover';
 import type { Rgb } from './theme';
 
@@ -10,17 +10,15 @@ export const bannerPixel = 2;
 export const bannerBucket = 32;
 /** How much a texture pixel adds to the glow before the threshold. */
 const inkWeight = .12;
-/** Share of the accent (`strength`) the banner takes: light themes carry more than dark ones, which a glow already lights. */
-export const bannerStrength = { light: .38, dark: .4 } as const;
 
 export interface BannerSpec {
   seed: number;
-  /** A cover family (the Appearance's BANNER choice, except none); another name lets the seed pick one. */
+  /** A cover family (the Appearance's BACKGROUND choice, except none); another name lets the seed pick one. */
   family: string;
   /** Size in dither pixels. */
   width: number;
   height: number;
-  /** `--home-card`, and the two hues of `--grad-a` / `--grad-b`, all opaque. */
+  /** The window's surface (the weaker first tone mixes from it), and the two hues of `--grad-a` / `--grad-b`, all opaque. */
   ground: Rgb;
   a: Rgb;
   b: Rgb;
@@ -52,7 +50,7 @@ export function renderBanner(spec: BannerSpec): Cover {
   return { width, height, pixels, palette: bannerPalette(ground, a, b, strength), family: texture.family };
 }
 
-/** The grid for a band of this CSS size: one dither pixel per `bannerPixel`, the width rounded up to the bucket. */
+/** The grid for a picture of this CSS size: one dither pixel per `bannerPixel`, the width rounded up to the bucket. */
 export function bannerGrid(cssWidth: number, cssHeight: number): { width: number; height: number } {
   return { width: Math.max(1, Math.ceil(cssWidth / bannerBucket) * bannerBucket / bannerPixel), height: Math.max(1, Math.round(cssHeight / bannerPixel)) };
 }

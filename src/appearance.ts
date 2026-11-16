@@ -1,5 +1,5 @@
 import { FONT_MAX, FONT_MIN } from './text-size';
-import { appearance, applyAppearance, glows, glowSchemes, isGlow, palettes, readingColors, rgbToHex, saveAppearance, schemeOf, type Appearance, type AppearanceMode, type Banner, type PageTone, type Palette } from './theme';
+import { appearance, applyAppearance, backgroundStrengthMax, backgroundStrengthMin, glows, glowSchemes, isGlow, palettes, readingColors, rgbToHex, saveAppearance, schemeOf, type Appearance, type AppearanceMode, type Banner, type PageTone, type Palette } from './theme';
 
 const icon = (size: number, body: string) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 export const paletteIcon = icon(14, '<circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.84-.44-1.13-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.67h2c3.05 0 5.55-2.5 5.55-5.55C21.97 6.01 17.46 2 12 2z"/>');
@@ -77,8 +77,10 @@ export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextContr
       </div></div>
     <div class="appearance-row"><span class="sheet-label" id="appearance-page-label">PAGE</span>
       <div class="choices" role="radiogroup" aria-labelledby="appearance-page-label">${tones.map(([tone, label]) => `<button role="radio" data-tone="${tone}">${label}</button>`).join('')}</div></div>
-    <div class="appearance-row"><span class="sheet-label" id="appearance-banner-label">BANNER</span>
-      <div class="choices" role="radiogroup" aria-labelledby="appearance-banner-label">${bannerChoices.map(([banner, label]) => `<button role="radio" data-banner="${banner}">${label}</button>`).join('')}</div></div>
+    <div class="appearance-row"><span class="sheet-label" id="appearance-background-label">BACKGROUND</span>
+      <div class="choices" role="radiogroup" aria-labelledby="appearance-background-label">${bannerChoices.map(([banner, label]) => `<button role="radio" data-banner="${banner}">${label}</button>`).join('')}</div></div>
+    <div class="appearance-row appearance-strength"><span class="sheet-label" id="appearance-strength-label">STRENGTH</span>
+      <div class="strength"><input class="strength-input" type="range" aria-labelledby="appearance-strength-label" min="${Math.round(backgroundStrengthMin * 100)}" max="${Math.round(backgroundStrengthMax * 100)}" step="1"><output class="strength-value" aria-live="polite"></output></div></div>
     <hr class="appearance-rule">
     <div class="appearance-text">
       <div class="appearance-preview" aria-hidden="true">${previewCopy}</div>
@@ -98,7 +100,8 @@ export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextContr
   const swatches = dialog.querySelector<HTMLElement>('.swatches')!, themeSwatch = dialog.querySelector<HTMLElement>('.swatch-theme')!;
   const custom = dialog.querySelector<HTMLButtonElement>('.swatch-custom')!, picker = dialog.querySelector<HTMLInputElement>('.swatch-input')!;
   const toneGroup = dialog.querySelector<HTMLElement>('[aria-labelledby=appearance-page-label]')!;
-  const bannerGroup = dialog.querySelector<HTMLElement>('[aria-labelledby=appearance-banner-label]')!;
+  const bannerGroup = dialog.querySelector<HTMLElement>('[aria-labelledby=appearance-background-label]')!;
+  const strengthInput = dialog.querySelector<HTMLInputElement>('.strength-input')!, strengthValue = dialog.querySelector<HTMLOutputElement>('.strength-value')!;
   const textSection = dialog.querySelector<HTMLElement>('.appearance-text')!, textNote = dialog.querySelector<HTMLElement>('.appearance-note')!, previewBox = dialog.querySelector<HTMLElement>('.appearance-preview')!;
   const sizeValue = dialog.querySelector<HTMLOutputElement>('.stepper-value')!;
   const spacingGroup = dialog.querySelector<HTMLElement>('[aria-labelledby=appearance-spacing-label]')!, marginGroup = dialog.querySelector<HTMLElement>('[aria-labelledby=appearance-margin-label]')!;
@@ -119,6 +122,10 @@ export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextContr
     custom.setAttribute('aria-label', preset ? 'Custom accent color…' : `Custom accent ${kept.accent}`);
     check(toneGroup, item => item.dataset.tone === kept.page);
     check(bannerGroup, item => item.dataset.banner === kept.banner);
+    // STRENGTH belongs to the background: with None it is shown, disabled, at the kept value.
+    const percent = Math.round(kept.backgroundStrength * 100), off = kept.banner === 'none';
+    strengthInput.value = String(percent); strengthValue.value = `${percent} %`;
+    strengthInput.disabled = off; strengthInput.setAttribute('aria-disabled', String(off));
     // The line under the swatches names the kept theme; while another is previewed it names that one and says how to get back. A glow theme keeps one mode, so at rest it says so.
     const name = document.createElement('span'); name.className = 'appearance-name'; name.textContent = names[shown.palette];
     hint.toggleAttribute('data-previewing', previewing);
@@ -160,6 +167,7 @@ export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextContr
   modeGroup.addEventListener('click', event => { const mode = (event.target as Element).closest<HTMLElement>('[data-mode]')?.dataset.mode as AppearanceMode | undefined; if (mode) keep({ mode }); });
   toneGroup.addEventListener('click', event => { const page = (event.target as Element).closest<HTMLElement>('[data-tone]')?.dataset.tone as PageTone | undefined; if (page) keep({ page }); });
   bannerGroup.addEventListener('click', event => { const banner = (event.target as Element).closest<HTMLElement>('[data-banner]')?.dataset.banner as Banner | undefined; if (banner) keep({ banner }); });
+  strengthInput.addEventListener('input', () => keep({ backgroundStrength: Number(strengthInput.value) / 100 }));
   spacingGroup.addEventListener('click', event => { const value = (event.target as Element).closest<HTMLElement>('[data-spacing]')?.dataset.spacing; if (value) editText({ lineHeight: Number(value) }); });
   marginGroup.addEventListener('click', event => { const value = (event.target as Element).closest<HTMLElement>('[data-margin]')?.dataset.margin; if (value) editText({ margin: Number(value) }); });
   wrapGroup.addEventListener('click', event => { const value = (event.target as Element).closest<HTMLElement>('[data-wrap]')?.dataset.wrap; if (value) editText({ wrap: value === 'true' }); });
