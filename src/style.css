@@ -1010,7 +1010,7 @@ h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 1px 0 
    A changed picture cross-fades by a transition of --ground-fade; nothing in it animates on its own. */
 @property --ground-fade { syntax: '<number>'; inherits: false; initial-value: 1; }
 .home-ground { position: absolute; z-index: -1; pointer-events: none; image-rendering: pixelated; mix-blend-mode: multiply; opacity: calc(var(--ground-strength, .06) * var(--ground-fade)); transition: --ground-fade 600ms linear; }
-:root[data-theme='dark'] .home-ground, :is([data-palette='aurora'], [data-palette='dusk'], [data-palette='nebula'], [data-palette='solar'], [data-palette='ember'], [data-palette='orchid'], [data-palette='glacier'], [data-palette='peach'], [data-palette='lagoon'], [data-palette='moss']) .home-ground { mix-blend-mode: lighten; }
+:root[data-theme='dark'] .home-ground { mix-blend-mode: lighten; }
 .home-ground.is-entering, .home-ground.is-leaving { --ground-fade: 0; }
 #empty[hidden] ~ .home-ground { display: none; }
 @media (prefers-reduced-motion: reduce) { .home-ground { transition: none; } }

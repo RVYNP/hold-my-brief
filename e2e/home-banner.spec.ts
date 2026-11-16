@@ -109,7 +109,7 @@ test('the glow\'s geometry belongs to the window: with the library panel open th
   expect((await shown(page).boundingBox())!.y).toBe(40);
 });
 
-test('the blend is multiply in light schemes and lighten in dark schemes and the glow themes, over the workspace surface', async ({ page }) => {
+test('the blend follows the scheme only: multiply in light schemes (Peach included), lighten in dark schemes (Aurora included), over the workspace surface', async ({ page }) => {
   await seedLibrary(page, documents, collections);
   const blends: Record<string, string> = {};
   for (const [name, record] of themes) {
@@ -117,7 +117,7 @@ test('the blend is multiply in light schemes and lighten in dark schemes and the
     await pixels(page);
     blends[name] = await shown(page).evaluate(node => getComputedStyle(node).mixBlendMode);
   }
-  expect(blends).toEqual({ 'Brief light': 'multiply', 'Brief dark': 'lighten', Aurora: 'lighten', Peach: 'lighten' });
+  expect(blends).toEqual({ 'Brief light': 'multiply', 'Brief dark': 'lighten', Aurora: 'lighten', Peach: 'multiply' });
 });
 
 test('the ground paints over the workspace surface and under the content: at the maximum the window differs from the same one with BACKGROUND None', async ({ page }) => {
