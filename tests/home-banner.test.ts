@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { bannerGrid, bannerPalette, bannerStrength, renderBanner, reshuffled, seedFor, localDay, type BannerSpec } from '../src/home-banner';
+import { bannerGrid, bannerPalette, renderBanner, reshuffled, seedFor, localDay, type BannerSpec } from '../src/home-banner';
+import type { Cover } from '../src/procedural-cover';
 
 const spec: BannerSpec = { seed: 12345, family: 'flow', width: 125, height: 35, ground: [233, 227, 214], a: [225, 58, 58], b: [240, 138, 60], strength: .55 };
 const differs = (x: Uint8Array, y: Uint8Array) => x.some((tone, index) => tone !== y[index]);
@@ -38,17 +39,14 @@ describe('renderBanner', () => {
   });
 });
 
-describe('the light banner', () => {
-  // Brief light: --home-card ground, the red and orange glow hues, drawn at the light strength for a 1080 px band (512 x 70) and a compact one's strip (320 x 7).
-  const light: Pick<BannerSpec, 'ground' | 'a' | 'b' | 'strength'> = { ground: [233, 227, 214], a: [225, 58, 58], b: [240, 138, 60], strength: bannerStrength.light };
-  const groundShare = ({ pixels }: ReturnType<typeof renderBanner>) => pixels.filter(tone => tone === 0).length / pixels.length;
-  it('takes a lighter share of the accent than the dark one', () => {
-    expect(bannerStrength).toEqual({ light: .38, dark: .4 });
-  });
-  it.each([['flow', 12345], ['flow', 987654321], ['arcs', 12345], ['arcs', 987654321]] as const)('leaves at least 35 percent of the art as ground: $0, seed $1', (family, seed) => {
-    for (const [width, height] of [[512, 70], [320, 7]]) {
-      const grid = renderBanner({ ...light, seed, family, width, height });
-      expect(grid.palette[0]).toEqual(light.ground);
+describe('the ground picture', () => {
+  // Brief light: the surface, the red and orange glow hues at full strength, drawn for a 1080 x 760 window (544 x 380 dither pixels) and a narrow one (224 x 320).
+  const full: Pick<BannerSpec, 'ground' | 'a' | 'b' | 'strength'> = { ground: [255, 255, 255], a: [225, 58, 58], b: [240, 138, 60], strength: 1 };
+  const groundShare = ({ pixels }: Cover) => pixels.filter(tone => tone === 0).length / pixels.length;
+  it.each([['flow', 12345], ['flow', 987654321], ['arcs', 12345], ['arcs', 987654321]] as const)('leaves at least 35 percent of the window as ground: $0, seed $1', (family, seed) => {
+    for (const [width, height] of [[544, 380], [224, 320]]) {
+      const grid = renderBanner({ ...full, seed, family, width, height });
+      expect(grid.palette[0]).toEqual(full.ground);
       expect(groundShare(grid)).toBeGreaterThanOrEqual(.35);
     }
   });

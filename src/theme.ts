@@ -22,9 +22,10 @@ export type Glow = 'aurora' | 'dusk' | 'nebula' | 'solar' | 'ember' | 'orchid' |
 export type Palette = Family | Glow;
 export type PageTone = 'theme' | 'white' | 'sepia' | 'dim';
 export type Scheme = 'light' | 'dark';
-/** The pattern of Home's banner (a cover family), or none for the plain bar. */
+/** The pattern of Home's background (a cover family), or none for no background. */
 export type Banner = 'flow' | 'arcs' | 'stripes' | 'contours' | 'truchet' | 'none';
-export type Appearance = { mode: AppearanceMode; palette: Palette; accent: string | null; page: PageTone; banner: Banner };
+/** `backgroundStrength` is the opacity of Home's background layer, 0.02 to 0.10. */
+export type Appearance = { mode: AppearanceMode; palette: Palette; accent: string | null; page: PageTone; banner: Banner; backgroundStrength: number };
 export type Rgb = [number, number, number];
 
 export const appearanceKey = 'hold-my-brief:appearance';
@@ -37,7 +38,12 @@ export const allPalettes: readonly Palette[] = [...palettes, ...glows];
 export const isGlow = (palette: Palette): palette is Glow => palette in glowSchemes;
 export const pageTones: readonly PageTone[] = ['theme', 'white', 'sepia', 'dim'];
 export const banners: readonly Banner[] = ['flow', 'arcs', 'stripes', 'contours', 'truchet', 'none'];
-export const defaultAppearance: Appearance = { mode: 'system', palette: 'brief', accent: null, page: 'theme', banner: 'flow' };
+/** What the Appearance sheet's STRENGTH slider offers (fractions; the slider shows whole percent) and where a missing or invalid value falls back. */
+export const backgroundStrengthMin = 0.02;
+/** 10 %: the most at which Home's text reads at 4.5:1 on the worst ground pixel, tightest in Brief light. In WebKit (the macOS app) Brief light gives 4.47 at 12 % and 4.49 at 11 %; in Chromium 4.52 at 12 %. e2e/home-banner.spec.ts holds it. */
+export const backgroundStrengthMax = 0.10;
+export const defaultBackgroundStrength = 0.06;
+export const defaultAppearance: Appearance = { mode: 'system', palette: 'brief', accent: null, page: 'theme', banner: 'flow', backgroundStrength: defaultBackgroundStrength };
 const accentTokens = ['--accent', '--accent-ink', '--accent-fill', '--accent-fill-hover', '--accent-soft', '--accent-soft-hover', '--accent-border', '--sheen-a', '--sheen-b', '--sheen-mix-light', '--sheen-mix-dark'] as const;
 const hexColor = /^#[0-9a-f]{6}$/i;
 
@@ -170,7 +176,7 @@ export function accentVars(hex: string): Record<(typeof accentTokens)[number], s
 
 // --- Preferences ---
 
-function parse(raw: string | null): Appearance {
+export function parse(raw: string | null): Appearance {
   try {
     const saved = JSON.parse(raw ?? 'null') as Partial<Appearance> | null;
     if (!saved || typeof saved !== 'object') return defaultAppearance;
@@ -180,6 +186,7 @@ function parse(raw: string | null): Appearance {
       accent: typeof saved.accent === 'string' && hexColor.test(saved.accent) ? saved.accent.toLowerCase() : null,
       page: pageTones.includes(saved.page as PageTone) ? saved.page as PageTone : defaultAppearance.page,
       banner: banners.includes(saved.banner as Banner) ? saved.banner as Banner : defaultAppearance.banner,
+      backgroundStrength: typeof saved.backgroundStrength === 'number' && saved.backgroundStrength >= backgroundStrengthMin && saved.backgroundStrength <= backgroundStrengthMax ? saved.backgroundStrength : defaultBackgroundStrength,
     };
   } catch { return defaultAppearance; }
 }
@@ -199,6 +206,7 @@ export function applyAppearance(next: Appearance) {
   root.dataset.theme = schemeOf(next);
   root.dataset.palette = next.palette;
   if (next.page === 'theme') delete root.dataset.page; else root.dataset.page = next.page;
+  root.style.setProperty('--ground-strength', String(next.backgroundStrength));
   const vars = next.accent ? accentVars(next.accent) : undefined;
   for (const name of accentTokens) if (vars) root.style.setProperty(name, vars[name]); else root.style.removeProperty(name);
   for (const listener of listeners) listener(next);
