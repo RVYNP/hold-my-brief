@@ -67,11 +67,6 @@ export class Pane<Target extends object = object> {
   /** Gives up the open in flight; whatever the pane shows stays as it was. */
   cancelLoad() { ++this.request; this.cancelPending?.(); this.cancelPending = undefined; this.loadingTarget = undefined; }
 
-  /** The position changed: it is saved shortly, unless it was only restored (`save` false). */
-  record(position: Position, save = true) {
-    this.position = position;
-    if (save) this.markDirty();
-  }
   markDirty() { this.dirty = true; clearTimeout(this.saveTimer); this.saveTimer = setTimeout(() => void this.flush(), 650); }
   /** Writes the position and options once if they changed since the last write; resolves when everything queued is written. */
   flush(): Promise<void> {
