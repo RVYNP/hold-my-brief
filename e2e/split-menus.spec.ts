@@ -243,7 +243,7 @@ test.describe('1080 × 760', () => {
     // The active pane (the EPUB's, on the right) is the one that shows; its row ends with the button, which counts the other side's tabs.
     const fold = page.getByRole('button', { name: /Other side/ });
     await expect(fold).toBeVisible();
-    await expect(fold).toHaveText('⫴ Other side (2)');
+    await expect(fold).toHaveText('Other side (2)');
     await expect(page.locator('.pane-strip[data-pane=a]')).toBeHidden();
     await expect(page.locator('.reader-host[data-pane=b]:not(.tab-hidden)')).toBeVisible();
     await expect(page.locator('.reader-host[data-pane=a]:not(.tab-hidden)')).toBeHidden();
@@ -254,7 +254,7 @@ test.describe('1080 × 760', () => {
     await expect(page.locator('.reader-host[data-pane=a]:not(.tab-hidden)')).toBeVisible();
     await expect(page.locator('.reader-host[data-pane=b]:not(.tab-hidden)')).toBeHidden();
     await expect(page.locator('#position')).toContainText('Page 1 of 5');
-    await expect(page.getByRole('button', { name: /Other side/ })).toHaveText('⫴ Other side (1)');
+    await expect(page.getByRole('button', { name: /Other side/ })).toHaveText('Other side (1)');
     await expect(page.locator('.pane-strip[data-pane=b]')).toBeHidden();
     // The library's room back: both panes unfold by themselves.
     await setLibrary(page, false);
@@ -282,7 +282,7 @@ test.describe('1080 × 760', () => {
     await menuItem(page, 'Open in split right').click();
     await expect(workspace(page)).toHaveAttribute('data-active', 'b');
     await expect(page.locator('.pane-strip[data-pane=b] .tab.is-active .tab-title')).toHaveText('extra.txt');
-    await expect(page.getByRole('button', { name: /Other side/ })).toHaveText('⫴ Other side (2)');
+    await expect(page.getByRole('button', { name: /Other side/ })).toHaveText('Other side (2)');
   });
 });
 
