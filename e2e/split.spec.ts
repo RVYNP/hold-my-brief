@@ -250,7 +250,7 @@ test('reloading while split brings every document back with its place', async ({
   await run(page, 'Split right');
   await expect(row(page, 'b')).toHaveCount(1);
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('hold-my-brief-tabs')!).tabs.length)).toBe(2);
-  await page.waitForTimeout(900);
+  await expect.poll(() => page.evaluate(() => Object.entries(localStorage).some(([key, value]) => key.startsWith('hold-my-brief:') && JSON.parse(value).locator?.page === 4))).toBe(true);
   await page.reload();
   await expect(barTabs(page)).toHaveCount(2);
   await barTabs(page).filter({ hasText: 'half-tone' }).click();
@@ -364,10 +364,10 @@ test('each pane\'s zoom label follows its own page through a split, a divider dr
   const agree = async (side: 'a' | 'b', read: () => Promise<number>, step: string) => {
     await expect.poll(async () => Math.abs((await pageWidth(side)) / await read() / full - 1), { message: `${side}: ${step}`, timeout: 5000 }).toBeLessThan(.01);
   };
-  // A page is redrawn a moment after its pane changes size: wait until both have stopped moving, then compare.
+  // A page is redrawn a moment after its pane changes size: wait until the widths read the same twice running, then compare.
   const settle = async (sides: ('a' | 'b')[] = ['a', 'b']) => {
-    let last = '', still = 0;
-    while (still < 3) { await page.waitForTimeout(150); const now = (await Promise.all(sides.map(pageWidth))).join(':'); still = now === last ? still + 1 : 0; last = now; }
+    let last = '';
+    await expect.poll(async () => { const now = (await Promise.all(sides.map(pageWidth))).join(':'); const held = now === last; last = now; return held; }, { intervals: [100, 100, 100, 200, 200], timeout: 10000 }).toBe(true);
   };
   const both = async (step: string) => {
     await settle();
