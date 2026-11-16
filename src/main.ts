@@ -1342,7 +1342,7 @@ onAppearanceChange(next => {
   const home = $('empty');
   if (!home.classList.contains('is-home')) return;
   repaintCovers(home, scheme());
-  // The ground repaints itself; choosing none or a pattern after the other adds or removes the shuffle button, so Home is painted again.
+  // The ground repaints itself; choosing none or a pattern after the other adds or removes the ground, so Home is painted again.
   if (!repaintGround(next.banner)) paintHome();
 });
 async function initialize() {
