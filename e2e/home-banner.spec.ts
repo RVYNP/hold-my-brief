@@ -350,32 +350,37 @@ const everyTheme: [string, object][] = [
   ...glowThemes.map(palette => [palette, { palette }] as [string, object]),
 ];
 
-// Home's text on the ground at the slider's maximum, read from the sheet: see home-contrast.ts for the measurement.
-test('Home text drawn on the ground reads at 4.5:1 against the worst ground pixel at the slider\'s maximum, in all 17 palettes (the families in light and dark)', async ({ page }) => {
-  test.setTimeout(180_000);
+// T (groundInkStrength in theme.ts): up to it Home's muted text is plain --muted, above it the text deepens toward --fg. Plain --muted passes 4.5:1 in all 24 theme/mode combinations up to T in Chromium and WebKit.
+const inkStart = .08;
+
+// Home's text on the ground at the first strength above T, at 20 % and at the slider's maximum, read from the sheet: see home-contrast.ts for the measurement.
+test('Home text drawn on the ground reads at 4.5:1 against the worst ground pixel at T + 1 %, 20 % and the slider\'s maximum, in all 17 palettes (the families in light and dark)', async ({ page }) => {
+  test.setTimeout(420_000);
   await page.setViewportSize({ width: 1080, height: 1500 });
   await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
   await seedLibrary(page, documents, collections);
   const sheet = await openSheet(page);
   const maximum = Number(await sheet.locator('input[type=range]').getAttribute('max')) / 100;
-  expect(maximum).toBeGreaterThan(.1);
+  expect(maximum).toBe(.3);
   const worst: Record<string, string> = {};
-  for (const [name, record] of everyTheme) {
-    await keepAppearance(page, { ...record, banner: 'flow', backgroundStrength: maximum });
-    await pixels(page);
-    expect(await opacityOf(shown(page))).toBe(String(maximum));
-    await expect(page.locator('.home-all').first()).toBeVisible();
-    const lowest = await lowestTextContrast(page);
-    worst[name] = `${lowest.ratio.toFixed(2)} (${lowest.label}, ground tone ${lowest.tone})`;
-    expect(lowest.texts, name).toBeGreaterThan(12);
-    expect(lowest.ratio, `${name}: ${worst[name]}`).toBeGreaterThanOrEqual(4.5);
+  for (const strength of [Math.round((inkStart + .01) * 100) / 100, .2, maximum]) {
+    for (const [name, record] of everyTheme) {
+      await keepAppearance(page, { ...record, banner: 'flow', backgroundStrength: strength });
+      await pixels(page);
+      expect(await opacityOf(shown(page))).toBe(String(strength));
+      await expect(page.locator('.home-all').first()).toBeVisible();
+      const lowest = await lowestTextContrast(page);
+      worst[`${name} ${Math.round(strength * 100)} %`] = `${lowest.ratio.toFixed(2)} (${lowest.label}, ground tone ${lowest.tone})`;
+      expect(lowest.texts, name).toBeGreaterThan(12);
+      expect(lowest.ratio, `${name} at ${Math.round(strength * 100)} %: ${lowest.ratio}`).toBeGreaterThanOrEqual(4.5);
+    }
   }
-  expect(Object.keys(worst)).toHaveLength(24); // 7 families x light and dark + 10 glow themes: the 17 palettes
-  console.log(`worst text contrast at ${maximum * 100} %:`, JSON.stringify(worst));
+  expect(Object.keys(worst)).toHaveLength(72); // 24 theme/mode combinations at 3 strengths
+  console.log('worst text contrast:', JSON.stringify(worst));
 });
 
-// Home's muted text (what is drawn on the ground in --muted) keeps --muted up to 10 % and deepens toward --fg above it. Text already in --fg never changes.
-test('Home\'s muted text is exactly --muted at 6 % and 10 %, its --fg text is exactly --fg, and above 10 % the muted text deepens toward --fg (darker in light themes, lighter in dark ones)', async ({ page }) => {
+// Home's muted text (what is drawn on the ground in --muted) keeps --muted up to T (8 %) and deepens toward --fg above it. Text already in --fg never changes.
+test('Home\'s muted text is exactly --muted at 6 % and at T (8 %), its --fg text is exactly --fg, and above T the muted text deepens toward --fg (darker in light themes, lighter in dark ones)', async ({ page }) => {
   test.setTimeout(120_000);
   await page.setViewportSize({ width: 1080, height: 1500 });
   await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
@@ -401,7 +406,7 @@ test('Home\'s muted text is exactly --muted at 6 % and 10 %, its --fg text is ex
     };
   });
   for (const [name, record] of themes) {
-    for (const strength of [.06, .1]) {
+    for (const strength of [.06, inkStart]) {
       await keepAppearance(page, { ...record, banner: 'flow', backgroundStrength: strength });
       await pixels(page);
       const now = await read();
@@ -426,7 +431,7 @@ test('Home\'s muted text is exactly --muted at 6 % and 10 %, its --fg text is ex
   }
 });
 
-test('the ink deepens as the slider rises above 10 % and is whole at the maximum, live without a reload', async ({ page }) => {
+test('the ink deepens as the slider rises above T (8 %) and is whole at the maximum, live without a reload', async ({ page }) => {
   await page.setViewportSize({ width: 1080, height: 1500 });
   await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
   await seedLibrary(page, documents, collections);
@@ -440,10 +445,10 @@ test('the ink deepens as the slider rises above 10 % and is whole at the maximum
     return (r + g + b) / 3;
   });
   const seen: number[] = [];
-  for (const value of ['10', '15', '20', '30']) { await slider.fill(value); await expect(sheet.locator('.strength-value')).toHaveText(`${value} %`); seen.push(await colour()); }
+  for (const value of ['8', '15', '20', '30']) { await slider.fill(value); await expect(sheet.locator('.strength-value')).toHaveText(`${value} %`); seen.push(await colour()); }
   expect(seen[1]).toBeLessThan(seen[0]);
   expect(seen[2]).toBeLessThan(seen[1]);
   expect(seen[3]).toBeLessThan(seen[2]);
-  await slider.fill('8'); // back under 10 %: the muted ink again
+  await slider.fill('6'); // back under T: the muted ink again
   expect(await colour()).toBe(seen[0]);
 });
