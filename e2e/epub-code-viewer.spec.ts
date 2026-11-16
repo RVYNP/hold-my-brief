@@ -23,7 +23,8 @@ async function open(page: Page, width: number, height: number, scheme: 'light' |
 
 /** The indented pandoc block (#cb2), exactly as the fixture writes it. */
 const INDENTED = ['def outer(items):', '    for item in items:', '        if item:', '            with open(item) as handle:', '                return handle.read()', '    return None'].join('\n');
-const clipboard = (page: Page) => page.evaluate(() => navigator.clipboard.readText());
+/** Chromium on Windows reads the clipboard back with CRLF whatever the page wrote; the written text itself is `\n` (tests/code-viewer.test.ts). */
+const clipboard = (page: Page) => page.evaluate(() => navigator.clipboard.readText()).then((text) => text.replace(/\r\n/g, '\n'));
 /** The Open and Copy buttons of the hovered block: where they sit in the block's corner, and how big they are. */
 const corner = (page: Page, block: string) => frameOf(page).locator(block).evaluate(element => {
   const doc = element.ownerDocument, shadow = Array.from(doc.documentElement.children).find(child => child.shadowRoot)!.shadowRoot!;
