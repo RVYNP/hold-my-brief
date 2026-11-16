@@ -263,3 +263,36 @@ describe('the saved session', () => {
     expect(readSession({ tabs: many, active: 0 }).tabs).toHaveLength(MAX_TABS);
   });
 });
+
+describe('replacing a tab\'s document', () => {
+  it('puts the new document in the same slot and keeps showing it when the old one was showing', () => {
+    const list = listOf('a', 'b', 'c');
+    list.activate('b');
+    expect(list.replace('b', tab('x'))).toBe(true);
+    expect(paths(list)).toEqual(['a', 'x', 'c']);
+    expect(list.active?.path).toBe('x');
+    expect(list.find('b')).toBeUndefined();
+  });
+
+  it('forgets the old document\'s liveness and keeps the live count honest', () => {
+    const list = listOf('a', 'b');
+    list.markLive('a'); list.markLive('b');
+    list.replace('b', tab('x')); list.markLive('x');
+    expect(list.isLive('b')).toBe(false);
+    expect(list.liveCount).toBe(2);
+  });
+
+  it('leaves what is showing alone when the replaced tab was not showing', () => {
+    const list = listOf('a', 'b', 'c');
+    list.replace('a', tab('x'));
+    expect(paths(list)).toEqual(['x', 'b', 'c']);
+    expect(list.active?.path).toBe('c');
+  });
+
+  it('refuses a document that is open in another tab, or a tab that is not open', () => {
+    const list = listOf('a', 'b');
+    expect(list.replace('a', tab('b'))).toBe(false);
+    expect(list.replace('zzz', tab('x'))).toBe(false);
+    expect(paths(list)).toEqual(['a', 'b']);
+  });
+});

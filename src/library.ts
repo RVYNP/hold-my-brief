@@ -22,6 +22,8 @@ const titleCase = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 
 type Callbacks = {
   open: (path: string) => Promise<boolean>;
+  /** Opens an image in place of the one showing (the image pager's step); a tab that already holds it is shown instead. */
+  replace: (path: string) => Promise<boolean>;
   /** Gives a document a tab beside the one showing without showing it (⌘/Ctrl-click in the tree). */
   openBackground: (doc: LibraryDocument) => void;
   error: (error: unknown) => void;
@@ -466,12 +468,12 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     const read = button('Open in reader'); read.onclick = () => { view.dialog.close(); void openDocument(doc, trigger); }; view.actions.append(read);
     const edit = button('Organize…'); edit.onclick = () => { view.dialog.close(); organize(doc, trigger); }; view.actions.append(edit); view.dialog.showModal();
   }
-  async function openDocument(doc: LibraryDocument, trigger?: HTMLElement, sequence?: string[]) {
+  async function openDocument(doc: LibraryDocument, trigger?: HTMLElement, sequence?: string[], inPlace = false) {
     if (busy) return;
     if (isImage(doc) && sequence) imageSequence = sequence;
     setBusy(true); let opened = false;
     try {
-      opened = await callbacks.open(doc.path);
+      opened = await (inPlace ? callbacks.replace(doc.path) : callbacks.open(doc.path));
       if (opened) { activePath = doc.path; revealed = undefined; renderImageNavigation(); paintTree(); if (!wide.matches) { setVisible(false, false, false); workspace?.querySelector<HTMLElement>('.reader-host:not(.staging)')?.focus(); } }
     } catch (error) { report(error); }
     finally { setBusy(false); if (!opened) restoreFocus(`open:${doc.path}`, trigger); }
@@ -485,7 +487,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     if (!imageSequence.includes(doc.path)) imageSequence = [doc.path];
     const index = imageSequence.indexOf(doc.path); const previous = button('←', 'Previous image in collection'); const next = button('→', 'Next image in collection');
     previous.dataset.imageDirection = 'previous'; next.dataset.imageDirection = 'next'; previous.disabled = index <= 0; next.disabled = index >= imageSequence.length - 1;
-    const move = (offset: number) => { const target = library.documents.find(item => item.path === imageSequence[index + offset]); if (target) void openDocument(target); };
+    const move = (offset: number) => { const target = library.documents.find(item => item.path === imageSequence[index + offset]); if (target) void openDocument(target, undefined, undefined, true); };
     previous.onclick = () => move(-1); next.onclick = () => move(1);
     const caption = element('span', '', `${index + 1} / ${imageSequence.length} · ${doc.name}`); caption.title = doc.name;
     imageNavigation.append(previous, caption, next);
