@@ -117,7 +117,7 @@ async function openSurface(page: Page, side: 'left' | 'right', record: object, s
   await expect.poll(async () => { const before = await sheet(); await page.waitForTimeout(300); return before === await sheet(); }).toBe(true);
 }
 
-// In the seven families the wash is the toolbar's own colour (--rail-wash = --chrome): the rail reads as the toolbar folding down the window's edge. At 2 px from the edge
+// In the seven families the wash is the toolbar's own colour (--rail-wash = --chrome pulled 8 % toward --fg: plain --chrome is under 6 levels at 2 px in some family/mode/side): the rail reads as the toolbar folding down the window's edge. At 2 px from the edge
 // it differs from the bare surface by at least 6 levels on its strongest channel, at 43 px it is gone, on Home and over a PDF, library on either side, light and dark.
 const expectWash = (name: string, seen: Awaited<ReturnType<typeof washAt>>) => {
   expect(seen.inner, `${name}: inner edge`).toBeLessThanOrEqual(2);

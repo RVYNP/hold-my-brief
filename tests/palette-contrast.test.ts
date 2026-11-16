@@ -176,7 +176,7 @@ describe('the glow', () => {
     const shared = /:is\(:root:not\(\[data-palette\]\), ([^)]*)\) \{([^}]*)\}/.exec(css);
     expect(shared, 'the shared family glow rule').not.toBeNull();
     for (const name of palettes) expect(shared![1]).toContain(`[data-palette='${name}']`);
-    expect(shared![2].replace(/\s+/g, ' ').trim()).toBe('--glow-paint: var(--glow-image); --glow-attach: fixed; --glass-chrome: var(--chrome); --glass-surface: color-mix(in srgb, var(--surface) 70%, transparent); --glass-host: transparent; --glass-stage: transparent; --glass-raise: color-mix(in srgb, var(--raise) 78%, transparent); --glass-raise-base: var(--chrome); --glass-raise-paint: linear-gradient(var(--glass-raise), var(--glass-raise)), var(--glow-paint); --glass-raise-attach: scroll, fixed, fixed; --rail-wash: var(--chrome);');
+    expect(shared![2].replace(/\s+/g, ' ').trim()).toBe('--glow-paint: var(--glow-image); --glow-attach: fixed; --glass-chrome: var(--chrome); --glass-surface: color-mix(in srgb, var(--surface) 70%, transparent); --glass-host: transparent; --glass-stage: transparent; --glass-raise: color-mix(in srgb, var(--raise) 78%, transparent); --glass-raise-base: var(--chrome); --glass-raise-paint: linear-gradient(var(--glass-raise), var(--glass-raise)), var(--glow-paint); --glass-raise-attach: scroll, fixed, fixed; --rail-wash: color-mix(in srgb, var(--chrome) 92%, var(--fg));');
   });
   it('gives every family its own light/dark pair of translucent glow stops, and keeps them out of the colour blocks', () => {
     for (const name of palettes) {
