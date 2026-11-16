@@ -25,9 +25,10 @@ async function openImages(page: Page, width: number, side: 'left' | 'right', dra
   await expect(page.locator('.image-frame img')).toBeVisible();
 }
 
-/** Opens the footer the way a reader does, by resting the pointer on the window's bottom edge, and waits for it to arrive. */
+/** Opens the footer the way a reader does, by resting the pointer on the reading area's bottom edge (the footer spans the workspace, not the rail or the panel), and waits for it to arrive. */
 async function openFooter(page: Page, width: number) {
-  await page.mouse.move(width / 2, HEIGHT - 3);
+  const workspace = await boxOf(page.locator('#workspace'));
+  await page.mouse.move(workspace.x + workspace.width / 2, HEIGHT - 3);
   await expect.poll(async () => { const box = await boxOf(page.locator('footer')); return Math.round(box.y + box.height); }).toBe(HEIGHT);
 }
 

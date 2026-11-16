@@ -36,7 +36,7 @@
      (the same wash over the same fixed glow, so they match it pixel for pixel): the rail's zone (its 6 px margin at the window's edge and
      the 6 px gap before the panel), under the rail; and the panel's 10 px handle with the 6 px margin after it, over the panel's shadow, which
      then falls on the reading panel from the gap's edge. The handle, and its hover state, stand above the strip. Neither takes the pointer. */
-  #reader-layout.library-open::before, .library-root::after { content: ''; position: absolute; top: 0; bottom: var(--footer-height); background-color: var(--glass-raise-base); background-image: var(--glass-raise-paint); background-attachment: var(--glass-raise-attach); pointer-events: none; }
+  #reader-layout.library-open::before, .library-root::after { content: ''; position: absolute; top: 0; bottom: 6px; background-color: var(--glass-raise-base); background-image: var(--glass-raise-paint); background-attachment: var(--glass-raise-attach); pointer-events: none; }
   #reader-layout.library-open::before { z-index: 0; left: 0; width: 60px; }
   #reader-layout.library-open.library-right::before { left: auto; right: 0; }
   .library-root::after { bottom: 0; left: calc(100% - 10px); width: 16px; }
@@ -46,8 +46,9 @@
   #reader-layout.library-open:not(.library-right) > #workspace { margin-left: var(--library-clear); }
   #reader-layout.library-open.library-right > #workspace { margin-right: var(--library-clear); }
   #reader-layout.library-right #view-controls { left: auto; right: var(--workspace-clear); translate: none; }
-  /* The panel ends where the icon rail does: above the footer's lane (see style.css), so the footer is never under it. */
-  .library-root { bottom: var(--footer-height); left: 54px; }
+  /* The panel and the rail reach the window's bottom, keeping the 6 px margin they keep at the outer edge. The footer is not under them: it
+     belongs to the reading area (see style.css). */
+  .library-root { bottom: 6px; left: 54px; }
   .library-right > .library-root { left: auto; right: 54px; }
   .library-header .library-plus, .library-header .library-close { display: none; }
 }
@@ -394,7 +395,7 @@
    Library wears the accent-soft fill while the panel is open. */
 .icon-rail { display: none; }
 @media (min-width: 720px) {
-  #reader-layout > .icon-rail { position: absolute; z-index: 21; top: 0; bottom: var(--footer-height); left: 6px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; box-sizing: border-box; width: 48px; padding: 8px 0; border: 1px solid var(--border); border-radius: 9px; background-color: var(--glass-raise-base); background-image: var(--glass-raise-paint); background-attachment: var(--glass-raise-attach); }
+  #reader-layout > .icon-rail { position: absolute; z-index: 21; top: 0; bottom: 6px; left: 6px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; box-sizing: border-box; width: 48px; padding: 8px 0; border: 1px solid var(--border); border-radius: 9px; background-color: var(--glass-raise-base); background-image: var(--glass-raise-paint); background-attachment: var(--glass-raise-attach); }
   #reader-layout.library-right > .icon-rail { left: auto; right: 6px; }
   #reader-layout:not(.library-right):not(.library-open) #empty.is-home { padding-left: 64px; }
   #reader-layout.library-right:not(.library-open) #empty.is-home { padding-right: 64px; }
