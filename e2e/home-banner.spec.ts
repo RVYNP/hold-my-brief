@@ -189,7 +189,7 @@ test('the toolbar never shows any of it: a pixel sample across the toolbar match
   }
 });
 
-test('STRENGTH sets the opacity live, from 2 to 10 %, and is kept', async ({ page }) => {
+test('STRENGTH sets the opacity live, from 2 to 30 %, and is kept', async ({ page }) => {
   await seedLibrary(page, documents, collections);
   await pixels(page);
   expect(await opacityOf(shown(page))).toBe('0.06');
@@ -199,7 +199,7 @@ test('STRENGTH sets the opacity live, from 2 to 10 %, and is kept', async ({ pag
   await expect(sheet.locator('.sheet-label', { hasText: 'STRENGTH' })).toBeVisible();
   await expect(sheet.locator('.sheet-label', { hasText: 'BANNER' })).toHaveCount(0);
   await expect(slider).toHaveAttribute('min', '2');
-  await expect(slider).toHaveAttribute('max', '10');
+  await expect(slider).toHaveAttribute('max', '30');
   await expect(slider).toHaveAttribute('step', '1');
   await expect(slider).toHaveValue('6');
   await expect(sheet.locator('.strength-value')).toHaveText('6 %');
@@ -209,15 +209,15 @@ test('STRENGTH sets the opacity live, from 2 to 10 %, and is kept', async ({ pag
   await expect.poll(() => opacityOf(shown(page))).toBe('0.09');
   await slider.fill('2');
   await expect.poll(() => opacityOf(shown(page))).toBe('0.02');
-  await slider.fill('10');
-  await expect.poll(() => opacityOf(shown(page))).toBe('0.1');
-  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).backgroundStrength, appearanceKey)).toBe(.1);
+  await slider.fill('30');
+  await expect.poll(() => opacityOf(shown(page))).toBe('0.3');
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).backgroundStrength, appearanceKey)).toBe(.3);
   await page.reload();
   await pixels(page);
-  expect(await opacityOf(shown(page))).toBe('0.1');
+  expect(await opacityOf(shown(page))).toBe('0.3');
   const again = await openSheet(page);
-  await expect(again.locator('input[type=range]')).toHaveValue('10');
-  await expect(again.locator('.strength-value')).toHaveText('10 %');
+  await expect(again.locator('input[type=range]')).toHaveValue('30');
+  await expect(again.locator('.strength-value')).toHaveText('30 %');
 });
 
 test('BACKGROUND None removes the ground and the shuffle button, greys STRENGTH, and a pattern brings them back', async ({ page }) => {
@@ -263,7 +263,7 @@ test('a saved record from before the strength shows its pattern at 6 %; an out-o
   await keepAppearance(page, { mode: 'light', palette: 'brief', banner: 'arcs' });
   await pixels(page);
   expect(await opacityOf(shown(page))).toBe('0.06');
-  for (const bad of [0.5, 0.2, 0.01, -1, '0.1', null]) {
+  for (const bad of [0.5, 0.31, 0.01, -1, '0.1', null]) {
     await keepAppearance(page, { mode: 'light', palette: 'brief', banner: 'arcs', backgroundStrength: bad });
     await pixels(page);
     expect(await opacityOf(shown(page)), String(bad)).toBe('0.06');
@@ -342,23 +342,113 @@ test('no animation frame fires while Home sits idle for 2 s', async ({ page }) =
   expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
 });
 
-// Home's text on the ground at the slider's maximum, read from the sheet: see home-contrast.ts for the measurement.
-test('Home text drawn on the ground reads at 4.5:1 against the worst ground pixel at the slider\'s maximum, in Brief light, Brief dark, Aurora and Peach', async ({ page }) => {
+// Every palette: the seven families in light and in dark, and the ten glow themes (each has one scheme of its own).
+const families = ['brief', 'lilac', 'birch', 'graphite', 'arctic', 'blossom', 'peony'];
+const glowThemes = ['aurora', 'dusk', 'nebula', 'solar', 'ember', 'orchid', 'glacier', 'peach', 'lagoon', 'moss'];
+const everyTheme: [string, object][] = [
+  ...families.flatMap(palette => [[`${palette} light`, { mode: 'light', palette }], [`${palette} dark`, { mode: 'dark', palette }]] as [string, object][]),
+  ...glowThemes.map(palette => [palette, { palette }] as [string, object]),
+];
+
+// T (groundInkStrength in theme.ts): up to it Home's muted text is plain --muted, above it the text deepens toward --fg. Plain --muted passes 4.5:1 in all 24 theme/mode combinations up to T in Chromium and WebKit.
+const inkStart = .08;
+
+// Home's text on the ground at the first strength above T, at 20 % and at the slider's maximum, read from the sheet: see home-contrast.ts for the measurement.
+test('Home text drawn on the ground reads at 4.5:1 against the worst ground pixel at T + 1 %, 20 % and the slider\'s maximum, in all 17 palettes (the families in light and dark)', async ({ page }) => {
+  test.setTimeout(420_000);
   await page.setViewportSize({ width: 1080, height: 1500 });
   await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
   await seedLibrary(page, documents, collections);
   const sheet = await openSheet(page);
   const maximum = Number(await sheet.locator('input[type=range]').getAttribute('max')) / 100;
+  expect(maximum).toBe(.3);
   const worst: Record<string, string> = {};
+  for (const strength of [Math.round((inkStart + .01) * 100) / 100, .2, maximum]) {
+    for (const [name, record] of everyTheme) {
+      await keepAppearance(page, { ...record, banner: 'flow', backgroundStrength: strength });
+      await pixels(page);
+      expect(await opacityOf(shown(page))).toBe(String(strength));
+      await expect(page.locator('.home-all').first()).toBeVisible();
+      const lowest = await lowestTextContrast(page);
+      worst[`${name} ${Math.round(strength * 100)} %`] = `${lowest.ratio.toFixed(2)} (${lowest.label}, ground tone ${lowest.tone})`;
+      expect(lowest.texts, name).toBeGreaterThan(12);
+      expect(lowest.ratio, `${name} at ${Math.round(strength * 100)} %: ${lowest.ratio}`).toBeGreaterThanOrEqual(4.5);
+    }
+  }
+  expect(Object.keys(worst)).toHaveLength(72); // 24 theme/mode combinations at 3 strengths
+  console.log('worst text contrast:', JSON.stringify(worst));
+});
+
+// Home's muted text (what is drawn on the ground in --muted) keeps --muted up to T (8 %) and deepens toward --fg above it. Text already in --fg never changes.
+test('Home\'s muted text is exactly --muted at 6 % and at T (8 %), its --fg text is exactly --fg, and above T the muted text deepens toward --fg (darker in light themes, lighter in dark ones)', async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setViewportSize({ width: 1080, height: 1500 });
+  await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
+  await seedLibrary(page, documents, collections);
+  const sheet = await openSheet(page);
+  const maximum = Number(await sheet.locator('input[type=range]').getAttribute('max')) / 100;
+  /** The computed colour of each Home text (as the browser serialises it) next to the computed --muted and --fg, and the lightness of each. */
+  const read = () => page.evaluate(() => {
+    const swatch = document.createElement('canvas').getContext('2d', { willReadFrequently: true })!;
+    swatch.canvas.width = swatch.canvas.height = 1;
+    const lightness = (css: string) => {
+      swatch.clearRect(0, 0, 1, 1); swatch.fillStyle = css; swatch.fillRect(0, 0, 1, 1);
+      const [r, g, b] = swatch.getImageData(0, 0, 1, 1).data, lin = (v: number) => { const c = v / 255; return c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4; };
+      return .2126 * lin(r) + .7152 * lin(g) + .0722 * lin(b);
+    };
+    const probe = (token: string) => { const node = document.createElement('i'); node.style.color = `var(${token})`; document.querySelector('#empty.is-home')!.append(node); const colour = getComputedStyle(node).color; node.remove(); return colour; };
+    const muted = probe('--muted'), fg = probe('--fg');
+    const texts = (selector: string) => [...document.querySelectorAll(selector)].filter(node => !node.closest('.home-recent-open') && node.textContent?.trim()).map(node => getComputedStyle(node).color);
+    return {
+      muted, fg, mutedLightness: lightness(muted), fgLightness: lightness(fg),
+      mutedTexts: ['.home-all', '.home-card-meta', '.home-file'].map(selector => ({ selector, colours: texts(selector), lightness: texts(selector).map(lightness) })),
+      fgTexts: ['#empty h1', '.home-section h2', '.home-card-title', '.home-chip:not([aria-pressed=true])'].map(selector => ({ selector, colours: texts(selector) })),
+    };
+  });
   for (const [name, record] of themes) {
+    for (const strength of [.06, inkStart]) {
+      await keepAppearance(page, { ...record, banner: 'flow', backgroundStrength: strength });
+      await pixels(page);
+      const now = await read();
+      for (const group of now.mutedTexts) {
+        expect(group.colours.length, `${name} ${group.selector}`).toBeGreaterThan(0);
+        for (const colour of group.colours) expect(colour, `${name} ${strength} ${group.selector}`).toBe(now.muted);
+      }
+      for (const group of now.fgTexts) {
+        expect(group.colours.length, `${name} ${group.selector}`).toBeGreaterThan(0);
+        for (const colour of group.colours) expect(colour, `${name} ${strength} ${group.selector}`).toBe(now.fg);
+      }
+    }
     await keepAppearance(page, { ...record, banner: 'flow', backgroundStrength: maximum });
     await pixels(page);
-    expect(await opacityOf(shown(page))).toBe(String(maximum));
-    await expect(page.locator('.home-all').first()).toBeVisible();
-    const lowest = await lowestTextContrast(page);
-    worst[name] = `${lowest.ratio.toFixed(2)} (${lowest.label}, ground tone ${lowest.tone})`;
-    expect(lowest.texts, name).toBeGreaterThan(12);
-    expect(lowest.ratio, `${name}: ${worst[name]}`).toBeGreaterThanOrEqual(4.5);
+    const top = await read();
+    const lighter = top.fgLightness > top.mutedLightness; // --fg is lighter than --muted in the dark themes
+    for (const group of top.mutedTexts) {
+      expect(group.colours.length, `${name} ${group.selector}`).toBeGreaterThan(0);
+      for (const light of group.lightness) expect(lighter ? light > top.mutedLightness : light < top.mutedLightness, `${name} at the maximum ${group.selector}`).toBe(true);
+    }
+    for (const group of top.fgTexts) for (const colour of group.colours) expect(colour, `${name} ${group.selector}`).toBe(top.fg);
   }
-  console.log(`worst text contrast at ${maximum * 100} %:`, JSON.stringify(worst));
+});
+
+test('the ink deepens as the slider rises above T (8 %) and is whole at the maximum, live without a reload', async ({ page }) => {
+  await page.setViewportSize({ width: 1080, height: 1500 });
+  await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
+  await seedLibrary(page, documents, collections);
+  await keepAppearance(page, { mode: 'light', palette: 'brief', banner: 'flow', backgroundStrength: .06 });
+  const sheet = await openSheet(page);
+  const slider = sheet.locator('input[type=range]'), file = page.locator('.home-file').first();
+  const colour = () => file.evaluate(node => {
+    const swatch = document.createElement('canvas').getContext('2d', { willReadFrequently: true })!;
+    swatch.canvas.width = swatch.canvas.height = 1; swatch.fillStyle = getComputedStyle(node).color; swatch.fillRect(0, 0, 1, 1);
+    const [r, g, b] = swatch.getImageData(0, 0, 1, 1).data;
+    return (r + g + b) / 3;
+  });
+  const seen: number[] = [];
+  for (const value of ['8', '15', '20', '30']) { await slider.fill(value); await expect(sheet.locator('.strength-value')).toHaveText(`${value} %`); seen.push(await colour()); }
+  expect(seen[1]).toBeLessThan(seen[0]);
+  expect(seen[2]).toBeLessThan(seen[1]);
+  expect(seen[3]).toBeLessThan(seen[2]);
+  await slider.fill('6'); // back under T: the muted ink again
+  expect(await colour()).toBe(seen[0]);
 });
