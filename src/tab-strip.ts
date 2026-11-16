@@ -7,9 +7,10 @@
  * deliver HTML5 drag events inside the page.
  */
 import { slotAt } from './tabs';
+import { middleTruncate } from './tab-titles';
 
-/** What one tab shows. `where` is the short place ("40 / 146"), empty until the document has been read; `progress` is the library's wording for how far in it is ("p. 12 / 96", "37 %", "Finished"), for the tab menu. The Library tab (`library`) shows a glyph for the format and its title for the path. */
-export type TabView = { path: string; title: string; hint: string; format: string; where: string; progress: string; active: boolean; problem: boolean; library: boolean };
+/** What one tab shows. `image` tabs keep the end of a long title (cut in the middle); the others keep its start. `where` is the short place ("40 / 146"), empty until the document has been read; `progress` is the library's wording for how far in it is ("p. 12 / 96", "37 %", "Finished"), for the tab menu. The Library tab (`library`) shows a glyph for the format and its title for the path. */
+export type TabView = { path: string; title: string; hint: string; format: string; where: string; progress: string; active: boolean; problem: boolean; library: boolean; image: boolean };
 
 export type TabHandlers = {
   /** A tab was chosen; `undefined` is Home. */
@@ -44,6 +45,17 @@ const icons = {
 const text = (tag: string, className: string, content: string) => Object.assign(document.createElement(tag), { className, textContent: content });
 /** Writes text only when it differs, so a repaint that changes nothing touches nothing. */
 const setText = (element: Element, value: string) => { if (element.textContent !== value) element.textContent = value; };
+let measuring: CanvasRenderingContext2D | null | undefined;
+/** Whether `candidate` is at most `limit` CSS px wide in `font`; true when there is nothing to measure with, so the CSS ellipsis stays in charge. */
+function fitsIn(font: string, limit: number): (candidate: string) => boolean {
+  measuring ??= document.createElement('canvas').getContext('2d');
+  const context = measuring;
+  if (!context || !(limit > 0)) return () => true;
+  context.font = font;
+  return candidate => context.measureText(candidate).width <= limit - .5;
+}
+/** A tab's tooltip: the Library tab's title, else the path, under the title when a folder hint is shown beside it. */
+const tooltip = (view: TabView) => view.library ? view.title : view.hint ? `${view.title}\n${view.path}` : view.path;
 const closeButton = (title: string) => {
   const button = document.createElement('button');
   button.type = 'button'; button.className = 'tab-close'; button.tabIndex = -1;
@@ -90,14 +102,34 @@ export function createTabStrip(elements: { strip: HTMLElement; home: HTMLElement
   function fill(tab: HTMLElement, view: TabView) {
     tab.classList.toggle('is-active', view.active); tab.classList.toggle('has-problem', view.problem);
     tab.setAttribute('aria-selected', String(view.active)); tab.dataset.kind = view.library ? 'library' : 'document';
-    tab.title = view.library ? view.title : view.hint ? `${view.title}\n${view.path}` : view.path;
+    tab.title = tooltip(view);
     const mark = tab.querySelector('.tab-format')!;
     if (!view.library) setText(mark, view.format.toUpperCase()); else if (!mark.firstElementChild) mark.replaceChildren(icon(icons.library, 12));
-    setText(tab.querySelector('.tab-title')!, view.title);
     setText(tab.querySelector('.tab-hint')!, view.hint);
     setText(tab.querySelector('.tab-where')!, view.active ? view.where : '');
     tab.querySelector('.tab-close')!.setAttribute('aria-label', `Close ${view.title}`);
   }
+  /**
+   * An image tab's title is cut in the middle to fit the tab's real width and font, which depend on whether it is active; the
+   * other tabs show the whole title and the CSS cuts its end. The full name stays in the tooltip and the accessible name.
+   * Runs once the tab is in the page, where its font and `max-width` can be read.
+   */
+  function fit(tab: HTMLElement, view: TabView) {
+    const title = tab.querySelector<HTMLElement>('.tab-title')!;
+    if (!view.image || view.library) { delete title.dataset.fit; setText(title, view.title); tab.removeAttribute('aria-label'); return; }
+    const style = getComputedStyle(title), font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`, limit = parseFloat(style.maxWidth);
+    const key = `${view.title}\n${font}\n${limit}`;
+    if (title.dataset.fit !== key) {
+      title.dataset.fit = key;
+      setText(title, middleTruncate(view.title, fitsIn(font, limit)));
+    }
+    const cut = title.textContent !== view.title;
+    if (cut) tab.setAttribute('aria-label', view.hint ? `${view.title} · ${view.hint}` : view.title); else tab.removeAttribute('aria-label');
+    tab.title = cut ? `${view.title}\n${view.path}` : tooltip(view);
+  }
+  const refit = () => { for (const view of views) { const node = nodes.get(view.path); if (node) { delete node.querySelector<HTMLElement>('.tab-title')!.dataset.fit; fit(node, view); } } };
+  document.fonts?.addEventListener?.('loadingdone', refit);
+  void document.fonts?.ready.then(refit);
   /** Keeps the active tab in view in a scrolling strip. */
   function reveal() {
     const tab = list.querySelector<HTMLElement>('.tab.is-active');
@@ -119,6 +151,7 @@ export function createTabStrip(elements: { strip: HTMLElement; home: HTMLElement
       if (!node) { node = build(view); nodes.set(view.path, node); }
       fill(node, view);
       if (list.children[index] !== node) list.insertBefore(node, list.children[index] ?? null);
+      fit(node, view);
     });
     measure(); reveal();
     if (!menu.hidden) fillMenu();
