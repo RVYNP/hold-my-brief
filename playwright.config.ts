@@ -45,7 +45,13 @@ export default defineConfig({
     viewport: { width: 420, height: 620 },
   },
   // Never reuse a server: it could belong to another checkout. A busy port fails fast (Vite strictPort).
-  webServer: { command: `npm run dev -- --port ${port}`, url: `http://127.0.0.1:${port}`, reuseExistingServer: false },
+  webServer: {
+    command: `npm run dev -- --port ${port}`,
+    url: `http://127.0.0.1:${port}`,
+    reuseExistingServer: false,
+    // CI only: keep the server output in the job log (Vite's "new dependencies optimized" lines).
+    ...(process.env.CI ? { stdout: 'pipe' as const, stderr: 'pipe' as const } : {}),
+  },
   timeout: 30000,
   // The first document open on a cold dev server transforms pdfjs-dist/foliate on demand;
   // on a CI runner that alone took longer than the 5 s default and failed the first PDF test.
