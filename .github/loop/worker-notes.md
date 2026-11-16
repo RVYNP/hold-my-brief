@@ -23,3 +23,36 @@ those paths as your worktree. This repository is public: never post absolute pat
   machine paths or keys. Never enter an API key for, or call, the AI assistant's provider.
 - Docs images (`docs/media/`) only come from the scripts in `docs/development.md`; do not hand-edit them.
 - Stop every server or browser you started, by PID; never `pkill` by name.
+
+## CI layout and e2e shards
+
+`.github/workflows/ci.yml` runs 9 jobs, all starting with the workflow. For each of Windows and macOS:
+`<OS> · e2e (1/3)`, `(2/3)`, `(3/3)`; `<OS> · checks` (unit tests, text layout check, Rust tests); `<OS> · build`
+(`tauri build`: the frontend build and the one release compile, then Windows' native smoke and NSIS installer,
+or macOS' `.app`). The loop merges when every check run on the head SHA is green, so:
+
+- No job may `needs:` another and no matrix may be computed by an earlier job: a waiting job has no check run
+  yet, and the loop would merge before it ran. No aggregator job either.
+- No `paths-ignore` in `ci.yml` unless the same globs go into `ciOptionalPaths` in `.github/loop.json`.
+- Shards run with `--workers=1`; more workers on one runner made `zoom.spec.ts` flaky. Changes to
+  `playwright.config.ts` stay behind `process.env.CI`: local runs (workers, `fullyParallel`, retries,
+  timeouts) must not change.
+- Each Rust cache (`Swatinem/rust-cache`) is keyed per OS and per job; keep the keys distinct.
+
+Shards: `node scripts/e2e-shard.mjs <index> <total>` prints that shard's spec files, one per line. It lists
+`e2e/*.spec.ts`, reads the seconds per file from `e2e/timings.json`, assigns files longest first to the
+least-loaded shard, and counts a file missing from the timings as the median. A new spec needs no entry
+(it counts as the median until the timings are refreshed). Every shard job prints its spec list and the exact
+local command before it runs; `gh run view --log-failed` shows it.
+
+Rerun one shard locally, on your own port:
+
+```
+E2E_PORT=$((20000 + <PR number>)) npx playwright test $(node scripts/e2e-shard.mjs 2 3)
+```
+
+Refresh the timings when specs are added, removed or change a lot (not on every PR): download the three
+`e2e-report-<OS>-<n>` artifacts of one green run of one OS (retained 7 days; `gh run download <run-id> -n
+e2e-report-macOS-1 -D reports/1`, and likewise for 2 and 3), then
+`node scripts/e2e-timings.mjs reports/1/e2e-report.json reports/2/e2e-report.json reports/3/e2e-report.json`
+rewrites `e2e/timings.json`. Commit it with the change; do not commit `reports/`.

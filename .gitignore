@@ -13,3 +13,4 @@ public/pdfjs/
 !.env.example
 .DS_Store
 desktop.ini
+e2e-report.json
