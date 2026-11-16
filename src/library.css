@@ -35,11 +35,14 @@
   /* The window glow must not show bare, as a stripe between two glass surfaces, beside the docked panel. Two strips carry the panel's own glass
      (the same wash over the same fixed glow, so they match it pixel for pixel): the rail's zone (from the window's edge to the panel's, 52 px, under
      the rail); and the panel's 10 px handle with the 2 px after it, over the panel's shadow, which
-     then falls on the reading panel from the gap's edge. The handle, and its hover state, stand above the strip. Neither takes the pointer. */
-  #reader-layout.library-open::before, .library-root::after { content: ''; position: absolute; top: 0; bottom: 6px; background-color: var(--glass-raise-base); background-image: var(--glass-raise-paint); background-attachment: var(--glass-raise-attach); pointer-events: none; }
+     then falls on the reading panel from the gap's edge. The handle, and its hover state, stand above the strip. Neither takes the pointer.
+     The strips run to the window's bottom: the panel's box keeps its 6 px margin there, and a third strip (over the panel's shadow, under its box's
+     6 px margin) shows the same glass in it, so the column has no band of another tone at its foot. */
+  #reader-layout.library-open::before, .library-root::before, .library-root::after { content: ''; position: absolute; top: 0; bottom: 0; background-color: var(--glass-raise-base); background-image: var(--glass-raise-paint); background-attachment: var(--glass-raise-attach); pointer-events: none; }
   #reader-layout.library-open::before { z-index: 0; left: 0; width: 52px; }
   #reader-layout.library-open.library-right::before { left: auto; right: 0; }
-  .library-root::after { bottom: 0; left: calc(100% - 10px); width: 12px; }
+  .library-root::before { z-index: 1; top: auto; bottom: -6px; left: 0; right: 0; height: 6px; }
+  .library-root::after { bottom: -6px; left: calc(100% - 10px); width: 12px; }
   .library-right > .library-root::after { left: auto; right: calc(100% - 10px); }
   #reader-layout { --library-clear: 48px; --workspace-clear: 48px; }
   #reader-layout.library-open { --library-clear: calc(var(--library-width, 270px) + 64px); --workspace-clear: 0px; }
