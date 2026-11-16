@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LIBRARY_PATH, MAX_LIVE_TABS, MAX_TABS, TabList, emptySession, mergeLists, moveAcross, readSession, restoreSplit, slotAt, splitOff } from '../src/tabs';
+import { LIBRARY_PATH, MAX_LIVE_TABS, MAX_TABS, TabList, emptySession, mergeLists, moveAcross, readSession, restoreSplit, slotAt, splitOff, splitOffRest } from '../src/tabs';
 
 type Tab = { path: string; name: string };
 const tab = (path: string): Tab => ({ path, name: path.toUpperCase() });
@@ -326,6 +326,39 @@ describe('the saved split', () => {
     const right = splitOff(list, 'c')!;
     expect(right.active?.path).toBe('c');
     expect(list.active?.path).toBe('a');
+  });
+});
+
+describe('splitting off every other tab (the dragged tab becomes the left pane)', () => {
+  it('keeps the tab alone, shown, and sends the rest in order with the tab that was showing shown there', () => {
+    const list = listOf('a', 'b', 'c', 'd');
+    list.markLive('c');
+    list.activate('b');
+    const rest = splitOffRest(list, 'd')!;
+    expect(paths(list)).toEqual(['d']);
+    expect(list.active?.path).toBe('d');
+    expect(paths(rest)).toEqual(['a', 'b', 'c']);
+    expect(rest.active?.path).toBe('b');
+    expect(rest.isLive('c')).toBe(true);
+    expect(list.isLive('c')).toBe(false);
+  });
+
+  it('shows the tab that was showing before the dragged one when that one was showing, and the first when none ever was', () => {
+    const list = listOf('a', 'b', 'c');
+    list.activate('a'); list.activate('c');
+    expect(splitOffRest(list, 'c')!.active?.path).toBe('a');
+    const fresh = new TabList<Tab>();
+    for (const name of ['a', 'b', 'c']) fresh.add(tab(name));
+    expect(splitOffRest(fresh, 'b')!.active?.path).toBe('a');
+  });
+
+  it('changes nothing when the tab is not there or is the only one', () => {
+    const list = listOf('a', 'b');
+    expect(splitOffRest(list, 'z')).toBeUndefined();
+    expect(paths(list)).toEqual(['a', 'b']);
+    const alone = listOf('a');
+    expect(splitOffRest(alone, 'a')).toBeUndefined();
+    expect(paths(alone)).toEqual(['a']);
   });
 });
 

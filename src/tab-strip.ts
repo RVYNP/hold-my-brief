@@ -3,7 +3,7 @@
  * pointer drag that reorders tabs. It draws what it is told (`paint`) and reports what the user did (`handlers`); the tab
  * model and everything a tab holds live in `tabs.ts` and `main.ts`.
  *
- * Reordering uses pointer events, not HTML5 drag and drop: with Tauri's native drag-drop enabled WebView2 does not
+ * Dragging (reordering, and carrying a tab to another strip, a pane or an edge) uses pointer events, not HTML5 drag and drop: with Tauri's native drag-drop enabled WebView2 does not
  * deliver HTML5 drag events inside the page.
  */
 import { slotAt } from './tabs';
@@ -21,10 +21,14 @@ export type TabHandlers = {
   move: (path: string, to: number) => void;
   /** The context menu of a tab was asked for (right-click, the menu key, Shift+F10), at `at` or, from the keyboard, beside `anchor`. */
   menu: (path: string, anchor: HTMLElement, at: { x: number; y: number } | undefined) => void;
+  /** A tab dragged away from its own strip: `over` hears every pointer position (to show where a release would land), `drop` the release, and `clear` that the preview must go (the drag came back, was cancelled, or ended). */
+  carry: { over: (path: string, x: number, y: number) => void; drop: (path: string, x: number, y: number) => void; clear: () => void };
 };
 
 /** A press that travels less than this (CSS px) is a click, not a drag. */
 const DRAG_SLOP = 4;
+/** How far (CSS px) above or below its strip a dragged tab may stray and still be reordering in it. */
+const AWAY_MARGIN = 12;
 const NS = 'http://www.w3.org/2000/svg';
 
 const icon = (paths: string, size = 14, stroke = 1.6) => {
@@ -194,38 +198,68 @@ export function createTabStrip(elements: { strip: HTMLElement; home?: HTMLElemen
   }, { passive: false });
   new ResizeObserver(measure).observe(list);
 
-  // Reordering. The dragged tab follows the pointer (a translate over its current place) while the others make room by the DOM
-  // order changing under it; the model is told once, on release.
-  let drag: { id: number; x: number; tab: HTMLElement; left: number; scroll: number; moved: boolean } | undefined;
+  // Dragging. The dragged tab follows the pointer (a translate over its current place) while the others make room by the DOM
+  // order changing under it; the model is told once, on release. Over this strip the drag reorders; away from it (`away`) the tab
+  // goes back to where it was and `handlers.carry` is told where the pointer is, so the window can show and take a drop elsewhere.
+  // Escape, or a release away from every target, changes nothing.
+  type Drag = { id: number; x: number; tab: HTMLElement; left: number; scroll: number; next: Element | null; moved: boolean; away: boolean; cancelled: boolean };
+  let drag: Drag | undefined;
+  const overStrip = (x: number, y: number) => {
+    const box = strip.getBoundingClientRect();
+    return x >= box.left && x <= box.right && y >= box.top - AWAY_MARGIN && y <= box.bottom + AWAY_MARGIN;
+  };
+  /** Moving a node in the DOM releases its pointer capture, and the release would then go to whatever is under the pointer instead of this list: the capture is taken again. */
+  const moveTab = (held: Drag, before: Element | null) => {
+    if (before ? held.tab.nextElementSibling !== before : list.lastElementChild !== held.tab) list.insertBefore(held.tab, before);
+    if (held.moved && !held.tab.hasPointerCapture(held.id)) held.tab.setPointerCapture(held.id);
+  };
+  const putBack = (held: Drag) => moveTab(held, held.next);
+  const settle = (held: Drag) => { dragging = false; held.tab.classList.remove('is-dragging', 'is-carried'); held.tab.style.translate = ''; handlers.carry.clear(); };
   list.addEventListener('pointerdown', event => {
     const tab = (event.target as Element).closest<HTMLElement>('.tab');
     if (!tab || drag || event.button !== 0 || !event.isPrimary || (event.target as Element).closest('.tab-close')) return;
-    drag = { id: event.pointerId, x: event.clientX, tab, left: tab.offsetLeft, scroll: list.scrollLeft, moved: false };
+    drag = { id: event.pointerId, x: event.clientX, tab, left: tab.offsetLeft, scroll: list.scrollLeft, next: tab.nextElementSibling, moved: false, away: false, cancelled: false };
   });
   list.addEventListener('pointermove', event => {
-    if (!drag || event.pointerId !== drag.id) return;
+    if (!drag || event.pointerId !== drag.id || drag.cancelled) return;
     if (!(event.buttons & 1)) { drag = undefined; return; }
     if (!drag.moved) {
-      if (Math.abs(event.clientX - drag.x) < DRAG_SLOP) return;
+      if (Math.abs(event.clientX - drag.x) < DRAG_SLOP && overStrip(event.clientX, event.clientY)) return; // A press that has not moved sideways, and has not left the strip, is still a click.
       drag.moved = dragging = true; drag.tab.setPointerCapture(event.pointerId); drag.tab.classList.add('is-dragging');
     }
-    const others = [...list.querySelectorAll<HTMLElement>('.tab')].filter(tab => tab !== drag!.tab);
-    const pointer = event.clientX - list.getBoundingClientRect().left + list.scrollLeft;
-    const before = others[slotAt(others.map(tab => tab.offsetLeft + tab.offsetWidth / 2), pointer)] ?? null;
-    if (before ? drag.tab.nextElementSibling !== before : list.lastElementChild !== drag.tab) list.insertBefore(drag.tab, before);
+    const away = !overStrip(event.clientX, event.clientY);
+    if (away) {
+      if (!drag.away) { putBack(drag); drag.away = true; drag.tab.classList.add('is-carried'); }
+      handlers.carry.over(drag.tab.dataset.path!, event.clientX, event.clientY);
+    } else {
+      if (drag.away) { drag.away = false; drag.tab.classList.remove('is-carried'); handlers.carry.clear(); }
+      const others = [...list.querySelectorAll<HTMLElement>('.tab')].filter(tab => tab !== drag!.tab);
+      const pointer = event.clientX - list.getBoundingClientRect().left + list.scrollLeft;
+      const before = others[slotAt(others.map(tab => tab.offsetLeft + tab.offsetWidth / 2), pointer)] ?? null;
+      moveTab(drag, before);
+    }
     drag.tab.style.translate = `${event.clientX - drag.x + drag.scroll - list.scrollLeft - (drag.tab.offsetLeft - drag.left)}px 0`;
   });
   const endDrag = (event: PointerEvent) => {
     if (!drag || event.pointerId !== drag.id) return;
-    const { tab, moved } = drag; drag = undefined;
-    if (!moved) return;
-    dragging = false; tab.classList.remove('is-dragging'); tab.style.translate = '';
+    const held = drag; drag = undefined;
+    if (!held.moved) return;
     const swallow = (click: Event) => { click.preventDefault(); click.stopPropagation(); };
     list.addEventListener('click', swallow, { capture: true, once: true }); setTimeout(() => list.removeEventListener('click', swallow, true));
-    if (event.type === 'pointerup') handlers.move(tab.dataset.path!, [...list.querySelectorAll('.tab')].indexOf(tab));
-    if (repaint || event.type !== 'pointerup') { repaint = false; paint(views, homeActive); }
+    if (held.cancelled) return; // Escape has put everything back already.
+    const dropped = event.type === 'pointerup';
+    settle(held);
+    if (held.away) { putBack(held); if (dropped) handlers.carry.drop(held.tab.dataset.path!, event.clientX, event.clientY); }
+    else if (dropped) handlers.move(held.tab.dataset.path!, [...list.querySelectorAll('.tab')].indexOf(held.tab));
+    if (repaint || !dropped) { repaint = false; paint(views, homeActive); }
   };
   list.addEventListener('pointerup', endDrag); list.addEventListener('pointercancel', endDrag);
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || !drag?.moved || drag.cancelled) return;
+    event.preventDefault(); event.stopPropagation();
+    drag.cancelled = true; putBack(drag); settle(drag);
+    if (repaint) { repaint = false; paint(views, homeActive); }
+  }, true);
 
   // The menu of open tabs: Home, every document, then New tab. The compact title opens it, and so does the strip's overflow button.
   const menu = document.createElement('div');
