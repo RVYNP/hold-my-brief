@@ -123,8 +123,9 @@ test('image tabs of one series keep the end of their names, and the full name st
 test('a short image name, and a name of another format, are shown as they were', async ({ page }) => {
   await page.goto('/');
   await page.locator('#file-input').setInputFiles(image('plate.png', 300, 90));
-  await page.locator('#file-input').setInputFiles({ name: `${'a long text file name '.repeat(4)}.txt`, mimeType: 'text/plain', buffer: Buffer.from('hello') });
+  // A second open cancels a pending one, so the image has to be a tab before the text file is opened.
   await expect(tabs(page).nth(0).locator('.tab-title')).toHaveText('plate.png');
+  await page.locator('#file-input').setInputFiles({ name: `${'a long text file name '.repeat(4)}.txt`, mimeType: 'text/plain', buffer: Buffer.from('hello') });
   const text = tabs(page).nth(1).locator('.tab-title');
   await expect(text).toHaveText(/^a long text file name a long/);
   expect(await text.textContent()).not.toContain('…');
