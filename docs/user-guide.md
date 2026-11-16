@@ -453,7 +453,7 @@ can show it; positions saved before this version have none until you read the do
 ## Document library
 
 In windows 720 pixels wide and up, a slim **icon rail** (no box, only a soft wash from the window's edge) stands on the side the library is kept on, and the
-library **panel** opens beside it. Its icons line up under the toolbar's first control (Home), or under **⋯** with the library on the right. The icon rail has, from the top: **Library**, **Search** and **Add files**; at its foot,
+library **panel** opens beside it. Its icons line up under the toolbar's first control (Home), or under **⋯** with the library on the right, and an open document is fitted beside the rail, never under its icons. The icon rail has, from the top: **Library**, **Search** and **Add files**; at its foot,
 **Settings**. That is all of it: there is one way to the library. **Library** (**Ctrl+B**) opens the panel or collapses it (the
 icon rail stays) and is filled with the accent tone while the panel is open. **Search** (**Ctrl+Shift+F**) opens the panel
 if it is closed and puts the cursor in its filter field. **Add files** opens a menu with **Add files…** and **Sources…**

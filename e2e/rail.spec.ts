@@ -310,10 +310,10 @@ for (const width of [1440, 900]) for (const side of ['left', 'right'] as const) 
     await expect(sheet).toBeVisible();
     await expect.poll(() => beyond(sheet)).toBeGreaterThanOrEqual(0);
     await expect.poll(async () => Math.round((await boxOf(page.locator('.pdf-reader'))).width)).toBe(width - 270 - 64);
-    // Collapsing it hands the width back, and the page is fitted to the whole window again.
+    // Collapsing it hands the width back, and the page is fitted to the window less the rail's 48 px (the rail has no box, but a page never runs under its icons).
     await rail.getByRole('button', { name: 'Library', exact: true }).click();
     await expect(info).toBeHidden();
-    await expect.poll(async () => Math.round((await boxOf(page.locator('.pdf-reader'))).width)).toBe(width);
+    await expect.poll(async () => Math.round((await boxOf(page.locator('.pdf-reader'))).width)).toBe(width - 48);
   });
 }
 

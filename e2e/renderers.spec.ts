@@ -272,7 +272,7 @@ test('the library panel docks: opening and resizing it re-fit the page as a wind
   const settled = async () => { await expect.poll(async () => { const before = JSON.stringify(await pageGeometry()); await page.waitForTimeout(200); return JSON.stringify(await pageGeometry()) === before; }, { timeout: 5000 }).toBe(true); return pageGeometry(); };
   const closed = await settled();
   expect(closed.workspace!.width).toBe(1080);
-  expect(closed.hostClientWidth).toBe(1080);
+  expect(closed.hostClientWidth).toBe(1080 - 48);
 
   // Opening the panel docks it: the reading panel gives the width up (the panel, its handle and the 6 px margins) and the page is
   // fitted to what is left, so no part of the page is under the panel.

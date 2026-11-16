@@ -45,6 +45,10 @@
   #reader-layout.library-open { --library-clear: calc(var(--library-width, 270px) + 64px); --workspace-clear: 0px; }
   #reader-layout.library-open:not(.library-right) > #workspace { margin-left: var(--library-clear); }
   #reader-layout.library-open.library-right > #workspace { margin-right: var(--library-clear); }
+  /* While the panel is closed the reading surface is inset by the rail's room (--workspace-clear is 0 once the panel is open, and #workspace's margin
+     takes over), so a page never runs under the rail's icons: it fits the cleared width. The host's box moves, not its padding: the adapters fit to clientWidth. */
+  #reader-layout:not(.library-right) .reader-host { left: var(--workspace-clear); }
+  #reader-layout.library-right .reader-host { right: var(--workspace-clear); }
   #reader-layout.library-right #view-controls { left: auto; right: var(--workspace-clear); translate: none; }
   /* The panel and the rail reach the window's bottom, keeping the 6 px margin they keep at the outer edge. The footer is not under them: it
      belongs to the reading area (see style.css). */
