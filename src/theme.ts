@@ -68,7 +68,7 @@ function linearFromOklch([L, C, H]: Rgb): Rgb {
   return [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s, -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s];
 }
 /** Maps an OKLCH color into sRGB, reducing chroma (never lightness or hue) until it fits. */
-function fromOklch([L, C, H]: Rgb): Rgb {
+export function fromOklch([L, C, H]: Rgb): Rgb {
   const lightness = Math.max(0, Math.min(1, L));
   const fits = (chroma: number) => linearFromOklch([lightness, chroma, H]).every(c => c >= -1e-4 && c <= 1 + 1e-4);
   let low = 0, high = C;
@@ -77,7 +77,7 @@ function fromOklch([L, C, H]: Rgb): Rgb {
   return linearFromOklch([lightness, low, H]).map(c => Math.round(fromLinear(Math.max(0, Math.min(1, c))) * 255)) as Rgb;
 }
 /** Moves lightness in `step` increments until `target` contrast against `background` is met. */
-function reach(color: Rgb, background: Rgb, target: number, step: number): Rgb {
+export function reach(color: Rgb, background: Rgb, target: number, step: number): Rgb {
   const [L, C, H] = toOklch(color);
   let next = color;
   for (let l = L; contrast(next, background) < target && l >= 0 && l <= 1; l += step) next = fromOklch([l, C, H]);
