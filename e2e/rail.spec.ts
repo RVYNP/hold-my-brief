@@ -6,14 +6,14 @@ import { seedLibrary, type FixtureDocument } from './home-fixture';
 const open = (page: Page, name: string) => page.locator('#file-input').setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from(`${name}\n\nBody of ${name}.\n`) });
 const shown = (page: Page, name: string) => expect(page.locator('#filename')).toHaveText(name);
 
-test('the icon rail stands at 720 px and up: 48 px wide, on the saved side, absent when compact; the panel beside it docks, taking its width from the page, and collapses to give it back', async ({ page }) => {
+test('the icon rail stands at 720 px and up: 36 px wide, 2 px from the edge, on the saved side, absent when compact; the panel beside it docks, taking its width from the page, and collapses to give it back', async ({ page }) => {
   await page.setViewportSize({ width: 1080, height: 680 });
   await page.goto('/');
   const rail = page.locator('#library-rail'), info = page.locator('#library-root');
   const library = rail.getByRole('button', { name: 'Library', exact: true });
   await expect(rail).toBeVisible();
   const box = (await rail.boundingBox())!;
-  expect([Math.round(box.x), Math.round(box.width)]).toEqual([6, 48]);
+  expect([Math.round(box.x), Math.round(box.width)]).toEqual([2, 36]);
 
   // The panel is open at first at this width, beside the icon rail, and its icon is the pressed one; the toolbar's button is the compact window's.
   await expect(info).toBeVisible();
@@ -22,9 +22,9 @@ test('the icon rail stands at 720 px and up: 48 px wide, on the saved side, abse
   await page.locator('#file-input').setInputFiles({ name: 'alpha.txt', mimeType: 'text/plain', buffer: Buffer.from('alpha\n\nBody.\n') });
   await expect(page.locator('#filename')).toHaveText('alpha.txt');
   const geometry = async () => ({ workspace: await page.locator('#workspace').boundingBox(), host: await page.locator('.reader-host:not(.staging):not(.tab-hidden)').boundingBox() });
-  // Docked: the reading panel starts after the 6 px margin, the rail, a 6 px gap, the 270 px panel, its 10 px handle and a 6 px margin.
-  expect(Math.round((await info.boundingBox())!.x)).toBe(60);
-  await expect.poll(async () => { const at = (await geometry()).workspace!; return [Math.round(at.x), Math.round(at.width)]; }).toEqual([346, 1080 - 346]);
+  // Docked: the reading panel starts after the rail's zone (the panel's root at 46 px, its own 6 px margin), the 270 px panel, its 10 px handle and 2 px.
+  expect(Math.round((await info.boundingBox())!.x)).toBe(52);
+  await expect.poll(async () => { const at = (await geometry()).workspace!; return [Math.round(at.x), Math.round(at.width)]; }).toEqual([334, 1080 - 334]);
   const open = await geometry();
   expect(open.host!.x).toBeGreaterThanOrEqual(open.workspace!.x);
 
@@ -44,11 +44,11 @@ test('the icon rail stands at 720 px and up: 48 px wide, on the saved side, abse
 
   // On the right once the library is kept there, with the find bar clear of the rail.
   await chooseLibrarySide(page, 'right');
-  await expect.poll(async () => { const at = (await geometry()).workspace!; return [Math.round(at.x), Math.round(at.width)]; }).toEqual([0, 1080 - 346]);
-  expect((await info.boundingBox())!.x + (await info.boundingBox())!.width).toBeLessThanOrEqual(1080 - 60 + .5);
+  await expect.poll(async () => { const at = (await geometry()).workspace!; return [Math.round(at.x), Math.round(at.width)]; }).toEqual([0, 1080 - 334]);
+  expect((await info.boundingBox())!.x + (await info.boundingBox())!.width).toBeLessThanOrEqual(1080 - 52 + .5);
   await library.click(); await expect(info).toBeHidden();
   const right = (await rail.boundingBox())!;
-  expect(right.x).toBeGreaterThan(1080 - 6 - 48 - 1);
+  expect(right.x).toBeGreaterThan(1080 - 2 - 36 - 1);
   await page.keyboard.press('Control+f');
   const find = page.locator('#find-bar');
   await expect(find).toBeVisible();
@@ -195,7 +195,7 @@ test('the rail has exactly four buttons; the library side is moved from the ⋯ 
   await expect(railMenu).toHaveCount(0);
   expect(await side()).toBe('right');
   await expect(rail).toHaveAttribute('data-library-side', 'right');
-  expect((await boxOf(rail)).x).toBeGreaterThan(1080 - 6 - 48 - 1);
+  expect((await boxOf(rail)).x).toBeGreaterThan(1080 - 2 - 36 - 1);
   // The panel beside it follows to the right.
   expect((await boxOf(page.locator('#library-root'))).x).toBeGreaterThan(1080 / 2);
 
@@ -226,7 +226,7 @@ test('the rail has exactly four buttons; the library side is moved from the ⋯ 
   await page.reload();
   await expect(rail).toBeVisible();
   await expect(rail).toHaveAttribute('data-library-side', 'right');
-  expect((await boxOf(rail)).x).toBeGreaterThan(1080 - 6 - 48 - 1);
+  expect((await boxOf(rail)).x).toBeGreaterThan(1080 - 2 - 36 - 1);
   await expect(page.locator('#library-root')).toBeVisible();
   expect((await boxOf(page.locator('#library-root'))).x).toBeGreaterThan(1080 / 2);
   await page.getByRole('button', { name: 'Reader menu' }).click();
@@ -298,7 +298,7 @@ for (const width of [1440, 900]) for (const side of ['left', 'right'] as const) 
     await expect.poll(() => beyond(card)).toBeGreaterThanOrEqual(0);
     // The reading panel itself is what is left of the window, and Home's content is laid out inside it.
     const work = await boxOf(page.locator('#workspace'));
-    expect(Math.round(work.width)).toBe(width - 270 - 76);
+    expect(Math.round(work.width)).toBe(width - 270 - 64);
     const homeBox = await boxOf(page.locator('#empty'));
     expect(homeBox.x).toBeGreaterThanOrEqual(work.x - .5); expect(homeBox.x + homeBox.width).toBeLessThanOrEqual(work.x + work.width + .5);
 
@@ -309,7 +309,7 @@ for (const width of [1440, 900]) for (const side of ['left', 'right'] as const) 
     const sheet = page.locator('.pdf-page canvas').first();
     await expect(sheet).toBeVisible();
     await expect.poll(() => beyond(sheet)).toBeGreaterThanOrEqual(0);
-    await expect.poll(async () => Math.round((await boxOf(page.locator('.pdf-reader'))).width)).toBe(width - 270 - 76);
+    await expect.poll(async () => Math.round((await boxOf(page.locator('.pdf-reader'))).width)).toBe(width - 270 - 64);
     // Collapsing it hands the width back, and the page is fitted to the whole window again.
     await rail.getByRole('button', { name: 'Library', exact: true }).click();
     await expect(info).toBeHidden();

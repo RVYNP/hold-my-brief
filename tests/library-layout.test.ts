@@ -6,9 +6,9 @@ import { assignMasonry, clampLibraryWidth, defaultLibraryView, libraryGrid, libr
 describe('library panel width', () => {
   it('caps at 520 px, then 55% of the window, then a 320 px reading panel', () => {
     expect(libraryWidthBounds(1400)).toEqual({ min: 240, max: 520 });
-    // Beside both rails (6 + 48 + 6 + the 10 px handle + 6 = 76 px) the reading panel floor (800 - 76 - 320) is tighter than 55% (440).
-    expect(libraryWidthBounds(800)).toEqual({ min: 240, max: 404 });
-    expect(libraryWidthBounds(720)).toEqual({ min: 240, max: 324 });
+    // Beside the rail (46 + 6 + the 10 px handle + 2 = 64 px) the reading panel floor (800 - 64 - 320) is tighter than 55% (440).
+    expect(libraryWidthBounds(800)).toEqual({ min: 240, max: 416 });
+    expect(libraryWidthBounds(720)).toEqual({ min: 240, max: 336 });
   });
 
   it('never lets the maximum fall below the minimum in a window narrower than both limits', () => {

@@ -1,5 +1,5 @@
-/* The library panel is docked from 720 px: it stands beside the 48 px icon rail (6 px margin, 48 px rail, 6 px gap: it starts 60 px
-   from the edge) and #workspace takes a margin of the same width (see --library-clear below), so the reading panel gives the width up
+/* The library panel is docked from 720 px: it stands beside the 36 px icon rail (2 px from the edge, 36 px wide; the root's 6 px margin
+   starts at 46 px, so the panel starts 52 px from the edge) and #workspace takes a margin of the same width (see --library-clear below), so the reading panel gives the width up
    and the page re-fits as it does for a window resize. Nothing is drawn under it. Below 720 px it is a sheet over a scrim (see the end
    of this file). The Library tab's page is not part of it: it fills the reading panel (see `.library-page` below). */
 .library-root { --library-width: 270px; position: absolute; z-index: 20; top: 0; bottom: 0; left: 0; display: flex; flex: 0 0 auto; width: calc(var(--library-width) + 10px); min-width: 0; min-height: 0; margin: 0 0 0 6px; }
@@ -23,8 +23,8 @@
 /* --shadow-drawer casts rightward; a right-docked drawer uses the symmetric popover shadow. */
 .library-right .library-panel { box-shadow: var(--shadow-popover); }
 /* What stands beside the reading panel. --library-clear is the width from the layout's edge to where the reading panel may draw: the icon
-   rail (a 6 px margin, 48 px, 6 px after) while the panel is closed, and, while it is open, the rail and the panel (its width and the
-   10 px handle, 6 px after). The open panel docks: #workspace takes that width as a margin, so what is inside it (the page, Home, the
+   rail (2 px from the edge, 36 px, 10 px after) while the panel is closed, and, while it is open, the rail and the panel (its width and the
+   10 px handle, 2 px after). The open panel docks: #workspace takes that width as a margin, so what is inside it (the page, Home, the
    find bar, the page strip, the image pager, the view controls) starts after the panel without further help. --workspace-clear is the
    same room measured from the reading panel's own edge: the icon rail's overlay while the panel is closed, nothing once it is open.
    The right-docked view controls move out from under it too. Their position is fully specified (left/right/translate): the workspace
@@ -33,23 +33,23 @@
    width is exposed on #reader-layout by applyWidth in library.ts. */
 @media (min-width: 720px) {
   /* The window glow must not show bare, as a stripe between two glass surfaces, beside the docked panel. Two strips carry the panel's own glass
-     (the same wash over the same fixed glow, so they match it pixel for pixel): the rail's zone (its 6 px margin at the window's edge and
-     the 6 px gap before the panel), under the rail; and the panel's 10 px handle with the 6 px margin after it, over the panel's shadow, which
+     (the same wash over the same fixed glow, so they match it pixel for pixel): the rail's zone (from the window's edge to the panel's, 52 px, under
+     the rail); and the panel's 10 px handle with the 2 px after it, over the panel's shadow, which
      then falls on the reading panel from the gap's edge. The handle, and its hover state, stand above the strip. Neither takes the pointer. */
   #reader-layout.library-open::before, .library-root::after { content: ''; position: absolute; top: 0; bottom: 6px; background-color: var(--glass-raise-base); background-image: var(--glass-raise-paint); background-attachment: var(--glass-raise-attach); pointer-events: none; }
-  #reader-layout.library-open::before { z-index: 0; left: 0; width: 60px; }
+  #reader-layout.library-open::before { z-index: 0; left: 0; width: 52px; }
   #reader-layout.library-open.library-right::before { left: auto; right: 0; }
-  .library-root::after { bottom: 0; left: calc(100% - 10px); width: 16px; }
+  .library-root::after { bottom: 0; left: calc(100% - 10px); width: 12px; }
   .library-right > .library-root::after { left: auto; right: calc(100% - 10px); }
-  #reader-layout { --library-clear: 60px; --workspace-clear: 60px; }
-  #reader-layout.library-open { --library-clear: calc(var(--library-width, 270px) + 76px); --workspace-clear: 0px; }
+  #reader-layout { --library-clear: 48px; --workspace-clear: 48px; }
+  #reader-layout.library-open { --library-clear: calc(var(--library-width, 270px) + 64px); --workspace-clear: 0px; }
   #reader-layout.library-open:not(.library-right) > #workspace { margin-left: var(--library-clear); }
   #reader-layout.library-open.library-right > #workspace { margin-right: var(--library-clear); }
   #reader-layout.library-right #view-controls { left: auto; right: var(--workspace-clear); translate: none; }
   /* The panel and the rail reach the window's bottom, keeping the 6 px margin they keep at the outer edge. The footer is not under them: it
      belongs to the reading area (see style.css). */
-  .library-root { bottom: 6px; left: 54px; }
-  .library-right > .library-root { left: auto; right: 54px; }
+  .library-root { bottom: 6px; left: 46px; }
+  .library-right > .library-root { left: auto; right: 46px; }
   .library-header .library-plus, .library-header .library-close { display: none; }
 }
 .library-resize { position: relative; z-index: 2; flex: 0 0 10px; display: grid; place-items: center; cursor: col-resize; touch-action: none; outline: none; }
@@ -390,15 +390,19 @@
 .library-add-menu { position: fixed; z-index: 40; }
 .library-dialog-host { display: contents; }
 
-/* Icon rail: from 720 px up, a 48 px strip with Library, Search and Add files, and at its foot Settings. It overlays the reading panel's
+/* Icon rail: from 720 px up, a 36 px strip (no box: an edge wash implies it) with Library, Search and Add files, and at its foot Settings. It overlays the reading panel's
    edge while the panel is closed (--workspace-clear keeps the page's furniture off it) and stands beside the docked panel when it is open;
    Library wears the accent-soft fill while the panel is open. */
 .icon-rail { display: none; }
 @media (min-width: 720px) {
-  #reader-layout > .icon-rail { position: absolute; z-index: 21; top: 0; bottom: 6px; left: 6px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; box-sizing: border-box; width: 48px; padding: 8px 0; border: 1px solid var(--border); border-radius: 9px; background-color: var(--glass-raise-base); background-image: var(--glass-raise-paint); background-attachment: var(--glass-raise-attach); }
-  #reader-layout.library-right > .icon-rail { left: auto; right: 6px; }
-  #reader-layout:not(.library-right):not(.library-open) #empty.is-home { padding-left: 64px; }
-  #reader-layout.library-right:not(.library-open) #empty.is-home { padding-right: 64px; }
+  #reader-layout > .icon-rail { position: absolute; z-index: 21; top: 0; bottom: 6px; left: 2px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; box-sizing: border-box; width: 36px; padding: 8px 0; }
+  /* The rail has no box: a wash from the window's edge implies it (D3). It runs from the toolbar's bottom edge to the window's bottom, 44 px from
+     the edge, and fades to nothing at its inner edge; the buttons stand on it (the rail is a stacking context, the wash is its lowest layer). */
+  #reader-layout > .icon-rail::before { content: ''; position: absolute; z-index: -1; top: 0; bottom: -6px; left: -2px; width: 44px; background: linear-gradient(to right, var(--glass-raise), transparent); pointer-events: none; }
+  #reader-layout.library-right > .icon-rail { left: auto; right: 2px; }
+  #reader-layout.library-right > .icon-rail::before { left: auto; right: -2px; background: linear-gradient(to left, var(--glass-raise), transparent); }
+  #reader-layout:not(.library-right):not(.library-open) #empty.is-home { padding-left: 52px; }
+  #reader-layout.library-right:not(.library-open) #empty.is-home { padding-right: 52px; }
   /* The toolbar's library button is the compact window's door; here the icon rail is. */
   #library-toggle { display: none; }
 }

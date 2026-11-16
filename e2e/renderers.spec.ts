@@ -281,7 +281,7 @@ test('the library panel docks: opening and resizing it re-fit the page as a wind
   await expect(handle).toHaveAttribute('aria-valuenow', '270');
   const dockedAt = async (width: number) => {
     const opened = await settled();
-    expect(Math.round(opened.workspace!.width), `reading panel beside a ${width} px library`).toBe(1080 - width - 76);
+    expect(Math.round(opened.workspace!.width), `reading panel beside a ${width} px library`).toBe(1080 - width - 64);
     expect(opened.hostClientWidth).toBeLessThanOrEqual(opened.workspace!.width);
     const edge = (await panel.boundingBox())!, sheet = (await canvas.boundingBox())!;
     expect(opened.workspace!.x).toBeGreaterThanOrEqual(edge.x + edge.width);
@@ -297,7 +297,7 @@ test('the library panel docks: opening and resizing it re-fit the page as a wind
   await page.mouse.move(box.x + 45, y, { steps: 6 });
   // The panel follows the pointer live, and the reading panel gives or takes the width with it.
   await expect(handle).toHaveAttribute('aria-valuenow', '310');
-  await expect.poll(async () => Math.round((await workspace.boundingBox())!.width)).toBe(1080 - 310 - 76);
+  await expect.poll(async () => Math.round((await workspace.boundingBox())!.width)).toBe(1080 - 310 - 64);
   await page.mouse.move(box.x + 75, y, { steps: 6 }); await page.mouse.up();
   await expect(handle).toHaveAttribute('aria-valuenow', '340');
   expect(Math.round((await panel.boundingBox())!.width)).toBe(340);
@@ -331,10 +331,10 @@ test('the library panel docks: opening and resizing it re-fit the page as a wind
   const tree = page.locator('.library-tree');
   await handle.focus(); await page.keyboard.press('End'); await expect(handle).toHaveAttribute('aria-valuenow', '520');
   expect(await tree.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-  await expect.poll(async () => Math.round((await workspace.boundingBox())!.width)).toBe(1080 - 520 - 76);
+  await expect.poll(async () => Math.round((await workspace.boundingBox())!.width)).toBe(1080 - 520 - 64);
   await page.keyboard.press('Home'); await expect(handle).toHaveAttribute('aria-valuenow', '240');
   expect(await tree.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-  await expect.poll(async () => Math.round((await workspace.boundingBox())!.width)).toBe(1080 - 240 - 76);
+  await expect.poll(async () => Math.round((await workspace.boundingBox())!.width)).toBe(1080 - 240 - 64);
   await page.keyboard.press('Enter'); await page.keyboard.press('Shift+ArrowLeft'); await expect(handle).toHaveAttribute('aria-valuenow', '334'); // docked right: Left widens
   const beforeTab = await settled();
   // The Library tab: a tab of the reading panel, beside the docked panel (on its right here). Nothing covers the panel, so it keeps its width and its
@@ -371,10 +371,10 @@ test('the library panel docks: opening and resizing it re-fit the page as a wind
   expect(await docked()).toBe(true);
   // Arrows move the separator visually, so Left widens a right-docked library.
   await handle.focus(); await page.keyboard.press('ArrowLeft'); await expect(handle).toHaveAttribute('aria-valuenow', '350');
-  // A narrower window re-clamps without forgetting the preferred width: 55% of 800 px is 440, but the reading panel keeps 320 px clear beside both rails (800 - 76 - 320).
+  // A narrower window re-clamps without forgetting the preferred width: 55% of 800 px is 440, but the reading panel keeps 320 px clear beside both rails (800 - 64 - 320).
   await page.keyboard.press('End'); await expect(handle).toHaveAttribute('aria-valuenow', '520');
   await page.setViewportSize({ width: 800, height: 680 });
-  await expect(handle).toHaveAttribute('aria-valuenow', '404'); await expect(handle).toHaveAttribute('aria-valuemax', '404');
+  await expect(handle).toHaveAttribute('aria-valuenow', '416'); await expect(handle).toHaveAttribute('aria-valuemax', '416');
   await page.setViewportSize({ width: 1080, height: 680 }); await expect(handle).toHaveAttribute('aria-valuenow', '520');
 });
 
@@ -1318,8 +1318,8 @@ test('view controls pill moves by its grip, stays inside the panel, persists, re
   await page.mouse.move(panel.x + 200, panel.y + 120, { steps: 6 });
   await page.mouse.move(panel.x + 1, panel.y + 1, { steps: 6 }); await page.mouse.up();
   const moved = await inside();
-  // The icon rail stands at the panel's left edge, so the pill stops beside it (6 px margin + 48 px rail) rather than at the 8 px margin.
-  expect(moved.x).toBeCloseTo(panel.x + 54 + 8, 0); expect(moved.y).toBeCloseTo(panel.y + 1 + 8, 0);
+  // The icon rail stands at the panel's left edge, so the pill stops beside it (2 px + the 36 px rail) rather than at the 8 px margin.
+  expect(moved.x).toBeCloseTo(panel.x + 38 + 8, 0); expect(moved.y).toBeCloseTo(panel.y + 1 + 8, 0);
   expect(await geometry()).toEqual(untouched);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('hold-my-brief:view-controls')!))).toEqual({ x: expect.any(Number), y: expect.any(Number) });
 
@@ -1376,7 +1376,7 @@ test('a moved view-controls pill stays beside the docked library panel, on eithe
   await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2); await page.mouse.down();
   await page.mouse.move(panel.x + 1, panel.y + 1, { steps: 8 }); await page.mouse.up();
   const corner = (await pill.boundingBox())!;
-  expect(corner.x).toBeCloseTo(panel.x + 54 + 8, 0); // beside the icon rail
+  expect(corner.x).toBeCloseTo(panel.x + 38 + 8, 0); // beside the icon rail
 
   // The open panel docks: the reading panel starts after it, and the pill, which was kept off the rail, is inside the narrower reading panel.
   await libraryToggle(page).click();
