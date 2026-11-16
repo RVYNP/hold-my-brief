@@ -25,7 +25,7 @@ import { createZoomGesture } from './zoom-gesture';
 import type { Hold, Spot } from './zoom-anchor';
 import { createZoomMenu } from './zoom-menu';
 import { createProgressPreview } from './progress-preview';
-import { LIBRARY_PATH, TabList, mergeLists, moveAcross, splitOff, type SavedTab } from './tabs';
+import { LIBRARY_PATH, TabList, mergeLists, moveAcross, restoreSplit, splitOff, type SavedSplit, type SavedTab, type TabSession } from './tabs';
 import { createTabStrip, type TabStrip, type TabView } from './tab-strip';
 import { titleHints } from './tab-titles';
 import { baseName, ghostLabel, insertionIndex, overlayNames, splitDropped, unsupportedNotice } from './drop';
@@ -36,7 +36,8 @@ import { steppedFontSize } from './text-size';
 import { createWindowControls, wireWindowControls } from './window-controls';
 import { Pane } from './pane';
 import { DEFAULT_PERCENT, canSplit, clampPercent, shareOf } from './split';
-import { createBody, createDivider, createRow, paintDivider, withoutIds, type SideLetter, type SideView } from './split-view';
+import { createBody, createDivider, createRow, paintDivider, paintFold, withoutIds, type SideLetter, type SideView } from './split-view';
+import { createContextMenu, type MenuEntry } from './context-menu';
 initAppearance();
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
@@ -133,7 +134,8 @@ function makeSide(letter: SideLetter): Side {
   let state: HTMLElement;
   if (letter === 'a') { state = $('tab-state'); body.append(state, pill); } else { state = withoutIds($('tab-state').cloneNode(true) as HTMLElement); state.hidden = true; body.append(state); }
   workspace.append(parts.row, body);
-  const tabsRow = createTabStrip({ strip: parts.row, list: parts.list, add: parts.add, overflow: parts.overflow }, { select: path => selectTab(path), close: closeTab, newTab: () => { activateSide(side); openFile(); }, move: (path, to) => { side.tabs.move(path, to); paintTabs(); saveSession(); } }, platform === 'mac' ? '⌘T' : 'Ctrl T');
+  const tabsRow = createTabStrip({ strip: parts.row, list: parts.list, add: parts.add, overflow: parts.overflow }, { select: path => selectTab(path), close: closeTab, newTab: () => { activateSide(side); openFile(); }, move: (path, to) => { side.tabs.move(path, to); paintTabs(); saveSession(); }, menu: showTabMenu }, platform === 'mac' ? '⌘T' : 'Ctrl T');
+  parts.fold.onclick = () => focusOtherSide();
   const side: Side = { pane: new Pane<Tab>({ persist, notify }), tabs: new TabList<Tab>(), shown: undefined, scanNoticeShown: false, view: { letter, body, state, ...parts }, strip: tabsRow };
   state.querySelector<HTMLElement>('.primary')!.onclick = () => stateAction(side);
   state.querySelector<HTMLElement>('.tab-state-actions button:not(.primary)')!.onclick = () => { if (side.shown) closeTab(side.shown.path); };
@@ -468,6 +470,8 @@ const library = createLibrary($('library-root'), {
   replace: path => stepImage(path),
   error: fail,
   openBackground: doc => openInBackground(doc),
+  openSplit: doc => openInSplitRight(doc),
+  splitReason: doc => openSplitReason(doc.path),
   changed: (next, progress) => { homeLibrary = next; homeProgress = { ...progress }; if ($('empty').classList.contains('is-home')) paintHome(); },
   progressChanged: progress => { homeProgress = { ...progress }; if ($('empty').classList.contains('is-home')) paintHome(); },
   settle: () => activePane().flush(),
@@ -770,6 +774,7 @@ function paintTabs() {
   paintedTabs = key;
   strip.paint(bar, home);
   if (isSplit()) sides.forEach((side, index) => { side.strip.paint(rows[index], false); side.view.row.classList.toggle('is-inactive', side !== focused || Boolean(cover)); });
+  paintFolds();
   const here = isSplit() ? (cover ? (cover === 'library' ? libraryTab : undefined) : focused.shown) : sides[0].tabs.active;
   $('filename').textContent = here ? tabTitle(here) : 'Hold My Brief'; $('filename').title = here?.path ?? '';
   $('tab-count').textContent = all.length ? String(all.length) : '';
@@ -847,12 +852,16 @@ function saveSession() {
 }
 
 const savedTab = (tab: Tab): SavedTab => ({ path: tab.path, name: tab.name, format: tab.format, ...(tab.scope ? { scope: tab.scope } : {}) });
-/** The tabs as they are saved: split or not, one strip in order (the Library tab, the left pane's tabs, then the right pane's), so a restart brings back every document. */
-function sessionOf() {
+/**
+ * The tabs as they are saved. Split or not, one strip in order (the Library tab, the left pane's tabs, then the right pane's), so a build that does not know
+ * the split still brings back every document; split, the session also names each pane's tabs and shown tab, the divider's place and the active pane.
+ */
+function sessionOf(): TabSession {
   if (!isSplit()) return focused.tabs.session(savedTab);
   const ordered = [...(libraryTab ? [libraryTab] : []), ...sides.flatMap(side => side.tabs.tabs)];
   const showing = cover === 'library' ? libraryTab : cover ? undefined : focused.shown;
-  return { tabs: ordered.map(savedTab), active: showing ? ordered.indexOf(showing) : null };
+  const pane = (side: Side) => ({ tabs: side.tabs.tabs.map(tab => tab.path), shown: side.shown?.path ?? side.tabs.tabs[0]?.path ?? '' });
+  return { tabs: ordered.map(savedTab), active: showing ? ordered.indexOf(showing) : null, split: { left: pane(sides[0]), right: pane(sides[1]), ratio, active: focused === sides[1] ? 'right' : 'left' } };
 }
 /** The tab Close tab (Ctrl W) closes: the one the reader sees, which is the Library tab while its page covers the split. */
 const closableTab = () => cover === 'library' ? libraryTab : cover ? undefined : focused.shown;
@@ -862,8 +871,14 @@ const documentCount = () => sides.reduce((total, side) => total + side.tabs.tabs
 /** The width the panes really share: the reading area less the icon rail's room (`--workspace-clear`, which only applies from 720 px up). */
 const paneRoom = () => workspace.clientWidth - (matchMedia('(min-width: 720px)').matches ? parseFloat(getComputedStyle(workspace).getPropertyValue('--workspace-clear')) || 0 : 0);
 const splitContext = (): SplitContext => ({ active: isSplit(), room: canSplit(paneRoom(), innerWidth), documents: documentCount() });
-/** Why Split right cannot run now, or undefined. */
-const splitReason = () => unavailableReason(COMMANDS.find(entry => entry.id === 'split-right')!, { hasDocument: Boolean(focused.shown && focused.shown.path !== LIBRARY_PATH), desktop, split: splitContext() });
+/** Why Split right cannot run now for `tab` (the one showing, by default), or undefined. */
+const splitReason = (tab = focused.shown) => unavailableReason(COMMANDS.find(entry => entry.id === 'split-right')!, { hasDocument: Boolean(tab && tab.path !== LIBRARY_PATH), desktop, split: splitContext() });
+/** Why the document at `path` cannot open in a split's right pane now, or undefined: a split has a right pane already; otherwise the window needs room and another document to stay on the left. */
+function openSplitReason(path: string) {
+  if (isSplit()) return undefined;
+  if (!canSplit(paneRoom(), innerWidth)) return 'The window is too narrow to split';
+  return documentCount() - (known(path) ? 1 : 0) < 1 ? 'Open a document first, to put this one beside it' : undefined;
+}
 
 /** Lays the panes out: the split's classes, the divider's place, and the footer under the focused pane. */
 function applyLayout() {
@@ -880,9 +895,17 @@ function applyLayout() {
     // `classList.remove` writes the attribute even when the class is absent, which the class observer would see: this runs on every layout pass, so it must change nothing it does not have to.
     delete workspace.dataset.active; workspace.classList.toggle('is-single', false); workspace.style.removeProperty('--ratio'); divider.hidden = true;
   }
+  paintFolds();
   placeFooter();
 }
-function setRatio(percent: number) { ratio = percent; applyLayout(); }
+/** While one pane shows, the shown pane's row ends with the button that swaps the panes. */
+function paintFolds() {
+  const folded = isSplit() && workspace.classList.contains('is-single');
+  for (const side of sides) paintFold(side.view.fold, folded && side === focused, sides.find(other => other !== side)?.tabs.size ?? 0);
+}
+let ratioTimer: ReturnType<typeof setTimeout> | undefined;
+/** Moves the divider. A drag moves it on every frame, so the session is written once it has been still for a moment. */
+function setRatio(percent: number) { ratio = percent; applyLayout(); clearTimeout(ratioTimer); ratioTimer = setTimeout(saveSession, 300); }
 /** The progress line and scrubber sit under the focused pane only. */
 function placeFooter() {
   if (!isSplit()) { footer.style.removeProperty('left'); footer.style.removeProperty('right'); return; }
@@ -930,7 +953,7 @@ function adoptSide(side: Side) {
 }
 function activateSide(side: Side) {
   if (side === focused || !sides.includes(side)) return;
-  parkSide(focused); focused = side; adoptSide(side);
+  parkSide(focused); focused = side; adoptSide(side); saveSession();
 }
 // The pane last clicked or focused is the active one. A press inside a book's frame never reaches the page (a fixed-layout book's frames report theirs, see `onFrame` in `load`),
 // but it moves the focus into the frame, which blurs the page: the pane that holds the element the page then reports as focused is the one.
@@ -954,36 +977,61 @@ function clearCover() {
   cover = undefined;
   workspace.classList.remove('is-covered'); $('empty').hidden = true;
   library.showPage(false); library.setActive(focused.shown?.path);
-  syncFooter(); paintTabs();
+  syncFooter(); paintTabs(); saveSession();
 }
 
-/** Split right: the shown tab moves to a new pane on the right, which becomes the focused one; every other document tab stays on the left, showing the one shown most recently. */
-function splitRight() {
-  const reason = splitReason();
-  if (reason) { notify(reason); return; }
-  const left = focused, tab = left.shown!;
+/** Adds the right side holding `moved`, with the divider at `percent`: the one made on an earlier split is put back, else it is made. Nothing is shown in it yet. */
+function addRightSide(moved: TabList<Tab>, percent: number) {
+  const left = sides[0], right = spare ?? makeSide('b');
+  if (spare) { workspace.append(right.view.row, right.view.body); right.pane = new Pane<Tab>({ persist, notify }); right.shown = undefined; right.scanNoticeShown = false; } else watchSide(right);
+  spare = undefined;
+  right.tabs = moved; right.pane.pillPlacement = left.pane.pillPlacement;
+  sides.push(right); ratio = percent;
+  return right;
+}
+/**
+ * Starts a split with `tab` (a document tab of the one side, shown or not) on a new pane on the right, which becomes the focused one; every other document tab
+ * stays on the left, showing the one shown most recently.
+ */
+function startSplit(tab: Tab) {
+  const left = focused;
   clearCover();
   if (left.pane.cancelPending) cancelOpen();
   syncBack(left); findBar.close(); zoomGesture.cancel();
   const entry = left.tabs.find(LIBRARY_PATH);
   if (entry) { left.tabs.detach(LIBRARY_PATH); libraryTab = entry; }
-  const moved = splitOff(left.tabs, tab.path)!, right = spare ?? makeSide('b');
-  if (spare) { workspace.append(right.view.row, right.view.body); right.pane = new Pane<Tab>({ persist, notify }); right.shown = undefined; right.scanNoticeShown = false; } else watchSide(right);
-  spare = undefined;
-  right.tabs = moved; right.pane.pillPlacement = left.pane.pillPlacement;
-  sides.push(right);
-  tab.host?.setAttribute('data-pane', 'b');
-  left.shown = undefined; ratio = DEFAULT_PERCENT; applyLayout();
+  const right = addRightSide(splitOff(left.tabs, tab.path)!, DEFAULT_PERCENT);
+  tab.host?.setAttribute('data-pane', 'b'); tab.host?.classList.remove('tab-hidden');
+  left.shown = undefined; applyLayout();
   show(left.tabs.active, true);
   right.shown = tab; right.pane.show(tab); right.scanNoticeShown = tab.scanNoticeShown;
   activateSide(right);
   if (!tab.reader && !tab.problem) void reopen(tab);
   right.pane.host?.focus();
 }
-/** Moves the shown tab to the other pane, which shows it and becomes the focused one; a pane left with no tab ends the split. */
-function moveTabToOtherSide() {
-  if (!isSplit()) return;
-  clearCover();
+/** Split right: `tab` (the shown one, by default) moves to a new pane on the right. */
+function splitRight(tab = focused.shown) {
+  const reason = splitReason(tab);
+  if (reason || !tab) { notify(reason ?? 'Open a document to split'); return; }
+  startSplit(tab);
+}
+/** Opens a document in the right pane, splitting the window first when it is not split: the document is shown there, beside the documents that stay on the left. */
+function openInSplitRight(doc: { path: string; name: string; format: string }) {
+  const reason = openSplitReason(doc.path);
+  if (reason) { notify(reason); return; }
+  const existing = known(doc.path);
+  if (!isSplit()) {
+    const tab = existing ?? { path: doc.path, name: doc.name, format: doc.format, options: { ...defaultOptions }, hand: false, scanNoticeShown: false };
+    if (!existing) sides[0].tabs.add(tab);
+    startSplit(tab);
+  } else if (!existing) void openMany([{ path: doc.path, open: () => openLibraryDocument(doc.path), label: doc.name }], undefined, sides[1]);
+  else if (holder(doc.path) === sides[1]) selectTab(doc.path);
+  else moveTabToOtherSide(doc.path);
+}
+/** Moves a tab (the shown one, by default) to the other pane, which shows it and becomes the focused one; a pane left with no tab ends the split. */
+function moveTabToOtherSide(path = focused.shown?.path) {
+  if (!isSplit() || !path || path === LIBRARY_PATH) return;
+  if (focused.shown?.path !== path || cover) selectTab(path);
   const from = focused, to = sides.find(side => side !== from)!, tab = from.shown;
   if (!tab) return;
   if (from.pane.cancelPending) cancelOpen();
@@ -1022,12 +1070,50 @@ function endSplit() {
   applyLayout();
   show(keep, true);
 }
+/** Brings a saved split back: both panes with their tabs, the divider and the active pane. Each pane's shown document opens, the pane that is not the active one first, so the focus ends on the active one. False, and nothing changed, when the session no longer holds a document on each side. */
+function restoreSplitView(session: TabSession, split: SavedSplit): boolean {
+  const left = sides[0], entry = left.tabs.find(LIBRARY_PATH);
+  if (entry) left.tabs.detach(LIBRARY_PATH);
+  const moved = restoreSplit(left.tabs, split);
+  if (!moved) { if (entry) left.tabs.add(entry, 0); return false; }
+  libraryTab = entry;
+  const right = addRightSide(moved, split.ratio);
+  for (const side of sides) { side.shown = side.tabs.active; side.pane.show(side.shown); }
+  $('empty').hidden = true;
+  applyLayout(); paintTabState(); paintTabs();
+  void (async () => {
+    for (const side of split.active === 'right' ? [left, right] : [right, left]) {
+      activateSide(side);
+      if (side.shown && !side.shown.reader && !side.shown.problem) await reopen(side.shown);
+    }
+    // Home or the Library page was covering the panes: it does again, once they have opened.
+    const showing = session.active === null ? undefined : session.tabs[session.active];
+    if (!showing) showCover('home'); else if (showing.path === LIBRARY_PATH) showCover('library');
+  })().catch(fail);
+  return true;
+}
 
 const strip = createTabStrip(
   { strip: $('tab-strip'), home: $('home-tab'), list: $('tab-list'), add: $('tab-add'), overflow: $('tab-overflow') },
-  { select: selectTab, close: closeTab, newTab: () => openFile(), move: (path, to) => { if (isSplit()) return; sides[0].tabs.move(path, to); paintTabs(); saveSession(); } },
+  { select: selectTab, close: closeTab, newTab: () => openFile(), move: (path, to) => { if (isSplit()) return; sides[0].tabs.move(path, to); paintTabs(); saveSession(); }, menu: showTabMenu },
   platform === 'mac' ? '⌘T' : 'Ctrl T',
 );
+/** The one context menu of the window's tabs and Home's cards (the library's own is the same component). */
+const contextMenu = createContextMenu({ blocked: () => Boolean(document.querySelector('dialog[open]')) });
+/** A tab's menu: Split right and Close, or, while split, Move to the other side, Close and Close the split. The Library tab only closes. */
+function showTabMenu(path: string, anchor: HTMLElement, at: { x: number; y: number } | undefined) {
+  const tab = known(path);
+  if (!tab) return;
+  const entries: MenuEntry[] = [];
+  if (path !== LIBRARY_PATH) entries.push(isSplit() ? { label: 'Move to the other side', run: () => moveTabToOtherSide(path) } : { label: 'Split right', run: () => splitRight(tab), unavailable: splitReason(tab) });
+  entries.push({ label: 'Close', run: () => closeTab(path) });
+  if (isSplit() && path !== LIBRARY_PATH) entries.push({ label: 'Close the split', run: () => endSplit() });
+  contextMenu.show(entries, anchor, at);
+}
+/** A document card or row on Home: Open, and Open in split right. */
+function showHomeMenu(item: { path: string; name: string; format: string }, anchor: HTMLElement, at: { x: number; y: number } | undefined) {
+  contextMenu.show([{ label: 'Open', run: () => void openPath(item.path, item.name) }, { label: 'Open in split right', run: () => openInSplitRight(item), unavailable: openSplitReason(item.path) }], anchor, at);
+}
 $('title').onclick = () => { const menu = isSplit() ? focused.strip : strip; if (menu.isMenuOpen()) menu.closeMenu(); else menu.openMenu($('title')); };
 
 /**
@@ -1338,6 +1424,7 @@ function paintHome() {
   const generation = ++homePicture;
   renderHome(empty, sections, {
     open: (path, name) => { void openPath(path, name); },
+    menu: showHomeMenu,
     openFile: () => openFile(),
     viewAll: scope => library.browse(scope),
     viewCollection: id => library.browse({ collection: id }),
@@ -1372,7 +1459,7 @@ async function initialize() {
   paintHome();
   for (const entry of saved.tabs.tabs) focused.tabs.open({ ...entry, options: { ...defaultOptions }, hand: false, scanNoticeShown: false });
   library.restoreScope(known(LIBRARY_PATH)?.scope);
-  show(saved.tabs.active === null ? undefined : focused.tabs.tabs[saved.tabs.active], true);
+  if (!saved.tabs.split || !restoreSplitView(saved.tabs, saved.tabs.split)) show(saved.tabs.active === null ? undefined : focused.tabs.tabs[saved.tabs.active], true);
   if (desktop) {
     const { listen } = await import('@tauri-apps/api/event');
     const { getCurrentWindow } = await import('@tauri-apps/api/window');

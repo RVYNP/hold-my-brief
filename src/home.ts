@@ -177,6 +177,8 @@ export const shelfRatio = (ratio: number) => Math.min(1, Math.max(shelfCover.wid
 
 export type HomeActions = {
   open: (path: string, name: string) => void;
+  /** The context menu of a document card or row was asked for (right-click, the menu key, Shift+F10), at `at` or, from the keyboard, beside `anchor`. */
+  menu: (item: { path: string; name: string; format: string }, anchor: HTMLElement, at: { x: number; y: number } | undefined) => void;
   openFile: () => void;
   /** Opens the full library: on all references, its favorites, or the documents still being read. */
   viewAll: (scope: 'all' | 'favorites' | 'reading') => void;
@@ -454,6 +456,8 @@ function opener(item: HomeTile, className: string, actions: HomeActions): HTMLBu
   const reached = formatProgress(item.progress);
   open.title = reached ? `${item.name} · ${reached}` : item.name;
   open.onclick = () => actions.open(item.path, item.name);
+  open.addEventListener('contextmenu', event => { event.preventDefault(); actions.menu(item, open, event.clientX || event.clientY ? { x: event.clientX, y: event.clientY } : undefined); });
+  open.addEventListener('keydown', event => { if (event.key === 'ContextMenu' || event.key === 'F10' && event.shiftKey) { event.preventDefault(); actions.menu(item, open, undefined); } });
   return open;
 }
 

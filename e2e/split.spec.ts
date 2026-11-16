@@ -239,7 +239,7 @@ test('Split right says why it cannot run', async ({ page }) => {
   await expect(page.locator('#palette-list')).toContainText('too narrow');
 });
 
-test('reloading while split brings every document back with its place', async ({ page }) => {
+test('reloading while split brings the split back with every document at its place', async ({ page }) => {
   await page.goto('/');
   await page.locator('#file-input').setInputFiles(pdf);
   await expect(page.locator('#position')).toContainText('Page 1 of 5');
@@ -249,11 +249,13 @@ test('reloading while split brings every document back with its place', async ({
   await expect(page.locator('#tab-list .tab')).toHaveCount(2);
   await run(page, 'Split right');
   await expect(row(page, 'b')).toHaveCount(1);
-  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('hold-my-brief-tabs')!).tabs.length)).toBe(2);
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('hold-my-brief-tabs')!).split?.right.tabs.length)).toBe(1);
   await expect.poll(() => page.evaluate(() => Object.entries(localStorage).some(([key, value]) => key.startsWith('hold-my-brief:') && JSON.parse(value).locator?.page === 4))).toBe(true);
   await page.reload();
-  await expect(barTabs(page)).toHaveCount(2);
-  await barTabs(page).filter({ hasText: 'half-tone' }).click();
+  await expect(row(page, 'a').locator('.tab-format')).toHaveText(['PDF']);
+  await expect(row(page, 'b').locator('.tab-format')).toHaveText(['MD']);
+  await expect(barTabs(page)).toHaveCount(0);
+  await page.locator('.reader-host[data-pane=a]:not(.tab-hidden)').click({ position: { x: 40, y: 200 } });
   await expect(page.locator('#position')).toContainText('Page 4 of 5');
 });
 

@@ -1518,6 +1518,11 @@ dialog, dialog.drop, #menu, #appearance, .tab-menu, .zoom-menu { background-imag
 #workspace.is-split .pane-strip .tab, #workspace.is-split .pane-strip .tab-add, #workspace.is-split .pane-strip .tab-overflow { height: 24px; }
 #workspace.is-split .pane-strip .tab-add, #workspace.is-split .pane-strip .tab-overflow { width: 24px; }
 #workspace.is-split .pane-strip .tab-list { flex: 0 1 auto; }
+/* A folded split: the shown pane's row ends with the button that swaps the panes. */
+#workspace.is-split .pane-strip .pane-fold { flex: none; margin-left: auto; height: 24px; padding: 0 8px; border-radius: 6px; color: var(--accent-ink); font: 600 12px/1 var(--font-ui), 'Apple Symbols', 'STIXGeneral', 'Cambria Math', 'Segoe UI Symbol'; white-space: nowrap; } /* The first font to have ⫴ (U+2AF4) draws it. */
+#workspace.is-split .pane-strip .pane-fold[hidden] { display: none; }
+#workspace.is-split .pane-strip .pane-fold:hover { background: var(--hover); }
+#workspace.is-split .pane-strip .pane-fold:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 /* The shown tab of the pane that is not the active one is selected, without the sheen. */
 .pane-strip.is-inactive .tab.is-active::before { display: none; }
 #workspace.is-split .pane-divider { display: block; position: absolute; z-index: 7; top: 0; bottom: 0; left: calc(var(--split-start) + var(--split-a)); width: 8px; background: var(--chrome); cursor: col-resize; touch-action: none; }
