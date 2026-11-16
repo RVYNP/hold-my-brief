@@ -859,7 +859,9 @@ const closableTab = () => cover === 'library' ? libraryTab : cover ? undefined :
 
 /** What the split commands need to know. */
 const documentCount = () => sides.reduce((total, side) => total + side.tabs.tabs.filter(tab => tab.path !== LIBRARY_PATH).length, 0);
-const splitContext = (): SplitContext => ({ active: isSplit(), room: canSplit(workspace.clientWidth, innerWidth), documents: documentCount() });
+/** The width the panes really share: the reading area less the icon rail's room (`--workspace-clear`, which only applies from 720 px up). */
+const paneRoom = () => workspace.clientWidth - (matchMedia('(min-width: 720px)').matches ? parseFloat(getComputedStyle(workspace).getPropertyValue('--workspace-clear')) || 0 : 0);
+const splitContext = (): SplitContext => ({ active: isSplit(), room: canSplit(paneRoom(), innerWidth), documents: documentCount() });
 /** Why Split right cannot run now, or undefined. */
 const splitReason = () => unavailableReason(COMMANDS.find(entry => entry.id === 'split-right')!, { hasDocument: Boolean(focused.shown && focused.shown.path !== LIBRARY_PATH), desktop, split: splitContext() });
 
@@ -870,7 +872,7 @@ function applyLayout() {
   if (split) {
     workspace.dataset.active = focused.view.letter;
     workspace.style.setProperty('--ratio', String(ratio / 100));
-    workspace.classList.toggle('is-single', !canSplit(workspace.clientWidth, innerWidth));
+    workspace.classList.toggle('is-single', !canSplit(paneRoom(), innerWidth));
     divider.hidden = workspace.classList.contains('is-single');
     paintDivider(divider, ratio);
   } else {

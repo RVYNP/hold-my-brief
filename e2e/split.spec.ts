@@ -32,6 +32,11 @@ async function openThree(page: Page) {
   await page.locator('#tab-list .tab[data-path]').nth(1).click();
   await expect(page.locator('#position')).toContainText('%');
 }
+/** The panel closed, so the icon rail's 48 px is not room for the panes. */
+const closeLibrary = async (page: Page) => {
+  if (await page.locator('#reader-layout.library-open').count()) await page.keyboard.press('Control+b');
+  await expect(page.locator('#reader-layout.library-open')).toHaveCount(0);
+};
 async function split(page: Page) {
   await openThree(page);
   await run(page, 'Split right');
@@ -250,6 +255,22 @@ test('reloading while split brings every document back with its place', async ({
   await expect(barTabs(page)).toHaveCount(2);
   await barTabs(page).filter({ hasText: 'half-tone' }).click();
   await expect(page.locator('#position')).toContainText('Page 4 of 5');
+});
+
+test('the icon rail\'s room is not counted: a 760 px window with the panel closed is too narrow to split', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles(pdf);
+  await expect(page.locator('#position')).toContainText('Page 1 of 5');
+  await page.locator('#file-input').setInputFiles(markdown);
+  await expect(page.locator('#tab-list .tab')).toHaveCount(2);
+  await closeLibrary(page);
+  await page.setViewportSize({ width: 760, height: 800 });
+  await page.keyboard.press('Control+k'); await page.locator('#palette-input').fill('Split right');
+  await expect(page.locator('#palette-list')).toContainText('too narrow');
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({ width: 800, height: 800 });
+  await page.keyboard.press('Control+k'); await page.locator('#palette-input').fill('Split right');
+  await expect(page.locator('#palette-list')).not.toContainText('too narrow');
 });
 
 test('a window that shrinks while split shows the active pane only', async ({ page }) => {
