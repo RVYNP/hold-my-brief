@@ -26,7 +26,7 @@ those paths as your worktree. This repository is public: never post absolute pat
 
 ## CI layout and e2e shards
 
-`.github/workflows/ci.yml` runs 9 jobs, all starting with the workflow. For each of Windows and macOS:
+`.github/workflows/ci.yml` runs 10 jobs (5 per OS), all starting with the workflow. For each of Windows and macOS:
 `<OS> · e2e (1/3)`, `(2/3)`, `(3/3)`; `<OS> · checks` (unit tests, text layout check, Rust tests); `<OS> · build`
 (`tauri build`: the frontend build and the one release compile, then Windows' native smoke and NSIS installer,
 or macOS' `.app`). The loop merges when every check run on the head SHA is green, so:
