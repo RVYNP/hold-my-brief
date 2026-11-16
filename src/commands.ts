@@ -32,6 +32,8 @@ export type Command = {
   formats?: readonly Format[];
   /** True when the command needs the desktop app (native IPC). */
   requiresDesktop?: boolean;
+  /** `off`: the window must not be split yet (and have room and a second document for it); `on`: it must be split. */
+  split?: 'off' | 'on';
 };
 
 /** Display order of the groups. */
@@ -47,6 +49,9 @@ export const COMMANDS: readonly Command[] = [
   { id: 'close-tab', label: 'Close tab', group: 'File', keywords: ['tabs', 'document', 'shut'], shortcut: 'Ctrl W' },
   { id: 'next-tab', label: 'Next tab', group: 'File', keywords: ['tabs', 'switch', 'right'], shortcut: 'Ctrl Tab' },
   { id: 'previous-tab', label: 'Previous tab', group: 'File', keywords: ['tabs', 'switch', 'left'], shortcut: 'Ctrl Shift Tab' },
+  { id: 'split-right', label: 'Split right', group: 'File', keywords: ['side by side', 'two documents', 'panes', 'divide', 'tabs'], shortcut: 'Ctrl \\', requiresDocument: true, split: 'off' },
+  { id: 'move-tab-side', label: 'Move tab to the other side', group: 'File', keywords: ['split', 'pane', 'left', 'right', 'tabs'], requiresDocument: true, split: 'on' },
+  { id: 'close-split', label: 'Close the split', group: 'File', keywords: ['merge', 'one pane', 'panes', 'unsplit', 'tabs'], split: 'on' },
   { id: 'library', label: 'Toggle document library', group: 'File', keywords: ['sidebar', 'books', 'collection'], shortcut: 'Ctrl B' },
   { id: 'library-search', label: 'Search the library', group: 'File', keywords: ['find', 'filter', 'folders', 'documents', 'tree', 'sidebar'], shortcut: 'Ctrl Shift F' },
   { id: 'library-side', label: 'Move library to other side', group: 'File', keywords: ['dock', 'rail', 'sidebar', 'left', 'right', 'lock'] },
@@ -134,6 +139,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: 'back', key: 'arrowleft', alt: true },
   ...orCommand({ id: 'new-tab', key: 't' }),
   ...orCommand({ id: 'close-tab', key: 'w' }),
+  ...orCommand({ id: 'split-right', key: '\\' }),
   { id: 'next-tab', key: 'tab', ctrl: true },
   { id: 'previous-tab', key: 'tab', ctrl: true, shift: true },
   ...orCommand({ id: 'next-tab', key: 'arrowright', alt: true }),
@@ -162,9 +168,19 @@ export function appliesTo(command: Command, format: string | undefined): boolean
   return !command.formats || command.formats.some(candidate => candidate === format);
 }
 
+/** What the split commands need to know: whether the window is split, has room for two panes, and how many documents are open as tabs. */
+export type SplitContext = { active: boolean; room: boolean; documents: number };
+
 /** Why a command cannot run right now, or undefined when it can. */
-export function unavailableReason(command: Command, context: { hasDocument: boolean; desktop: boolean; format?: string }): string | undefined {
+export function unavailableReason(command: Command, context: { hasDocument: boolean; desktop: boolean; format?: string; split?: SplitContext }): string | undefined {
   if (command.requiresDocument && !context.hasDocument) return 'Open a document first';
+  const split = context.split;
+  if (split && command.split === 'on' && !split.active) return 'Split the window first';
+  if (split && command.split === 'off') {
+    if (split.active) return 'Already split · Ctrl \\ moves to the other side';
+    if (!split.room) return 'The window is too narrow to split';
+    if (split.documents < 2) return 'Open a second document to split';
+  }
   if (command.requiresDesktop && !context.desktop) return 'Available in the desktop app';
   if (context.hasDocument && !appliesTo(command, context.format)) return `Available for ${command.formats!.map(format => format.toUpperCase()).join(' and ')} documents`;
   return undefined;
@@ -186,7 +202,8 @@ const MOVING_KEYS: readonly ShortcutRow[] = [
 const INTERFACE_KEYS: readonly ShortcutRow[] = [
   { label: 'Command palette', keys: ['Ctrl', 'K'] },
   { label: 'Go to tab 1–8 / last tab', keys: ['Alt', '1…9'], note: 'or ⌘ 1…9 on macOS' },
-  { label: 'Resize the library', keys: ['←', '→'], note: 'on its divider' },
+  { label: 'Resize the library or the split', keys: ['←', '→'], note: 'on its divider' },
+  { label: 'Other side of the split', keys: ['Ctrl', '\\'], note: 'or ⌘ \\ on macOS' },
   { label: 'Close a dialog or popover', keys: ['Esc'] },
 ];
 

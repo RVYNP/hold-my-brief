@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LIBRARY_PATH, MAX_LIVE_TABS, MAX_TABS, TabList, emptySession, readSession, slotAt } from '../src/tabs';
+import { LIBRARY_PATH, MAX_LIVE_TABS, MAX_TABS, TabList, emptySession, mergeLists, moveAcross, readSession, slotAt, splitOff } from '../src/tabs';
 
 type Tab = { path: string; name: string };
 const tab = (path: string): Tab => ({ path, name: path.toUpperCase() });
@@ -294,5 +294,84 @@ describe('replacing a tab\'s document', () => {
     expect(list.replace('a', tab('b'))).toBe(false);
     expect(list.replace('zzz', tab('x'))).toBe(false);
     expect(paths(list)).toEqual(['a', 'b']);
+  });
+});
+
+describe('splitting and merging tab lists', () => {
+  it('splits the shown tab off to the right and keeps every other tab on the left, in order', () => {
+    const left = listOf('a', 'b', 'c', 'd');
+    left.activate('c');
+    const right = splitOff(left, 'c')!;
+    expect(paths(left)).toEqual(['a', 'b', 'd']);
+    expect(paths(right)).toEqual(['c']);
+    expect(right.active?.path).toBe('c');
+  });
+
+  it('shows the most recently shown of the remaining tabs on the left, not the tab beside the one that left', () => {
+    const left = listOf('a', 'b', 'c', 'd');
+    left.activate('a'); left.activate('c');
+    splitOff(left, 'c');
+    expect(left.active?.path).toBe('a');
+  });
+
+  it('shows the closing neighbour when none of the rest was ever shown', () => {
+    const left = new TabList<Tab>();
+    for (const name of ['a', 'b', 'c']) left.add(tab(name));
+    left.activate('b');
+    splitOff(left, 'b');
+    expect(left.active?.path).toBe('c');
+  });
+
+  it('splits nothing off a path the list does not hold', () => {
+    const left = listOf('a', 'b');
+    expect(splitOff(left, 'z')).toBeUndefined();
+    expect(paths(left)).toEqual(['a', 'b']);
+  });
+
+  it('takes a live reader along when a tab moves, so it is not reopened', () => {
+    const left = listOf('a', 'b', 'c');
+    left.markLive('b');
+    const right = splitOff(left, 'b')!;
+    expect(right.isLive('b')).toBe(true);
+    expect(left.isLive('b')).toBe(false);
+    left.markLive('a');
+    expect(moveAcross(left, right, 'a')).toBe(true);
+    expect(right.isLive('a')).toBe(true);
+  });
+
+  it('moves a tab to the other side at the end, shows it there, and shows what closing it would show on the side it left', () => {
+    const left = listOf('a', 'b', 'c');
+    const right = splitOff(left, 'c')!;
+    left.activate('a');
+    expect(moveAcross(left, right, 'a')).toBe(true);
+    expect(paths(left)).toEqual(['b']);
+    expect(left.active?.path).toBe('b');
+    expect(paths(right)).toEqual(['c', 'a']);
+    expect(right.active?.path).toBe('a');
+  });
+
+  it('does not move a tab to a list that already holds it, or one the source does not hold', () => {
+    const left = listOf('a', 'b'), right = listOf('b');
+    expect(moveAcross(left, right, 'b')).toBe(false);
+    expect(moveAcross(left, right, 'z')).toBe(false);
+    expect(paths(left)).toEqual(['a', 'b']);
+  });
+
+  it('merges the right tabs after the left ones, in order, and shows the one asked for', () => {
+    const left = listOf('a', 'b', 'c');
+    const right = splitOff(left, 'c')!;
+    right.add(tab('d')); right.add(tab('e'));
+    mergeLists(left, right, 'd');
+    expect(paths(left)).toEqual(['a', 'b', 'c', 'd', 'e']);
+    expect(left.active?.path).toBe('d');
+    expect(right.size).toBe(0);
+  });
+
+  it('keeps live readers live through a merge', () => {
+    const left = listOf('w'), right = listOf('x', 'y');
+    right.markLive('y');
+    mergeLists(left, right, 'w');
+    expect(left.isLive('y')).toBe(true);
+    expect(left.isLive('x')).toBe(false);
   });
 });

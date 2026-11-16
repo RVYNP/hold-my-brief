@@ -13,7 +13,7 @@ import { middleTruncate } from './tab-titles';
 export type TabView = { path: string; title: string; hint: string; format: string; where: string; progress: string; active: boolean; problem: boolean; library: boolean; image: boolean };
 
 export type TabHandlers = {
-  /** A tab was chosen; `undefined` is Home. */
+  /** A tab was chosen; `undefined` is Home (only a strip with a Home button says so). */
   select: (path: string | undefined) => void;
   close: (path: string) => void;
   newTab: () => void;
@@ -78,15 +78,15 @@ export type TabStrip = {
 
 /**
  * `elements` are the static parts of the toolbar markup: the Home button, the scrolling list of tabs, the + button and the
- * overflow button. `newTabKeys` is how the New tab command's shortcut is written on this platform.
+ * overflow button. `newTabKeys` is how the New tab command's shortcut is written on this platform. A strip without a Home button is a
+ * pane's own row of tabs (a split view): its menu has no Home row, and only the toolbar's menu carries the `tab-menu` id.
  */
-export function createTabStrip(elements: { strip: HTMLElement; home: HTMLElement; list: HTMLElement; add: HTMLElement; overflow: HTMLElement }, handlers: TabHandlers, newTabKeys: string): TabStrip {
+export function createTabStrip(elements: { strip: HTMLElement; home?: HTMLElement; list: HTMLElement; add: HTMLElement; overflow: HTMLElement }, handlers: TabHandlers, newTabKeys: string): TabStrip {
   const { strip, home, list, add, overflow } = elements;
   const nodes = new Map<string, HTMLElement>();
   let views: readonly TabView[] = [], homeActive = true, dragging = false, repaint = false;
 
-  home.replaceChildren(icon(icons.home, 16));
-  home.onclick = () => handlers.select(undefined);
+  if (home) { home.replaceChildren(icon(icons.home, 16)); home.onclick = () => handlers.select(undefined); }
   add.replaceChildren(icon(icons.plus, 14, 2));
   add.onclick = () => handlers.newTab();
   overflow.replaceChildren(icon(icons.chevron, 14, 2));
@@ -143,7 +143,7 @@ export function createTabStrip(elements: { strip: HTMLElement; home: HTMLElement
   function paint(next: readonly TabView[], atHome: boolean) {
     views = next; homeActive = atHome;
     if (dragging) { repaint = true; return; }
-    home.classList.toggle('is-active', atHome); home.setAttribute('aria-selected', String(atHome));
+    if (home) { home.classList.toggle('is-active', atHome); home.setAttribute('aria-selected', String(atHome)); }
     const wanted = new Set(next.map(view => view.path));
     for (const [path, node] of nodes) if (!wanted.has(path)) { node.remove(); nodes.delete(path); }
     next.forEach((view, index) => {
@@ -220,7 +220,8 @@ export function createTabStrip(elements: { strip: HTMLElement; home: HTMLElement
 
   // The menu of open tabs: Home, every document, then New tab. The compact title opens it, and so does the strip's overflow button.
   const menu = document.createElement('div');
-  menu.id = 'tab-menu'; menu.className = 'tab-menu'; menu.hidden = true; menu.setAttribute('role', 'menu'); menu.setAttribute('aria-label', 'Open tabs');
+  if (home) menu.id = 'tab-menu';
+  menu.className = 'tab-menu'; menu.hidden = true; menu.setAttribute('role', 'menu'); menu.setAttribute('aria-label', 'Open tabs');
   document.body.append(menu);
   let anchor: HTMLElement | undefined;
   function row(label: string, meta: string | undefined, active: boolean, glyph: string, onChoose: () => void, onClose?: () => void, hint = '', tip = '') {
@@ -235,7 +236,7 @@ export function createTabStrip(elements: { strip: HTMLElement; home: HTMLElement
     return item;
   }
   function fillMenu() {
-    const rows: HTMLElement[] = [row('Home', undefined, homeActive, icons.home, () => handlers.select(undefined))];
+    const rows: HTMLElement[] = home ? [row('Home', undefined, homeActive, icons.home, () => handlers.select(undefined))] : [];
     for (const view of views) rows.push(row(view.title, view.library ? undefined : [view.format.toUpperCase(), view.progress].filter(Boolean).join(' · '), view.active, view.library ? icons.library : icons.document, () => handlers.select(view.path), () => handlers.close(view.path), view.hint, view.library ? view.title : `${view.title}\n${view.path}`));
     const separator = document.createElement('div'); separator.className = 'tab-menu-separator'; separator.setAttribute('role', 'separator');
     const fresh = row('New tab…', undefined, false, icons.plus, () => handlers.newTab());
