@@ -120,6 +120,8 @@ let cover: 'home' | 'library' | undefined;
 let libraryTab: Tab | undefined;
 /** The divider's position: the left pane's percent of the room the two panes share. Kept for as long as the split lasts. */
 let ratio = DEFAULT_PERCENT;
+/** The right side while no split is open: its row, layer and tab strip are made once and put back on the next split. */
+let spare: Side | undefined;
 /** The tab of a document (or the Library tab) wherever it is open. */
 const known = (path: string): Tab | undefined => { for (const side of sides) { const tab = side.tabs.find(path); if (tab) return tab; } return path === LIBRARY_PATH ? libraryTab : undefined; };
 /** The side whose tabs hold `path`. */
@@ -945,9 +947,11 @@ function splitRight() {
   syncBack(left); findBar.close(); zoomGesture.cancel();
   const entry = left.tabs.find(LIBRARY_PATH);
   if (entry) { left.tabs.detach(LIBRARY_PATH); libraryTab = entry; }
-  const moved = splitOff(left.tabs, tab.path)!, right = makeSide('b');
+  const moved = splitOff(left.tabs, tab.path)!, right = spare ?? makeSide('b');
+  if (spare) { workspace.append(right.view.row, right.view.body); right.pane = new Pane<Tab>({ persist, notify }); right.shown = undefined; right.scanNoticeShown = false; } else watchSide(right);
+  spare = undefined;
   right.tabs = moved; right.pane.pillPlacement = left.pane.pillPlacement;
-  sides.push(right); watchSide(right);
+  sides.push(right);
   tab.host?.setAttribute('data-pane', 'b');
   left.shown = undefined; ratio = DEFAULT_PERCENT; applyLayout();
   show(left.tabs.active, true);
@@ -989,8 +993,8 @@ function endSplit() {
   if (right.pane.cancelPending && !left.pane.cancelPending) $('loading').hidden = true;
   right.pane.cancelLoad(); void right.pane.flush(); right.strip.closeMenu();
   for (const tab of right.tabs.tabs) tab.host?.classList.add('tab-hidden');
-  left.view.ghost?.remove(); left.view.ghost = undefined;
-  right.view.row.remove(); right.view.body.remove();
+  for (const side of sides) { side.view.ghost?.remove(); side.view.ghost = undefined; }
+  right.view.row.remove(); right.view.body.remove(); right.view.state.hidden = true; spare = right;
   mergeLists(left.tabs, right.tabs, keep?.path);
   if (libraryTab) { left.tabs.add(libraryTab, 0); libraryTab = undefined; }
   for (const tab of left.tabs.tabs) tab.host?.setAttribute('data-pane', 'a');

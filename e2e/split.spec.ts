@@ -263,3 +263,62 @@ test('a window that shrinks while split shows the active pane only', async ({ pa
   await expect(page.locator('.reader-host[data-pane=a]:not(.tab-hidden)')).toBeVisible();
   await expect(page.locator('.reader-host[data-pane=b]:not(.tab-hidden)')).toBeHidden();
 });
+
+test('a library row dragged onto a pane\'s row or reading surface opens in that pane', async ({ page }) => {
+  await split(page);
+  await page.locator('#file-input').setInputFiles(extra);
+  await expect(row(page, 'b').locator('.tab-title')).toHaveCount(2);
+  const closeExtra = async () => { await row(page, 'b').last().hover(); await row(page, 'b').last().locator('.tab-close').click(); await expect(row(page, 'b').locator('.tab-title')).toHaveCount(1); };
+  await closeExtra();
+  const source = page.locator('#library-root .tree-row.is-document', { hasText: 'extra.txt' });
+  const drag = async (to: { x: number; y: number }) => {
+    const from = await box(source);
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2); await page.mouse.down();
+    await page.mouse.move(from.x + from.width / 2 + 40, from.y + from.height / 2, { steps: 4 });
+    await page.mouse.move(to.x, to.y, { steps: 10 });
+    await page.mouse.up();
+  };
+  // Onto the right pane's row, past its last tab: the document opens at the end of that row.
+  const rightRow = await box(page.locator('.pane-strip[data-pane=b]'));
+  await drag({ x: rightRow.x + rightRow.width - 20, y: rightRow.y + rightRow.height / 2 });
+  await expect(row(page, 'b').locator('.tab-title')).toHaveText([/./, 'extra.txt']);
+  await closeExtra();
+  // Onto the left pane's reading surface: it opens in the left pane, which becomes the active one.
+  const leftBody = await box(page.locator('.pane-body[data-pane=a]'));
+  await drag({ x: leftBody.x + leftBody.width / 2, y: leftBody.y + leftBody.height / 2 });
+  await expect(row(page, 'a').locator('.tab-title')).toHaveText(['half-tone.pdf', 'extra.txt', 'moby.md']); // After the tab being read, as a drop on a single reading area does.
+  await expect(page.locator('#workspace')).toHaveAttribute('data-active', 'a');
+  await expect(row(page, 'b').locator('.tab-title')).toHaveCount(1);
+});
+
+test('the Library tab stays in the top bar while split, covers the panes, and closing it brings the split back', async ({ page }) => {
+  await split(page);
+  const left = await box(page.locator('.pane-body[data-pane=a]'));
+  await page.locator('#library-root').getByRole('button', { name: 'Library', exact: true }).click();
+  await expect(page.locator('#library-page')).toBeVisible();
+  await expect(barTabs(page)).toHaveCount(1);
+  await expect(page.locator('#tab-list .tab[data-kind=library]')).toHaveClass(/is-active/);
+  await expect(page.locator('.reader-host[data-pane=b]:not(.tab-hidden)')).toBeHidden();
+  await expect(row(page, 'a')).toHaveCount(2);
+  await row(page, 'b').first().click();
+  await expect(page.locator('#library-page')).toBeHidden();
+  await expect(page.locator('#workspace')).toHaveAttribute('data-active', 'b');
+  expect(Math.abs((await box(page.locator('.pane-body[data-pane=a]'))).width - left.width)).toBeLessThanOrEqual(.5);
+  // With the split ended, the Library tab leads the strip again.
+  await run(page, 'Close the split');
+  await expect(barTabs(page).first()).toHaveAttribute('data-kind', 'library');
+  await expect(barTabs(page)).toHaveCount(4);
+});
+
+// A still, not a check: `HMB_SHOT=1 npx playwright test e2e/split.spec.ts -g "split view still"` writes docs/media/split-view.png (Brief, light, 1440 × 900; documents built by the fixtures).
+test('split view still', async ({ page }) => {
+  test.skip(!process.env.HMB_SHOT, 'writes docs/media/split-view.png only when HMB_SHOT is set');
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.addInitScript(() => localStorage.setItem('hold-my-brief:appearance', JSON.stringify({ mode: 'system', palette: 'brief', accent: null, page: 'theme' })));
+  await split(page);
+  await page.locator('.reader-host[data-pane=a]:not(.tab-hidden)').click({ position: { x: 40, y: 200 } });
+  await page.keyboard.press('PageDown');
+  await expect(page.locator('#position')).toContainText('Page 2 of 5');
+  await page.mouse.move(700, 880);
+  await page.screenshot({ path: 'docs/media/split-view.png' });
+});
