@@ -265,7 +265,7 @@
  *   page              --chrome, --stage              opaque; the native window colour (src/theme.ts)
  *   panel (alpha)     --glass-surface                #workspace: Home, the stage around PDF pages
  *   panel (opaque)    --surface, --paper             panel composited over page: dialogs, EPUB/text paper
- *   card (alpha)      --glass-raise                  library rail and drawer (over the window's own glow, never over the document)
+ *   card (alpha)      --glass-raise                  library rail's edge wash and the drawer (over the window's own glow; the document never runs under the rail: .reader-host is inset by --workspace-clear)
  *   card (opaque)     --card                         card composited over page: menus, sheets, popovers
  *   raise             --raise                        find bar, page strip, loading bar
  *   (page, no fill)   --glass-host, --glass-stage   the page-based reader host and the PDF stage (the workspace's panel shows); --glass-chrome (toolbar) too in the glow themes, while the seven families keep it opaque
@@ -293,9 +293,10 @@
   --glass-surface: var(--surface);
   --glass-host: var(--surface);
   --glass-stage: var(--stage);
-  /* The rail (and the library panel) float over the document, so they must not show it through: in a glow family their
-     glass is the window's own glow, fixed to the window, beneath a wash of --glass-raise (three image layers:
-     wash, glow, glow) on the page colour. Elsewhere it is the plain --raise and no image, so nothing changes. */
+  /* The library panel floats beside the document and must not show it through, and the rail's wash is drawn over the window, not over a page
+     (the reading surface is inset by the rail's room, see library.css): in a glow family their glass is the window's own glow, fixed to the
+     window, beneath a wash of --glass-raise (three image layers: wash, glow, glow) on the page colour. Elsewhere it is the plain --raise and no
+     image, so nothing changes. */
   --glass-raise-base: var(--raise);
   --glass-raise-paint: none;
   --glass-raise-attach: scroll;

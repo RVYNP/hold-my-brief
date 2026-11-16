@@ -347,8 +347,8 @@ test('a double-click on a folder shows it in the Library tab, and a right-click 
   await expect(page.locator('.library-scope-name')).toHaveText('refs › 03_vintage_magazine');
   await expect(page.locator('.library-result-count')).toHaveText('2 references');
   // The icon rail and the panel stay beside the page, and the page does not reach under them.
-  expect((await iconRail(page).boundingBox())!.width).toBe(48);
-  expect((await rootBox.boundingBox())!.x).toBeGreaterThanOrEqual(54);
+  expect((await iconRail(page).boundingBox())!.width).toBe(36);
+  expect((await rootBox.boundingBox())!.x).toBeGreaterThanOrEqual(46);
   const panel = (await rootBox.boundingBox())!, view = (await page.locator('#library-page').boundingBox())!;
   expect(view.x).toBeGreaterThanOrEqual(panel.x + panel.width);
   await expect(node(page, folder('refs', '03_vintage_magazine'))).toHaveClass(/is-scope/);
