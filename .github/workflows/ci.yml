@@ -197,7 +197,7 @@ jobs:
       # Windows: tauri.windows.conf.json narrows bundling to NSIS, the Windows deliverable.
       # macOS: only the .app bundle is built; CI never launches it.
       - name: Build the frontend, the release binary and the ${{ matrix.label }} bundle
-        run: npx tauri build --bundles ${{ matrix.bundles }}
+        run: npx tauri build --bundles ${{ matrix.bundles }} -- --locked
 
       # WebView2 honours a remote-debugging port, so on Windows the smoke scripts drive
       # the real release binary over CDP: embedded UI, CLI open, IPC, pin, lock, save,
