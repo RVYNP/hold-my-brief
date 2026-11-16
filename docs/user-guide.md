@@ -74,8 +74,8 @@ on **Home**:
 
 A faint **background** lies behind Home: a dithered picture of the theme's window glow that covers the whole window below the
 toolbar (the tab strip and the window buttons never show any of it), under the library rail and Home's content, at 6 %
-strength by default. The bar holds the title, **Open files**, **Browse library** and **Shuffle background**, a quiet button that
-draws another pattern at once. The pattern also changes once a day (by your local date) and the last one is remembered. It takes its colours
+strength by default. The bar holds the title, **Open files** and **Browse library**.
+The picture changes once a day (by your local date) and stays the same until the day ends. It takes its colours
 from the theme and follows theme changes, and it is drawn only while Home is showing, once and still: nothing on it moves
 on its own, and a change fades from one picture to the next over 0.6 s (not at all with reduced motion). Reading
 surfaces (PDF, EPUB, Markdown, text and image tabs) and the Library tab stay plain. Choose its pattern, turn it off, or set
@@ -146,7 +146,7 @@ tooltip and accessible name. One ring marks the kept choice in all three rows.
 - **Page:** Match theme, White, Sepia or Dim for text documents (Markdown, TXT and reflowable EPUB).
   PDF pages, fixed-layout EPUB pages and images always keep their original colors.
 - **Background:** the pattern of Home's background: Flow (default), Arcs, Stripes, Contours or Truchet, the same families as the
-  generated covers; **None** turns it off (and hides Shuffle background).
+  generated covers; **None** turns it off.
 - **Strength:** how strongly the background shows, from 2 % to 30 % (6 % by default); live, and greyed while Background is None.
   Up to 8 % Home's text keeps its usual colours: it is the most at which the muted text keeps 4.5:1 contrast on the strongest part of
   the picture in every theme. Above 8 % the muted text (**Open files**, **Browse library**, **Open in library**, the small lines under
