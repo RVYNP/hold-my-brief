@@ -123,11 +123,11 @@ test('the blend follows the scheme only: multiply in light schemes (Peach includ
 test('the ground paints over the workspace surface and under the content: at the maximum the window differs from the same one with BACKGROUND None', async ({ page }) => {
   await seedLibrary(page, documents, collections);
   for (const [name, record] of [themes[0], themes[1], themes[2]] as [string, object][]) {
-    await keepAppearance(page, { ...record, banner: 'flow', backgroundStrength: .12 });
+    await keepAppearance(page, { ...record, banner: 'flow', backgroundStrength: .1 });
     await pixels(page);
     const clip = { x: 0, y: 40, width: 1080, height: 720 };
     const withGround = await page.screenshot({ clip, animations: 'disabled' });
-    await keepAppearance(page, { ...record, banner: 'none', backgroundStrength: .12 });
+    await keepAppearance(page, { ...record, banner: 'none', backgroundStrength: .1 });
     await expect(canvases(page)).toHaveCount(0);
     const without = await page.screenshot({ clip, animations: 'disabled' });
     expect(withGround.equals(without), name).toBe(false);
@@ -177,19 +177,19 @@ test('the toolbar never shows any of it: a pixel sample across the toolbar match
   await seedLibrary(page, documents, collections);
   const toolbar = { x: 0, y: 0, width: 1080, height: 40 };
   for (const [name, record] of themes) {
-    await keepAppearance(page, { ...record, banner: 'flow', backgroundStrength: .12 });
+    await keepAppearance(page, { ...record, banner: 'flow', backgroundStrength: .1 });
     await pixels(page);
     const withGround = await page.screenshot({ clip: toolbar, animations: 'disabled' });
-    await keepAppearance(page, { ...record, banner: 'none', backgroundStrength: .12 });
+    await keepAppearance(page, { ...record, banner: 'none', backgroundStrength: .1 });
     await expect(canvases(page)).toHaveCount(0);
     const without = await page.screenshot({ clip: toolbar, animations: 'disabled' });
-    // The empty strip between the tabs and the buttons is identical to the bit. Across the whole bar an icon's anti-aliasing may move one level when a compositing layer is added or gone (the dither at 12 % would be 20 levels or more).
+    // The empty strip between the tabs and the buttons is identical to the bit. Across the whole bar an icon's anti-aliasing may move one level when a compositing layer is added or gone (the dither at 10 % would be 20 levels or more).
     expect(await channelDiff(page, withGround, without, 300, 900), name).toBe(0);
     expect(await channelDiff(page, withGround, without), name).toBeLessThanOrEqual(1);
   }
 });
 
-test('STRENGTH sets the opacity live, from 2 to 12 %, and is kept', async ({ page }) => {
+test('STRENGTH sets the opacity live, from 2 to 10 %, and is kept', async ({ page }) => {
   await seedLibrary(page, documents, collections);
   await pixels(page);
   expect(await opacityOf(shown(page))).toBe('0.06');
@@ -199,7 +199,7 @@ test('STRENGTH sets the opacity live, from 2 to 12 %, and is kept', async ({ pag
   await expect(sheet.locator('.sheet-label', { hasText: 'STRENGTH' })).toBeVisible();
   await expect(sheet.locator('.sheet-label', { hasText: 'BANNER' })).toHaveCount(0);
   await expect(slider).toHaveAttribute('min', '2');
-  await expect(slider).toHaveAttribute('max', '12');
+  await expect(slider).toHaveAttribute('max', '10');
   await expect(slider).toHaveAttribute('step', '1');
   await expect(slider).toHaveValue('6');
   await expect(sheet.locator('.strength-value')).toHaveText('6 %');
@@ -209,15 +209,15 @@ test('STRENGTH sets the opacity live, from 2 to 12 %, and is kept', async ({ pag
   await expect.poll(() => opacityOf(shown(page))).toBe('0.09');
   await slider.fill('2');
   await expect.poll(() => opacityOf(shown(page))).toBe('0.02');
-  await slider.fill('12');
-  await expect.poll(() => opacityOf(shown(page))).toBe('0.12');
-  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).backgroundStrength, appearanceKey)).toBe(.12);
+  await slider.fill('10');
+  await expect.poll(() => opacityOf(shown(page))).toBe('0.1');
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).backgroundStrength, appearanceKey)).toBe(.1);
   await page.reload();
   await pixels(page);
-  expect(await opacityOf(shown(page))).toBe('0.12');
+  expect(await opacityOf(shown(page))).toBe('0.1');
   const again = await openSheet(page);
-  await expect(again.locator('input[type=range]')).toHaveValue('12');
-  await expect(again.locator('.strength-value')).toHaveText('12 %');
+  await expect(again.locator('input[type=range]')).toHaveValue('10');
+  await expect(again.locator('.strength-value')).toHaveText('10 %');
 });
 
 test('BACKGROUND None removes the ground and the shuffle button, greys STRENGTH, and a pattern brings them back', async ({ page }) => {

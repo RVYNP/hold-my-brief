@@ -147,8 +147,8 @@ tooltip and accessible name. One ring marks the kept choice in all three rows.
   PDF pages, fixed-layout EPUB pages and images always keep their original colors.
 - **Background:** the pattern of Home's background: Flow (default), Arcs, Stripes, Contours or Truchet, the same families as the
   generated covers; **None** turns it off (and hides Shuffle background).
-- **Strength:** how strongly the background shows, from 2 % to 12 % (6 % by default); live, and greyed while Background is None.
-  12 % is the most at which Home's text keeps 4.5:1 contrast on the strongest part of the picture in every theme.
+- **Strength:** how strongly the background shows, from 2 % to 10 % (6 % by default); live, and greyed while Background is None.
+  10 % is the most at which Home's text keeps 4.5:1 contrast on the strongest part of the picture in every theme.
 
 Below a hairline, a **preview** of a page of text in the reading font shows the settings the open document uses, live,
 and under it are **Size**, **Spacing**, **Margins** and, for plain text, **Lines**. **Text size & spacing…** in the palette

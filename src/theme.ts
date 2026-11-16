@@ -24,7 +24,7 @@ export type PageTone = 'theme' | 'white' | 'sepia' | 'dim';
 export type Scheme = 'light' | 'dark';
 /** The pattern of Home's background (a cover family), or none for no background. */
 export type Banner = 'flow' | 'arcs' | 'stripes' | 'contours' | 'truchet' | 'none';
-/** `backgroundStrength` is the opacity of Home's background layer, 0.02 to 0.12. */
+/** `backgroundStrength` is the opacity of Home's background layer, 0.02 to 0.10. */
 export type Appearance = { mode: AppearanceMode; palette: Palette; accent: string | null; page: PageTone; banner: Banner; backgroundStrength: number };
 export type Rgb = [number, number, number];
 
@@ -40,8 +40,8 @@ export const pageTones: readonly PageTone[] = ['theme', 'white', 'sepia', 'dim']
 export const banners: readonly Banner[] = ['flow', 'arcs', 'stripes', 'contours', 'truchet', 'none'];
 /** What the Appearance sheet's STRENGTH slider offers (fractions; the slider shows whole percent) and where a missing or invalid value falls back. */
 export const backgroundStrengthMin = 0.02;
-/** 12 %: the most at which Home's text reads at 4.5:1 on the worst ground pixel in Brief light (13 % gives 4.51, 14 % fails), Brief dark, Aurora and Peach. e2e/home-banner.spec.ts holds it. */
-export const backgroundStrengthMax = 0.12;
+/** 10 %: the most at which Home's text reads at 4.5:1 on the worst ground pixel, tightest in Brief light. In WebKit (the macOS app) Brief light gives 4.47 at 12 % and 4.49 at 11 %; in Chromium 4.52 at 12 %. e2e/home-banner.spec.ts holds it. */
+export const backgroundStrengthMax = 0.10;
 export const defaultBackgroundStrength = 0.06;
 export const defaultAppearance: Appearance = { mode: 'system', palette: 'brief', accent: null, page: 'theme', banner: 'flow', backgroundStrength: defaultBackgroundStrength };
 const accentTokens = ['--accent', '--accent-ink', '--accent-fill', '--accent-fill-hover', '--accent-soft', '--accent-soft-hover', '--accent-border', '--sheen-a', '--sheen-b', '--sheen-mix-light', '--sheen-mix-dark'] as const;

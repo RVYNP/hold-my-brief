@@ -50,8 +50,8 @@ describe('glow themes', () => {
 
 describe('parse: Home background', () => {
   const strength = (record: object) => parse(JSON.stringify(record)).backgroundStrength;
-  it('reads a kept strength from 0.02 to 0.12 as it is', () => {
-    for (const value of [0.02, 0.06, 0.11, 0.12]) expect(strength({ backgroundStrength: value })).toBe(value);
+  it('reads a kept strength from 0.02 to 0.10 as it is', () => {
+    for (const value of [0.02, 0.06, 0.09, 0.1]) expect(strength({ backgroundStrength: value })).toBe(value);
   });
   it('loads a record without a strength as 0.06', () => {
     expect(defaultBackgroundStrength).toBe(0.06);
@@ -59,7 +59,7 @@ describe('parse: Home background', () => {
     expect(parse(null).backgroundStrength).toBe(0.06);
     expect(parse('not json').backgroundStrength).toBe(0.06);
   });
-  it.each([0.019, 0.121, 0.2, 0, -0.06, 1, 6, 1e9, null, '0.1', true, [0.1], {}])('loads the out-of-range or non-numeric strength %j as 0.06', value => {
+  it.each([0.019, 0.101, 0.11, 0.12, 0.2, 0, -0.06, 1, 6, 1e9, null, '0.1', true, [0.1], {}])('loads the out-of-range or non-numeric strength %j as 0.06', value => {
     expect(strength({ backgroundStrength: value })).toBe(0.06);
   });
   it('loads a non-finite strength (which JSON writes as null) as 0.06', () => {
