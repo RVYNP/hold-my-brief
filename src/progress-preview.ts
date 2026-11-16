@@ -35,10 +35,11 @@ export function createProgressPreview(scrubber: HTMLInputElement, container: HTM
     shown = ''; clearTimeout(dwell); request?.abort(); request = undefined;
     card.hidden = true; scrubber.title = tooltip;
   }
-  /** Centres the card over the pointer, kept inside the window. */
+  /** Centres the card over the pointer, kept inside the bar's extent: the reading area, never over the rail or the panel. */
   function follow(clientX: number) {
-    const bounds = container.getBoundingClientRect();
-    card.style.left = `${Math.max(MARGIN, Math.min(bounds.width - card.offsetWidth - MARGIN, clientX - bounds.left - card.offsetWidth / 2))}px`;
+    const bounds = container.getBoundingClientRect(), bar = scrubber.getBoundingClientRect();
+    const least = bar.left - bounds.left + MARGIN, most = bar.right - bounds.left - card.offsetWidth - MARGIN;
+    card.style.left = `${Math.max(least, Math.min(most, clientX - bounds.left - card.offsetWidth / 2))}px`;
   }
   function show(clientX: number) {
     const now = context();

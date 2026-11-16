@@ -101,10 +101,10 @@ for (const side of ['right', 'left'] as const) {
       await openFooter();
       const [railBox, stripBox, footerBox, pillBox] = [await boxOf(rail), await boxOf(strip), await boxOf(footer), await boxOf(pill)];
       for (const [name, a, b] of [['rail/strip', railBox, stripBox], ['rail/footer', railBox, footerBox], ['rail/pill', railBox, pillBox], ['strip/footer', stripBox, footerBox], ['strip/pill', stripBox, pillBox], ['footer/pill', footerBox, pillBox]] as const) expect(apart(a, b), name).toBe(true);
-      // The strip stops at the rail's inner edge, on whichever side that is, and the rail ends above the footer.
+      // The strip stops at the rail's inner edge, on whichever side that is, and the rail reaches 6 px from the window's bottom (the footer is beside it, not under it).
       if (side === 'right') expect(stripBox.x + stripBox.width).toBeLessThanOrEqual(railBox.x);
       else expect(stripBox.x).toBeGreaterThanOrEqual(railBox.x + railBox.width);
-      expect(railBox.y + railBox.height).toBeLessThanOrEqual(footerBox.y + .5);
+      expect(858 - (railBox.y + railBox.height)).toBeCloseTo(6, 0);
       // The footer is whole inside the window, and its two arrows are what is under the pointer at their centres.
       expect(footerBox.x).toBeGreaterThanOrEqual(0); expect(footerBox.x + footerBox.width).toBeLessThanOrEqual(973 + .5);
       for (const id of ['previous', 'next', 'position', 'progress']) {
@@ -133,7 +133,7 @@ for (const side of ['right', 'left'] as const) {
 }
 
 for (const side of ['left', 'right'] as const) {
-  test(`the open panel docked ${side}, beside the icon rail, with the page strip, ends above the footer and the strip and the pill start beside both`, async ({ page }) => {
+  test(`the open panel docked ${side}, beside the icon rail, with the page strip, reaches the bottom beside the footer and the strip and the pill start beside both`, async ({ page }) => {
     await openReading(page, side);
     await page.locator('#library-rail').getByRole('button', { name: 'Library', exact: true }).click();
     const drawer = page.locator('#library-root'), rail = page.locator('#library-rail'), strip = page.locator('#page-strip'), footer = page.locator('footer'), pill = page.locator('#view-controls');
@@ -142,7 +142,7 @@ for (const side of ['left', 'right'] as const) {
     await expect.poll(async () => { const box = await boxOf(footer); return Math.round(box.y + box.height); }).toBe(858);
     const [d, r, s, f, p] = [await boxOf(drawer), await boxOf(rail), await boxOf(strip), await boxOf(footer), await boxOf(pill)];
     expect(apart(d, s) && apart(d, f) && apart(s, f) && apart(r, d) && apart(r, s) && apart(r, f) && apart(d, p) && apart(r, p)).toBe(true);
-    expect(d.y + d.height).toBeLessThanOrEqual(f.y + .5);
+    expect(858 - (d.y + d.height)).toBeCloseTo(6, 0);
     if (side === 'left') expect(s.x).toBeGreaterThanOrEqual(d.x + d.width); else expect(s.x + s.width).toBeLessThanOrEqual(d.x);
   });
 }
