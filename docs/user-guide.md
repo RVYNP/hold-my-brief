@@ -72,7 +72,8 @@ on **Home**:
 - The chips under the title (**All**, **PDF**, **EPUB**, **Markdown**, **Text**, **Images**, only the types you have) filter every
   section; **All** restores the mixed view. They stay on one row that scrolls sideways when the window is narrow.
 
-A **banner** heads Home: a dithered picture of the theme's window glow, 140 px tall (64 px in a window under 720 px wide), with
+A **banner** heads Home: a dithered picture of the theme's window glow, 140 px tall (64 px in a window under 720 px wide, where a 14 px strip of the picture runs along the top
+and the plate sits under it), with
 a plate along its lower edge that holds the title, **Open files**, **Browse library** and **New banner pattern**, a shuffle
 button that draws another pattern at once. The pattern also changes once a day (by your local date) and the last one is
 remembered. It takes its colours from the theme and follows theme changes, and it is drawn only while Home is showing, once
@@ -223,6 +224,10 @@ first 10 spine items, or `<pre>` and `<table>` hold at least a fifth of their te
 Code blocks in a reflowable EPUB wrap instead of scrolling sideways, with wrapped lines indented under the line they continue, and are set
 at a tighter line height than the text. In Scroll a code block may run wider than the text column. A code background that is light on a
 dark page (or dark on a light one) takes a tint of the page, and its text is lifted to stay readable.
+Point at a code block, or Tab onto it, and two small buttons appear in its top-right corner: **Open code** shows the block in a sheet over
+the reading area, in the mono face at 0.9 of the text size and unwrapped, with line numbers, scrolling both ways and the language in the
+header when the book names one; **Copy code** copies the block's text exactly as the book has it (no line numbers) and says *Copied* for a
+moment. Escape, **Close** or a click outside the sheet closes it and puts focus back on the block's Open button.
 
 **What the percentage means.** Zoom is a true scale, the same as in a design tool: **100%** is actual size.
 For a PDF, a page at its physical size at screen resolution (1 point = 96/72 CSS pixels, so a Letter page is

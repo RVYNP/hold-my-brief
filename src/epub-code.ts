@@ -101,6 +101,8 @@ export function codeStyles(room?: number): string {
     `${WITHIN} :where(pre, code) { font-size: inherit !important; }`,
     // A listing that wraps a `pre` is only its frame: the `pre` takes the padding, so the two are one box.
     `${OUTER}:where(:has(pre)) { padding: 0 !important; }`,
+    // A block the keyboard has reached (the viewer makes each one a Tab stop) shows where it is.
+    `${OUTER}:focus-visible { outline: 2px solid var(--hmb-accent, Highlight) !important; outline-offset: 2px !important; }`,
     `${WITHIN} :where(pre) { box-sizing: border-box !important; margin: 0 !important; padding: 0.6em 0.9em !important; }`,
     // A wrapped line hangs 2ch in from where its own line begins (its indent, which `markLines` sets), so each line is a box of its own.
     `${WITHIN} [${LINE}] { display: inline-block !important; padding-left: calc(1ch * (var(--hmb-indent, 0) + 2)) !important; text-indent: calc(-1ch * (var(--hmb-indent, 0) + 2)) !important; }`,

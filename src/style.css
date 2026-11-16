@@ -1003,18 +1003,20 @@ h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 1px 0 
 #empty.is-home::before, #empty.is-home::after { display: none; }
 #empty.is-home h1 { font-size: 22px; margin: 0; }
 .home-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-/* The banner replaces the bar: a sheen base at 22 %, the dithered window glow over it (multiply in light, screen in dark), and a ground plate along the
-   lower edge with the title and the buttons. It is outside any backdrop-filter, and nothing in it animates on its own: a changed picture cross-fades by a transition. */
+/* The banner replaces the bar: a sheen base (12 % in light themes, 22 % in dark), the dithered window glow over it (multiply in light, screen in dark), and a ground plate along the
+   lower edge with the title and the buttons. Below 720 px the band is 64 px: a 14 px strip of art along the top, the 50 px plate under it. It is outside any backdrop-filter, and nothing in it animates on its own: a changed picture cross-fades by a transition. */
 .home-banner { --banner-alpha: .6; --banner-blend: multiply; position: relative; isolation: isolate; contain: paint; overflow: hidden; height: 64px; margin-bottom: 12px; border-radius: 9px; background: var(--home-card); }
 :root[data-theme='dark'] .home-banner { --banner-alpha: .85; --banner-blend: screen; }
 @media (min-width: 720px) { .home-banner { height: 140px; } }
-.home-banner-sheen { position: absolute; inset: 0; background: var(--sheen); opacity: .22; pointer-events: none; }
+.home-banner-sheen { position: absolute; inset: 0; background: var(--sheen); opacity: .12; pointer-events: none; }
+:root[data-theme='dark'] .home-banner-sheen { opacity: .22; }
 .home-banner-art { position: absolute; inset: 0; pointer-events: none; }
+@media (max-width: 719.98px) { .home-banner-art { bottom: auto; height: 14px; overflow: hidden; } }
 .home-banner-art canvas { position: absolute; top: 0; left: 0; image-rendering: pixelated; mix-blend-mode: var(--banner-blend); opacity: var(--banner-alpha); transition: opacity 600ms linear; }
 .home-banner-art canvas.is-entering, .home-banner-art canvas.is-leaving { opacity: 0; }
 @media (prefers-reduced-motion: reduce) { .home-banner-art canvas { transition: none; } }
 .home-banner-plate { position: absolute; inset: auto 0 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 48px; padding: 0 10px 0 16px; background: color-mix(in srgb, var(--home-card) 94%, transparent); }
-@media (max-width: 719.98px) { .home-banner-plate { height: 100%; } }
+@media (max-width: 719.98px) { .home-banner-plate { height: 50px; } #empty.is-home .home-banner-plate h1 { font-size: 20px; } }
 .home-reshuffle { display: grid; place-items: center; flex: none; width: 28px; height: 28px; padding: 0; border-radius: 6px; color: var(--muted); }
 .home-reshuffle:hover { color: var(--fg); background: var(--hover-subtle); }
 .home-file { padding: 6px 10px; border-radius: 6px; color: var(--muted); font-size: 12px; }
@@ -1467,7 +1469,7 @@ dd { margin: 0; color: var(--muted); }
 .link-button:hover { background: transparent; text-decoration: underline; }
 .danger-text { color: var(--error); }
 /* The sheen, placement 6: a 1 px hairline at 60 % inside the top edge of sheets, dialogs and popovers (the docked library panel and
-   the library's own menus are in library.css). The long ids are there for specificity: their rules set `background` as a shorthand. */
+   the library's own menus are in library.css, the EPUB code sheet's in code-viewer.css). The long ids are there for specificity: their rules set `background` as a shorthand. */
 dialog, dialog.drop, #menu, #appearance, .tab-menu, .zoom-menu { background-image: var(--sheen-edge); background-size: 100% 1px; background-position: top; background-repeat: no-repeat; }
 /* Under forced colours and more contrast every sheen placement is today's flat token: the bars keep --accent on --track and --hairline,
    the washes and the primary button their flat fill, the sheets their plain edge, and the tab no line. Keep this block last. */

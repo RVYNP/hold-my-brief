@@ -11,7 +11,7 @@ export const bannerBucket = 32;
 /** How much a texture pixel adds to the glow before the threshold. */
 const inkWeight = .12;
 /** Share of the accent (`strength`) the banner takes: light themes carry more than dark ones, which a glow already lights. */
-export const bannerStrength = { light: .55, dark: .4 } as const;
+export const bannerStrength = { light: .38, dark: .4 } as const;
 
 export interface BannerSpec {
   seed: number;
