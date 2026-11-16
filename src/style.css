@@ -265,7 +265,7 @@
  *   page              --chrome, --stage              opaque; the native window colour (src/theme.ts)
  *   panel (alpha)     --glass-surface                #workspace: Home, the stage around PDF pages
  *   panel (opaque)    --surface, --paper             panel composited over page: dialogs, EPUB/text paper
- *   card (alpha)      --glass-raise                  library rail's edge wash and the drawer (over the window's own glow; the document never runs under the rail: .reader-host is inset by --workspace-clear)
+ *   card (alpha)      --glass-raise                  the drawer, over the window's own glow; the rail's edge wash is --rail-wash: --glass-raise in the glow themes, --chrome in the families (the document never runs under the rail: .reader-host is inset by --workspace-clear)
  *   card (opaque)     --card                         card composited over page: menus, sheets, popovers
  *   raise             --raise                        find bar, page strip, loading bar
  *   (page, no fill)   --glass-host, --glass-stage   the page-based reader host and the PDF stage (the workspace's panel shows); --glass-chrome (toolbar) too in the glow themes, while the seven families keep it opaque
@@ -300,6 +300,8 @@
   --glass-raise-base: var(--raise);
   --glass-raise-paint: none;
   --glass-raise-attach: scroll;
+  /* The icon rail's edge wash (library.css). The glow themes keep --glass-raise; the seven families override it below with the toolbar's own colour. */
+  --rail-wash: var(--glass-raise);
   /* The sheen: each theme's two-stop accent gradient (--sheen-a to --sheen-b), drawn in six places and nowhere else (see the end of this
      file). --sheen-mix-light and --sheen-mix-dark are how much of --sheen-b the primary button's far end takes, the most that keeps
      --on-accent at 4.5:1 along the whole fill; tests/palette-contrast.test.ts holds them to it. Text, icons, borders and chips stay flat. */
@@ -332,6 +334,7 @@
   --glass-raise-base: var(--chrome);
   --glass-raise-paint: linear-gradient(var(--glass-raise), var(--glass-raise)), var(--glow-paint);
   --glass-raise-attach: scroll, fixed, fixed;
+  --rail-wash: var(--chrome);
 }
 [data-palette='aurora'] {
   color-scheme: dark;

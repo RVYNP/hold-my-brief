@@ -87,24 +87,73 @@ test('closed: the page strip, find bar, footer, view controls, image pager and H
   expect(await read()).toMatchObject({ library: '48px', workspace: '48px', home: '52px', footer: 48, loading: '48px' });
 });
 
-for (const side of ['left', 'right'] as const) test(`the wash fades out: the pixel at 2 px from the ${side} edge differs from the bare surface, the one at 43 px does not (Brief light, Brief dark, Aurora, Peach)`, async ({ page }) => {
-  const edge: Record<string, number> = {};
-  for (const [name, record] of themes) {
+const families = ['brief', 'lilac', 'birch', 'graphite', 'arctic', 'blossom', 'peony'];
+const familyThemes = families.flatMap(palette => (['light', 'dark'] as const).map((mode): [string, object] => [`${palette} ${mode}`, { mode, palette, accent: null, page: 'theme' }]));
+const difference = (a: number[], b: number[]) => Math.max(...a.map((value, index) => Math.abs(value - b[index]!)));
+
+/** The pixel at 2 px and at 43 px from the window edge, with the wash and without it (its ::before hidden), and with `rule` (the wash as it was on main) when given. */
+async function washAt(page: Page, side: 'left' | 'right', rule?: string) {
+  const at = (distance: number): [number, number] => [side === 'left' ? distance : 1080 - 1 - distance, 380];
+  const points: [number, number][] = [at(2), at(43)], shoot = async () => sample(page, await page.screenshot({ animations: 'disabled' }), points);
+  const withWash = await shoot();
+  const hide = async (content: string) => { const style = await page.addStyleTag({ content }); const taken = await shoot(); await style.evaluate(node => (node as Element).remove()); return taken; };
+  const bare = await hide('#library-rail::before { display: none !important; }');
+  const before = rule ? await hide(`#library-rail::before { background: ${rule} !important; }`) : null;
+  return { edge: difference(withWash[0]!, bare[0]!), inner: difference(withWash[1]!, bare[1]!), sinceMain: before ? difference(withWash[0]!, before[0]!) : null };
+}
+
+/** Home, or a PDF at fit width (the panel closed either way). */
+async function openSurface(page: Page, side: 'left' | 'right', record: object, surface: 'Home' | 'PDF') {
+  await openHome(page, side, record);
+  if (surface === 'Home') return;
+  await page.locator('#empty [data-home-path]').first().click();
+  await expect(page.locator('#position')).toContainText(/Page \d of 3/);
+  await expect(page.locator('#loading')).toBeHidden();
+  await expect(page.locator('.pdf-render-status')).toHaveCount(0);
+  await page.locator('.pdf-reader').focus(); await page.keyboard.press('Control+2');
+  await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', 'width');
+  await page.mouse.move(540, 400);
+  const sheet = () => page.locator('.pdf-page canvas').first().evaluate(canvas => { const box = canvas.getBoundingClientRect(); return [box.left, box.right].join(); });
+  await expect.poll(async () => { const before = await sheet(); await page.waitForTimeout(300); return before === await sheet(); }).toBe(true);
+}
+
+// In the seven families the wash is the toolbar's own colour (--rail-wash = --chrome): the rail reads as the toolbar folding down the window's edge. At 2 px from the edge
+// it differs from the bare surface by at least 6 levels on its strongest channel, at 43 px it is gone, on Home and over a PDF, library on either side, light and dark.
+const expectWash = (name: string, seen: Awaited<ReturnType<typeof washAt>>) => {
+  expect(seen.inner, `${name}: inner edge`).toBeLessThanOrEqual(2);
+  expect(seen.edge, `${name}: the window edge has the wash`).toBeGreaterThanOrEqual(6);
+};
+for (const side of ['left', 'right'] as const) {
+  test(`the family wash shows: 2 px from the ${side} edge is at least 6 levels off the bare surface, 43 px is not, on Home, every family in light and dark`, async ({ page }) => {
+    const edge: Record<string, number> = {};
+    for (const [name, record] of familyThemes) {
+      await openHome(page, side, record);
+      const seen = await washAt(page, side);
+      edge[name] = seen.edge;
+      expectWash(name, seen);
+    }
+    console.log(`family wash at 2 px, largest channel difference from the bare surface, Home, ${side}:`, JSON.stringify(edge));
+  });
+  // A document is open on the page afterwards, so each family gets its own page.
+  for (const [name, record] of familyThemes) test(`the family wash shows over a PDF: 2 px from the ${side} edge, ${name}`, async ({ page }) => {
+    await openSurface(page, side, record, 'PDF');
+    const seen = await washAt(page, side);
+    console.log(`family wash at 2 px, PDF, ${side}, ${name}: ${seen.edge}`);
+    expectWash(name, seen);
+  });
+}
+
+// The glow themes keep --glass-raise: the pixel at 2 px is what main drew (its rule, forced back on), to the level.
+for (const side of ['left', 'right'] as const) test(`the glow themes' wash is unchanged: Aurora and Peach at 2 px from the ${side} edge match --glass-raise to 1 level, 43 px is bare`, async ({ page }) => {
+  for (const [name, record] of themes.slice(2)) {
     await openHome(page, side, record);
-    const y = 380, at = (distance: number): [number, number] => [side === 'left' ? distance : 1080 - 1 - distance, y];
-    const points: [number, number][] = [at(2), at(43)];
-    const withWash = await sample(page, await page.screenshot({ animations: 'disabled' }), points);
-    const style = await page.addStyleTag({ content: '#library-rail::before { display: none !important; }' });
-    const bare = await sample(page, await page.screenshot({ animations: 'disabled' }), points);
-    await style.evaluate(node => (node as Element).remove());
-    const difference = (a: number[], b: number[]) => Math.max(...a.map((value, index) => Math.abs(value - b[index]!)));
-    expect(difference(withWash[1]!, bare[1]!), `${name}: inner edge`).toBeLessThanOrEqual(2);
-    edge[name] = difference(withWash[0]!, bare[0]!);
+    const seen = await washAt(page, side, `linear-gradient(to ${side === 'left' ? 'right' : 'left'}, var(--glass-raise), transparent)`);
+    expect(seen.sinceMain, `${name}: 2 px against main`).toBeLessThanOrEqual(1);
+    expect(seen.inner, `${name}: inner edge`).toBeLessThanOrEqual(2);
+    expect(seen.edge, `${name}: the window edge has the wash`).toBeGreaterThan(2);
   }
-  // In the seven families the glass is the surface's own tone (--raise): there the wash is a 1-3 level step by design. The glow themes' glass is a visible veil.
-  console.log(`wash at 2 px, largest channel difference from the bare surface, ${side}:`, JSON.stringify(edge));
-  for (const name of ['Aurora', 'Peach']) expect(edge[name], `${name}: the window edge has the wash`).toBeGreaterThan(2);
 });
+
 
 interface RailIcon { label: string; rect: number[]; colour: number[]; pressed: string | null }
 /** Each rail icon: its box, its resting colour (--muted) as rgba, and whether it is pressed. */
@@ -137,57 +186,51 @@ const contrastOf = (page: Page, png: Buffer | string, icons: RailIcon[]) => page
   });
 }, { png: typeof png === 'string' ? png : png.toString('base64'), icons });
 
+/** The lowest rail-icon contrast over Home's ground at each of its three tones, with the icons' own drawing hidden. */
+async function homeContrast(page: Page, name: string) {
+  const icons = await railIcons(page);
+  expect(icons.length).toBe(4);
+  for (const icon of icons) expect(icon.pressed, 'at rest: the panel is closed').not.toBe('true');
+  const tones = await page.evaluate(() => {
+    const canvas = document.querySelector<HTMLCanvasElement>('canvas.home-ground:not(.is-leaving)')!, data = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data, seen = new Set<string>();
+    for (let index = 0; index < data.length; index += 4) if (data[index + 3] === 255) seen.add(`rgb(${data[index]}, ${data[index + 1]}, ${data[index + 2]})`);
+    return [...seen];
+  });
+  expect(tones.length, name).toBe(3);
+  const hide = await page.addStyleTag({ content: '.icon-rail-button svg { visibility: hidden !important; } .home-ground { transition: none !important; }' });
+  let lowest = { ratio: Infinity, label: '', tone: '' };
+  for (const tone of tones) {
+    await page.evaluate(fill => { const canvas = document.querySelector<HTMLCanvasElement>('canvas.home-ground:not(.is-leaving)')!, context = canvas.getContext('2d')!; context.globalCompositeOperation = 'source-over'; context.fillStyle = fill; context.fillRect(0, 0, canvas.width, canvas.height); }, tone);
+    const png = (await page.screenshot({ animations: 'disabled' })).toString('base64');
+    for (const item of await contrastOf(page, png, icons)) if (item.ratio < lowest.ratio) lowest = { ...item, tone };
+  }
+  await hide.evaluate(node => (node as Element).remove());
+  return lowest;
+}
+
 // Non-text contrast (WCAG 1.4.11): each rail icon at rest (--muted) against the pixels around it: the wash over Home's ground at 6 %, each of its three tones.
-for (const side of ['left', 'right'] as const) test(`every rail icon reads at 3:1 over the wash and Home's ground at 6 %, library on the ${side}, in Brief light, Brief dark, Aurora and Peach`, async ({ page }) => {
+for (const side of ['left', 'right'] as const) test(`every rail icon reads at 3:1 over the wash and Home's ground at 6 %, library on the ${side}, in every family in light and dark, Aurora and Peach`, async ({ page }) => {
   const worst: Record<string, string> = {};
-  for (const [name, record] of themes) {
+  for (const [name, record] of [...familyThemes, ...themes.slice(2)]) {
     await openHome(page, side, record);
-    const icons = await railIcons(page);
-    expect(icons.length).toBe(4);
-    for (const icon of icons) expect(icon.pressed, 'at rest: the panel is closed').not.toBe('true');
-    const tones = await page.evaluate(() => {
-      const canvas = document.querySelector<HTMLCanvasElement>('canvas.home-ground:not(.is-leaving)')!, data = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data, seen = new Set<string>();
-      for (let index = 0; index < data.length; index += 4) if (data[index + 3] === 255) seen.add(`rgb(${data[index]}, ${data[index + 1]}, ${data[index + 2]})`);
-      return [...seen];
-    });
-    expect(tones.length, name).toBe(3);
-    const hide = await page.addStyleTag({ content: '.icon-rail-button svg { visibility: hidden !important; } .home-ground { transition: none !important; }' });
-    let lowest = { ratio: Infinity, label: '', tone: '' };
-    for (const tone of tones) {
-      await page.evaluate(fill => { const canvas = document.querySelector<HTMLCanvasElement>('canvas.home-ground:not(.is-leaving)')!, context = canvas.getContext('2d')!; context.globalCompositeOperation = 'source-over'; context.fillStyle = fill; context.fillRect(0, 0, canvas.width, canvas.height); }, tone);
-      const png = (await page.screenshot({ animations: 'disabled' })).toString('base64');
-      const ratios = await contrastOf(page, png, icons);
-      for (const item of ratios) if (item.ratio < lowest.ratio) lowest = { ...item, tone };
-    }
-    await hide.evaluate(node => (node as Element).remove());
+    const lowest = await homeContrast(page, name);
     worst[name] = `${lowest.ratio.toFixed(2)} (${lowest.label}, ground tone ${lowest.tone})`;
     expect(lowest.ratio, `${name}: ${worst[name]}`).toBeGreaterThanOrEqual(3);
   }
   console.log(`worst rail icon contrast, library on the ${side}:`, JSON.stringify(worst));
 });
 
-// The rail is drawn over a document too (the panel closed: the reading surface starts after it, it never runs under the icons). A PDF at fit width in Brief dark
-// is the worst case: white paper beside muted icons. Alpha.pdf is opened from Home, fitted to width, and every icon is held to 3:1 against the pixels under it.
-for (const side of ['left', 'right'] as const) test(`a PDF at fit width, the panel closed, library on the ${side}: the page stays out from under the rail and every rail icon reads at 3:1 in Brief dark`, async ({ page }) => {
-  await openHome(page, side, themes[1]![1]);
-  await page.locator('#empty [data-home-path]').first().click();
-  await expect(page.locator('#position')).toContainText(/Page \d of 3/);
-  await expect(page.locator('#loading')).toBeHidden();
-  await expect(page.locator('.pdf-render-status')).toHaveCount(0);
-  const host = page.locator('.pdf-reader');
-  await host.focus(); await page.keyboard.press('Control+2');
-  await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', 'width');
-  await page.mouse.move(540, 400);
-  // Settled: the fitted page does not move for 300 ms.
-  const sheet = () => page.locator('.pdf-page canvas').first().evaluate(canvas => { const box = canvas.getBoundingClientRect(); return [box.left, box.right].join(); });
-  await expect.poll(async () => { const before = await sheet(); await page.waitForTimeout(300); return before === await sheet(); }).toBe(true);
-  const [left, right] = (await sheet()).split(',').map(Number) as [number, number];
+// The rail is drawn over a document too (the panel closed: the reading surface starts after it, it never runs under the icons). A PDF at fit width is the worst case
+// in the dark: white paper beside muted icons. Alpha.pdf is opened from Home, fitted to width, and every icon is held to 3:1 against the pixels under it.
+for (const side of ['left', 'right'] as const) for (const [name, record] of familyThemes) test(`a PDF at fit width, the panel closed, library on the ${side}: the page stays out from under the rail and every rail icon reads at 3:1 in ${name}`, async ({ page }) => {
+  await openSurface(page, side, record, 'PDF');
+  const sheet = await page.locator('.pdf-page canvas').first().evaluate(canvas => { const box = canvas.getBoundingClientRect(); return [box.left, box.right]; });
   const icons = await railIcons(page);
   expect(icons.length).toBe(4);
   const hide = await page.addStyleTag({ content: '.icon-rail-button svg { visibility: hidden !important; }' });
   const ratios = await contrastOf(page, await page.screenshot({ animations: 'disabled' }), icons);
   await hide.evaluate(node => (node as Element).remove());
-  console.log(`rail icons over a PDF at fit width, Brief dark, library on the ${side}:`, JSON.stringify(ratios.map(item => `${item.label} ${item.ratio.toFixed(2)}`)));
+  console.log(`rail icons over a PDF at fit width, ${name}, library on the ${side}:`, JSON.stringify(ratios.map(item => `${item.label} ${item.ratio.toFixed(2)}`)));
   for (const item of ratios) expect(item.ratio, `${item.label}`).toBeGreaterThanOrEqual(3);
-  expect(side === 'left' ? left : 1080 - right, 'the page starts after the rail (48 px) and its 16 px margin').toBeGreaterThanOrEqual(48 + 16 - .5);
+  expect(side === 'left' ? sheet[0]! : 1080 - sheet[1]!, 'the page starts after the rail (48 px) and its 16 px margin').toBeGreaterThanOrEqual(48 + 16 - .5);
 });

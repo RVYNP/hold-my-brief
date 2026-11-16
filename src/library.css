@@ -405,9 +405,9 @@
   #reader-layout > .icon-rail { position: absolute; z-index: 21; top: 0; bottom: 6px; left: 2px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; box-sizing: border-box; width: 36px; padding: 8px 0; }
   /* The rail has no box: a wash from the window's edge implies it (D3). It runs from the toolbar's bottom edge to the window's bottom, 44 px from
      the edge, and fades to nothing at its inner edge; the buttons stand on it (the rail is a stacking context, the wash is its lowest layer). */
-  #reader-layout > .icon-rail::before { content: ''; position: absolute; z-index: -1; top: 0; bottom: -6px; left: -2px; width: 44px; background: linear-gradient(to right, var(--glass-raise), transparent); pointer-events: none; }
+  #reader-layout > .icon-rail::before { content: ''; position: absolute; z-index: -1; top: 0; bottom: -6px; left: -2px; width: 44px; background: linear-gradient(to right, var(--rail-wash), transparent); pointer-events: none; }
   #reader-layout.library-right > .icon-rail { left: auto; right: 2px; }
-  #reader-layout.library-right > .icon-rail::before { left: auto; right: -2px; background: linear-gradient(to left, var(--glass-raise), transparent); }
+  #reader-layout.library-right > .icon-rail::before { left: auto; right: -2px; background: linear-gradient(to left, var(--rail-wash), transparent); }
   #reader-layout:not(.library-right):not(.library-open) #empty.is-home { padding-left: 52px; }
   #reader-layout.library-right:not(.library-open) #empty.is-home { padding-right: 52px; }
   /* The toolbar's library button is the compact window's door; here the icon rail is. */
