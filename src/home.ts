@@ -9,7 +9,8 @@ import { markUnavailable, showPicture, tileMedia, type Appearance } from './card
 import { OPEN_DRAG_SLOP } from './open-drag';
 import type { Thumbnail } from './thumbnails';
 import { formatProgress, inProgress, type Progress } from './progress';
-import { bannerGrid, bannerPixel, bannerStrength, localDay, renderBanner, reshuffled, seedFor, type BannerSeed } from './home-banner';
+import { bannerGrid, bannerPixel, localDay, renderBanner, reshuffled, seedFor, type BannerSeed } from './home-banner';
+import type { Cover } from './procedural-cover';
 import { rememberRecent } from './covers';
 import type { Banner } from './theme';
 
@@ -187,7 +188,7 @@ export type HomeActions = {
   selectFormat: (value: string) => void;
   /** Whether a picture can be made for a format, and what is already known about it (proportions, a finished picture). */
   picture: { can: (format: string) => boolean; ratio: (path: string) => number | undefined; peek: (path: string) => Thumbnail | undefined };
-  /** The Appearance's BANNER choice: a cover family draws the dithered banner, `none` the plain bar. */
+  /** The Appearance's BACKGROUND choice: a cover family draws the dithered ground, `none` leaves Home without one. */
   banner: Banner;
   /** Present for "Recently opened", whose entries can leave the recent list without leaving the library. */
   remove?: (path: string, name: string) => void;
@@ -207,29 +208,31 @@ function control(className: string, label?: string, text?: string): HTMLButtonEl
 }
 
 type Shelf = { track: HTMLElement; previous: HTMLButtonElement; next: HTMLButtonElement };
-/** The banner on screen: its band, the canvas shown (and its key), the family drawn, the pending idle job. */
-type BannerView = { band: HTMLElement; art: HTMLElement; family: string; canvas?: HTMLCanvasElement; key: string; cancel?: () => void; resize: ResizeObserver };
-let current: { shelves: Shelf[]; chips?: HTMLElement; resize: ResizeObserver; lazy?: IntersectionObserver; frame: number; reduced: MediaQueryList; banner?: BannerView } | undefined;
+/** The ground on show: Home's root and the element it sits in, the family drawn, the canvas shown (and its key), the pending idle job. */
+type GroundView = { root: HTMLElement; host: HTMLElement; family: string; canvas?: HTMLCanvasElement; key: string; cancel?: () => void; resize: ResizeObserver };
+let current: { shelves: Shelf[]; chips?: HTMLElement; resize: ResizeObserver; lazy?: IntersectionObserver; frame: number; reduced: MediaQueryList; ground?: GroundView } | undefined;
 
 function disposeHome() {
   if (!current) return;
   current.resize.disconnect(); current.lazy?.disconnect(); cancelAnimationFrame(current.frame);
-  current.banner?.cancel?.(); current.banner?.resize.disconnect();
+  const { ground } = current;
+  if (ground) { ground.cancel?.(); ground.resize.disconnect(); for (const canvas of ground.host.querySelectorAll('.home-ground')) canvas.remove(); }
   current = undefined;
 }
 
-// ---- the banner ---------------------------------------------------------------------------------------------
+// ---- the ground ---------------------------------------------------------------------------------------------
+// The dithered window glow, one canvas behind Home's content and the whole window below the toolbar (style.css: `.home-ground`).
 // Painted in an idle callback while Home is the tab on show, once per (theme colours, family, seed, size bucket); a change
 // cross-fades two stacked canvases by a CSS transition. Nothing here runs a frame loop.
 
 const bannerSeedKey = 'hold-my-brief:home-banner';
-const bannerCacheSize = 8;
-const bannerFade = 650; // ms: the 600 ms transition and a margin
+const groundCacheSize = 8;
+const groundFade = 650; // ms: the 600 ms transition and a margin
 let bannerSeed: BannerSeed | undefined;
 /** Rendered pictures, newest last; the key holds everything the pixels depend on. */
-const bannerPictures = new Map<string, HTMLCanvasElement>();
-/** What the last banner showed, so a repainted Home starts from it rather than from an empty band. */
-let lastBanner: { key: string; picture: HTMLCanvasElement } | undefined;
+const groundPictures = new Map<string, HTMLCanvasElement>();
+/** What the last ground showed, so a repainted Home starts from it rather than from an empty window. */
+let lastGround: { key: string; picture: HTMLCanvasElement } | undefined;
 
 function saveBannerSeed(next: BannerSeed) {
   bannerSeed = next;
@@ -260,93 +263,103 @@ function opaque(value: string): { rgb: Channels; visible: boolean } | null {
   const alpha = match[4] === undefined ? 1 : Number(match[4]) / (match[5] ? 100 : 1);
   return { rgb: [Number(match[1]), Number(match[2]), Number(match[3])], visible: alpha > 0 };
 }
-/** The banner's three colours as the page shows them now: `--home-card`, and the glow's two hues (the sheen's where the glow is not drawn). */
-function bannerColours(band: HTMLElement): [Channels, Channels, Channels] {
+/** The ground's three colours as the page shows them now: `--surface`, and the glow's two hues at full strength (the sheen's where the glow is not drawn). */
+function groundColours(host: HTMLElement): [Channels, Channels, Channels] {
   const probe = element('span');
   probe.hidden = true;
-  band.append(probe);
+  host.append(probe);
   const read = (token: string) => { probe.style.color = ''; probe.style.color = `var(${token})`; return opaque(getComputedStyle(probe).color); };
-  const ground = read('--home-card')?.rgb ?? [128, 128, 128];
-  const hue = (glow: string, sheen: string) => { const grad = read(glow); return (grad?.visible ? grad : read(sheen))?.rgb ?? ground; };
-  const colours: [Channels, Channels, Channels] = [ground, hue('--grad-a', '--sheen-a'), hue('--grad-b', '--sheen-b')];
+  const surface = read('--surface')?.rgb ?? [128, 128, 128];
+  const hue = (glow: string, sheen: string) => { const grad = read(glow); return (grad?.visible ? grad : read(sheen))?.rgb ?? surface; };
+  const colours: [Channels, Channels, Channels] = [surface, hue('--grad-a', '--sheen-a'), hue('--grad-b', '--sheen-b')];
   probe.remove();
   return colours;
 }
+/** The window's top edge of the ground: the toolbar's bottom edge. The toolbar never shows any of it. */
+const toolbarBottom = (host: HTMLElement) => document.querySelector('.toolbar')?.getBoundingClientRect().bottom ?? host.getBoundingClientRect().top;
 
-function bannerPicture(key: string, make: () => HTMLCanvasElement): HTMLCanvasElement {
-  return rememberRecent(bannerPictures, key, bannerPictures.get(key) ?? make(), bannerCacheSize);
+function groundPicture(key: string, make: () => HTMLCanvasElement): HTMLCanvasElement {
+  return rememberRecent(groundPictures, key, groundPictures.get(key) ?? make(), groundCacheSize);
 }
-function paintBannerGrid(grid: ReturnType<typeof renderBanner>): HTMLCanvasElement {
-  const canvas = document.createElement('canvas');
-  canvas.width = grid.width; canvas.height = grid.height;
+/** The grid below its first `skip` rows (the toolbar's) as pixels: tone 0, the ground, stays transparent, the others are opaque hues; the layer's opacity and blend do the rest. */
+function paintGroundGrid(grid: Cover, skip: number): HTMLCanvasElement {
+  const canvas = document.createElement('canvas'), rows = Math.max(1, grid.height - skip);
+  canvas.width = grid.width; canvas.height = rows;
   const context = canvas.getContext('2d');
   if (!context) return canvas;
-  const image = context.createImageData(grid.width, grid.height);
-  grid.pixels.forEach((tone, index) => { const [r, g, b] = grid.palette[tone]; image.data.set([r, g, b, 255], index * 4); });
+  const image = context.createImageData(grid.width, rows);
+  for (let y = 0; y < rows; y++) for (let x = 0; x < grid.width; x++) {
+    const tone = grid.pixels[(y + skip) * grid.width + x];
+    if (!tone) continue;
+    const [r, g, b] = grid.palette[tone], at = (y * grid.width + x) * 4;
+    image.data[at] = r; image.data[at + 1] = g; image.data[at + 2] = b; image.data[at + 3] = 255;
+  }
   context.putImageData(image, 0, 0);
   return canvas;
 }
+/** Puts a canvas at the window's left edge and the toolbar's bottom edge, whatever the rail or the toolbar do to the element it sits in. */
+function placeGround(view: GroundView, canvas: HTMLCanvasElement) {
+  const box = view.host.getBoundingClientRect();
+  canvas.style.left = `${-(box.left + view.host.clientLeft)}px`;
+  canvas.style.top = `${toolbarBottom(view.host) - (box.top + view.host.clientTop)}px`;
+}
 /** A fresh on-screen canvas with the picture's pixels (a picture itself may be on screen only once). */
-function bannerCopy(picture: HTMLCanvasElement): HTMLCanvasElement {
+function groundCopy(view: GroundView, picture: HTMLCanvasElement): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
+  canvas.className = 'home-ground';
+  canvas.setAttribute('aria-hidden', 'true');
   canvas.width = picture.width; canvas.height = picture.height;
   canvas.style.width = `${picture.width * bannerPixel}px`; canvas.style.height = `${picture.height * bannerPixel}px`;
   canvas.getContext('2d')?.drawImage(picture, 0, 0);
+  placeGround(view, canvas);
   return canvas;
 }
 
-function showBanner(view: BannerView, key: string, picture: HTMLCanvasElement) {
-  const next = bannerCopy(picture), before = view.canvas;
-  for (const stale of Array.from(view.art.children)) if (stale !== before) stale.remove();
-  view.canvas = next; view.key = key; lastBanner = { key, picture };
-  if (!before || matchMedia('(prefers-reduced-motion: reduce)').matches) { before?.remove(); view.art.append(next); return; }
+function showGround(view: GroundView, key: string, picture: HTMLCanvasElement) {
+  const next = groundCopy(view, picture), before = view.canvas;
+  for (const stale of Array.from(view.host.querySelectorAll('.home-ground'))) if (stale !== before) stale.remove();
+  view.canvas = next; view.key = key; lastGround = { key, picture };
+  if (!before || matchMedia('(prefers-reduced-motion: reduce)').matches) { before?.remove(); view.host.append(next); return; }
   next.classList.add('is-entering');
-  view.art.append(next);
+  view.host.append(next);
   void next.offsetWidth; // the transition starts from the hidden state
   next.classList.remove('is-entering'); before.classList.add('is-leaving');
-  setTimeout(() => before.remove(), bannerFade);
+  setTimeout(() => before.remove(), groundFade);
 }
 
-/** Draws what the band should show now, unless it already shows it, is not laid out, or Home is not the tab on show. */
-function drawBanner(view: BannerView) {
-  const { band, art } = view;
-  if (!band.isConnected || band.closest('[hidden]')) return;
-  const width = art.clientWidth, height = art.clientHeight; // the art's box: the whole band, or its top strip below 720 px
+/** Draws what the window should show now, unless it already shows it, is not laid out, or Home is not the tab on show. */
+function drawGround(view: GroundView) {
+  const { root, host } = view;
+  if (!root.isConnected || root.hidden) return;
+  const width = innerWidth, height = innerHeight; // the picture belongs to the window: the rail, the drawer and the toolbar's height move nothing
   if (!width || !height) return;
-  const scheme = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light', grid = bannerGrid(width, height), colours = bannerColours(band), seed = bannerSeedNow().seed;
-  const key = [scheme, view.family, seed, grid.width, grid.height, ...colours.map(channels => channels.join(','))].join('|');
+  for (const canvas of host.querySelectorAll<HTMLCanvasElement>('.home-ground')) placeGround(view, canvas);
+  const skip = Math.round(toolbarBottom(host) / bannerPixel), grid = bannerGrid(width, height), colours = groundColours(host), seed = bannerSeedNow().seed;
+  const key = [view.family, seed, grid.width, grid.height, skip, ...colours.map(channels => channels.join(','))].join('|');
   if (key === view.key) return;
-  const [ground, a, b] = colours;
-  showBanner(view, key, bannerPicture(key, () => paintBannerGrid(renderBanner({ seed, family: view.family, ...grid, ground, a, b, strength: bannerStrength[scheme] }))));
+  const [surface, a, b] = colours;
+  showGround(view, key, groundPicture(key, () => paintGroundGrid(renderBanner({ seed, family: view.family, ...grid, ground: surface, a, b, strength: 1 }), skip)));
 }
-function scheduleBanner(view: BannerView) {
+function scheduleGround(view: GroundView) {
   view.cancel?.();
-  view.cancel = later(() => { view.cancel = undefined; drawBanner(view); });
+  view.cancel = later(() => { view.cancel = undefined; drawGround(view); });
 }
 
-/** The band: a sheen base, the art, and over them a ground plate that carries the title and the buttons (below it, a strip of art where the band is short). */
-function bannerBand(family: Banner, buttons: HTMLElement): BannerView {
-  const band = element('div', 'home-banner'), art = element('div', 'home-banner-art'), plate = element('div', 'home-banner-plate');
-  const view: BannerView = { band, art, family, key: '', resize: new ResizeObserver(() => scheduleBanner(view)) };
-  const reshuffle = control('home-reshuffle', 'New banner pattern');
-  reshuffle.title = 'New banner pattern';
-  reshuffle.innerHTML = reshuffleIcon;
-  reshuffle.onclick = () => { saveBannerSeed(reshuffled(bannerSeedNow(), localDay(new Date()), Math.random)); scheduleBanner(view); };
-  buttons.append(reshuffle);
-  plate.append(element('h1', '', 'Home'), buttons);
-  band.append(element('div', 'home-banner-sheen'), art, plate);
-  if (lastBanner) { view.canvas = bannerCopy(lastBanner.picture); view.key = lastBanner.key; art.append(view.canvas); }
+/** The ground behind `root`, in the element `root` sits in. It starts from the picture the last one showed. */
+function groundView(root: HTMLElement, family: Banner): GroundView {
+  const view: GroundView = { root, host: root.parentElement ?? root, family, key: '', resize: new ResizeObserver(() => scheduleGround(view)) };
+  if (lastGround) { view.canvas = groundCopy(view, lastGround.picture); view.key = lastGround.key; view.host.append(view.canvas); }
   return view;
 }
 
 /**
- * Called when the theme or the BANNER choice changed. Returns false when the page has to be painted again (the band is
- * there or gone); otherwise the band repaints itself in an idle moment.
+ * Called when the theme or the BACKGROUND choice changed. Returns false when the page has to be painted again (the ground
+ * and its shuffle button are there or gone); otherwise the ground repaints itself in an idle moment.
  */
-export function repaintBanner(banner: Banner): boolean {
-  const view = current?.banner;
+export function repaintGround(banner: Banner): boolean {
+  const view = current?.ground;
   if (!current || (banner === 'none') === Boolean(view)) return false;
-  if (view) { view.family = banner; scheduleBanner(view); }
+  if (view) { view.family = banner; scheduleGround(view); }
   return true;
 }
 
@@ -555,13 +568,17 @@ export function renderHome(root: HTMLElement, sections: HomeSections, actions: H
   browse.onclick = () => actions.viewAll('all');
   const buttons = element('div', 'home-actions');
   buttons.append(openFile, browse);
-  const bannerView = actions.banner === 'none' ? undefined : bannerBand(actions.banner, buttons);
-  if (bannerView) root.append(bannerView.band);
-  else {
-    const bar = element('div', 'home-bar');
-    bar.append(element('h1', '', 'Home'), buttons);
-    root.append(bar);
+  const ground = actions.banner === 'none' ? undefined : groundView(root, actions.banner);
+  if (ground) {
+    const shuffle = control('home-reshuffle', 'Shuffle background');
+    shuffle.title = 'Shuffle background';
+    shuffle.innerHTML = reshuffleIcon;
+    shuffle.onclick = () => { saveBannerSeed(reshuffled(bannerSeedNow(), localDay(new Date()), Math.random)); scheduleGround(ground); };
+    buttons.append(shuffle);
   }
+  const bar = element('div', 'home-bar');
+  bar.append(element('h1', '', 'Home'), buttons);
+  root.append(bar);
   let chipRow: HTMLElement | undefined;
   if (actions.types.length) {
     const chips = chipRow = element('div', 'home-chips');
@@ -583,7 +600,7 @@ export function renderHome(root: HTMLElement, sections: HomeSections, actions: H
     empty.setAttribute('role', 'status');
     root.append(empty);
   }
-  const view = { shelves: [] as Shelf[], frame: 0, reduced: matchMedia('(prefers-reduced-motion: reduce)'), resize: new ResizeObserver(() => scheduleSync(view)), banner: bannerView } as NonNullable<typeof current>;
+  const view = { shelves: [] as Shelf[], frame: 0, reduced: matchMedia('(prefers-reduced-motion: reduce)'), resize: new ResizeObserver(() => scheduleSync(view)), ground } as NonNullable<typeof current>;
   const painter: Painter = { actions, appearance, view };
   if (sections.recent.length) {
     const { region } = section('recent', 'Recently opened');
@@ -600,7 +617,7 @@ export function renderHome(root: HTMLElement, sections: HomeSections, actions: H
   if (sections.favorites.length) root.append(shelf('favorites', 'Favorites', sections.favorites.map(item => documentCard(item, painter, item.format.toUpperCase())), { label: 'Open in library: Favorites', run: () => actions.viewAll('favorites') }, painter));
   if (sections.collections.length) root.append(shelf('collections', 'Collections', sections.collections.map(card => collectionCard(card, painter)), { label: 'Open in library: Collections', run: () => actions.viewAll('all') }, painter));
   current = view;
-  bannerView?.resize.observe(bannerView.band);
+  if (ground) { ground.resize.observe(root); ground.resize.observe(document.body); }
   if (chipRow) { view.chips = chipRow; view.resize.observe(chipRow); chipRow.addEventListener('scroll', () => scheduleSync(view), { passive: true }); }
   for (const { track } of view.shelves) { view.resize.observe(track); track.addEventListener('scroll', () => scheduleSync(view), { passive: true }); }
   scheduleSync(view);

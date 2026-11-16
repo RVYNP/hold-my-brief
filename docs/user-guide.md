@@ -72,13 +72,14 @@ on **Home**:
 - The chips under the title (**All**, **PDF**, **EPUB**, **Markdown**, **Text**, **Images**, only the types you have) filter every
   section; **All** restores the mixed view. They stay on one row that scrolls sideways when the window is narrow.
 
-A **banner** heads Home: a dithered picture of the theme's window glow, 140 px tall (64 px in a window under 720 px wide, where a 14 px strip of the picture runs along the top
-and the plate sits under it), with
-a plate along its lower edge that holds the title, **Open files**, **Browse library** and **New banner pattern**, a shuffle
-button that draws another pattern at once. The pattern also changes once a day (by your local date) and the last one is
-remembered. It takes its colours from the theme and follows theme changes, and it is drawn only while Home is showing, once
-and still: nothing on it moves on its own, and a change fades from one picture to the next over 0.6 s (not at all with
-reduced motion). Choose its pattern, or turn it off for the plain title bar, with **Banner** in Appearance.
+A faint **background** lies behind Home: a dithered picture of the theme's window glow that covers the whole window below the
+toolbar (the tab strip and the window buttons never show any of it), under the library rail and Home's content, at 6 %
+strength by default. The bar holds the title, **Open files**, **Browse library** and **Shuffle background**, a quiet button that
+draws another pattern at once. The pattern also changes once a day (by your local date) and the last one is remembered. It takes its colours
+from the theme and follows theme changes, and it is drawn only while Home is showing, once and still: nothing on it moves
+on its own, and a change fades from one picture to the next over 0.6 s (not at all with reduced motion). Reading
+surfaces (PDF, EPUB, Markdown, text and image tabs) and the Library tab stay plain. Choose its pattern, turn it off, or set
+its strength with **Background** and **Strength** in Appearance.
 
 **Browse library** and **Open files** are in the header. Edits made in the library refresh Home. A picture fills in when its
 thumbnail is ready; a book without a picture keeps the generated cover it has on its shelf. An EPUB shows the title from its
@@ -144,8 +145,10 @@ tooltip and accessible name. One ring marks the kept choice in all three rows.
   automatically so text and controls stay readable.
 - **Page:** Match theme, White, Sepia or Dim for text documents (Markdown, TXT and reflowable EPUB).
   PDF pages, fixed-layout EPUB pages and images always keep their original colors.
-- **Banner:** the pattern of Home's banner: Flow (default), Arcs, Stripes, Contours or Truchet, the same families as the
-  generated covers; **None** brings back the plain bar with the title and the two buttons.
+- **Background:** the pattern of Home's background: Flow (default), Arcs, Stripes, Contours or Truchet, the same families as the
+  generated covers; **None** turns it off (and hides Shuffle background).
+- **Strength:** how strongly the background shows, from 2 % to 12 % (6 % by default); live, and greyed while Background is None.
+  12 % is the most at which Home's text keeps 4.5:1 contrast on the strongest part of the picture in every theme.
 
 Below a hairline, a **preview** of a page of text in the reading font shows the settings the open document uses, live,
 and under it are **Size**, **Spacing**, **Margins** and, for plain text, **Lines**. **Text size & spacing…** in the palette

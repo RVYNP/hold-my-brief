@@ -1003,20 +1003,17 @@ h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 1px 0 
 #empty.is-home::before, #empty.is-home::after { display: none; }
 #empty.is-home h1 { font-size: 22px; margin: 0; }
 .home-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-/* The banner replaces the bar: a sheen base (12 % in light themes, 22 % in dark), the dithered window glow over it (multiply in light, screen in dark), and a ground plate along the
-   lower edge with the title and the buttons. Below 720 px the band is 64 px: a 14 px strip of art along the top, the 50 px plate under it. It is outside any backdrop-filter, and nothing in it animates on its own: a changed picture cross-fades by a transition. */
-.home-banner { --banner-alpha: .6; --banner-blend: multiply; position: relative; isolation: isolate; contain: paint; overflow: hidden; height: 64px; margin-bottom: 12px; border-radius: 9px; background: var(--home-card); }
-:root[data-theme='dark'] .home-banner { --banner-alpha: .85; --banner-blend: screen; }
-@media (min-width: 720px) { .home-banner { height: 140px; } }
-.home-banner-sheen { position: absolute; inset: 0; background: var(--sheen); opacity: .12; pointer-events: none; }
-:root[data-theme='dark'] .home-banner-sheen { opacity: .22; }
-.home-banner-art { position: absolute; inset: 0; pointer-events: none; }
-@media (max-width: 719.98px) { .home-banner-art { bottom: auto; height: 14px; overflow: hidden; } }
-.home-banner-art canvas { position: absolute; top: 0; left: 0; image-rendering: pixelated; mix-blend-mode: var(--banner-blend); opacity: var(--banner-alpha); transition: opacity 600ms linear; }
-.home-banner-art canvas.is-entering, .home-banner-art canvas.is-leaving { opacity: 0; }
-@media (prefers-reduced-motion: reduce) { .home-banner-art canvas { transition: none; } }
-.home-banner-plate { position: absolute; inset: auto 0 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 48px; padding: 0 10px 0 16px; background: color-mix(in srgb, var(--home-card) 94%, transparent); }
-@media (max-width: 719.98px) { .home-banner-plate { height: 50px; } #empty.is-home .home-banner-plate h1 { font-size: 20px; } }
+/* The ground: while Home shows, one canvas behind its content over the whole window below the toolbar (home.ts sets its left and top so
+   it sits at the window's left edge and the toolbar's bottom edge, whatever the rail does; it lives in #workspace, whose overflow and
+   container keep it off the toolbar and put it over the workspace's own surface). Its ground tone is transparent, so it works over any surface;
+   the opacity is the Appearance's STRENGTH (--ground-strength, set by theme.ts), the blend lighten in the dark schemes and the glow themes and multiply in the light ones.
+   A changed picture cross-fades by a transition of --ground-fade; nothing in it animates on its own. */
+@property --ground-fade { syntax: '<number>'; inherits: false; initial-value: 1; }
+.home-ground { position: absolute; z-index: -1; pointer-events: none; image-rendering: pixelated; mix-blend-mode: multiply; opacity: calc(var(--ground-strength, .06) * var(--ground-fade)); transition: --ground-fade 600ms linear; }
+:root[data-theme='dark'] .home-ground, :is([data-palette='aurora'], [data-palette='dusk'], [data-palette='nebula'], [data-palette='solar'], [data-palette='ember'], [data-palette='orchid'], [data-palette='glacier'], [data-palette='peach'], [data-palette='lagoon'], [data-palette='moss']) .home-ground { mix-blend-mode: lighten; }
+.home-ground.is-entering, .home-ground.is-leaving { --ground-fade: 0; }
+#empty[hidden] ~ .home-ground { display: none; }
+@media (prefers-reduced-motion: reduce) { .home-ground { transition: none; } }
 .home-reshuffle { display: grid; place-items: center; flex: none; width: 28px; height: 28px; padding: 0; border-radius: 6px; color: var(--muted); }
 .home-reshuffle:hover { color: var(--fg); background: var(--hover-subtle); }
 .home-file { padding: 6px 10px; border-radius: 6px; color: var(--muted); font-size: 12px; }
@@ -1327,7 +1324,7 @@ dd { margin: 0; color: var(--muted); }
 /* A sheet opened with the mouse rings nothing; Tab brings focus rings back (as for the menu and page). */
 :root:not(.keyboard-focus) #appearance :focus-visible { outline: none; }
 /* The one status line: the kept theme, and how to preview or keep another. It lines up under the swatches. */
-#appearance .appearance-hint { min-height: 16px; margin: 0 0 0 72px; color: var(--muted); font-size: 11px; line-height: 1.45; white-space: nowrap; }
+#appearance .appearance-hint { min-height: 16px; margin: 0 0 0 80px; color: var(--muted); font-size: 11px; line-height: 1.45; white-space: nowrap; }
 #appearance .appearance-name { color: var(--fg); }
 #appearance .appearance-hint[data-previewing] { color: var(--accent-ink); }
 #appearance .appearance-hint[data-previewing] .appearance-name { color: inherit; }
@@ -1355,15 +1352,21 @@ dd { margin: 0; color: var(--muted); }
 /* While another theme is previewed, the kept one gives up its ring. */
 #appearance:has(.theme-card[data-previewing]) .theme-card[aria-checked=true]:not([data-previewing]) .theme-disc { box-shadow: var(--edge); }
 .appearance-row { display: flex; align-items: center; gap: 12px; min-height: 24px; }
-.appearance-row > .sheet-label { flex-shrink: 0; width: 60px; }
+.appearance-row > .sheet-label { flex-shrink: 0; width: 68px; }
 .appearance-rule { height: 1px; margin: 0; border: 0; background: var(--hairline); }
 .appearance-text { display: flex; flex-direction: column; gap: 14px; }
 /* The preview is the open document's page in miniature: the reading font, with the size, spacing and margins being edited, on the page tone. */
-.appearance-preview { width: 100%; height: 104px; padding-block: 12px; overflow: hidden; border-radius: 6px; background: var(--paper); color: var(--ink); box-shadow: inset 0 0 0 1px var(--hairline); font-family: var(--font-read); }
+.appearance-preview { width: 100%; height: 88px; padding-block: 12px; overflow: hidden; border-radius: 6px; background: var(--paper); color: var(--ink); box-shadow: inset 0 0 0 1px var(--hairline); font-family: var(--font-read); }
 .stepper { display: flex; align-items: center; gap: 2px; }
 .stepper button { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; color: var(--muted); font-size: 12px; font-weight: 500; }
 .stepper button:hover { color: var(--fg); }
 .stepper-value { min-width: 44px; text-align: center; color: var(--fg); font: 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+.appearance-strength { margin-top: -6px; } /* STRENGTH belongs to the BACKGROUND row above it; the tuck also keeps the sheet inside the compact window */
+.strength { display: flex; align-items: center; gap: 10px; }
+.strength input { width: 148px; margin: 0; accent-color: var(--accent); }
+.strength-value { min-width: 36px; color: var(--fg); font: 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+.strength:has(input[aria-disabled=true]) { opacity: .45; }
+.strength input[aria-disabled=true] { cursor: default; }
 .swatches { position: relative; flex: 1; flex-wrap: wrap; }
 .swatch-theme { --swatch: var(--accent); }
 .swatch-input { position: absolute; right: 0; bottom: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }
