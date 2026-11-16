@@ -124,17 +124,16 @@ test('the blend follows the scheme only: multiply in light schemes (Peach includ
 test('the ground paints over the workspace surface and under the content: at the maximum the window differs from the same one with BACKGROUND None', async ({ page }) => {
   await seedLibrary(page, documents, collections);
   for (const [name, record] of [themes[0], themes[1], themes[2]] as [string, object][]) {
-    await keepAppearance(page, { ...record, banner: 'flow', backgroundStrength: .1 });
-    await pixels(page);
-    // A repaint after the first draw (a theme colour that settled late) cross-fades two canvases; a screenshot inside the fade sees the new one at 0 % and the old one gone.
-    await expect(canvases(page)).toHaveCount(1);
-    await expect(shown(page)).toHaveCSS('opacity', '0.1');
     const clip = { x: 0, y: 40, width: 1080, height: 720 };
-    const withGround = await page.screenshot({ clip, animations: 'disabled' });
     await keepAppearance(page, { ...record, banner: 'none', backgroundStrength: .1 });
     await expect(canvases(page)).toHaveCount(0);
     const without = await page.screenshot({ clip, animations: 'disabled' });
-    expect(withGround.equals(without), name).toBe(false);
+    await keepAppearance(page, { ...record, banner: 'flow', backgroundStrength: .1 });
+    await pixels(page);
+    await expect(shown(page)).toHaveCSS('opacity', '0.1');
+    // A repaint after the first draw (a theme colour that settled late) cross-fades two canvases, and a screenshot inside that fade can see neither at any strength:
+    // the window differs from the one without a ground as soon as the picture is on screen, so the screenshot is retaken until it does.
+    await expect.poll(async () => (await page.screenshot({ clip, animations: 'disabled' })).equals(without), { message: name }).toBe(false);
   }
 });
 
