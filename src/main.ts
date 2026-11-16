@@ -1,6 +1,6 @@
 import './style.css';
 import { defaultOptions, type Position, type ReaderAdapter, type ReaderOptions } from './types';
-import { nudgeFor, parsePlacement, placementOf, resolvePlacement, serialisePlacement, type Placement, type Point } from './view-controls-position';
+import { nudgeFor, parsePlacement, placementOf, resolvePlacement, serialisePlacement, type Point } from './view-controls-position';
 import { desktop, native, state, browserFile, persist, openExternal, confirmDocument, touchDocument, openLibraryDocument, chooseDocument, getLibrary, imageFormats, locateLibraryDocument, saveTabs, type Opened, type Recent, type WindowState } from './bridge';
 import { emptyLibrary, type Library } from './catalog-types';
 import { createLibrary, type LibraryPlace } from './library';
@@ -13,7 +13,7 @@ import { COMMANDS, shortcutFor, shortcutReference, tabDigit, unavailableReason }
 import { appearance, initAppearance, onAppearanceChange, allPalettes, pageTones, saveAppearance, scheme, type AppearanceMode } from './theme';
 import { appearanceSummary, createAppearanceSheet, paletteIcon } from './appearance';
 import { createAssistantPanel } from './assistant-panel';
-import { DRAG_SLOP, Panner, type Offset } from './pan';
+import { DRAG_SLOP, Panner } from './pan';
 import { MIN_SPREAD_WIDTH, pagesLabel, spreadPages } from './spread';
 import { assignShelfSlots, closeHome, fillHomePictures, homeSections, homeTypes, openedOrder, renderHome, repaintGround } from './home';
 import { displayTitle } from './shelf';
@@ -22,7 +22,7 @@ import { canThumbnail, createThumbnailStore } from './thumbnails';
 import { createPageStrip, MIN_PANEL_HEIGHT } from './page-strip';
 import { DEFAULT_LIMITS, migrateLegacyZoom, stepZoom, wheelFactor, ZOOM_MODEL, zoomPercent, type Point as ZoomPoint } from './zoom';
 import { createZoomGesture } from './zoom-gesture';
-import { holdView, type Anchor, type Hold, type Spot } from './zoom-anchor';
+import type { Hold, Spot } from './zoom-anchor';
 import { createZoomMenu } from './zoom-menu';
 import { createProgressPreview } from './progress-preview';
 import { LIBRARY_PATH, TabList, type SavedTab } from './tabs';
@@ -34,6 +34,7 @@ import { createReadingControls } from './reading-controls';
 import { fillContents } from './contents';
 import { steppedFontSize } from './text-size';
 import { createWindowControls, wireWindowControls } from './window-controls';
+import { Pane } from './pane';
 initAppearance();
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
@@ -85,15 +86,11 @@ $('shortcut-list').replaceChildren(...shortcutReference({ desktop }).map(section
 }));
 // Text settings apply to reflowable documents only; PDF pages, fixed-layout books and images zoom instead.
 const appearanceSheet = createAppearanceSheet($<HTMLDialogElement>('appearance'), {
-  current: () => reader && active && reader.mode !== 'fixed' ? { fontSize: options.fontSize, lineHeight: options.lineHeight, margin: options.margin, wrap: options.wrap, wraps: active.format === 'txt' } : undefined,
+  current: () => { const { reader, active, options } = activePane(); return reader && active && reader.mode !== 'fixed' ? { fontSize: options.fontSize, lineHeight: options.lineHeight, margin: options.margin, wrap: options.wrap, wraps: active.format === 'txt' } : undefined; },
   change: next => changeOptions(next),
 });
 const scrubber = $<HTMLInputElement>('progress'), footer = scrubber.parentElement!; // The footer carries --scrub-fill: its line is drawn by the footer, not the slider's track.
 let scrubbing = false, scrubRequest = 0;
-let reader: ReaderAdapter | undefined;
-let active: Opened | undefined;
-let options: ReaderOptions = { ...defaultOptions };
-let position: Position | undefined;
 let windowState: WindowState = { width: 420, height: 620, pinned: false, locked: false };
 let homeRecents: Recent[] = [];
 let homeLibrary: Library = emptyLibrary();
@@ -102,15 +99,13 @@ let homeFormat = '';
 let splashHtml: string | undefined;
 let homePicture = 0;
 const homeThumbs = createThumbnailStore();
-let request = 0, dirty = false, saveTimer: ReturnType<typeof setTimeout> | undefined;
-let saveQueue = Promise.resolve();
-let activeHost: HTMLElement | undefined;
-let cancelPending: (() => void) | undefined;
 const pan = new Panner();
-let pannedScroller: HTMLElement | undefined;
+/** The panes: each holds one document's reading state. There is one for now; `activePane()` is the one commands, keys, the footer and the pill act on. */
+const panes = [new Pane<Tab>({ persist, notify })];
+const activePane = () => panes[0];
 /**
- * The documents open as tabs. `reader`, `active`, `options`, `position`, `activeHost`, `pannedScroller` and `scanNoticeShown` above
- * are the working copy of the tab that is showing (`shown`); `leave` takes them back into the tab, `enter` loads the next tab's into them.
+ * The documents open as tabs. The active pane's `reader`, `active`, `options`, `position`, `host` and `pannedScroller`, and `scanNoticeShown` below,
+ * are the working copy of the tab that is showing (`shown`); `leave` takes them back into the tab, `show` loads the next tab's into them.
  * Every other tab holds its own reader and host (live) or only its saved place (hibernated), see `hibernate`.
  */
 type Tab = {
@@ -125,8 +120,6 @@ type Tab = {
 };
 const tabs = new TabList<Tab>();
 let shown: Tab | undefined;
-/** The tab a pending open is filling, while the loading notice is up. */
-let loadingTarget: Tab | undefined;
 /** The scan notice is shown once per opened document; opening a document re-arms it. */
 let scanNoticeShown = false;
 
@@ -134,9 +127,9 @@ function notify(message: string, retry = false) { $('notice').hidden = false; $(
 // A select-drag on a page without text selects nothing. Say why, once, when the user shows that intent:
 // primary button, hand tool off, past the same slop a pan uses, on a page marked image-only.
 document.addEventListener('pointerdown', down => {
-  const target = down.target;
+  const target = down.target, pane = activePane();
   if (scanNoticeShown || down.button !== 0 || !down.isPrimary || down.pointerType === 'touch' || pan.hand || !(target instanceof Element)
-    || !activeHost?.contains(target) || !target.closest('[data-image-only]') || !reader?.getPosition().imageOnly) return;
+    || !pane.host?.contains(target) || !target.closest('[data-image-only]') || !pane.reader?.getPosition().imageOnly) return;
   const move = (e: PointerEvent) => {
     if (e.pointerId !== down.pointerId) return;
     if (!(e.buttons & 1)) return end();
@@ -149,9 +142,10 @@ document.addEventListener('pointerdown', down => {
 function fail(error: unknown) { notify(error instanceof Error ? error.message : String(error)); }
 function updateWindow(next: WindowState) { windowState = next; $('pin').setAttribute('aria-pressed', String(next.pinned)); $('pin').title = next.pinned ? 'Pinned on top (Ctrl+Shift+T)' : 'Always on top (Ctrl+Shift+T)'; $('lock').setAttribute('aria-pressed', String(next.locked)); $('lock').title = next.locked ? 'Size locked (Ctrl+Shift+L)' : 'Lock dimensions (Ctrl+Shift+L)'; $<HTMLButtonElement>('caption-maximize').disabled = next.locked; }
 function showPosition(p: Position, save = true) {
-  position = p;
+  const pane = activePane();
+  pane.position = p;
   const percent = Math.max(0, Math.min(100, p.fraction * 100));
-  const label = active?.format === 'epub' && reader?.mode === 'paginated' ? p.label : `${p.label} · ${reader?.mode === 'fixed' ? '' : '≈'}${Math.round(percent)}% position`;
+  const label = pane.active?.format === 'epub' && pane.reader?.mode === 'paginated' ? p.label : `${p.label} · ${pane.reader?.mode === 'fixed' ? '' : '≈'}${Math.round(percent)}% position`;
   if (!scrubbing) {
     $('position').textContent = label; $('position').title = `${label} · Go to location (Ctrl+G)`;
     scrubber.min = p.scrub.unit === 'percent' ? '0' : '1';
@@ -161,10 +155,11 @@ function showPosition(p: Position, save = true) {
     scrubber.disabled = Number(scrubber.max) <= Number(scrubber.min);
     updateScrubValue();
   }
-  if (save) { dirty = true; clearTimeout(saveTimer); saveTimer = setTimeout(() => void flush(), 650); }
+  if (save) pane.markDirty();
   updateViewControls();
 }
 function updateScrubValue(preview = false) {
+  const position = activePane().position;
   if (!position) return;
   const value = scrubber.valueAsNumber, min = Number(scrubber.min), max = Number(scrubber.max);
   const cover = position.scrub.cover;
@@ -177,15 +172,16 @@ function updateScrubValue(preview = false) {
   if (preview) $('position').textContent = `${label} · release to jump`;
 }
 /** The level the open document is drawn at; before it is drawn, 100 %. */
-const zoomLevel = () => reader?.zoomLevel?.() ?? (options.fitted ? 1 : options.zoom);
-const zoomLimits = () => reader?.zoomLimits?.() ?? DEFAULT_LIMITS;
+const zoomLevel = () => { const { reader, options } = activePane(); return reader?.zoomLevel?.() ?? (options.fitted ? 1 : options.zoom); };
+const zoomLimits = () => activePane().reader?.zoomLimits?.() ?? DEFAULT_LIMITS;
 /** Syncs the view-controls pill, page-layout toggles and the title subtitle with the current position, zoom, layout and hand-tool state. */
 function updateViewControls() {
+  const pane = activePane(), { reader, active, options, position } = pane;
   if (!reader || !active) return;
   syncPageStrip();
   // Fixed-layout EPUB rebuilds its renderer when the page layout changes; follow it.
   const scroller = reader.scroller?.();
-  if (scroller !== pannedScroller) { pannedScroller = scroller; pan.attach(scroller, activeHost); }
+  if (scroller !== pane.pannedScroller) { pane.pannedScroller = scroller; pan.attach(scroller, pane.host); }
   pan.refresh(position?.spread, options.fitted);
   // The level is always the real scale; a fit is a mode that follows the window, and the adapter says what scale it came to.
   const fitted = options.fitted, width = options.fit === 'width', current = zoomLevel();
@@ -266,8 +262,7 @@ $('page-strip-toggle').onclick = () => void command('page-strip').catch(fail);
 // placement stands untouched; with one, inline left/top (kept as centre fractions of the panel so a
 // resize keeps it proportional) win, clamped inside the panel and clear of an open library drawer.
 const pillKey = 'hold-my-brief:view-controls', pill = $('view-controls'), grip = $('view-grip'), workspace = $('workspace');
-let pillPlacement: Placement | null = null;
-try { pillPlacement = parsePlacement(localStorage.getItem(pillKey)); } catch { /* Optional preference. */ }
+try { activePane().pillPlacement = parsePlacement(localStorage.getItem(pillKey)); } catch { /* Optional preference. */ }
 const pillPanel = () => ({ width: workspace.clientWidth, height: workspace.clientHeight });
 const pillBox = () => ({ width: pill.offsetWidth, height: pill.offsetHeight });
 /**
@@ -290,17 +285,19 @@ function showPill(point: Point | null) {
   ['left', 'top', 'right', 'bottom', 'translate'].forEach((name, index) => pill.style.setProperty(name, values[index]));
 }
 function placePill() {
-  if (!pillPlacement) return showPill(null);
+  const placement = activePane().pillPlacement;
+  if (!placement) return showPill(null);
   const size = pillBox();
-  if (size.width) showPill(resolvePlacement(pillPlacement, pillPanel(), size, drawerBand(), pillStrip())); // A hidden pill has no size to place.
+  if (size.width) showPill(resolvePlacement(placement, pillPanel(), size, drawerBand(), pillStrip())); // A hidden pill has no size to place.
 }
 /** Moves the pill to the clamped, drawer-clear form of `point` and remembers what is actually on screen. */
 function movePill(point: Point, save: boolean) {
   const panel = pillPanel(), size = pillBox(), resolved = resolvePlacement(placementOf(point, panel, size), panel, size, drawerBand(), pillStrip());
-  pillPlacement = placementOf(resolved, panel, size); showPill(resolved);
-  if (save) try { localStorage.setItem(pillKey, serialisePlacement(pillPlacement)); } catch { /* Optional preference. */ }
+  const pane = activePane();
+  pane.pillPlacement = placementOf(resolved, panel, size); showPill(resolved);
+  if (save) try { localStorage.setItem(pillKey, serialisePlacement(pane.pillPlacement)); } catch { /* Optional preference. */ }
 }
-function resetPill() { pillPlacement = null; showPill(null); try { localStorage.removeItem(pillKey); } catch { /* Optional preference. */ } }
+function resetPill() { activePane().pillPlacement = null; showPill(null); try { localStorage.removeItem(pillKey); } catch { /* Optional preference. */ } }
 /** The pill's rendered top-left in panel pixels, wherever the CSS or a stored position put it. */
 function pillPoint(): Point {
   const box = pill.getBoundingClientRect(), panel = workspace.getBoundingClientRect();
@@ -338,7 +335,7 @@ new MutationObserver(viewChanged).observe(workspace, { attributes: true, attribu
 // it. It is room the reading surface leaves (CSS, `has-page-strip`), not a row in the page's flow, so turning
 // a page never resizes what the page was fitted to.
 const stripKey = 'hold-my-brief:page-strip', pageStrip = createPageStrip(fail);
-let stripWanted = false, stripReader: ReaderAdapter | undefined;
+let stripWanted = false;
 try { stripWanted = localStorage.getItem(stripKey) === 'on'; } catch { /* Optional preference. */ }
 workspace.append(pageStrip.element);
 /** Reserves or releases the strip's room for the document `adapter` shows; true when the strip is shown. */
@@ -353,38 +350,34 @@ function stripSpace(adapter: ReaderAdapter | undefined) {
 }
 /** Points the strip at the open document while it is shown, and away from it otherwise. */
 function syncPageStrip() {
-  const feeder = stripSpace(reader) ? reader : undefined;
-  if (feeder === stripReader) return;
-  stripReader?.setPreviews?.(undefined); pageStrip.clear();
-  stripReader = feeder; feeder?.setPreviews?.(pageStrip.sink);
+  const pane = activePane(), feeder = stripSpace(pane.reader) ? pane.reader : undefined;
+  if (feeder === pane.stripReader) return;
+  pane.stripReader?.setPreviews?.(undefined); pageStrip.clear();
+  pane.stripReader = feeder; feeder?.setPreviews?.(pageStrip.sink);
 }
 // Hovering or dragging the progress bar previews the page under the pointer (PDF only: the other formats have no pages to draw).
-createProgressPreview(scrubber, $('app'), () => reader?.thumbnails && position?.scrub.unit === 'page'
-  ? { source: reader.thumbnails, spread: position.spread === 'active', cover: position.scrub.cover !== false, total: position.scrub.total } : undefined);
+createProgressPreview(scrubber, $('app'), () => { const { reader, position } = activePane(); return reader?.thumbnails && position?.scrub.unit === 'page'
+  ? { source: reader.thumbnails, spread: position.spread === 'active', cover: position.scrub.cover !== false, total: position.scrub.total } : undefined; });
 scrubber.oninput = () => { scrubbing = true; ++scrubRequest; updateScrubValue(true); };
 scrubber.onchange = () => {
-  if (!reader || !position) return;
-  const current = reader, token = ++scrubRequest, value = scrubber.value;
+  const pane = activePane(), { position } = pane;
+  if (!pane.reader || !position) return;
+  const current = pane.reader, token = ++scrubRequest, value = scrubber.value;
   const unit = position.scrub.unit;
   scrubbing = true;
   const jump = unit !== 'page' && value === scrubber.max ? current.navigate('end')
     : current.goTo(unit === 'percent' ? `${value}%` : value);
-  void jump.catch(error => { if (reader === current) fail(error); }).finally(() => {
-    if (reader !== current || token !== scrubRequest) return;
+  void jump.catch(error => { if (pane.reader === current) fail(error); }).finally(() => {
+    if (pane.reader !== current || token !== scrubRequest) return;
     scrubbing = false; showPosition(current.getPosition());
   });
 };
 scrubber.onpointercancel = () => {
   ++scrubRequest; scrubbing = false;
+  const { reader } = activePane();
   if (reader) showPosition(reader.getPosition());
 };
-function flush(): Promise<void> {
-  if (!active || !position || !dirty) return saveQueue;
-  const doc = active, loc = structuredClone(position.locator), prefs = { ...options }, progress = progressOf(position); dirty = false;
-  saveQueue = saveQueue.then(() => persist(doc, loc, prefs, progress)).catch(() => { if (active?.id === doc.id) dirty = true; notify('Progress could not be saved. Reading is still available.', true); });
-  return saveQueue;
-}
-setInterval(() => { if (dirty) void flush(); }, 1500);
+setInterval(() => { for (const pane of panes) if (pane.dirty) void pane.flush(); }, 1500);
 // Go to and Contents drop from the toolbar under the title, like the palette, instead of centring on a
 // dimmed page; a click outside closes them.
 /** `anchor` stands a popover on that box, above it where there is room and below it where there is not; without one it drops from the toolbar. */
@@ -408,8 +401,8 @@ function showDialog(id: string, anchor?: DOMRect) {
   // ringing its close button; not every engine honours the attribute on <dialog>.
   if (dialog.hasAttribute('autofocus')) dialog.focus();
 }
-function closeDialog(dialog: HTMLDialogElement) { dialog.close(); activeHost?.focus(); $('menu-toggle').setAttribute('aria-expanded', 'false'); }
-document.querySelectorAll<HTMLDialogElement>('dialog').forEach(dialog => { dialog.addEventListener('close', () => { activeHost?.focus(); if (dialog.id === 'menu') $('menu-toggle').setAttribute('aria-expanded', 'false'); }); });
+function closeDialog(dialog: HTMLDialogElement) { dialog.close(); activePane().host?.focus(); $('menu-toggle').setAttribute('aria-expanded', 'false'); }
+document.querySelectorAll<HTMLDialogElement>('dialog').forEach(dialog => { dialog.addEventListener('close', () => { activePane().host?.focus(); if (dialog.id === 'menu') $('menu-toggle').setAttribute('aria-expanded', 'false'); }); });
 document.querySelectorAll<HTMLElement>('[data-close]').forEach(button => button.onclick = () => closeDialog(button.closest('dialog')!));
 document.querySelectorAll<HTMLDialogElement>('dialog.drop').forEach(dialog => dialog.addEventListener('click', event => {
   const box = dialog.getBoundingClientRect();
@@ -429,7 +422,7 @@ const library = createLibrary($('library-root'), {
   openBackground: doc => openInBackground(doc),
   changed: (next, progress) => { homeLibrary = next; homeProgress = { ...progress }; if ($('empty').classList.contains('is-home')) paintHome(); },
   progressChanged: progress => { homeProgress = { ...progress }; if ($('empty').classList.contains('is-home')) paintHome(); },
-  settle: () => flush(),
+  settle: () => activePane().flush(),
   sideChanged: showSide,
   openChanged: open => rail.setOpen(open),
   door: () => rail.button('library'),
@@ -452,8 +445,8 @@ function openPalette() {
     // Created on first use, and appended after the static dialogs, so the shared close handler
     // above (which focuses the reading surface) never attaches to it; the palette owns its focus.
     palette = createPalette({
-      hasDocument: () => Boolean(reader), format: () => active?.format, desktop, run: id => command(id),
-      goTo: target => { const current = reader; return current?.goTo(target).then(() => activeHost?.focus(), error => { if (reader === current) fail(error); }); },
+      hasDocument: () => Boolean(activePane().reader), format: () => activePane().active?.format, desktop, run: id => command(id),
+      goTo: target => { const current = activePane().reader; return current?.goTo(target).then(() => activePane().host?.focus(), error => { if (activePane().reader === current) fail(error); }); },
       find: text => findBar.open(text),
       assistant,
     });
@@ -467,8 +460,8 @@ function openPalette() {
  * reveal; adapters without a text layer (images) report that instead of searching.
  */
 const findBar = createFindBar({
-  target: () => reader,
-  formatIsImage: () => Boolean(active && Object.hasOwn(imageFormats, active.format)),
+  target: () => activePane().reader,
+  formatIsImage: () => { const { active } = activePane(); return Boolean(active && Object.hasOwn(imageFormats, active.format)); },
   onError: fail,
 });
 // Inside the reading panel, so it pushes the document down rather than covering it.
@@ -480,20 +473,20 @@ $('workspace').prepend(findBar.element);
  */
 const assistant = createAssistantPanel($('reader-layout'), {
   desktop, openExternal,
-  returnFocus: () => activeHost?.focus(),
+  returnFocus: () => activePane().host?.focus(),
   env: {
-    hasDocument: () => Boolean(reader),
-    snapshot: () => ({
+    hasDocument: () => Boolean(activePane().reader),
+    snapshot: () => { const { active, reader } = activePane(); return {
       document: active && reader ? { name: active.name, format: active.format, position: reader.getPosition().label, view: $('filekind').title } : null,
       window: desktop ? { pinned: windowState.pinned, sizeLocked: windowState.locked } : 'browser preview',
       appearance: appearanceSummary(),
       libraryOpen: $('library-toggle').getAttribute('aria-expanded') === 'true',
-    }),
-    goTo: async target => { const current = reader!; await current.goTo(target); return current.getPosition().label; },
-    readText: async limit => reader?.readText?.(limit),
-    search: async (query, options) => reader?.search?.(query, options),
-    showMatch: async hit => { const current = reader!; await current.revealSearchMatch?.(hit); return current.getPosition().label; },
-    outline: () => reader?.outline() ?? [],
+    }; },
+    goTo: async target => { const current = activePane().reader!; await current.goTo(target); return current.getPosition().label; },
+    readText: async limit => activePane().reader?.readText?.(limit),
+    search: async (query, options) => activePane().reader?.search?.(query, options),
+    showMatch: async hit => { const current = activePane().reader!; await current.revealSearchMatch?.(hit); return current.getPosition().label; },
+    outline: () => activePane().reader?.outline() ?? [],
     library: async () => (await getLibrary()).documents,
     filterLibrary: change => library.filter(change),
     colourNames: library.colourNames,
@@ -510,7 +503,7 @@ const assistant = createAssistantPanel($('reader-layout'), {
     },
     runCommand: async id => {
       const entry = COMMANDS.find(candidate => candidate.id === id)!;
-      const reason = unavailableReason(entry, { hasDocument: Boolean(reader), desktop, format: active?.format });
+      const reason = unavailableReason(entry, { hasDocument: Boolean(activePane().reader), desktop, format: activePane().active?.format });
       if (reason) throw new Error(reason);
       const before = { pinned: windowState.pinned, locked: windowState.locked };
       await command(id);
@@ -526,7 +519,7 @@ async function command(id: string) {
   // The catalog's declared requirements are enforced here rather than by each caller, so the
   // keyboard, the menu and the palette cannot drift into different behaviour.
   const entry = COMMANDS.find(candidate => candidate.id === id);
-  const reason = entry && unavailableReason(entry, { hasDocument: Boolean(reader), desktop, format: active?.format });
+  const reason = entry && unavailableReason(entry, { hasDocument: Boolean(activePane().reader), desktop, format: activePane().active?.format });
   if (reason) { notify(reason); return; }
   if (id === 'open' || id === 'new-tab') openFile();
   else if (id === 'close-tab') { if (shown) closeTab(shown.path); }
@@ -563,21 +556,21 @@ async function adapter(format: string): Promise<ReaderAdapter> {
  * (its place and view are saved first); when that tab is no longer showing by then, the document opens as a new tab at `at`.
  */
 async function load(open: () => Promise<Opened | null>, label = 'document', { target, at, replace }: { target?: Tab; at?: number; replace?: Tab } = {}): Promise<boolean> {
-  const token = ++request; cancelPending?.();
-  loadingTarget = target; paintTabState();
+  const pane = activePane(), token = pane.beginLoad(target);
+  paintTabState();
   $('loading').hidden = false; $('loading').querySelector('span')!.textContent = `Opening ${label}…`;
   let candidate: ReaderAdapter | undefined, staging: HTMLElement | undefined, opening = true;
   const urls: string[] = [];
-  cancelPending = () => { candidate?.destroy(); staging?.remove(); for (const url of urls) URL.revokeObjectURL(url); };
+  pane.cancelPending = () => { candidate?.destroy(); staging?.remove(); for (const url of urls) URL.revokeObjectURL(url); };
   try {
-    await flush(); const doc = await open(); if (!doc || token !== request) return false;
+    await pane.flush(); const doc = await open(); if (!doc || !pane.isCurrent(token)) return false;
     opening = false;
     // A dialog or a CLI request only now says which document it is: if it is already open, that tab is the one to fill or show.
     const tab = target ?? tabs.find(doc.path) ?? { path: doc.path, name: doc.name, format: doc.format, options: { ...defaultOptions }, hand: false, scanNoticeShown: false };
     if (tab.reader) { doc.bytes = new Uint8Array(); selectTab(tab.path); void touch(tab); return true; }
     if (tab.resume) doc.previousState = { locator: tab.resume.locator, options: tab.resume.options };
     $('loading').querySelector('span')!.textContent = `Opening ${doc.name}…`;
-    candidate = await adapter(doc.format); if (token !== request) return false;
+    candidate = await adapter(doc.format); if (!pane.isCurrent(token)) return false;
     stripSpace(candidate); // A page-preview strip's room is there before the document is fitted, so opening never refits it.
     staging = document.createElement('section'); staging.className = 'reader-host staging'; staging.tabIndex = 0; staging.setAttribute('aria-label', 'Reading surface'); $('view-controls').before(staging);
     // Options saved before zoom was a true scale hold a multiplier of the fit. They open fitted and are converted below, once the document is drawn, so the page keeps its size; saving then writes the new form.
@@ -586,7 +579,7 @@ async function load(open: () => Promise<Opened | null>, label = 'document', { ta
     const current = candidate;
     await candidate.open({ ...doc, bytes: doc.bytes }, staging, {
       // The tab showing hears its reader fully; a live tab out of sight only keeps the place.
-      onPosition: p => { if (reader === current) showPosition(p); else if (tab.reader === current) tab.position = p; }, onError: fail, openExternal, requestPassword: password, onFrame: doc => { pan.watchFrame(doc); watchFrameZoom(doc); },
+      onPosition: p => { if (pane.reader === current) showPosition(p); else if (tab.reader === current) tab.position = p; }, onError: fail, openExternal, requestPassword: password, onFrame: doc => { pan.watchFrame(doc); watchFrameZoom(doc); },
       resolveImage: desktop ? async relative => { const result = await native<{bytes: number[]; mime: string}>('read_relative_image', { path: doc.path, relative }); const url = URL.createObjectURL(new Blob([new Uint8Array(result.bytes)], { type: result.mime })); urls.push(url); return url; } : undefined,
     }, prefs);
     // A reflowable book opens in the flow the reader last chose; with none saved the adapter picked one from the book, and it is kept from here on.
@@ -597,44 +590,45 @@ async function load(open: () => Promise<Opened | null>, label = 'document', { ta
       const converted = migrateLegacyZoom({ fit: prefs.fit, zoom: legacyZoom }, candidate.legacyZoomBase?.(prefs.fit), candidate.zoomLimits?.());
       if (!converted.fitted) { Object.assign(prefs, converted); await candidate.setOptions(prefs); }
     }
-    if (token !== request) return false;
+    if (!pane.isCurrent(token)) return false;
     await confirmDocument(doc).catch(error => notify(`Your library could not be saved. Reading is still available. ${error instanceof Error ? error.message : String(error)}`));
-    await flush();
-    if (token !== request) return false;
+    await pane.flush();
+    if (!pane.isCurrent(token)) return false;
     doc.bytes = new Uint8Array();
     const swapping = replace && !tabs.find(tab.path) && shown === replace && tabs.find(replace.path) === replace ? replace : undefined;
     Object.assign(tab, { name: doc.name, format: doc.format, doc, reader: candidate, host: staging, options: prefs, position: candidate.getPosition(), hand: false, stripScroll: undefined, find: undefined, scanNoticeShown: false, resume: undefined, problem: undefined });
     staging.classList.remove('staging'); staging.classList.add('tab-hidden'); // `enter` shows it
     if (swapping) {
       // The tab being replaced goes the way a closed one does: its place and view are saved, its reader lets go, and it is gone from the strip.
-      void flush(); swapping.find = undefined; findBar.close(); zoomGesture.cancel();
-      reader = undefined; syncPageStrip();
+      void pane.flush(); swapping.find = undefined; findBar.close(); zoomGesture.cancel();
+      pane.reader = undefined; syncPageStrip();
       swapping.reader?.destroy(); swapping.host?.remove(); swapping.reader = swapping.host = undefined;
       tabs.replace(swapping.path, tab); shown = undefined;
     } else if (!tabs.find(tab.path)) tabs.open(tab, at);
     tabs.markLive(tab.path);
     show(tab, true);
     showPosition(candidate.getPosition()); // A reopened or converted document saves its place and options again.
-    staging.focus(); candidate = undefined; staging = undefined; cancelPending = undefined;
+    staging.focus(); candidate = undefined; staging = undefined; pane.cancelPending = undefined;
     if (doc.warning) notify(doc.warning);
     if (tab.format === 'epub') void homeThumbs.loadEpub(tab.path, () => Boolean(tabs.find(tab.path))).then(() => paintTabs());
     if (desktop) homeRecents = (await state()).recents; // The store moves the opened document to the front.
     await library.refresh(doc.path).catch(fail);
     return true;
   } catch (error) {
-    if (token === request) {
+    if (pane.isCurrent(token)) {
       fail(error);
       if (target && !target.reader) { target.problem = { kind: opening ? 'missing' : 'failed', message: error instanceof Error ? error.message : String(error) }; }
     }
     return false;
   }
-  finally { candidate?.destroy(); staging?.remove(); if (token === request) { $('loading').hidden = true; cancelPending = undefined; loadingTarget = undefined; syncPageStrip(); paintTabState(); } }
+  finally { candidate?.destroy(); staging?.remove(); if (pane.endLoad(token)) { $('loading').hidden = true; syncPageStrip(); paintTabState(); } }
 }
 
 /** Takes the showing tab's working copy back into the tab, saves its place, and puts it out of sight. */
 function leave(tab: Tab) {
-  void flush();
-  if (tab.reader && tab.reader === reader) { tab.options = options; tab.position = position; tab.hand = pan.hand; tab.scanNoticeShown = scanNoticeShown; tab.stripScroll = pageStrip.scrollPosition(); }
+  const pane = activePane();
+  void pane.flush();
+  if (tab.reader && tab.reader === pane.reader) { tab.options = pane.options; tab.position = pane.position; tab.hand = pan.hand; tab.scanNoticeShown = scanNoticeShown; tab.stripScroll = pageStrip.scrollPosition(); }
   tab.find = findBar.isOpen() ? findBar.query() : undefined;
   tab.host?.classList.add('tab-hidden');
   findBar.close(); zoomGesture.cancel();
@@ -654,18 +648,19 @@ function hibernate(tab: Tab) {
 /** Shows `next` (or Home, for none): the one place the working copy changes hands. */
 function show(next: Tab | undefined, refreshed = false) {
   if (shown === next && !refreshed) return;
+  const pane = activePane();
   if (shown && shown !== next) leave(shown);
   shown = next; tabs.activate(next?.path);
-  reader = next?.reader; active = next?.doc; options = next?.options ?? { ...defaultOptions }; position = next?.position; activeHost = next?.host;
+  pane.show(next);
   scanNoticeShown = next?.scanNoticeShown ?? false; ++scrubRequest; scrubbing = false;
   for (const path of tabs.hibernation()) hibernate(tabs.find(path)!);
   next?.host?.classList.remove('tab-hidden');
-  pannedScroller = reader?.scroller?.(); pan.attach(pannedScroller, activeHost); if (next) pan.setHand(next.hand);
+  pane.pannedScroller = pane.reader?.scroller?.(); pan.attach(pane.pannedScroller, pane.host); if (next) pan.setHand(next.hand);
   $('empty').hidden = Boolean(next);
   syncPageStrip(); if (next?.stripScroll !== undefined) pageStrip.restoreScroll(next.stripScroll);
-  for (const id of ['previous', 'position', 'next']) $<HTMLButtonElement>(id).disabled = !reader;
-  if (reader && position) showPosition(position, false); else paintNoDocument();
-  activeHost?.focus();
+  for (const id of ['previous', 'position', 'next']) $<HTMLButtonElement>(id).disabled = !pane.reader;
+  if (pane.reader && pane.position) showPosition(pane.position, false); else paintNoDocument();
+  pane.host?.focus();
   if (next?.find !== undefined) findBar.open(next.find, false);
   lastBackground = undefined;
   // The Library tab's page is drawn while the tab is in front; the document that was showing is no longer the one the tree marks.
@@ -689,7 +684,7 @@ function reopen(tab: Tab) { return load(() => openLibraryDocument(tab.path), tab
 const tabTitle = (tab: Tab) => tab.path === LIBRARY_PATH ? tab.name : displayTitle(tab, tab.format === 'epub' ? homeThumbs.epub(tab.path)?.title : undefined);
 /** Where a tab is, short: "40 / 146" for pages and lines, a percentage for the rest. */
 function tabWhere(tab: Tab) {
-  const place = tab === shown ? position : tab.position;
+  const place = tab === shown ? activePane().position : tab.position;
   if (!place) return '';
   const pages = place.label.match(/^(?:Pages?|Line) ([\d–-]+) of (\d+)/);
   return pages ? `${pages[1]} / ${pages[2]}` : `${Math.round(Math.max(0, Math.min(100, place.fraction * 100)))} %`;
@@ -697,7 +692,7 @@ function tabWhere(tab: Tab) {
 let paintedTabs = '';
 function paintTabs() {
   const hints = titleHints(tabs.tabs.filter(tab => tab.path !== LIBRARY_PATH).map(tab => ({ path: tab.path, title: tabTitle(tab) })));
-  const views: TabView[] = tabs.tabs.map(tab => ({ path: tab.path, title: tabTitle(tab), hint: hints.get(tab.path) ?? '', format: tab.format, where: tabWhere(tab), progress: formatProgress(progressOf((tab === shown ? position : tab.position) ?? { fraction: NaN, scrub: { current: 0, total: 0, unit: 'line' } })) ?? '', active: tab === tabs.active, problem: Boolean(tab.problem), library: tab.path === LIBRARY_PATH, image: Object.hasOwn(imageFormats, tab.format) }));
+  const views: TabView[] = tabs.tabs.map(tab => ({ path: tab.path, title: tabTitle(tab), hint: hints.get(tab.path) ?? '', format: tab.format, where: tabWhere(tab), progress: formatProgress(progressOf((tab === shown ? activePane().position : tab.position) ?? { fraction: NaN, scrub: { current: 0, total: 0, unit: 'line' } })) ?? '', active: tab === tabs.active, problem: Boolean(tab.problem), library: tab.path === LIBRARY_PATH, image: Object.hasOwn(imageFormats, tab.format) }));
   const key = JSON.stringify([views, tabs.size]);
   if (key === paintedTabs) return;
   paintedTabs = key;
@@ -709,7 +704,7 @@ function paintTabs() {
 
 /** The placeholder for a showing tab that has no page: its file is missing, its open failed, or it is not opened yet. */
 function paintTabState() {
-  const tab = tabs.active, waiting = Boolean(tab && !tab.reader && loadingTarget !== tab && tab.path !== LIBRARY_PATH);
+  const tab = tabs.active, waiting = Boolean(tab && !tab.reader && activePane().loadingTarget !== tab && tab.path !== LIBRARY_PATH);
   $('tab-state').hidden = !waiting || !tab;
   if (!waiting || !tab) return;
   const problem = tab.problem;
@@ -734,18 +729,18 @@ function selectTab(path: string | undefined) {
   const tab = path === undefined ? undefined : tabs.find(path);
   if (path !== undefined && !tab) return;
   if (tab === shown) return;
-  if (loadingTarget !== tab) cancelOpen();
+  if (activePane().loadingTarget !== tab) cancelOpen();
   show(tab);
 }
 
 function closeTab(path: string) {
   const tab = tabs.find(path);
   if (!tab) return;
-  if (loadingTarget === tab) cancelOpen();
+  if (activePane().loadingTarget === tab) cancelOpen();
   const wasShown = shown === tab;
   if (wasShown) {
-    void flush(); tab.find = undefined; findBar.close(); zoomGesture.cancel();
-    reader = undefined; syncPageStrip(); // The strip lets go of the reader before it is destroyed.
+    void activePane().flush(); tab.find = undefined; findBar.close(); zoomGesture.cancel();
+    activePane().reader = undefined; syncPageStrip(); // The strip lets go of the reader before it is destroyed.
   }
   tab.reader?.destroy(); tab.host?.remove(); tab.reader = tab.host = undefined;
   const next = tabs.close(path);
@@ -885,15 +880,15 @@ function openFile() { if (desktop) void openTab(undefined, () => chooseDocument(
 $('empty-open').onclick = () => openFile();
 $<HTMLInputElement>('file-input').onchange = event => { const input = event.target as HTMLInputElement; if (input.files?.[0]) { const file = input.files[0]; void openTab(undefined, () => browserFile(file), file.name); } input.value = ''; };
 /** Gives up the pending open; every tab stays as it was. */
-function cancelOpen() { ++request; cancelPending?.(); cancelPending = undefined; loadingTarget = undefined; $<HTMLDialogElement>('password').close(); $('loading').hidden = true; syncPageStrip(); paintTabState(); }
+function cancelOpen() { activePane().cancelLoad(); $<HTMLDialogElement>('password').close(); $('loading').hidden = true; syncPageStrip(); paintTabState(); }
 $('cancel').onclick = cancelOpen;
 $('dismiss-notice').onclick = () => { $('notice').hidden = true; };
-$('retry-save').onclick = () => { dirty = true; void flush(); };
-async function navigate(action: Parameters<ReaderAdapter['navigate']>[0]) { try { await reader?.navigate(action); } catch (error) { fail(error); } }
+$('retry-save').onclick = () => { const pane = activePane(); pane.dirty = true; void pane.flush(); };
+async function navigate(action: Parameters<ReaderAdapter['navigate']>[0]) { try { await activePane().reader?.navigate(action); } catch (error) { fail(error); } }
 $('previous').onclick = () => void navigate('previous'); $('next').onclick = () => void navigate('next');
-function jump() { if (!reader) return; $('jump-label').textContent = reader.mode === 'fixed' ? 'Physical page number' : active?.format === 'epub' ? 'Book percentage (e.g. 35%) or chapter' : 'Source line number'; $('jump-error').textContent = ''; $<HTMLInputElement>('target').value = ''; showDialog('jump'); $<HTMLInputElement>('target').focus(); }
+function jump() { const { reader, active } = activePane(); if (!reader) return; $('jump-label').textContent = reader.mode === 'fixed' ? 'Physical page number' : active?.format === 'epub' ? 'Book percentage (e.g. 35%) or chapter' : 'Source line number'; $('jump-error').textContent = ''; $<HTMLInputElement>('target').value = ''; showDialog('jump'); $<HTMLInputElement>('target').focus(); }
 $('position').onclick = jump;
-$('jump').querySelector('form')!.onsubmit = event => { event.preventDefault(); void reader?.goTo($<HTMLInputElement>('target').value.trim()).then(() => closeDialog($<HTMLDialogElement>('jump'))).catch(error => { $('jump-error').textContent = String(error instanceof Error ? error.message : error); }); };
+$('jump').querySelector('form')!.onsubmit = event => { event.preventDefault(); void activePane().reader?.goTo($<HTMLInputElement>('target').value.trim()).then(() => closeDialog($<HTMLDialogElement>('jump'))).catch(error => { $('jump-error').textContent = String(error instanceof Error ? error.message : error); }); };
 async function toggle(which: 'pin' | 'lock') { if (!desktop) { notify('Pin and size lock are available in the desktop app.'); return; } try { updateWindow(await native(`set_${which}`, { enabled: !(which === 'pin' ? windowState.pinned : windowState.locked) })); } catch (error) { fail(error); } }
 $('pin').onclick = () => void toggle('pin'); $('lock').onclick = () => void toggle('lock');
 // The menu is a popover under its button, not a centred dialog: it opens where the pointer already is
@@ -914,19 +909,7 @@ if (desktop) document.querySelectorAll<HTMLElement>('#menu [data-desktop]').forE
  */
 const holdFor = (next: Partial<ReaderOptions>): Hold | false => next.fitted === false ? 'centre' : next.fitted && next.fit === 'width' ? 'top' : false;
 async function changeOptions(next: Partial<ReaderOptions>, hold: Hold | Spot | false = holdFor(next)) {
-  if (!reader) return;
-  const zooms = 'zoom' in next || 'fit' in next || 'fitted' in next;
-  const open = reader, host = open.scroller?.();
-  // The point is read where the page is drawn, slid or not; only then does a slid page go back, so the redrawn page starts from its natural place.
-  const spot = zooms && hold ? typeof hold === 'string' ? holdView(host, hold) : hold : undefined;
-  if (zooms) pan.recenter();
-  // Fit width wants the line at the top only as far as the page scrolls: a fit may centre, so it never slides the page.
-  const held: Anchor | undefined = host && spot && { ...spot, host, ...(hold === 'top' ? {} : { slide: (offset: Offset) => pan.slideTo(offset) }) };
-  const previous = options; options = { ...options, ...next };
-  try {
-    await open.setOptions(options, held);
-    showPosition(open.getPosition());
-  } catch (error) { options = previous; fail(error); }
+  try { await activePane().changeOptions(next, hold, pan, showPosition); } catch (error) { fail(error); }
 }
 /**
  * The Contents popover. A reflowable EPUB, whose pill carries the Contents button, opens it above the pill; any other document drops it from
@@ -934,12 +917,13 @@ async function changeOptions(next: Partial<ReaderOptions>, hold: Hold | Spot | f
  */
 function openContents() {
   const dialog = $<HTMLDialogElement>('contents'), anchored = !$('view-controls').hidden && $('view-controls').classList.contains('is-reading');
-  const current = fillContents($('outline-list'), reader?.outline() ?? [], reader?.currentOutline?.() ?? -1, item => { void reader?.goTo(item.target).then(() => closeDialog(dialog)).catch(fail); });
+  const current = fillContents($('outline-list'), activePane().reader?.outline() ?? [], activePane().reader?.currentOutline?.() ?? -1, item => { void activePane().reader?.goTo(item.target).then(() => closeDialog(dialog)).catch(fail); });
   showDialog('contents', anchored ? $('view-controls').getBoundingClientRect() : undefined);
   current?.focus({ preventScroll: true });
   current?.scrollIntoView({ block: 'center' });
 }
 async function action(name: string) {
+  const { reader, options } = activePane();
   if (name === 'goto') jump();
   else if (name === 'appearance') appearanceSheet.open();
   else if (name === 'pin' || name === 'lock') await toggle(name);
@@ -967,7 +951,7 @@ async function action(name: string) {
   else if (['back', 'start', 'end', 'screen-next', 'screen-previous'].includes(name)) await navigate(name as Parameters<ReaderAdapter['navigate']>[0]);
 }
 document.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(button => button.onclick = () => { closeDialog($<HTMLDialogElement>('menu')); void command(button.dataset.action!).catch(fail); });
-$('confirm-delete').onclick = () => { void (async () => { await flush(); if (desktop) await native('clear_reading_data'); else for (const key of Object.keys(localStorage)) if (key.startsWith('hold-my-brief:')) localStorage.removeItem(key); dirty = false; closeDialog($<HTMLDialogElement>('delete-data')); notify('Saved reading data deleted. Your documents are unchanged.'); })().catch(fail); };
+$('confirm-delete').onclick = () => { void (async () => { await activePane().flush(); if (desktop) await native('clear_reading_data'); else for (const key of Object.keys(localStorage)) if (key.startsWith('hold-my-brief:')) localStorage.removeItem(key); activePane().dirty = false; closeDialog($<HTMLDialogElement>('delete-data')); notify('Saved reading data deleted. Your documents are unchanged.'); })().catch(fail); };
 
 // Tab marks keyboard navigation (the page's focus ring returns); a pointer press clears it.
 document.addEventListener('keydown', event => { if (event.key === 'Tab') document.documentElement.classList.add('keyboard-focus'); }, true);
@@ -976,7 +960,7 @@ document.addEventListener('pointerdown', () => document.documentElement.classLis
 // WKWebView reports it as gesture events. Both are claimed everywhere (the webview would otherwise zoom the whole interface),
 // but only a page-based document moves; the zoom commits once the input pauses (see zoom-gesture.ts).
 const zoomGesture = createZoomGesture({
-  scroller: () => reader?.mode === 'fixed' ? reader.scroller?.() : undefined,
+  scroller: () => { const { reader } = activePane(); return reader?.mode === 'fixed' ? reader.scroller?.() : undefined; },
   zoom: zoomLevel,
   limits: zoomLimits,
   commit: (zoom, spot) => changeOptions({ fitted: false, zoom }, spot ?? false),
@@ -1021,11 +1005,11 @@ function watchFrameZoom(doc: Document) {
 }
 document.addEventListener('keydown', event => {
   if (document.querySelector('dialog[open]')) return;
-  const target = event.composedPath()[0];
+  const target = event.composedPath()[0], { reader, host } = activePane();
   // Escape closes the find bar from anywhere except its own field, which handles it itself.
   if (event.key === 'Escape' && assistant.isOpen()) { event.preventDefault(); assistant.close(); return; }
   if (event.key === 'Escape' && findBar.isOpen() && target !== findBar.element.querySelector('#find-query')) {
-    event.preventDefault(); findBar.close(); activeHost?.focus(); return;
+    event.preventDefault(); findBar.close(); host?.focus(); return;
   }
   // Ctrl+K opens the palette from anywhere, text fields included (the library search, find): it is how
   // the interface reaches every command, and a field would otherwise swallow it as typing. It needs no
@@ -1041,8 +1025,8 @@ document.addEventListener('keydown', event => {
   else if (shortcut === 'back') operation = () => void navigate('back');
   else if (shortcut === 'page-strip' && reader && !reader.setPreviews) return; // Only a PDF has previews; for any other document the key is not ours.
   else if (shortcut) operation = () => void command(shortcut).catch(fail);
-  else if (key === 'h' && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey && !event.repeat && pan.pannable && (target === document.body || target instanceof Node && (activeHost?.contains(target) || $('view-controls').contains(target)))) operation = toggleHand;
-  else if (!event.ctrlKey && !event.altKey && activeHost && (target === document.body || target instanceof Node && (activeHost.contains(target) || inStrip))) {
+  else if (key === 'h' && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey && !event.repeat && pan.pannable && (target === document.body || target instanceof Node && (host?.contains(target) || $('view-controls').contains(target)))) operation = toggleHand;
+  else if (!event.ctrlKey && !event.altKey && host && (target === document.body || target instanceof Node && (host.contains(target) || inStrip))) {
     const horizontal = target instanceof HTMLElement && target.closest('pre,table,[data-horizontal-scroll]');
     const mapping: Record<string, Parameters<ReaderAdapter['navigate']>[0]> = { pagedown: 'next', pageup: 'previous', home: 'start', end: 'end', ' ': event.shiftKey ? 'screen-previous' : 'screen-next' };
     if (reader?.mode !== 'scroll' && !horizontal) { mapping.arrowright = 'next'; mapping.arrowleft = 'previous'; }
@@ -1127,7 +1111,7 @@ async function initialize() {
     await listen('close-tab-request', () => { if (shown) closeTab(shown.path); else void getCurrentWindow().close(); });
     await listen<string | null>('reader-warning', event => { if (event.payload) notify(event.payload); });
     const appWindow = getCurrentWindow();
-    let closing = false; await appWindow.onCloseRequested(async event => { if (closing) return; event.preventDefault(); await flush(); closing = true; await appWindow.close(); });
+    let closing = false; await appWindow.onCloseRequested(async event => { if (closing) return; event.preventDefault(); await activePane().flush(); closing = true; await appWindow.close(); });
     if (platform === 'windows') {
       const maximize = $('caption-maximize');
       const syncMaximized = async () => { const maximized = await appWindow.isMaximized(); document.documentElement.classList.toggle('window-maximized', maximized); maximize.setAttribute('aria-label', maximized ? 'Restore' : 'Maximize'); maximize.title = maximized ? 'Restore down' : 'Maximize'; };
@@ -1170,4 +1154,4 @@ async function initialize() {
   }
 }
 void initialize().catch(fail);
-window.addEventListener('beforeunload', () => { void flush(); });
+window.addEventListener('beforeunload', () => { void activePane().flush(); });
