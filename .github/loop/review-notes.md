@@ -24,3 +24,13 @@
 - `e2e/` shares Home and library card classes; selectors measuring the drawer must scope to
   `.library-documents`. Timing in e2e must wait on state (a rendered page, a settled zoom), not sleeps or
   larger timeouts: CI flakiness here stalls every merge.
+- CI layout (`.github/workflows/ci.yml`): the loop merges when every check run on the head SHA is
+  completed and green, so reject any `needs:` between jobs, any matrix computed by an earlier job, any
+  aggregator job, and any `paths-ignore` that is not mirrored in `ciOptionalPaths` (`.github/loop.json`):
+  a job that has no check run yet, or never runs, lets the loop merge early or wait forever. Jobs per OS:
+  three `e2e (i/3)` shards, `checks`, `build`. Shards come from `scripts/e2e-shard.mjs` and the recorded
+  seconds in `e2e/timings.json` (refreshed with `scripts/e2e-timings.mjs` from the shards' JSON report
+  artifacts); each shard prints its spec list and the local command to reproduce it. E2E in CI stays at
+  one worker per machine, and `playwright.config.ts` changes must be gated on `process.env.CI` so local
+  runs (up to 3 loop workers per Mac, separate ports) keep their defaults. Rust caches are keyed per OS and
+  per job. `release.yml` is a separate workflow.
