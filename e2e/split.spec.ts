@@ -273,6 +273,20 @@ test('the icon rail\'s room is not counted: a 760 px window with the panel close
   await expect(page.locator('#palette-list')).not.toContainText('too narrow');
 });
 
+test('a divider moved to the limit keeps both panes at 360 px when the window shrinks', async ({ page }) => {
+  await split(page);
+  await closeLibrary(page);
+  const handle = divider(page);
+  await handle.focus();
+  await page.keyboard.press('End');
+  await page.setViewportSize({ width: 1000, height: 900 });
+  await expect(page.locator('#workspace')).not.toHaveClass(/is-single/);
+  for (const side of ['a', 'b']) await expect.poll(async () => (await box(page.locator(`.pane-body[data-pane=${side}]`))).width, { message: side }).toBeGreaterThanOrEqual(359.5);
+  // The place the user set comes back when there is room again.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect.poll(async () => (await box(page.locator('.pane-body[data-pane=b]'))).width).toBeLessThan(359.5 + 1);
+});
+
 test('a window that shrinks while split shows the active pane only', async ({ page }) => {
   await split(page);
   await page.setViewportSize({ width: 800, height: 700 });

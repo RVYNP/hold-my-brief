@@ -35,7 +35,7 @@ import { fillContents } from './contents';
 import { steppedFontSize } from './text-size';
 import { createWindowControls, wireWindowControls } from './window-controls';
 import { Pane } from './pane';
-import { DEFAULT_PERCENT, canSplit } from './split';
+import { DEFAULT_PERCENT, canSplit, clampPercent, shareOf } from './split';
 import { createBody, createDivider, createRow, paintDivider, withoutIds, type SideLetter, type SideView } from './split-view';
 initAppearance();
 
@@ -871,10 +871,11 @@ function applyLayout() {
   workspace.classList.toggle('is-split', split);
   if (split) {
     workspace.dataset.active = focused.view.letter;
-    workspace.style.setProperty('--ratio', String(ratio / 100));
-    workspace.classList.toggle('is-single', !canSplit(paneRoom(), innerWidth));
+    const room = paneRoom(), shown = clampPercent(ratio, shareOf(room));
+    workspace.style.setProperty('--ratio', String(shown / 100));
+    workspace.classList.toggle('is-single', !canSplit(room, innerWidth));
     divider.hidden = workspace.classList.contains('is-single');
-    paintDivider(divider, ratio);
+    paintDivider(divider, shown);
   } else {
     // `classList.remove` writes the attribute even when the class is absent, which the class observer would see: this runs on every layout pass, so it must change nothing it does not have to.
     delete workspace.dataset.active; workspace.classList.toggle('is-single', false); workspace.style.removeProperty('--ratio'); divider.hidden = true;
