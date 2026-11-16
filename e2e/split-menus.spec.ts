@@ -408,6 +408,24 @@ test.describe('the split after a restart', () => {
     await expect(workspace(page)).toHaveAttribute('data-active', 'a');
   });
 
+  test('a document opened while the split is still being restored stays shown, with Home not put back over it', async ({ page }) => {
+    await openSplit(page);
+    await setLibrary(page, false);
+    await page.locator('#home-tab').click();
+    await expect(page.locator('#empty')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('hold-my-brief-tabs')!).active)).toBeNull();
+    await page.reload();
+    // The panes exist as soon as the session is read; their documents are still opening.
+    await expect(row(page, 'b').locator('.tab-format')).toHaveText(['EPUB']);
+    await page.locator('#file-input').setInputFiles(extra);
+    await expect(page.locator('.pane-strip .tab.is-active').filter({ hasText: 'extra.txt' })).toHaveCount(1);
+    await expect(page.locator('#empty')).toBeHidden();
+    // The restore stops at the new document: it is not covered again once everything has settled.
+    await expect(page.locator('#empty')).toBeHidden();
+    await expect(page.locator('#loading')).toBeHidden();
+    await expect(page.locator('.pane-strip .tab.is-active').filter({ hasText: 'extra.txt' })).toHaveCount(1);
+  });
+
   test('a session written before the split existed, or with garbage in its split, restores the tabs as they were', async ({ page }) => {
     const tabs = [{ path: 'one.pdf', name: 'one.pdf', format: 'pdf' }, { path: 'two.md', name: 'two.md', format: 'md' }, { path: 'three.txt', name: 'three.txt', format: 'txt' }];
     await page.goto('/');

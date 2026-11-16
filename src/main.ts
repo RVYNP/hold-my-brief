@@ -1081,11 +1081,16 @@ function restoreSplitView(session: TabSession, split: SavedSplit): boolean {
   for (const side of sides) { side.shown = side.tabs.active; side.pane.show(side.shown); }
   $('empty').hidden = true;
   applyLayout(); paintTabState(); paintTabs();
+  // Anything else that changes the panes while the documents load (a file the app was launched with, a click on a tab, Home or a pane) ends the restore.
+  const expected = sides.map(side => side.shown);
+  const changed = () => sides.length !== 2 || sides.some((side, index) => side.shown !== expected[index]) || cover !== undefined;
   void (async () => {
     for (const side of split.active === 'right' ? [left, right] : [right, left]) {
+      if (changed()) return;
       activateSide(side);
       if (side.shown && !side.shown.reader && !side.shown.problem) await reopen(side.shown);
     }
+    if (changed()) return;
     // Home or the Library page was covering the panes: it does again, once they have opened.
     const showing = session.active === null ? undefined : session.tabs[session.active];
     if (!showing) showCover('home'); else if (showing.path === LIBRARY_PATH) showCover('library');
