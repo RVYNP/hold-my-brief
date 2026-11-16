@@ -148,9 +148,10 @@ tooltip and accessible name. One ring marks the kept choice in all three rows.
 - **Background:** the pattern of Home's background: Flow (default), Arcs, Stripes, Contours or Truchet, the same families as the
   generated covers; **None** turns it off (and hides Shuffle background).
 - **Strength:** how strongly the background shows, from 2 % to 30 % (6 % by default); live, and greyed while Background is None.
-  Up to 10 % Home's text keeps its usual colours. Above 10 % the muted text (**Open files**, **Browse library**, **Open in library**,
-  the small lines under cards) deepens toward the main text colour as you go, reaching it at 30 %, so it keeps 4.5:1 contrast on the
-  strongest part of the picture in every theme. 30 % is the top of the slider.
+  Up to 8 % Home's text keeps its usual colours: it is the most at which the muted text keeps 4.5:1 contrast on the strongest part of
+  the picture in every theme. Above 8 % the muted text (**Open files**, **Browse library**, **Open in library**, the small lines under
+  cards) deepens toward the main text colour as you go, reaching it at 30 %, so it keeps that contrast in every theme. 30 % is the top
+  of the slider.
 
 Below a hairline, a **preview** of a page of text in the reading font shows the settings the open document uses, live,
 and under it are **Size**, **Spacing**, **Margins** and, for plain text, **Lines**. **Text size & spacing…** in the palette

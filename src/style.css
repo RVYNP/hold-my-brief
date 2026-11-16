@@ -1015,9 +1015,9 @@ h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 1px 0 
 .home-ground.is-entering, .home-ground.is-leaving { --ground-fade: 0; }
 #empty[hidden] ~ .home-ground { display: none; }
 @media (prefers-reduced-motion: reduce) { .home-ground { transition: none; } }
-/* Home's muted ink: --muted up to 10 % STRENGTH (data-ground-deep is set by theme.ts above it), then mixed toward --fg in step with the strength, whole at the slider's maximum (30 %), so the text stays at 4.5:1 on a stronger ground. */
+/* Home's muted ink: --muted up to 8 % STRENGTH (data-ground-deep is set by theme.ts above it), then mixed toward --fg in step with the strength, whole at the slider's maximum (30 %), so the text stays at 4.5:1 on a stronger ground. .08 is groundInkStrength and .22 is backgroundStrengthMax - groundInkStrength in theme.ts: change them together. */
 #empty.is-home { --home-muted: var(--muted); }
-:root[data-ground-deep] #empty.is-home { --home-muted: color-mix(in oklab, var(--muted), var(--fg) clamp(0%, calc((var(--ground-strength, .06) - .1) / .2 * 100%), 100%)); }
+:root[data-ground-deep] #empty.is-home { --home-muted: color-mix(in oklab, var(--muted), var(--fg) clamp(0%, calc((var(--ground-strength, .06) - .08) / .22 * 100%), 100%)); }
 .home-reshuffle { display: grid; place-items: center; flex: none; width: 28px; height: 28px; padding: 0; border-radius: 6px; color: var(--muted); }
 .home-reshuffle:hover { color: var(--fg); background: var(--hover-subtle); }
 .home-file { padding: 6px 10px; border-radius: 6px; color: var(--home-muted); font-size: 12px; }

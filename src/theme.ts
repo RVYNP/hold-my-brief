@@ -40,9 +40,14 @@ export const pageTones: readonly PageTone[] = ['theme', 'white', 'sepia', 'dim']
 export const banners: readonly Banner[] = ['flow', 'arcs', 'stripes', 'contours', 'truchet', 'none'];
 /** What the Appearance sheet's STRENGTH slider offers (fractions; the slider shows whole percent) and where a missing or invalid value falls back. */
 export const backgroundStrengthMin = 0.02;
-/** Up to this the ground needs no help: Home's text keeps its usual ink (in WebKit, the macOS app, Brief light's muted text gave 4.47:1 at 12 %). */
-export const groundInkStrength = 0.10;
 export const backgroundStrengthMax = 0.30;
+/**
+ * T, where Home's ink starts to deepen: the highest strength at which plain --muted text keeps 4.5:1 on the worst ground pixel in all 24 theme/mode
+ * combinations, measured at every whole percent from 2 to 30 in Chromium and WebKit (the macOS app). Graphite light is the first to fail, at 9 % in WebKit
+ * (10 % in Chromium); Brief light follows at 11 % (14 % in Chromium). At or below T Home is as it was; above it style.css mixes --home-muted toward --fg,
+ * P = (strength - T) / (max - T), 0 at T and whole at the maximum. style.css repeats T and max - T as .08 and .22: change them together.
+ */
+export const groundInkStrength = 0.08;
 export const defaultBackgroundStrength = 0.06;
 export const defaultAppearance: Appearance = { mode: 'system', palette: 'brief', accent: null, page: 'theme', banner: 'flow', backgroundStrength: defaultBackgroundStrength };
 const accentTokens = ['--accent', '--accent-ink', '--accent-fill', '--accent-fill-hover', '--accent-soft', '--accent-soft-hover', '--accent-border', '--sheen-a', '--sheen-b', '--sheen-mix-light', '--sheen-mix-dark'] as const;
