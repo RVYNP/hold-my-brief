@@ -7,8 +7,10 @@ async function goTo(page: Page, target: string) {
   await page.getByRole('button', { name: 'Go to location', exact: true }).click();
 }
 /** The save is debounced; the browser build writes it to localStorage under the document's id. */
-async function saved(page: Page) {
-  await expect.poll(() => page.evaluate(() => Object.keys(localStorage).some(key => localStorage.getItem(key)?.includes('"locator"')))).toBe(true);
+async function stored(page: Page) {
+  return page.evaluate(() => Object.entries(localStorage)
+    .filter(([key, text]) => key.startsWith('hold-my-brief:') && text.includes('"locator"'))
+    .map(([, text]) => JSON.parse(text))[0] as { locator: { page?: number; cfi?: string }; options: { fit?: string; fitted?: boolean } } | undefined);
 }
 
 test('a PDF read to page 4 at fit width reopens on page 4', async ({ page }) => {
@@ -20,8 +22,7 @@ test('a PDF read to page 4 at fit width reopens on page 4', async ({ page }) => 
   await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', 'width');
   await goTo(page, '4');
   await expect(page.locator('#position')).toContainText('Page 4 of 8');
-  await saved(page);
-  await page.waitForTimeout(800);
+  await expect.poll(async () => { const s = await stored(page); return [s?.locator.page, s?.options.fit, s?.options.fitted]; }).toEqual([4, 'width', true]);
   await page.reload();
   await page.locator('#file-input').setInputFiles(file);
   await expect(page.locator('#position')).toContainText('Page 4 of 8');
@@ -40,8 +41,7 @@ test('an EPUB read part-way in reopens at the same place', async ({ page }) => {
   expect(before).toBeTruthy();
   const label = await page.locator('#position').innerText();
   expect(label).toMatch(/4\d|5\d/);
-  await saved(page);
-  await page.waitForTimeout(800);
+  await expect.poll(async () => (await stored(page))?.locator.cfi).toBe(before);
   await page.reload();
   await page.locator('#file-input').setInputFiles(file);
   await expect(page.locator('#position')).toContainText('%');
