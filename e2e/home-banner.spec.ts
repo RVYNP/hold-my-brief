@@ -344,8 +344,23 @@ test('no animation frame fires while Home sits idle for 2 s', async ({ page }) =
   });
   await seedLibrary(page, documents, collections);
   await pixels(page);
-  await page.waitForTimeout(500); // the first paint's own frame
-  await page.evaluate(() => { (window as unknown as { __frames: number }).__frames = 0; });
+  // Settle on state, not a sleep: fonts, every Home thumbnail (pdf.js paints it over a few frames of its own) and every Home image are
+  // loaded and decoded, and one 500 ms window has had no frame.
+  // A tile far below the fold is never asked for (Home fills tiles within 120 px of the viewport), so only the ones the lazy fill would reach count.
+  await expect.poll(() => page.evaluate(() => new Promise<number>(done => {
+    const pending = [...document.querySelectorAll('.library-tile-media[data-path]:not(.is-loaded):not(.is-unavailable)')];
+    const look = new IntersectionObserver(entries => { look.disconnect(); done(entries.filter(entry => entry.isIntersecting).length); }, { rootMargin: '120px' });
+    if (pending.length) for (const media of pending) look.observe(media); else done(0);
+  }))).toBe(0);
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await Promise.all([...document.querySelectorAll('img')].map(async image => { if (!image.complete) await new Promise(done => { image.addEventListener('load', done, { once: true }); image.addEventListener('error', done, { once: true }); }); await image.decode().catch(() => undefined); }));
+  });
+  await expect.poll(async () => {
+    await page.evaluate(() => { (window as unknown as { __frames: number }).__frames = 0; });
+    await page.waitForTimeout(500);
+    return page.evaluate(() => (window as unknown as { __frames: number }).__frames);
+  }, { timeout: 5000, intervals: [0] }).toBe(0);
   await page.waitForTimeout(2000);
   expect(await page.evaluate(() => (window as unknown as { __frames: number }).__frames)).toBe(0);
   expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
