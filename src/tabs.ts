@@ -96,6 +96,20 @@ export class TabList<T extends TabBase> {
     return this.active;
   }
 
+  /**
+   * Puts `tab` where the tab at `path` is, showing it if that one was showing, and drops the old one: the same slot with another
+   * document in it. Nothing changes when `path` is not open, or when `tab`'s document is already open in another tab.
+   */
+  replace(path: string, tab: T): boolean {
+    const index = this.indexOf(path);
+    if (index < 0 || (tab.path !== path && this.find(tab.path))) return false;
+    const wasShowing = this.showing === path;
+    this.items[index] = tab;
+    this.live.delete(path); this.used.delete(path);
+    if (wasShowing) this.activate(tab.path);
+    return true;
+  }
+
   /** Moves a tab so that it ends at index `to` of the list. */
   move(path: string, to: number) {
     const from = this.indexOf(path);
