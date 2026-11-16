@@ -126,6 +126,9 @@ test('the ground paints over the workspace surface and under the content: at the
   for (const [name, record] of [themes[0], themes[1], themes[2]] as [string, object][]) {
     await keepAppearance(page, { ...record, banner: 'flow', backgroundStrength: .1 });
     await pixels(page);
+    // A repaint after the first draw (a theme colour that settled late) cross-fades two canvases; a screenshot inside the fade sees the new one at 0 % and the old one gone.
+    await expect(canvases(page)).toHaveCount(1);
+    await expect(shown(page)).toHaveCSS('opacity', '0.1');
     const clip = { x: 0, y: 40, width: 1080, height: 720 };
     const withGround = await page.screenshot({ clip, animations: 'disabled' });
     await keepAppearance(page, { ...record, banner: 'none', backgroundStrength: .1 });
