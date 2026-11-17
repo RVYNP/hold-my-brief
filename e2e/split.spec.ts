@@ -251,6 +251,8 @@ test('Split right says why it cannot run', async ({ page }) => {
   await page.locator('#file-input').setInputFiles(markdown);
   await expect(page.locator('#tab-list .tab')).toHaveCount(2);
   await page.setViewportSize({ width: 800, height: 700 });
+  // The library docks a moment after the resize and takes its width from the reading area; the palette reads the room when it opens.
+  await expect(page.locator('#reader-layout')).toHaveClass(/library-open/);
   await page.keyboard.press('Control+k'); await page.locator('#palette-input').fill('Split right');
   await expect(page.locator('#palette-list')).toContainText('too narrow');
 });
