@@ -25,7 +25,7 @@ import { createZoomGesture } from './zoom-gesture';
 import type { Hold, Spot } from './zoom-anchor';
 import { createZoomMenu } from './zoom-menu';
 import { createProgressPreview } from './progress-preview';
-import { LIBRARY_PATH, TabList, mergeLists, moveAcross, restoreSplit, splitOff, splitOffRest, type SavedSplit, type SavedTab, type TabSession } from './tabs';
+import { LIBRARY_PATH, TabList, mergeLists, moveAcross, restoreSplit, splitOff, splitOffRest, type SavedLayout, type SavedTab, type TabSession } from './tabs';
 import { createTabStrip, type TabStrip, type TabView } from './tab-strip';
 import { titleHints } from './tab-titles';
 import { baseName, ghostLabel, insertionIndex, overlayNames, splitDropped, unsupportedNotice } from './drop';
@@ -35,8 +35,8 @@ import { fillContents } from './contents';
 import { steppedFontSize } from './text-size';
 import { createWindowControls, wireWindowControls } from './window-controls';
 import { Pane } from './pane';
-import { DEFAULT_PERCENT, canSplit, clampPercent, shareOf } from './split';
-import { createBody, createDivider, createRow, paintDivider, paintFold, withoutIds, type SideLetter, type SideView } from './split-view';
+import { DEFAULT_PERCENT, MIN_SPLIT_WINDOW, boxes, canSplit, evenRatio, fits, freeId, isSplit as isNode, removePane, setRatio, splitAt, splitPane, type Layout, type Path, type Rect } from './layout';
+import { createBody, createDivider, createRow, paintDivider, paintFold, withoutIds, type SideView } from './split-view';
 import { createContextMenu, type MenuEntry } from './context-menu';
 initAppearance();
 
@@ -106,7 +106,7 @@ const pan = new Panner();
 const workspace = $('workspace'), pill = $('view-controls');
 /**
  * A side is one pane of the window: its reading state (`pane`), the tabs it holds (`tabs`) and the one it shows (`shown`), and what it is drawn with (`view`).
- * Not split, the window has one side and its tabs are the toolbar's, the Library tab among them. Split, it has two, each with a row of tabs of its own, and
+ * Not split, the window has one side and its tabs are the toolbar's, the Library tab among them. Split, it has two (`layout` is the tree they are laid out in), each with a row of tabs of its own, and
  * the Library tab and Home (`cover`) belong to the window and take the whole reading area. `focused` is the side that commands, keys, the footer, the find
  * bar and the view controls act on: the last one clicked or focused. `activePane()` is its reading state.
  */
@@ -114,7 +114,7 @@ type Side = { pane: Pane<Tab>; tabs: TabList<Tab>; shown: Tab | undefined; scanN
 const sides: Side[] = [];
 let focused!: Side;
 const activePane = () => focused.pane;
-const isSplit = () => sides.length === 2;
+const isSplit = () => sides.length > 1;
 /** What takes the whole reading area while split: Home, or the Library page. */
 let cover: 'home' | 'library' | undefined;
 /** While `restoreSplitView` opens the panes: the tabs it opens, and the side the user pressed, focused or selected since (that side keeps the focus). */
@@ -122,8 +122,10 @@ let restoring: { tabs: (Tab | undefined)[]; picked?: Side } | undefined;
 const pick = (side: Side | undefined) => { if (restoring && side) restoring.picked = side; };
 /** The Library tab while split (not split, it is the first tab of the one side). */
 let libraryTab: Tab | undefined;
-/** The divider's position: the left pane's percent of the room the two panes share. Kept for as long as the split lasts. */
-let ratio = DEFAULT_PERCENT;
+/** How the panes are laid out: a tree of pane ids, the dividers' places in it (`layout.ts`). Not split, it is the one pane. */
+let layout: Layout = { pane: 'a' };
+/** The dividers drawn, by the path of the split each belongs to, and where `applyLayout` last put them. */
+const dividers = new Map<string, HTMLElement>();
 /** The right side while no split is open: its row, layer and tab strip are made once and put back on the next split. */
 let spare: Side | undefined;
 /** The tab of a document (or the Library tab) wherever it is open. */
@@ -131,26 +133,24 @@ const known = (path: string): Tab | undefined => { for (const side of sides) { c
 /** The side whose tabs hold `path`. */
 const holder = (path: string) => sides.find(side => side.tabs.find(path));
 /** The side an event target is in (a reading surface, a row of tabs, or a pane's layer). */
-const sideAt = (target: EventTarget | null) => { const letter = target instanceof Element ? target.closest<HTMLElement>('[data-pane]')?.dataset.pane : undefined; return sides.find(side => side.view.letter === letter); };
+const sideAt = (target: EventTarget | null) => { const id = target instanceof Element ? target.closest<HTMLElement>('[data-pane]')?.dataset.pane : undefined; return sides.find(side => side.view.id === id); };
 /** The pane whose area holds the press. `.pane-body` lets the pointer through (only its children take it), and a pane whose document has not mounted yet has no child there: such a press lands on #workspace itself, so the box decides. */
 const sideUnder = (event: PointerEvent) => event.target === workspace && !workspace.classList.contains('is-single') ? sides.find(side => { const box = side.view.body.getBoundingClientRect(); return event.clientX >= box.left && event.clientX < box.right && event.clientY >= box.top && event.clientY < box.bottom; }) : undefined;
 const carry = { over: (path: string, x: number, y: number) => carryOver(path, x, y), drop: (path: string, x: number, y: number) => carryDrop(path, x, y), clear: () => carryClear() };
-function makeSide(letter: SideLetter): Side {
-  const parts = createRow(letter), body = createBody(letter);
+function makeSide(id: string): Side {
+  const parts = createRow(id), body = createBody(id);
   let state: HTMLElement;
-  if (letter === 'a') { state = $('tab-state'); body.append(state, pill); } else { state = withoutIds($('tab-state').cloneNode(true) as HTMLElement); state.hidden = true; body.append(state); }
+  if (id === 'a') { state = $('tab-state'); body.append(state, pill); } else { state = withoutIds($('tab-state').cloneNode(true) as HTMLElement); state.hidden = true; body.append(state); }
   workspace.append(parts.row, body);
   const tabsRow = createTabStrip({ strip: parts.row, list: parts.list, add: parts.add, overflow: parts.overflow }, { select: path => selectTab(path), close: closeTab, newTab: () => { activateSide(side); openFile(); }, move: (path, to) => { side.tabs.move(path, to); paintTabs(); saveSession(); }, menu: showTabMenu, carry }, platform === 'mac' ? '⌘T' : 'Ctrl T');
   parts.fold.onclick = () => focusOtherSide();
-  const side: Side = { pane: new Pane<Tab>({ persist, notify }), tabs: new TabList<Tab>(), shown: undefined, scanNoticeShown: false, view: { letter, body, state, ...parts }, strip: tabsRow };
+  const side: Side = { pane: new Pane<Tab>({ persist, notify }), tabs: new TabList<Tab>(), shown: undefined, scanNoticeShown: false, view: { id, body, state, ...parts }, strip: tabsRow };
   state.querySelector<HTMLElement>('.primary')!.onclick = () => stateAction(side);
   state.querySelector<HTMLElement>('.tab-state-actions button:not(.primary)')!.onclick = () => { if (side.shown) closeTab(side.shown.path); };
   return side;
 }
 sides.push(makeSide('a'));
 focused = sides[0];
-const divider = createDivider({ percent: () => ratio, set: percent => setRatio(percent), bounds: () => { const a = sides[0].view.body.getBoundingClientRect(), b = sides[1]?.view.body.getBoundingClientRect(); return b && !workspace.classList.contains('is-single') ? { left: a.left, right: b.right } : undefined; } });
-workspace.append(divider);
 /**
  * The documents open as tabs. A side's pane (`reader`, `active`, `options`, `position`, `host` and `pannedScroller`) and its `scanNoticeShown` below,
  * are the working copy of the tab that side is showing (`shown`); `leave` takes them back into the tab, `show` loads the next tab's into them.
@@ -633,7 +633,7 @@ async function load(open: () => Promise<Opened | null>, label = 'document', { ta
     $('loading').querySelector('span')!.textContent = `Opening ${doc.name}…`;
     candidate = await adapter(doc.format); if (!pane.isCurrent(token)) return false;
     stripSpace(candidate); // A page-preview strip's room is there before the document is fitted, so opening never refits it.
-    staging = document.createElement('section'); staging.className = 'reader-host staging'; staging.tabIndex = 0; staging.setAttribute('aria-label', 'Reading surface'); staging.dataset.pane = side.view.letter; workspace.insertBefore(staging, sides[0].view.row);
+    staging = document.createElement('section'); staging.className = 'reader-host staging'; staging.tabIndex = 0; staging.setAttribute('aria-label', 'Reading surface'); staging.dataset.pane = side.view.id; workspace.insertBefore(staging, sides[0].view.row); if (isSplit()) applyLayout();
     // Options saved before zoom was a true scale hold a multiplier of the fit. They open fitted and are converted below, once the document is drawn, so the page keeps its size; saving then writes the new form.
     const saved = doc.previousState?.options, legacy = Boolean(saved) && saved!.zoomModel !== ZOOM_MODEL, legacyZoom = Number(saved?.zoom);
     const prefs: ReaderOptions = { ...defaultOptions, ...saved, zoomModel: ZOOM_MODEL, ...(legacy ? { fitted: true, zoom: 1 } : {}) };
@@ -778,7 +778,7 @@ function paintTabs() {
   const viewOf = (side: Side, tab: Tab, active: boolean): TabView => ({ path: tab.path, title: tabTitle(tab), hint: hints.get(tab.path) ?? '', format: tab.format, where: tabWhere(side, tab), progress: formatProgress(progressOf((tab === side.shown ? side.pane.position : tab.position) ?? { fraction: NaN, scrub: { current: 0, total: 0, unit: 'line' } })) ?? '', active, problem: Boolean(tab.problem), library: tab.path === LIBRARY_PATH, image: Object.hasOwn(imageFormats, tab.format) });
   const rows = sides.map(side => side.tabs.tabs.map(tab => viewOf(side, tab, tab === side.tabs.active)));
   const bar = isSplit() ? (libraryTab ? [viewOf(sides[0], libraryTab, cover === 'library')] : []) : rows[0], home = isSplit() ? cover === 'home' : !sides[0].tabs.active;
-  const key = JSON.stringify([bar, home, isSplit() ? [rows, focused.view.letter] : 0, all.length]);
+  const key = JSON.stringify([bar, home, isSplit() ? [rows, focused.view.id] : 0, all.length]);
   if (key === paintedTabs) return;
   paintedTabs = key;
   strip.paint(bar, home);
@@ -872,15 +872,15 @@ function flushSession(): Promise<void> {
 
 const savedTab = (tab: Tab): SavedTab => ({ path: tab.path, name: tab.name, format: tab.format, ...(tab.scope ? { scope: tab.scope } : {}) });
 /**
- * The tabs as they are saved. Split or not, one strip in order (the Library tab, the left pane's tabs, then the right pane's), so a build that does not know
- * the split still brings back every document; split, the session also names each pane's tabs and shown tab, the divider's place and the active pane.
+ * The tabs as they are saved. Split or not, one strip in order (the Library tab, then each pane's tabs in reading order), so a build that does not know
+ * the split still brings back every document; split, the session also holds the layout: its tree (the dividers' places among them), each pane's tabs and shown tab, and the active pane.
  */
 function sessionOf(): TabSession {
   if (!isSplit()) return focused.tabs.session(savedTab);
   const ordered = [...(libraryTab ? [libraryTab] : []), ...sides.flatMap(side => side.tabs.tabs)];
   const showing = cover === 'library' ? libraryTab : cover ? undefined : focused.shown;
   const pane = (side: Side) => ({ tabs: side.tabs.tabs.map(tab => tab.path), shown: side.shown?.path ?? side.tabs.tabs[0]?.path ?? '' });
-  return { tabs: ordered.map(savedTab), active: showing ? ordered.indexOf(showing) : null, split: { left: pane(sides[0]), right: pane(sides[1]), ratio, active: focused === sides[1] ? 'right' : 'left' } };
+  return { tabs: ordered.map(savedTab), active: showing ? ordered.indexOf(showing) : null, layout: { tree: layout, panes: Object.fromEntries(sides.map(side => [side.view.id, pane(side)])), active: focused.view.id } };
 }
 /** The tab Close tab (Ctrl W) closes: the one the reader sees, which is the Library tab while its page covers the split. */
 const closableTab = () => cover === 'library' ? libraryTab : cover ? undefined : focused.shown;
@@ -900,23 +900,69 @@ function openSplitReason(path: string) {
   return documentCount() - (known(path) ? 1 : 0) < 1 ? 'Open a document first, to put this one beside it' : undefined;
 }
 
-/** Lays the panes out: the split's classes, the divider's place, and the footer under the focused pane. */
+/** The room the panes share, in the workspace's own px: its padding box less the icon rail's room on the side the library is at. */
+function paneRect(): Rect {
+  const box = workspace.getBoundingClientRect(), style = getComputedStyle(workspace), edge = (name: string) => parseFloat(style.getPropertyValue(`border-${name}-width`)) || 0;
+  const clear = paneRoomClear(), libraryRight = $('reader-layout').classList.contains('library-right');
+  return { x: libraryRight ? 0 : clear, y: 0, width: box.width - edge('left') - edge('right') - clear, height: box.height - edge('top') - edge('bottom') };
+}
+/** Puts a pane's row, layer or reading surface in `box` (a row of tabs `tabs` px high is the top of the pane). A reading surface keeps its top and bottom to the CSS, which adds the find bar and the page strip to them. */
+function place(element: HTMLElement, box: Rect, tabs: number, room: Rect) {
+  const { style } = element;
+  style.left = `${box.x}px`; style.width = `${box.width}px`;
+  if (element.classList.contains('pane-strip')) style.top = `${box.y}px`;
+  else if (element.classList.contains('pane-body')) { style.top = `${box.y + tabs}px`; style.height = `${box.height - tabs}px`; }
+  else { style.setProperty('--pane-top', `${box.y}px`); style.setProperty('--pane-bottom', `${room.height - box.y - box.height}px`); }
+}
+/** Lays the panes out: the split's classes, each pane's and divider's box from the layout tree, and the footer under the focused pane. */
 function applyLayout() {
   const split = isSplit();
   workspace.classList.toggle('is-split', split);
   if (split) {
-    workspace.dataset.active = focused.view.letter;
-    const room = paneRoom(), shown = clampPercent(ratio, shareOf(room));
-    workspace.style.setProperty('--ratio', String(shown / 100));
-    workspace.classList.toggle('is-single', !canSplit(room, innerWidth));
-    divider.hidden = workspace.classList.contains('is-single');
-    paintDivider(divider, shown);
+    workspace.dataset.active = focused.view.id;
+    const single = innerWidth < MIN_SPLIT_WINDOW || !fits(layout, { width: paneRoom(), height: workspace.clientHeight });
+    workspace.classList.toggle('is-single', single);
+    const room = paneRect(), tabs = parseFloat(getComputedStyle(workspace).getPropertyValue('--pane-tabs')) || 0, shown = boxes(layout, room);
+    const spots = new Map(shown.panes.map(({ pane, rect }) => [pane, rect]));
+    // Folded, every pane has the whole room, and only the focused one is seen.
+    for (const element of workspace.querySelectorAll<HTMLElement>('[data-pane]')) { const box = single ? room : spots.get(element.dataset.pane!); if (box) place(element, box, tabs, room); }
+    const kept = new Set<string>();
+    for (const box of shown.dividers) {
+      const key = box.path.join('');
+      let element = dividers.get(key);
+      if (!element) { element = makeDivider(box.path); dividers.set(key, element); workspace.append(element); }
+      kept.add(key);
+      Object.assign(element.style, { left: `${box.rect.x}px`, top: `${box.rect.y}px`, width: `${box.rect.width}px`, height: `${box.rect.height}px` });
+      element.hidden = single;
+      paintDivider(element, box.percent, box.axis);
+    }
+    for (const [key, element] of dividers) if (!kept.has(key)) { element.remove(); dividers.delete(key); }
   } else {
     // `classList.remove` writes the attribute even when the class is absent, which the class observer would see: this runs on every layout pass, so it must change nothing it does not have to.
-    delete workspace.dataset.active; workspace.classList.toggle('is-single', false); workspace.style.removeProperty('--ratio'); divider.hidden = true;
+    delete workspace.dataset.active; workspace.classList.toggle('is-single', false);
+    for (const element of workspace.querySelectorAll<HTMLElement>('[data-pane]')) for (const name of ['left', 'top', 'width', 'height', '--pane-top', '--pane-bottom']) element.style.removeProperty(name);
+    for (const element of dividers.values()) element.remove();
+    dividers.clear();
   }
   paintFolds();
   placeFooter();
+}
+/** The divider of the split at `path`. It reads its place from `layout` and the room as they are when it is used (a layout pass may be a frame behind), so it outlives layout changes that keep the split. */
+function makeDivider(path: Path) {
+  const key = path.join('');
+  return createDivider({
+    axis: () => splitAt(layout, path)?.axis ?? 'row',
+    percent: () => splitAt(layout, path)?.ratio ?? DEFAULT_PERCENT,
+    set: percent => moveDivider(setRatio(layout, path, percent)),
+    even: () => moveDivider(evenRatio(layout, path)),
+    bounds: () => {
+      const box = boxes(layout, paneRect()).dividers.find(candidate => candidate.path.join('') === key);
+      if (!box || workspace.classList.contains('is-single')) return undefined;
+      const origin = workspace.getBoundingClientRect(), row = box.axis === 'row';
+      const start = row ? origin.left + workspace.clientLeft + box.room.x : origin.top + workspace.clientTop + box.room.y;
+      return { start, end: start + (row ? box.room.width : box.room.height), limits: box.limits };
+    },
+  });
 }
 /** While one pane shows, the shown pane's row ends with the button that swaps the panes. */
 function paintFolds() {
@@ -924,8 +970,8 @@ function paintFolds() {
   for (const side of sides) paintFold(side.view.fold, folded && side === focused, sides.find(other => other !== side)?.tabs.size ?? 0);
 }
 let ratioTimer: ReturnType<typeof setTimeout> | undefined;
-/** Moves the divider. A drag moves it on every frame, so the session is written once it has been still for a moment. */
-function setRatio(percent: number) { ratio = percent; applyLayout(); clearTimeout(ratioTimer); ratioTimer = setTimeout(() => { ratioTimer = undefined; saveSession(); }, 300); }
+/** Moves a divider (`next` is the layout with it moved). A drag moves it on every frame, so the session is written once it has been still for a moment. */
+function moveDivider(next: Layout) { layout = next; applyLayout(); clearTimeout(ratioTimer); ratioTimer = setTimeout(() => { ratioTimer = undefined; saveSession(); }, 300); }
 /** The progress line and scrubber sit under the focused pane only. */
 function placeFooter() {
   if (!isSplit()) { footer.style.removeProperty('left'); footer.style.removeProperty('right'); return; }
@@ -1003,11 +1049,11 @@ function clearCover() {
 
 /** Adds the right side holding `moved`, with the divider at `percent`: the one made on an earlier split is put back, else it is made. Nothing is shown in it yet. */
 function addRightSide(moved: TabList<Tab>, percent: number) {
-  const left = sides[0], right = spare ?? makeSide('b');
+  const left = sides[0], right = spare ?? makeSide(freeId(layout)!);
   if (spare) { workspace.append(right.view.row, right.view.body); right.pane = new Pane<Tab>({ persist, notify }); right.shown = undefined; right.scanNoticeShown = false; } else watchSide(right);
   spare = undefined;
   right.tabs = moved; right.pane.pillPlacement = left.pane.pillPlacement;
-  sides.push(right); ratio = percent;
+  sides.push(right); layout = setRatio(splitPane(layout, left.view.id, 'row', 'after', right.view.id)!, [], percent);
   return right;
 }
 /**
@@ -1024,7 +1070,7 @@ function startSplit(tab: Tab, edge: 'left' | 'right' = 'right') {
   if (entry) { left.tabs.detach(LIBRARY_PATH); libraryTab = entry; }
   const right = addRightSide((mirrored ? splitOffRest(left.tabs, tab.path) : splitOff(left.tabs, tab.path))!, DEFAULT_PERCENT);
   const beside = right.tabs.active!;
-  for (const moved of right.tabs.tabs) moved.host?.setAttribute('data-pane', 'b');
+  for (const moved of right.tabs.tabs) moved.host?.setAttribute('data-pane', right.view.id);
   beside.host?.classList.remove('tab-hidden');
   left.shown = undefined; applyLayout();
   show(left.tabs.active, true);
@@ -1062,7 +1108,7 @@ function moveTabToOtherSide(path = focused.shown?.path, at?: number) {
   if (from.pane.cancelPending) cancelOpen();
   syncBack(from); findBar.close(); zoomGesture.cancel();
   moveAcross(from.tabs, to.tabs, tab.path, at);
-  tab.host?.setAttribute('data-pane', to.view.letter);
+  tab.host?.setAttribute('data-pane', to.view.id);
   from.shown = undefined;
   if (from.tabs.size) show(from.tabs.active, true); else from.pane.show(undefined);
   activateSide(to);
@@ -1090,16 +1136,24 @@ function endSplit() {
   right.view.row.remove(); right.view.body.remove(); right.view.state.hidden = true; spare = right;
   mergeLists(left.tabs, right.tabs, keep?.path);
   if (libraryTab) { left.tabs.add(libraryTab, 0); libraryTab = undefined; }
-  for (const tab of left.tabs.tabs) tab.host?.setAttribute('data-pane', 'a');
-  sides.pop();
+  for (const tab of left.tabs.tabs) tab.host?.setAttribute('data-pane', left.view.id);
+  sides.pop(); layout = removePane(layout, right.view.id) ?? layout;
   applyLayout();
   show(keep, true);
 }
-/** Brings a saved split back: both panes with their tabs, the divider and the active pane. Each pane's shown document opens, the pane that is not the active one first, so the focus ends on the active one. False, and nothing changed, when the session no longer holds a document on each side. */
-function restoreSplitView(session: TabSession, split: SavedSplit): boolean {
+/**
+ * Brings a saved split back: both panes with their tabs, the divider and the active pane. Each pane's shown document opens, the pane that is not the active one first, so the focus ends on the active one.
+ * False, and nothing changed, when the session no longer holds a document on each side, or its layout is one this window cannot draw yet (more than two panes, or two one above the other).
+ */
+function restoreSplitView(session: TabSession, saved: SavedLayout): boolean {
+  const root = saved.tree;
+  if (!isNode(root) || root.axis !== 'row') return false;
+  const { first, second } = root;
+  if (isNode(first) || isNode(second)) return false;
+  const split = { left: saved.panes[first.pane], right: saved.panes[second.pane], ratio: root.ratio, active: saved.active === second.pane ? 'right' : 'left' };
   const left = sides[0], entry = left.tabs.find(LIBRARY_PATH);
   if (entry) left.tabs.detach(LIBRARY_PATH);
-  const moved = restoreSplit(left.tabs, split);
+  const moved = restoreSplit(left.tabs, split.left, split.right);
   if (!moved) { if (entry) left.tabs.add(entry, 0); return false; }
   libraryTab = entry;
   const right = addRightSide(moved, split.ratio);
@@ -1546,7 +1600,7 @@ async function initialize() {
   paintHome();
   for (const entry of saved.tabs.tabs) focused.tabs.open({ ...entry, options: { ...defaultOptions }, hand: false, scanNoticeShown: false });
   library.restoreScope(known(LIBRARY_PATH)?.scope);
-  if (!saved.tabs.split || !restoreSplitView(saved.tabs, saved.tabs.split)) show(saved.tabs.active === null ? undefined : focused.tabs.tabs[saved.tabs.active], true);
+  if (!saved.tabs.layout || !restoreSplitView(saved.tabs, saved.tabs.layout)) show(saved.tabs.active === null ? undefined : focused.tabs.tabs[saved.tabs.active], true);
   if (desktop) {
     const { listen } = await import('@tauri-apps/api/event');
     const { getCurrentWindow } = await import('@tauri-apps/api/window');
