@@ -33,6 +33,12 @@ async function pick(page: Page, from: Locator, to: { x: number; y: number }) {
 }
 /** Drags a tab onto a point and lets go. */
 async function drag(page: Page, from: Locator, to: { x: number; y: number }) { await pick(page, from, to); await page.mouse.up(); }
+/** Presses on `from` and goes straight to `to` with no sideways step first, and leaves the button down: the way a tab is pulled down onto a bottom quarter. */
+async function pickStraight(page: Page, from: Locator, to: { x: number; y: number }) {
+  const start = await box(from);
+  await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2); await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps: 40 });
+}
 
 /** The PDF, an EPUB, a Markdown file and a text file open, the library closed; then Split right with the EPUB: the PDF, MD and TXT on the left, the EPUB on the right. */
 async function openSplit(page: Page) {
@@ -76,6 +82,54 @@ test.describe('1440 × 900', () => {
     expect(Math.abs(below.x - above.x)).toBeLessThanOrEqual(1);
     await expect(tabIn(page, 'TXT')).toHaveClass(/is-active/);
     await expect(workspace(page)).toHaveAttribute('data-active', (await rowOf(page, 'TXT').getAttribute('data-pane'))!);
+  });
+
+  test('a tab pulled straight down from its row onto the bottom quarter of a pane splits it down', async ({ page }) => {
+    await openSplit(page);
+    // Dragging from a pane's own row: the left pane's Markdown tab onto the bottom quarter of the same pane, directly below the tab.
+    const tab = tabIn(page, 'MD'), start = await box(tab);
+    const left = await box(await bodyOf(page, 'PDF'));
+    await pickStraight(page, tab, { x: start.x + start.width / 2, y: left.y + left.height * .92 });
+    await expect(tab).toHaveClass(/is-carried/);
+    await expect(preview(page)).toBeVisible();
+    const shade = await box(preview(page));
+    expect(shade.y).toBeGreaterThan(left.y + left.height * .45);
+    await page.mouse.up();
+    await expect(preview(page)).toBeHidden();
+    await expect(panesShown(page)).toHaveCount(3);
+    await expect(formatsIn(page, 'MD')).toHaveText(['MD']);
+    await expect(formatsIn(page, 'PDF')).toHaveText(['PDF', 'TXT']);
+    expect((await box(rowOf(page, 'MD'))).y).toBeGreaterThan((await box(rowOf(page, 'PDF'))).y + 200);
+  });
+
+  test('not split, a tab pulled straight down from the main row onto the bottom quarter splits the window down', async ({ page }) => {
+    await page.goto('/');
+    for (const [file, format] of [[pdf, 'PDF'], [markdown, 'MD']] as const) {
+      await page.locator('#file-input').setInputFiles(file);
+      await expect(page.locator('#tab-list .tab.is-active .tab-format')).toHaveText(format);
+    }
+    await setLibrary(page, false);
+    const reading = await box(workspace(page));
+    const tab = page.locator('#tab-list .tab', { has: page.locator('.tab-format', { hasText: 'MD' }) }), start = await box(tab);
+    await pickStraight(page, tab, { x: start.x + start.width / 2, y: reading.y + reading.height * .92 });
+    await expect(tab).toHaveClass(/is-carried/);
+    await expect(preview(page)).toBeVisible();
+    await page.mouse.up();
+    await expect(workspace(page)).toHaveClass(/is-split/);
+    await expect(formatsIn(page, 'MD')).toHaveText(['MD']);
+    await expect(formatsIn(page, 'PDF')).toHaveText(['PDF']);
+    expect((await box(rowOf(page, 'MD'))).y).toBeGreaterThan((await box(rowOf(page, 'PDF'))).y + 200);
+  });
+
+  test('a press on a tab without moving still selects it, and its close button still closes it', async ({ page }) => {
+    await openSplit(page);
+    await tabIn(page, 'MD').click();
+    await expect(tabIn(page, 'MD')).toHaveClass(/is-active/);
+    await tabIn(page, 'TXT').click();
+    await expect(tabIn(page, 'TXT')).toHaveClass(/is-active/);
+    await tabIn(page, 'MD').hover();
+    await tabIn(page, 'MD').locator('.tab-close').click();
+    await expect(formatsIn(page, 'PDF')).toHaveText(['PDF', 'TXT']);
   });
 
   test('the top quarter splits up: the dragged tab is above, and the upper half is shaded', async ({ page }) => {
