@@ -46,7 +46,7 @@ export function scrollRoom(g: number): number {
 }
 
 /** Longest listing whose lines get a box each: splitting a line off a text node copies what follows it, so the cost grows with the square of the length. */
-const MAX_LINES = 2000;
+export const MAX_LINES = 2000;
 /** The column a line's text starts at, counting a tab as a step of 4 like `tab-size`. */
 function indentOf(line: string): number {
   let column = 0;
