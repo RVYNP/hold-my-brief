@@ -31,6 +31,8 @@ const scrollToEnd = (page: Page) => page.evaluate(async () => {
 });
 const scrollTop = (page: Page) => page.evaluate(() => document.querySelector('.library-documents')!.scrollTop);
 const focusFirst = (page: Page) => page.locator('.library-documents .library-document-open').first().focus();
+/** Renders and shows the whole set at once (End on a row), for tests about what happens after the end is reached. */
+const reachEnd = async (page: Page, count: number) => { await focusFirst(page); await page.keyboard.press('End'); await expect(rows(page)).toHaveCount(count); };
 
 test('no pager: the Library tab lists every document in one scroll and reaches the last one', async ({ page }) => {
   await seed(page, texts());
@@ -41,7 +43,7 @@ test('no pager: the Library tab lists every document in one scroll and reaches t
   await expect(page.locator('#library-page')).not.toContainText(/\d+\s*[–-]\s*\d+\s*\/\s*\d+/);
   expect(await rows(page).count()).toBeGreaterThan(0);
   expect(await rows(page).count()).toBeLessThan(200);
-  await expect.poll(() => scrollToEnd(page)).toBe(total);
+  await reachEnd(page, total);
   const last = rows(page).filter({ hasText: name(total, 'md') });
   await expect(last).toBeInViewport();
   await expect(rows(page).first()).toContainText(name(1, 'md'));
@@ -86,18 +88,18 @@ test('selection, the detail strip and the item menu work on a document from a la
 
 test('a filter or a sort change starts again at the top', async ({ page }) => {
   await seed(page, texts());
-  await expect.poll(() => scrollToEnd(page)).toBe(total);
+  await reachEnd(page, total);
   expect(await scrollTop(page)).toBeGreaterThan(1000);
   await chooseFromViewMenu(page, 'Name A–Z');
   await expect.poll(() => scrollTop(page)).toBe(0);
   expect(await rows(page).count()).toBeLessThan(200);
-  await expect.poll(() => scrollToEnd(page)).toBe(total);
+  await reachEnd(page, total);
   const search = page.locator('.library-search');
   await search.fill('Reference 09');
   const expected = texts().filter(document => document.name.includes('09')).length; // 119: 0009, 0090–0099, 0109, … 0900–0999
   await expect(page.locator('.library-result-count')).toHaveText(`${expected} references`);
   expect(await scrollTop(page)).toBe(0);
-  await expect.poll(() => scrollToEnd(page)).toBe(expected);
+  await reachEnd(page, expected);
 });
 
 test('thumbnails are requested only for tiles near the viewport', async ({ page }) => {

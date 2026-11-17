@@ -144,6 +144,27 @@ test('the Library tab survives a reload, on the same scope, and closing it forge
   await expect(count(page)).toHaveText('40 references');
 });
 
+test('a tab change is stored within the task that made it', async ({ page }) => {
+  await seed(page);
+  const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('hold-my-brief-tabs') ?? 'null')?.tabs?.map((tab: { format: string }) => tab.format) ?? []);
+  expect(await stored()).toEqual([]);
+  // The click and the read run in one task: a write that waits for a timer would not have happened yet.
+  const written = await page.evaluate(async () => {
+    const button = [...document.querySelectorAll<HTMLButtonElement>('#library-root button')].find(item => item.textContent?.trim() === 'Library')!;
+    button.click();
+    await Promise.resolve();
+    return JSON.parse(localStorage.getItem('hold-my-brief-tabs') ?? 'null')?.tabs?.map((tab: { format: string }) => tab.format) ?? [];
+  });
+  expect(written).toEqual(['library']);
+  // Closing it is stored the same way.
+  const cleared = await page.evaluate(async () => {
+    document.querySelector<HTMLElement>('#tab-list .tab[data-kind=library] .tab-close')!.click();
+    await Promise.resolve();
+    return JSON.parse(localStorage.getItem('hold-my-brief-tabs') ?? 'null')?.tabs?.length;
+  });
+  expect(cleared).toBe(0);
+});
+
 test('a Library tab that was behind a document comes back where it was', async ({ page }) => {
   await seed(page);
   await openLibraryTab(page);
