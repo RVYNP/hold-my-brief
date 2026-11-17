@@ -117,6 +117,18 @@ describe('TextAdapter interaction boundary', () => {
     expect(adapter.getPosition().label).toMatch(/^Line \d+ of 2$/);
     expect(adapter.getPosition().locator).toMatchObject({ kind: 'txt', blockLine: 1 });
   });
+  it('searches plain text by source line while a match is already marked', async () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    await adapter.open({ name: 'plain.txt', bytes: utf8('alpha\ngamma\ndelta beta\nomega'), format: 'txt' }, host, context, defaultOptions);
+    const [beta] = (await adapter.search('beta')).hits;
+    await adapter.revealSearchMatch(beta);
+    expect(host.querySelectorAll('mark.search-hit')).toHaveLength(1);
+    expect((await adapter.search('omega')).hits.map(hit => hit.unitLabel)).toEqual(['Line 4']);
+    const across = (await adapter.search('delta beta')).hits;
+    expect(across.map(hit => [hit.unitLabel, hit.text])).toEqual([['Line 3', 'delta beta']]);
+    await adapter.revealSearchMatch(across[0]);
+    expect(Array.from(host.querySelectorAll('mark.search-hit'), mark => mark.textContent).join('')).toBe('delta beta');
+  });
   it('rejects invalid Go to values without saving history or moving', async () => {
     await adapter.open({ name: 'plain.txt', bytes: utf8('one\ntwo'), format: 'txt' }, host, context, defaultOptions);
     const restore = vi.spyOn(adapter, 'restore');

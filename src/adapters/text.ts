@@ -3,7 +3,7 @@ import type { Locator, OutlineItem, Position, ReaderAdapter, ReaderContext, Read
 import { copyBlock, flash, iconMarkup, icons, openCodeSheet, type Sheet } from '../code-viewer';
 import { highlightCode } from '../code-highlight';
 import { markLines } from '../epub-code';
-import { excerpt, findMatches, type DocumentSearch, type SearchHit, type SearchOptions } from '../search';
+import { excerpt, findMatches, searchUnits, type DocumentSearch, type SearchHit, type SearchOptions, type UnitText } from '../search';
 
 /** What ends a run of inline text: a match never crosses one of these. */
 const blockSelector = 'p, h1, h2, h3, h4, h5, h6, li, td, th, pre, blockquote, figure, div, span[data-source-line]';
@@ -482,13 +482,13 @@ export class TextAdapter implements ReaderAdapter {
    * Searches the rendered text, so a query is what the reader sees: no `**`, backticks, link
    * syntax or heading `#`s. Offsets are into the concatenated text nodes, the same string `mark`
    * walks. A match never crosses a block (paragraph, heading, list item, table cell, code block).
-   * Markdown ignores how whitespace runs and soft line breaks fall; plain text searches line by
-   * line and matches exactly, as its source and its rendering are the same string.
+   * Markdown ignores how whitespace runs and soft line breaks fall. Plain text is searched as
+   * written: see `searchSource`.
    */
   async search(query: string, options: SearchOptions = {}): Promise<DocumentSearch> {
     if (this.disposed) return { hits: [], truncated: false };
-    const tolerant = this.format === 'md';
-    const needle = tolerant ? query.replace(/\s+/g, ' ') : query;
+    if (this.format === 'txt') return this.searchSource(query, options);
+    const needle = query.replace(/\s+/g, ' ');
     const hits: SearchHit[] = [];
     const limit = 2000;
     let truncated = false;
@@ -496,18 +496,14 @@ export class TextAdapter implements ReaderAdapter {
       if (truncated || !text.trim()) return;
       // Whitespace runs collapse to one space; `from`/`to` map each collapsed character back to the source run it came from.
       const from: number[] = [], to: number[] = [];
-      let collapsed = text;
-      if (tolerant) {
-        const parts: string[] = [];
-        for (const [run, index] of Array.from(text.matchAll(/\s+|\S/g), found => [found[0], found.index!] as const)) {
-          parts.push(/\s/.test(run[0]) ? ' ' : run);
-          from.push(index); to.push(index + run.length);
-        }
-        collapsed = parts.join('');
+      const parts: string[] = [];
+      for (const [run, index] of Array.from(text.matchAll(/\s+|\S/g), found => [found[0], found.index!] as const)) {
+        parts.push(/\s/.test(run[0]) ? ' ' : run);
+        from.push(index); to.push(index + run.length);
       }
-      for (const match of findMatches(collapsed, needle, options)) {
+      for (const match of findMatches(parts.join(''), needle, options)) {
         if (hits.length >= limit) { truncated = true; return; }
-        const start = tolerant ? from[match.start] : match.start, end = tolerant ? to[match.end - 1] : match.end;
+        const start = from[match.start], end = to[match.end - 1];
         hits.push({ text: text.slice(start, end), excerpt: excerpt(text, start, end), start: base + start, end: base + end, unit: line, unitLabel: `Line ${line}` });
       }
     };
@@ -515,20 +511,28 @@ export class TextAdapter implements ReaderAdapter {
     let base = 0, unit = '', unitBase = 0, unitBlock: Element | undefined;
     const flush = () => { if (unitBlock) searchUnit(unit, unitBase, Number(unitBlock.closest<HTMLElement>('[data-source-line]')?.dataset.sourceLine) || 1); unit = ''; };
     for (const node of this.textNodes()) {
-      if (this.format === 'txt') {
-        // One unit per source line; a chunk's text is its lines concatenated, so offsets equal source offsets.
-        const chunkLine = Number(node.parentElement?.closest<HTMLElement>('[data-source-line]')?.dataset.sourceLine) || 1;
-        let line = chunkLine;
-        for (const part of node.data.split(/(?<=\n)/)) { searchUnit(part, base, line++); base += part.length; if (truncated) break; }
-        continue;
-      }
       const block = blockOf(node);
       if (block !== unitBlock) { flush(); unitBlock = block; unitBase = base; }
       unit += node.data;
       base += node.data.length;
     }
-    if (this.format === 'md') flush();
+    flush();
     return { hits, truncated };
+  }
+
+  /**
+   * Plain text: the rendered text is exactly the source (the chunks are consecutive slices of it), so
+   * search the source one line at a time, exactly as written. Hit offsets are source offsets, which
+   * `mark` lands on, and the result does not depend on `<mark>` elements already splitting the text.
+   */
+  private searchSource(query: string, options: SearchOptions): DocumentSearch {
+    const units: UnitText[] = [];
+    for (let line = 0; line < this.offsets.length; line++) {
+      const text = this.source.slice(this.offsets[line], this.offsets[line + 1] ?? this.source.length);
+      if (text.trim()) units.push({ text, number: line + 1, label: `Line ${line + 1}` });
+    }
+    const { hits, truncated } = searchUnits(units, query, options);
+    return { hits: hits.map(hit => ({ ...hit, start: this.offsets[hit.unit - 1] + hit.start, end: this.offsets[hit.unit - 1] + hit.end })), truncated };
   }
 
   /** Scrolls the block holding a match into view and marks the matched text. */
