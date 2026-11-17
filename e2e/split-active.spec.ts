@@ -7,7 +7,13 @@ import { pagedPdf } from './paged-pdf';
 const pdf = { name: 'half-tone.pdf', mimeType: 'application/pdf', buffer: pagedPdf(5) };
 const edge = (page: Page, side: 'a' | 'b') => page.locator(`.pane-strip[data-pane=${side}] .pane-edge`);
 const dim = (page: Page, side: 'a' | 'b') => page.locator(`.pane-body[data-pane=${side}] .pane-dim`);
-const rowOpacity = (page: Page, side: 'a' | 'b') => page.locator(`.pane-strip[data-pane=${side}]`).evaluate(row => Number(getComputedStyle(row).opacity));
+/** Whether a row has stepped back: its shown tab has no card and its title is the muted ink, instead of the selected look (an opacity would take the text below AA). */
+const quiet = (page: Page, side: 'a' | 'b') => page.locator(`.pane-strip[data-pane=${side}]`).evaluate(row => {
+  const tab = row.querySelector('.tab.is-active')!, probe = document.createElement('span');
+  probe.style.color = 'var(--muted)'; row.append(probe);
+  const muted = getComputedStyle(probe).color; probe.remove();
+  return getComputedStyle(tab).backgroundColor === 'rgba(0, 0, 0, 0)' && getComputedStyle(tab.querySelector('.tab-title')!).color === muted;
+});
 const box = async (locator: Locator) => (await locator.boundingBox())!;
 
 /** The PDF on the left, the EPUB on the right, the PDF the active pane. */
@@ -29,7 +35,7 @@ test.beforeEach(async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce', forcedColors: 'none', contrast: 'no-preference' });
 });
 
-test('the active pane has the line along its top edge, the other pane is dimmed, and a click swaps them', async ({ page }) => {
+test('the active pane has the line along its top edge, the other pane is dimmed and its row steps back, and a click swaps them', async ({ page }) => {
   await splitPdfEpub(page);
   await expect(edge(page, 'a')).toBeVisible();
   const row = await box(page.locator('.pane-strip[data-pane=a]')), line = await box(edge(page, 'a'));
@@ -39,8 +45,8 @@ test('the active pane has the line along its top edge, the other pane is dimmed,
   await expect(edge(page, 'b')).toBeHidden();
   await expect(dim(page, 'a')).toBeHidden();
   await expect(dim(page, 'b')).toBeVisible();
-  await expect.poll(() => rowOpacity(page, 'b')).toBe(.55);
-  expect(await rowOpacity(page, 'a')).toBe(1);
+  await expect.poll(() => quiet(page, 'b')).toBe(true);
+  expect(await quiet(page, 'a')).toBe(false);
   // The dimming covers the page from below the row to the pane's bottom, and lets a press through.
   const body = await box(page.locator('.pane-body[data-pane=b]')), shade = await box(dim(page, 'b')), strip = await box(page.locator('.pane-strip[data-pane=b]'));
   expect(shade).toEqual(body);
@@ -52,29 +58,29 @@ test('the active pane has the line along its top edge, the other pane is dimmed,
   await expect(edge(page, 'a')).toBeHidden();
   await expect(dim(page, 'a')).toBeVisible();
   await expect(dim(page, 'b')).toBeHidden();
-  await expect.poll(() => rowOpacity(page, 'a')).toBe(.55);
-  expect(await rowOpacity(page, 'b')).toBe(1);
+  await expect.poll(() => quiet(page, 'a')).toBe(true);
+  expect(await quiet(page, 'b')).toBe(false);
 });
 
 test('the marks fade over 120 ms, and show nothing while Home covers the split or a folded split shows one pane', async ({ page }) => {
   await splitPdfEpub(page);
-  expect(await page.locator('.pane-strip[data-pane=b]').evaluate(row => getComputedStyle(row).transitionDuration)).toBe('0s'); // Reduced motion: at once.
+  expect(await page.locator('.pane-strip[data-pane=b] .tab-title').evaluate(title => getComputedStyle(title).transitionDuration)).toBe('0s'); // Reduced motion: at once.
   await page.emulateMedia({ reducedMotion: 'no-preference' });
-  expect(await page.locator('.pane-strip[data-pane=b]').evaluate(row => getComputedStyle(row).transitionDuration)).toBe('0.12s');
+  expect(await page.locator('.pane-strip[data-pane=b] .tab-title').evaluate(title => getComputedStyle(title).transitionDuration)).toBe('0.12s, 0.12s, 0.12s, 0.12s');
   expect(await dim(page, 'b').evaluate(shade => getComputedStyle(shade).transitionDuration)).toContain('0.12s');
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.locator('#home-tab').click();
   await expect(page.locator('#workspace')).toHaveClass(/is-covered/);
   for (const side of ['a', 'b'] as const) { await expect(edge(page, side)).toBeHidden(); await expect(dim(page, side)).toBeHidden(); }
-  await expect.poll(() => rowOpacity(page, 'b')).toBe(1);
+  await expect.poll(() => quiet(page, 'b')).toBe(false);
   await page.locator('.pane-strip[data-pane=a] .tab').first().click();
   await expect(page.locator('#workspace')).not.toHaveClass(/is-covered/);
   await expect(edge(page, 'a')).toBeVisible();
   await page.setViewportSize({ width: 700, height: 760 });
   await expect(page.locator('#workspace')).toHaveClass(/is-single/);
   for (const side of ['a', 'b'] as const) { await expect(edge(page, side)).toBeHidden(); await expect(dim(page, side)).toBeHidden(); }
-  expect(await rowOpacity(page, 'a')).toBe(1);
-  expect(await rowOpacity(page, 'b')).toBe(1);
+  expect(await quiet(page, 'a')).toBe(false);
+  expect(await quiet(page, 'b')).toBe(false);
 });
 
 test('forced colours draw the edge in the system highlight and do not dim the other pane', async ({ page }) => {

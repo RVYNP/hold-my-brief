@@ -1518,18 +1518,20 @@ dialog, dialog.drop, #menu, #appearance, .tab-menu, .zoom-menu { background-imag
 #workspace.is-split .pane-strip .pane-fold:hover { background: var(--hover); }
 #workspace.is-split .pane-strip .pane-fold:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 /* Which pane is active (hillclimb 2C). Its row carries the sheen as a 2 px line across the full top edge, in place of the per-tab sheen the panes' rows
-   do not draw; every other pane's row steps back to 55 % and its reading surface is dimmed by `.pane-dim`, which takes no pointer. A lone pane (not split,
+   do not draw; every other pane's row steps back in colour (muted text and icons, no card on its shown tab; AA holds, which an opacity would not) and its reading surface is dimmed by `.pane-dim`, which takes no pointer. A lone pane (not split,
    covered by Home or the Library page, or a folded split) is marked by neither. Forced colours and more contrast are at the end of the file. */
 /* The rows' own tabs draw no sheen. The line is emptied, not removed, and the pane that is not the active one still has it `display: none` (its shown tab is selected, without the line). */
 #workspace.is-split .pane-strip .tab.is-active::before { background: none; }
 .pane-strip.is-inactive .tab.is-active::before { display: none; }
-.pane-strip { transition: opacity 120ms; }
+.pane-strip .tab, .pane-strip .tab-format, .pane-strip .tab-title, .pane-strip .tab-where, .pane-strip .tab-hint, .pane-strip .tab-close, .pane-strip .tab-add, .pane-strip .tab-overflow { transition: color 120ms, background-color 120ms, border-color 120ms, box-shadow 120ms; }
 .pane-edge { display: none; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--sheen); pointer-events: none; }
 .pane-dim { position: absolute; inset: 0; z-index: 10; background: light-dark(rgb(0 0 0 / .08), rgb(0 0 0 / .28)); pointer-events: none; opacity: 0; visibility: hidden; transition: opacity 120ms, visibility 0s 120ms; }
 #workspace.is-split:not(.is-covered, .is-single)[data-active='a'] .pane-strip[data-pane='a'] .pane-edge,
 #workspace.is-split:not(.is-covered, .is-single)[data-active='b'] .pane-strip[data-pane='b'] .pane-edge { display: block; }
-#workspace.is-split:not(.is-covered, .is-single)[data-active='a'] .pane-strip[data-pane='b'],
-#workspace.is-split:not(.is-covered, .is-single)[data-active='b'] .pane-strip[data-pane='a'] { opacity: .55; }
+#workspace.is-split:not(.is-covered, .is-single)[data-active='a'] .pane-strip[data-pane='b'] .tab.is-active,
+#workspace.is-split:not(.is-covered, .is-single)[data-active='b'] .pane-strip[data-pane='a'] .tab.is-active { background: none; border-color: transparent; box-shadow: none; }
+#workspace.is-split:not(.is-covered, .is-single)[data-active='a'] .pane-strip[data-pane='b'] :is(.tab, .tab-format, .tab.is-active .tab-format, .tab-title, .tab-where, .tab-hint, .tab-close, .tab-add, .tab-overflow),
+#workspace.is-split:not(.is-covered, .is-single)[data-active='b'] .pane-strip[data-pane='a'] :is(.tab, .tab-format, .tab.is-active .tab-format, .tab-title, .tab-where, .tab-hint, .tab-close, .tab-add, .tab-overflow) { color: var(--muted); }
 #workspace.is-split:not(.is-covered, .is-single)[data-active='a'] .pane-body[data-pane='b'] .pane-dim,
 #workspace.is-split:not(.is-covered, .is-single)[data-active='b'] .pane-body[data-pane='a'] .pane-dim { opacity: 1; visibility: visible; transition: opacity 120ms; }
 #split-preview { position: absolute; z-index: 8; pointer-events: none; outline: 2px solid var(--accent); outline-offset: -2px; background: color-mix(in srgb, var(--accent) 10%, transparent); }
