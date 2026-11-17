@@ -219,6 +219,13 @@ clipboard and says *Copied* for a moment; **Open** shows the block in the same s
 selecting across a block and copying never takes the label or the buttons. A long line wraps, with the wrapped part indented under the
 line it continues, while the Wrap setting is on. Inline `code` is a small chip in the same face.
 
+A fenced block whose language is one of bash (`sh`, `zsh`, `console`), shell, JavaScript (`js`, `jsx`), TypeScript (`ts`, `tsx`), JSON, Python
+(`py`), CSS, HTML or XML (`html`), Markdown (`md`), YAML (`yml`), SQL, Rust, Go, Swift, diff or plaintext is coloured: keywords, strings, names,
+numbers and comments each take a colour of the current theme, and diff adds a tint to added and removed lines. The language is never guessed:
+a block with no language, or with one that is not in the list, stays in the ink colour and keeps its label. A block over 2,000 lines or 200 KB is
+left plain. The text itself is not changed, so Find, Copy and saved places work as before. With increased contrast or forced colours the
+blocks are not coloured. EPUB code blocks keep the publisher's colours.
+
 The theme design is inspired by [Tern](https://stencil.so/tern) by Stencil, and the Graphite theme
 uses Tern's default palette. See [Credits](../README.md#credits).
 
