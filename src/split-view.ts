@@ -3,9 +3,9 @@
  * for a tab with no page) is laid on, and the dividers between the panes. The numbers and rules are in `layout.ts`; which tab is where is in
  * `tabs.ts`; `main.ts` owns what a pane shows.
  */
-import { nudgePercent, percentAt, shareOf, snapPercent, type Axis, type Limits } from './layout';
+import { nudgePercent, panes, percentAt, shareOf, sketch, snapPercent, type Axis, type Layout, type Limits } from './layout';
 
-/** What a side is drawn with. `body` is the layer over the pane's reading surface, `row` its tabs, `fold` the button at the row's end that swaps the panes while only one shows, `state` the placeholder of a tab with no page, `ghost` a still copy of the view controls while the side is not the active one. */
+/** What a side is drawn with. `body` is the layer over the pane's reading surface, `row` its tabs, `fold` the button at the row's end that holds the pane map while only one pane shows, `state` the placeholder of a tab with no page, `ghost` a still copy of the view controls while the side is not the active one. */
 export type SideView = { id: string; body: HTMLElement; row: HTMLElement; list: HTMLElement; add: HTMLElement; overflow: HTMLElement; fold: HTMLElement; state: HTMLElement; ghost?: HTMLElement };
 
 const make = <K extends keyof HTMLElementTagNameMap>(tag: K, className: string, attributes: Record<string, string> = {}) => {
@@ -31,7 +31,7 @@ export function createRow(id: string) {
   const add = make('button', 'tab-add', { type: 'button', 'aria-label': `New tab, ${sideName(id)}`, title: 'New tab' });
   const overflow = make('button', 'tab-overflow', { type: 'button', 'aria-label': `All tabs, ${sideName(id)}`, title: 'All tabs', 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
   overflow.hidden = true;
-  const fold = make('button', 'pane-fold', { type: 'button' });
+  const fold = make('button', 'pane-fold', { type: 'button', 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
   fold.hidden = true;
   row.append(make('span', 'pane-edge', { 'aria-hidden': 'true' }), list, add, overflow, fold);
   return { row, list, add, overflow, fold };
@@ -92,19 +92,35 @@ export function paintDivider(divider: HTMLElement, percent: number, axis: Axis) 
   divider.setAttribute('aria-valuetext', axis === 'row' ? `${shown} % left, ${100 - shown} % right` : `${shown} % top, ${100 - shown} % bottom`);
 }
 
-/** Lucide's `columns-2`. */
-const COLUMNS_ICON = '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M12 3v18"/>';
-/** The button at the end of a folded split's row: a two-columns icon and "Other side (n)" (with more than two panes, "Other panes (n)"), n being the documents the panes that are out of sight hold. Hidden when the panes are side by side. */
-export function paintFold(fold: HTMLElement, folded: boolean, others: number, panes = 2) {
+const SVG = 'http://www.w3.org/2000/svg';
+/** The map's size, in CSS px (the same in the fold button and in a menu row), and the gap between its cells. */
+const MAP_WIDTH = 22, MAP_HEIGHT = 14, MAP_GAP = 2;
+
+/** A small picture of the layout: one cell per pane, laid out like the panes, `active`'s filled with `--accent` and the others outlined in `--muted` (the CSS draws them). */
+export function paneMap(tree: Layout, active: string): SVGSVGElement {
+  const width = MAP_WIDTH, height = MAP_HEIGHT, svg = document.createElementNS(SVG, 'svg');
+  for (const [name, value] of Object.entries({ class: 'pane-map', width: String(width), height: String(height), viewBox: `0 0 ${width} ${height}`, 'aria-hidden': 'true' })) svg.setAttribute(name, value);
+  // Half a pixel in, so the 1 px outline of a cell stays inside the picture.
+  for (const { pane, rect } of sketch(tree, { x: .5, y: .5, width: width - 1, height: height - 1 }, MAP_GAP)) {
+    const cell = document.createElementNS(SVG, 'rect');
+    for (const [name, value] of Object.entries({ x: String(rect.x), y: String(rect.y), width: String(rect.width), height: String(rect.height), rx: '1.5' })) cell.setAttribute(name, value);
+    if (pane === active) cell.classList.add('is-active');
+    svg.append(cell);
+  }
+  return svg;
+}
+
+/** The button at the end of a folded split's row: the map of the layout and "n panes" beside it. `label` is its accessible name. Hidden when the panes are side by side. */
+export function paintFold(fold: HTMLElement, folded: boolean, tree: Layout, active: string, label: string) {
   fold.hidden = !folded;
   if (!folded) return;
-  const side = panes > 2 ? 'panes' : 'side', label = `Other ${side} (${others})`;
-  if (fold.textContent !== label || !fold.querySelector('svg')) {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    for (const [name, value] of Object.entries({ width: '13', height: '13', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' })) svg.setAttribute(name, value);
-    svg.innerHTML = COLUMNS_ICON;
-    fold.replaceChildren(svg, label);
+  const count = panes(tree).length, key = `${active}|${JSON.stringify(tree)}`;
+  if (fold.dataset.map !== key) {
+    fold.dataset.map = key;
+    const text = make('span', 'pane-fold-count');
+    text.textContent = `${count} panes`;
+    fold.replaceChildren(paneMap(tree, active), text);
   }
-  fold.setAttribute('aria-label', `Other ${side}, ${others} ${others === 1 ? 'document' : 'documents'}`);
-  fold.title = panes > 2 ? 'Show the next pane (Ctrl \\)' : 'Show the other side (Ctrl \\)';
+  fold.setAttribute('aria-label', label);
+  fold.title = 'Choose a pane (Ctrl \\)';
 }

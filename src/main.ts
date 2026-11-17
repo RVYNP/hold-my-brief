@@ -36,7 +36,7 @@ import { steppedFontSize } from './text-size';
 import { createWindowControls, wireWindowControls } from './window-controls';
 import { Pane } from './pane';
 import { DEFAULT_PERCENT, MIN_SPLIT_WINDOW, PANE_IDS, boxes, evenRatio, fits, freeId, neighbour, panes as panesOf, receiver, removePane, renamePanes, setRatio, splitAt, splitPane, type Axis, type Direction, type Layout, type Path, type Rect } from './layout';
-import { createBody, createDivider, createRow, paintDivider, paintFold, withoutIds, type SideView } from './split-view';
+import { createBody, createDivider, createRow, paintDivider, paintFold, paneMap, withoutIds, type SideView } from './split-view';
 import { createContextMenu, type MenuEntry } from './context-menu';
 initAppearance();
 
@@ -145,7 +145,7 @@ function makeSide(id: string): Side {
   if (id === 'a') { state = $('tab-state'); body.append(state, pill); } else { state = withoutIds(stateTemplate.cloneNode(true) as HTMLElement); state.hidden = true; body.append(state); }
   workspace.append(parts.row, body);
   const tabsRow = createTabStrip({ strip: parts.row, list: parts.list, add: parts.add, overflow: parts.overflow }, { select: path => selectTab(path), close: closeTab, newTab: () => { activateSide(side); openFile(); }, move: (path, to) => { side.tabs.move(path, to); paintTabs(); saveSession(); }, menu: showTabMenu, carry }, platform === 'mac' ? '⌘T' : 'Ctrl T');
-  parts.fold.onclick = () => focusNextPane();
+  parts.fold.onclick = () => showPaneMenu(parts.fold);
   const side: Side = { pane: new Pane<Tab>({ persist, notify }), tabs: new TabList<Tab>(), shown: undefined, scanNoticeShown: false, view: { id, body, state, ...parts }, strip: tabsRow };
   state.querySelector<HTMLElement>('.primary')!.onclick = () => stateAction(side);
   state.querySelector<HTMLElement>('.tab-state-actions button:not(.primary)')!.onclick = () => { if (side.shown) closeTab(side.shown.path); };
@@ -985,10 +985,15 @@ function makeDivider(path: Path) {
     },
   });
 }
-/** While one pane shows, the shown pane's row ends with the button that swaps the panes. */
+/** While one pane shows, the shown pane's row ends with the pane map: the layout drawn small, "n panes", and a menu of the panes. */
 function paintFolds() {
   const folded = isSplit() && workspace.classList.contains('is-single');
-  for (const side of sides) paintFold(side.view.fold, folded && side === focused, sides.reduce((total, other) => other === side ? total : total + other.tabs.size, 0), sides.length);
+  const shown = focused.shown, label = `Panes, ${sides.length}; showing ${shown ? tabTitle(shown) : 'no document'}`;
+  for (const side of sides) paintFold(side.view.fold, folded && side === focused, layout, focused.view.id, label);
+}
+/** The pane map's menu: a row per pane (in reading order) with the layout drawn small, that pane filled, and the document it shows; choosing one makes that pane the active one. */
+function showPaneMenu(anchor: HTMLElement) {
+  contextMenu.show(sides.map(side => { const shown = side.shown ?? side.tabs.tabs[0]; return { label: shown ? tabTitle(shown) : 'No document', icon: () => paneMap(layout, side.view.id), run: () => focusSide(side) }; }), anchor);
 }
 let ratioTimer: ReturnType<typeof setTimeout> | undefined;
 /** Moves a divider (`next` is the layout with it moved). A drag moves it on every frame, so the session is written once it has been still for a moment. */
@@ -1082,11 +1087,12 @@ function orderSides() {
   sides.sort((x, y) => order.indexOf(x.view.id) - order.indexOf(y.view.id));
 }
 /**
- * Splits `near`, which becomes the active pane: `tab` (a document tab of it, shown or not) moves to a new pane to its right (`axis` `row`) or below it (`column`), which becomes the active one;
- * every other tab stays in `near`, showing the one shown most recently. With `mirrored` (a tab dragged onto the left quarter of a window that is not split) the new pane is the other way round: `tab` stays alone
- * in `near`, which stays the active pane, and every other document tab goes to the new pane, showing the one the window was showing (else the one shown most recently).
+ * Splits `near`, which becomes the active pane: `tab` (a document tab of it, shown or not) moves to a new pane to its right or below it (`axis` `row` or `column`, `place` `'after'`) or to its left or above it
+ * (`'before'`), which becomes the active one; every other tab stays in `near`, showing the one shown most recently. With `mirrored` (a tab dragged onto the left or top quarter of a window that is not split) the
+ * new pane is the other way round: `tab` stays alone in `near`, which stays the active pane, and every other document tab goes to the new pane, showing the one the window was showing (else the one shown
+ * most recently); `place` is then `'after'`, the dragged tab being the first pane.
  */
-function startSplit(tab: Tab, near: Side, axis: Axis, mirrored = false) {
+function startSplit(tab: Tab, near: Side, axis: Axis, mirrored = false, place: 'before' | 'after' = 'after') {
   clearCover();
   activateSide(near);
   if (near.pane.cancelPending) cancelOpen();
@@ -1094,7 +1100,7 @@ function startSplit(tab: Tab, near: Side, axis: Axis, mirrored = false) {
   const entry = near.tabs.find(LIBRARY_PATH);
   if (entry) { near.tabs.detach(LIBRARY_PATH); libraryTab = entry; }
   const added = createSide(freeId(layout)!, (mirrored ? splitOffRest : splitOff)(near.tabs, tab.path)!, near);
-  layout = splitPane(layout, near.view.id, axis, 'after', added.view.id)!; orderSides();
+  layout = splitPane(layout, near.view.id, axis, place, added.view.id)!; orderSides();
   const beside = added.tabs.active!;
   for (const moved of added.tabs.tabs) moved.host?.setAttribute('data-pane', added.view.id);
   beside.host?.classList.remove('tab-hidden');
@@ -1107,11 +1113,11 @@ function startSplit(tab: Tab, near: Side, axis: Axis, mirrored = false) {
   if (mirrored) activateSide(near);
   focused.pane.host?.focus();
 }
-/** Split right or down: `tab` (the shown one, by default) moves to a new pane to the right of its pane or below it; with `edge` `'left'` (a drag, right only, window not split) it becomes the left pane and the other documents the right one. */
-function splitTab(axis: 'right' | 'down', tab = focused.shown, edge: 'left' | 'right' = 'right') {
+/** Split right or down: `tab` (the shown one, by default) moves to a new pane to the right of its pane or below it; with `mirrored` (a drag, window not split) it becomes the left or top pane and the other documents the right or bottom one. */
+function splitTab(axis: 'right' | 'down', tab = focused.shown, mirrored = false) {
   const reason = splitReason(axis, tab);
   if (reason || !tab) { notify(reason ?? 'Open a document to split'); return; }
-  startSplit(tab, holder(tab.path) ?? focused, axis === 'right' ? 'row' : 'column', edge === 'left');
+  startSplit(tab, holder(tab.path) ?? focused, axis === 'right' ? 'row' : 'column', mirrored);
 }
 /** Opens a document in a new pane to the right of the active pane or below it, splitting the window first when it is not split: the document is shown there, beside the documents that stay. One that is open in another pane moves. */
 function openInSplit(doc: { path: string; name: string; format: string }, axis: 'right' | 'down') {
@@ -1266,8 +1272,29 @@ function readingArea(): Edges {
   return { left: box.left + (libraryRight ? 0 : clear), right: box.right - (libraryRight ? clear : 0), top: box.top, bottom: box.bottom };
 }
 const within = (box: Edges, x: number, y: number) => x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
-/** Where a tab dragged out of its strip would land at this point: a slot in another pane's row, another pane, or (not split) the left or right quarter of the reading area. */
-type Landing = { kind: 'row'; to: Side; slot: number } | { kind: 'pane'; to: Side } | { kind: 'edge'; edge: 'left' | 'right' };
+type Edge = 'left' | 'right' | 'top' | 'bottom';
+/** Where a tab dragged out of its strip would land at this point: a slot in another pane's row, another pane (its centre), or a pane's edge (the outer quarter on a side), which splits that pane. Not split, the one pane is the reading area. */
+type Landing = { kind: 'row'; to: Side; slot: number } | { kind: 'pane'; to: Side } | { kind: 'edge'; to: Side; edge: Edge };
+/** The outer quarter of `box` the point is in, the nearest side in a corner; undefined in the centre. */
+function zoneAt(box: Edges, x: number, y: number): Edge | undefined {
+  const across = (x - box.left) / (box.right - box.left), down = (y - box.top) / (box.bottom - box.top);
+  const [edge, depth] = ([['left', across], ['right', 1 - across], ['top', down], ['bottom', 1 - down]] as const).reduce((best, next) => next[1] < best[1] ? next : best);
+  return depth < .25 ? edge : undefined;
+}
+const sideway = (edge: Edge) => edge === 'left' || edge === 'right';
+/** Why a tab dropped on the `edge` of the pane `over` cannot split it now: the menus' reasons for the pane, then whether the layout that would result fits the room. Undefined when it can. */
+function dropReason(path: string, over: Side, edge: Edge): string | undefined {
+  const axis = sideway(edge) ? 'right' : 'down';
+  if (!isSplit()) return splitReason(axis, known(path));
+  const from = holder(path);
+  if (!from) return 'Open a document first';
+  const context = splitContext(over), reason = paneSplitReason(axis, over === from ? context : { ...context, tabs: 2 }); // Another pane's tabs are not what the split needs: the dragged tab joins it.
+  if (reason) return reason;
+  // A pane that was the dragged tab's only one closes, and its room goes to its sibling.
+  const rest = over !== from && from.tabs.size === 1 ? removePane(layout, from.view.id) : layout;
+  const result = rest && splitPane(rest, over.view.id, sideway(edge) ? 'row' : 'column', edge === 'left' || edge === 'top' ? 'before' : 'after', freeId(rest) ?? '');
+  return result && fits(result, paneRect()) ? undefined : 'There is no room for another pane';
+}
 function landingAt(path: string, x: number, y: number): Landing | undefined {
   const tab = known(path);
   if (!tab || path === LIBRARY_PATH) return undefined; // The Library tab belongs to the window, not to a pane.
@@ -1275,19 +1302,24 @@ function landingAt(path: string, x: number, y: number): Landing | undefined {
     const from = holder(path), others = sides.filter(side => side !== from);
     if (!from || workspace.classList.contains('is-single')) return undefined; // Folded, the other panes' rows and pages are out of sight.
     for (const to of others) { const slot = to.strip.dropSlot(x, y); if (slot !== undefined) return { kind: 'row', to, slot }; }
-    const over = !cover ? others.find(side => within(side.view.body.getBoundingClientRect(), x, y)) : undefined;
-    return over ? { kind: 'pane', to: over } : undefined;
+    const over = !cover ? sides.find(side => within(side.view.body.getBoundingClientRect(), x, y)) : undefined;
+    if (!over) return undefined;
+    const edge = zoneAt(over.view.body.getBoundingClientRect(), x, y);
+    if (!edge) return over === from ? undefined : { kind: 'pane', to: over };
+    return dropReason(path, over, edge) ? undefined : { kind: 'edge', to: over, edge };
   }
-  if (splitReason('right', tab)) return undefined;
-  const area = readingArea();
-  if (!within(area, x, y)) return undefined;
-  const across = (x - area.left) / (area.right - area.left);
-  return across >= .75 ? { kind: 'edge', edge: 'right' } : across <= .25 ? { kind: 'edge', edge: 'left' } : undefined;
+  const area = readingArea(), edge = within(area, x, y) ? zoneAt(area, x, y) : undefined;
+  return edge && !dropReason(path, sides[0], edge) ? { kind: 'edge', to: sides[0], edge } : undefined;
 }
 function showPreview(box: Edges) {
   const origin = workspace.getBoundingClientRect();
   Object.assign(splitPreview.style, { left: `${box.left - origin.left}px`, top: `${box.top - origin.top}px`, width: `${box.right - box.left}px`, height: `${box.bottom - box.top}px` });
   splitPreview.hidden = false;
+}
+/** The half of `box` on the `edge` side: what the new pane would take. */
+function halfOf(box: Edges, edge: Edge): Edges {
+  const middleX = (box.left + box.right) / 2, middleY = (box.top + box.bottom) / 2;
+  return edge === 'left' ? { ...box, right: middleX } : edge === 'right' ? { ...box, left: middleX } : edge === 'top' ? { ...box, bottom: middleY } : { ...box, top: middleY };
 }
 function carryClear() { splitPreview.hidden = true; for (const side of sides) side.strip.showDrop(undefined); }
 function carryOver(path: string, x: number, y: number) {
@@ -1296,13 +1328,27 @@ function carryOver(path: string, x: number, y: number) {
   if (!landing || !tab) return;
   if (landing.kind === 'row') landing.to.strip.showDrop(landing.slot, tabTitle(tab));
   else if (landing.kind === 'pane') showPreview(landing.to.view.body.getBoundingClientRect());
-  else { const area = readingArea(), middle = (area.left + area.right) / 2; showPreview(landing.edge === 'right' ? { ...area, left: middle } : { ...area, right: middle }); }
+  else if (!isSplit()) showPreview(halfOf(readingArea(), landing.edge));
+  else { const body = landing.to.view.body.getBoundingClientRect(); showPreview(halfOf({ left: body.left, right: body.right, top: landing.to.view.row.getBoundingClientRect().top, bottom: body.bottom }, landing.edge)); }
 }
 function carryDrop(path: string, x: number, y: number) {
   const landing = landingAt(path, x, y);
   carryClear();
-  if (landing?.kind === 'edge') splitTab('right', known(path), landing.edge);
+  if (landing?.kind === 'edge') dropOnEdge(path, landing.to, landing.edge);
   else if (landing) moveTab(path, landing.to, landing.kind === 'row' ? landing.slot : undefined);
+}
+/**
+ * Splits the pane `over` along its `edge` with the dragged tab in the new pane. Not split, the left and top edges give the dragged tab the first pane (the same as the menu's Split right or Split down does for the second).
+ * A tab from another pane first moves into `over` (its pane closing when that was its last tab), then `over` is split with it.
+ */
+function dropOnEdge(path: string, over: Side, edge: Edge) {
+  const tab = known(path), before = edge === 'left' || edge === 'top';
+  if (!tab) return;
+  if (!isSplit()) { splitTab(sideway(edge) ? 'right' : 'down', tab, before); return; }
+  const from = holder(path);
+  if (!from) return;
+  if (over !== from) moveTab(path, over);
+  startSplit(tab, over, sideway(edge) ? 'row' : 'column', false, before ? 'before' : 'after');
 }
 /** A document card or row on Home: Open, Open in split right and Open in split down. */
 function showHomeMenu(item: { path: string; name: string; format: string }, anchor: HTMLElement, at: { x: number; y: number } | undefined) {

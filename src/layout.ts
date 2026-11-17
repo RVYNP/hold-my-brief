@@ -232,3 +232,18 @@ export function readLayout(value: unknown): Layout | undefined {
   const tree = read(value, 0);
   return tree && isSplit(tree) && seen.size <= MAX_PANES ? tree : undefined;
 }
+
+/** The narrowest share of a sketch's room either side of a split gets, in percent: a lopsided ratio still draws two cells you can see. */
+const SKETCH_LIMIT = 20;
+
+/**
+ * A small picture of the layout for the pane map: every pane's cell in `rect`, panes in reading order, with `gap` between cells. It follows each split's own ratio (kept
+ * within `SKETCH_LIMIT`..`100 - SKETCH_LIMIT`), unlike `boxes`, which holds every pane to its minimum size and so would draw every split in a room this small at 50.
+ */
+export function sketch(tree: Layout, rect: Rect, gap: number): PaneBox[] {
+  if (!isSplit(tree)) return [{ pane: tree.pane, rect }];
+  const row = tree.axis === 'row', share = Math.max(0, (row ? rect.width : rect.height) - gap);
+  const first = share * Math.max(SKETCH_LIMIT, Math.min(100 - SKETCH_LIMIT, tree.ratio)) / 100;
+  const cut = (offset: number, length: number): Rect => row ? { x: rect.x + offset, y: rect.y, width: length, height: rect.height } : { x: rect.x, y: rect.y + offset, width: rect.width, height: length };
+  return [...sketch(tree.first, cut(0, first), gap), ...sketch(tree.second, cut(first + gap, share - first), gap)];
+}

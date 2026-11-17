@@ -1603,11 +1603,16 @@ dialog, dialog.drop, #menu, #appearance, .tab-menu, .zoom-menu { background-imag
 #workspace.is-split .pane-strip .tab, #workspace.is-split .pane-strip .tab-add, #workspace.is-split .pane-strip .tab-overflow { height: 24px; }
 #workspace.is-split .pane-strip .tab-add, #workspace.is-split .pane-strip .tab-overflow { width: 24px; }
 #workspace.is-split .pane-strip .tab-list { flex: 0 1 auto; }
-/* A folded split: the shown pane's row ends with the button that swaps the panes. */
-#workspace.is-split .pane-strip .pane-fold { flex: none; margin-left: auto; height: 24px; padding: 0 8px; display: inline-flex; align-items: center; gap: 5px; border-radius: 6px; color: var(--accent-ink); font: 600 12px/1 var(--font-ui); white-space: nowrap; }
+/* A folded split: the shown pane's row ends with the button that holds the pane map (hillclimb 23 · 3B, 3C) and opens the menu of panes. */
+#workspace.is-split .pane-strip .pane-fold { flex: none; margin-left: auto; height: 24px; padding: 0 8px; display: inline-flex; align-items: center; gap: 7px; border-radius: 6px; color: var(--accent-ink); font: 600 12px/1 var(--font-ui); white-space: nowrap; }
 #workspace.is-split .pane-strip .pane-fold[hidden] { display: none; }
 #workspace.is-split .pane-strip .pane-fold:hover { background: var(--hover); }
 #workspace.is-split .pane-strip .pane-fold:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* The pane map: a cell per pane laid out like the panes, the one it stands for filled with the accent and the others outlined in the muted ink. */
+.pane-map { flex: none; display: block; }
+.pane-map rect { fill: none; stroke: var(--muted); stroke-width: 1; }
+.pane-map rect.is-active { fill: var(--accent); stroke: var(--accent); }
+.context-menu button:has(> .pane-map) { display: flex; align-items: center; gap: 10px; }
 /* Which pane is active (hillclimb 2C). Its row carries the sheen as a 2 px line across the full top edge, in place of the per-tab sheen the panes' rows
    do not draw; every other pane's row steps back in colour (muted text and icons, no card on its shown tab; AA holds, which an opacity would not) and its reading surface is dimmed by `.pane-dim`, which takes no pointer. A lone pane (not split,
    covered by Home or the Library page, or a folded split) is marked by neither. Forced colours and more contrast are at the end of the file. */

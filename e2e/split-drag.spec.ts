@@ -2,7 +2,7 @@ import { test, expect, type Locator, type Page } from '@playwright/test';
 import { chapterBook } from './epub-book';
 import { pagedPdf } from './paged-pdf';
 
-/** Split view, third part: drag a tab onto the other pane's row, onto a pane's page, or onto the reading area's left or right quarter to split. */
+/** Split view, third part: drag a tab onto the other pane's row, onto a pane's page, or onto the reading area's outer quarters to split (the drop zones of every pane are in split-zones.spec.ts). */
 
 const pdf = { name: 'half-tone.pdf', mimeType: 'application/pdf', buffer: pagedPdf(5) };
 const markdown = { name: 'moby.md', mimeType: 'text/markdown', buffer: Buffer.from(['# Moby', '', ...Array.from({ length: 80 }, (_, i) => `Line ${i + 1}: call me Ishmael.`)].join('\n\n')) };
@@ -130,8 +130,7 @@ test.describe('1440 × 900', () => {
   test('releasing a dragged tab over no target does nothing: the tab is where it was', async ({ page }) => {
     await openThree(page);
     await setLibrary(page, false);
-    const strip = await box(page.locator('#tab-strip'));
-    await pick(page, tabOf(page, 'MD'), { x: strip.x + strip.width / 2, y: strip.y + strip.height + 40 }); // Below the strip, in the middle of the page.
+    await pick(page, tabOf(page, 'MD'), point(await box(workspace(page)), .5)); // The middle of the page: the top quarter is a drop zone now.
     await expect(preview(page)).toBeHidden();
     await page.mouse.up();
     await expect(barTabs(page).locator('.tab-format')).toHaveText(['PDF', 'EPUB', 'MD']);
@@ -281,7 +280,7 @@ test('where two 360 px panes do not fit (the library docked in a 1080 px window)
   await expect(barTabs(page).locator('.tab-format')).toHaveText(['PDF', 'EPUB', 'MD']);
 });
 
-test('the folded split\'s "Other side (n)" button draws the app\'s columns icon, not a character the UI font lacks', async ({ page }) => {
+test('the folded split\'s pane map draws a cell per pane in an SVG, the active one filled, with "n panes" beside it', async ({ page }) => {
   await page.setViewportSize({ width: 1080, height: 760 });
   await widePanel(page);
   await openThree(page);
@@ -291,12 +290,21 @@ test('the folded split\'s "Other side (n)" button draws the app\'s columns icon,
   await expect(formats(page, 'b')).toHaveText(['EPUB']);
   await setLibrary(page, true);
   await expect(workspace(page)).toHaveClass(/is-single/);
-  const fold = page.getByRole('button', { name: /Other side/ });
+  const fold = page.getByRole('button', { name: /^Panes, / });
   await expect(fold).toBeVisible();
-  await expect(fold.locator('svg')).toHaveCount(1);
-  expect(await fold.locator('svg').evaluate(svg => ({ width: svg.getAttribute('width'), height: svg.getAttribute('height'), stroke: svg.getAttribute('stroke') }))).toEqual({ width: '13', height: '13', stroke: 'currentColor' });
-  const label = (await fold.textContent())!;
-  expect(label).not.toContain('⫴');
-  expect(label.trim()).toBe('Other side (2)');
-  await expect(fold).toHaveAccessibleName('Other side, 2 documents');
+  await expect(fold).toHaveText('2 panes');
+  await expect(fold).toHaveAccessibleName(/^Panes, 2; showing THE GENERATED BOOK/);
+  await expect(fold.locator('svg.pane-map rect')).toHaveCount(2);
+  await expect(fold.locator('svg.pane-map rect.is-active')).toHaveCount(1);
+  // The active pane is the right one: its cell is the second, and is filled with the accent; the other is outlined in the muted ink.
+  const [first, second] = await fold.locator('svg.pane-map rect').evaluateAll(cells => cells.map(cell => { const css = getComputedStyle(cell); return { x: cell.getBoundingClientRect().x, fill: css.fill, stroke: css.stroke }; }));
+  expect(second.x).toBeGreaterThan(first.x);
+  const ink = await page.evaluate(() => { const probe = document.createElement('i'); document.body.append(probe); const read = (name: string) => { probe.style.color = `var(${name})`; return getComputedStyle(probe).color; }; const out = { accent: read('--accent'), muted: read('--muted'), inkOfText: read('--accent-ink') }; probe.remove(); return out; });
+  expect(second.fill).toBe(ink.accent);
+  expect(first.fill).toBe('none');
+  expect(first.stroke).toBe(ink.muted);
+  const text = await fold.locator('.pane-fold-count').evaluate(node => { const css = getComputedStyle(node); return { weight: css.fontWeight, size: css.fontSize, colour: css.color }; });
+  expect(text.weight).toBe('600');
+  expect(text.size).toBe('12px');
+  expect(text.colour).toBe(ink.inkOfText);
 });
