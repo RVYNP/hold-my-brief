@@ -497,7 +497,8 @@ test('split view still', async ({ page }) => {
   await page.keyboard.press('PageDown');
   await expect(page.locator('#position')).toContainText('Page 2 of 5');
   await page.mouse.move(700, 880);
-  await page.screenshot({ path: 'docs/media/split-view.png' });
+  await expect(page.locator('.pane-body[data-pane=b] .pane-dim')).toBeVisible();
+  await page.screenshot({ path: 'docs/media/split-view.png', animations: 'disabled' });
   await page.emulateMedia({ colorScheme: 'dark' });
-  await page.screenshot({ path: 'docs/media/split-view-dark.png' });
+  await page.screenshot({ path: 'docs/media/split-view-dark.png', animations: 'disabled' });
 });
