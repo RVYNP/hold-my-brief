@@ -219,6 +219,7 @@ export function createTabStrip(elements: { strip: HTMLElement; home?: HTMLElemen
     const tab = (event.target as Element).closest<HTMLElement>('.tab');
     if (!tab || drag || event.button !== 0 || !event.isPrimary || (event.target as Element).closest('.tab-close')) return;
     drag = { id: event.pointerId, x: event.clientX, tab, left: tab.offsetLeft, scroll: list.scrollLeft, next: tab.nextElementSibling, moved: false, away: false, cancelled: false };
+    tab.setPointerCapture(event.pointerId); // Without it a press that leaves the row downward stops hearing moves before the drag starts.
   });
   list.addEventListener('pointermove', event => {
     if (!drag || event.pointerId !== drag.id || drag.cancelled) return;
