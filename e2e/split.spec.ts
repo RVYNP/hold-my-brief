@@ -485,9 +485,9 @@ test('each pane\'s zoom label follows its own page through a split, a divider dr
   await agree('a', live, 'split ended');
 });
 
-// A still, not a check: `HMB_SHOT=1 npx playwright test e2e/split.spec.ts -g "split view still"` writes docs/media/split-view.png (Brief, light, 1440 × 900; documents built by the fixtures).
+// A still, not a check: `HMB_SHOT=1 npx playwright test e2e/split.spec.ts -g "split view still"` writes docs/media/split-view.png and split-view-dark.png (Brief, light and dark, 1440 × 900; documents built by the fixtures).
 test('split view still', async ({ page }) => {
-  test.skip(!process.env.HMB_SHOT, 'writes docs/media/split-view.png only when HMB_SHOT is set');
+  test.skip(!process.env.HMB_SHOT, 'writes docs/media/split-view.png and split-view-dark.png only when HMB_SHOT is set');
   await page.emulateMedia({ colorScheme: 'light' });
   await page.addInitScript(() => localStorage.setItem('hold-my-brief:appearance', JSON.stringify({ mode: 'system', palette: 'brief', accent: null, page: 'theme' })));
   await split(page);
@@ -496,4 +496,6 @@ test('split view still', async ({ page }) => {
   await expect(page.locator('#position')).toContainText('Page 2 of 5');
   await page.mouse.move(700, 880);
   await page.screenshot({ path: 'docs/media/split-view.png' });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.screenshot({ path: 'docs/media/split-view-dark.png' });
 });
