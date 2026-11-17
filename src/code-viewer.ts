@@ -184,7 +184,7 @@ export function attachCodeControls(doc: Document, hooks: CodeHooks): void {
     if (block?.isConnected && place(block)) controls.setAttribute('data-shown', '');
     else { controls.removeAttribute('data-shown'); current = null; }
   };
-  // A label goes at the top-left of the first box of its block. Layout moves under it (a style sheet arrives, an image loads, the window or the text size changes), so it is set again then.
+  // A label goes at the top-left of the first box of its block. Layout moves under it (a style sheet arrives, an image loads, the window or the text size changes), so it is set again then. The frame is sandboxed without scripts, and WebKit never runs callbacks made in its realm, so the observers and the frame callback come from the app window, as Foliate's own do.
   const placeLabels = () => {
     for (const [block, tag] of labels) {
       const rect = block.isConnected ? Array.from(block.getClientRects()).find(box => box.width > 0 && box.height > 0) : undefined;
@@ -199,12 +199,12 @@ export function attachCodeControls(doc: Document, hooks: CodeHooks): void {
     const relayout = () => {
       if (queued) return;
       queued = true;
-      view.requestAnimationFrame(() => { queued = false; if (view.document === doc) placeLabels(); });
+      requestAnimationFrame(() => { queued = false; if (view.document === doc) placeLabels(); });
     };
-    const observer = new view.ResizeObserver(relayout);
+    const observer = new ResizeObserver(relayout);
     observer.observe(doc.documentElement); observer.observe(doc.body);
     for (const block of labels.keys()) observer.observe(block);
-    if (doc.head) new view.MutationObserver(relayout).observe(doc.head, { childList: true, subtree: true, characterData: true, attributes: true });
+    if (doc.head) new MutationObserver(relayout).observe(doc.head, { childList: true, subtree: true, characterData: true, attributes: true });
     doc.addEventListener('load', relayout, true);
     view.addEventListener('resize', relayout);
     void doc.fonts?.ready.then(relayout);
