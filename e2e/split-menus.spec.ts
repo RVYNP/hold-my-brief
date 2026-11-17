@@ -243,7 +243,7 @@ test.describe('1080 × 760', () => {
     // The active pane (the EPUB's, on the right) is the one that shows; its row ends with the button, which counts the other side's tabs.
     const fold = page.getByRole('button', { name: /Other side/ });
     await expect(fold).toBeVisible();
-    await expect(fold).toHaveText('⫴ Other side (2)');
+    await expect(fold).toHaveText('Other side (2)');
     await expect(page.locator('.pane-strip[data-pane=a]')).toBeHidden();
     await expect(page.locator('.reader-host[data-pane=b]:not(.tab-hidden)')).toBeVisible();
     await expect(page.locator('.reader-host[data-pane=a]:not(.tab-hidden)')).toBeHidden();
@@ -254,7 +254,7 @@ test.describe('1080 × 760', () => {
     await expect(page.locator('.reader-host[data-pane=a]:not(.tab-hidden)')).toBeVisible();
     await expect(page.locator('.reader-host[data-pane=b]:not(.tab-hidden)')).toBeHidden();
     await expect(page.locator('#position')).toContainText('Page 1 of 5');
-    await expect(page.getByRole('button', { name: /Other side/ })).toHaveText('⫴ Other side (1)');
+    await expect(page.getByRole('button', { name: /Other side/ })).toHaveText('Other side (1)');
     await expect(page.locator('.pane-strip[data-pane=b]')).toBeHidden();
     // The library's room back: both panes unfold by themselves.
     await setLibrary(page, false);
@@ -282,7 +282,7 @@ test.describe('1080 × 760', () => {
     await menuItem(page, 'Open in split right').click();
     await expect(workspace(page)).toHaveAttribute('data-active', 'b');
     await expect(page.locator('.pane-strip[data-pane=b] .tab.is-active .tab-title')).toHaveText('extra.txt');
-    await expect(page.getByRole('button', { name: /Other side/ })).toHaveText('⫴ Other side (2)');
+    await expect(page.getByRole('button', { name: /Other side/ })).toHaveText('Other side (2)');
   });
 });
 
@@ -340,11 +340,22 @@ test.describe('the split after a restart', () => {
     await expect(row(page, 'b').locator('.tab-format')).toHaveText(['EPUB']);
     await goTo(page, '50%');
     await expect(page.locator('#position')).toContainText('50');
+    // The book's page count and place keep refining for a moment after a jump (50.4 % settles at 55.3 %): take the place once the label has held still.
+    await expect(async () => {
+      const before = await page.locator('#position').textContent();
+      await page.waitForTimeout(500);
+      expect(await page.locator('#position').textContent()).toBe(before);
+    }).toPass();
     const epubPlace = await page.locator('#position').textContent();
     // The divider to 56 %, then the left pane active again.
-    await page.locator('.pane-divider').focus();
-    for (let step = 0; step < 3; step++) await page.keyboard.press('ArrowRight');
-    await expect(page.locator('.pane-divider')).toHaveAttribute('aria-valuenow', '56');
+    // One step at a time, with the focus put back and the key sent again until it lands: Go to hands the focus back to the page when the book's jump settles, which can be after the label changed, and a key sent before that goes to the page.
+    for (const value of ['52', '54', '56']) {
+      await expect(async () => {
+        await page.locator('.pane-divider').focus();
+        await page.keyboard.press('ArrowRight');
+        expect(await page.locator('.pane-divider').getAttribute('aria-valuenow')).toBe(value);
+      }).toPass();
+    }
     await page.locator('.reader-host[data-pane=a]:not(.tab-hidden)').click({ position: { x: 40, y: 200 } });
     await expect(workspace(page)).toHaveAttribute('data-active', 'a');
     await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('hold-my-brief-tabs')!).split?.active)).toBe('left');

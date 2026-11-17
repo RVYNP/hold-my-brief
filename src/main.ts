@@ -25,7 +25,7 @@ import { createZoomGesture } from './zoom-gesture';
 import type { Hold, Spot } from './zoom-anchor';
 import { createZoomMenu } from './zoom-menu';
 import { createProgressPreview } from './progress-preview';
-import { LIBRARY_PATH, TabList, mergeLists, moveAcross, restoreSplit, splitOff, type SavedSplit, type SavedTab, type TabSession } from './tabs';
+import { LIBRARY_PATH, TabList, mergeLists, moveAcross, restoreSplit, splitOff, splitOffRest, type SavedSplit, type SavedTab, type TabSession } from './tabs';
 import { createTabStrip, type TabStrip, type TabView } from './tab-strip';
 import { titleHints } from './tab-titles';
 import { baseName, ghostLabel, insertionIndex, overlayNames, splitDropped, unsupportedNotice } from './drop';
@@ -129,12 +129,13 @@ const known = (path: string): Tab | undefined => { for (const side of sides) { c
 const holder = (path: string) => sides.find(side => side.tabs.find(path));
 /** The side an event target is in (a reading surface, a row of tabs, or a pane's layer). */
 const sideAt = (target: EventTarget | null) => { const letter = target instanceof Element ? target.closest<HTMLElement>('[data-pane]')?.dataset.pane : undefined; return sides.find(side => side.view.letter === letter); };
+const carry = { over: (path: string, x: number, y: number) => carryOver(path, x, y), drop: (path: string, x: number, y: number) => carryDrop(path, x, y), clear: () => carryClear() };
 function makeSide(letter: SideLetter): Side {
   const parts = createRow(letter), body = createBody(letter);
   let state: HTMLElement;
   if (letter === 'a') { state = $('tab-state'); body.append(state, pill); } else { state = withoutIds($('tab-state').cloneNode(true) as HTMLElement); state.hidden = true; body.append(state); }
   workspace.append(parts.row, body);
-  const tabsRow = createTabStrip({ strip: parts.row, list: parts.list, add: parts.add, overflow: parts.overflow }, { select: path => selectTab(path), close: closeTab, newTab: () => { activateSide(side); openFile(); }, move: (path, to) => { side.tabs.move(path, to); paintTabs(); saveSession(); }, menu: showTabMenu }, platform === 'mac' ? '⌘T' : 'Ctrl T');
+  const tabsRow = createTabStrip({ strip: parts.row, list: parts.list, add: parts.add, overflow: parts.overflow }, { select: path => selectTab(path), close: closeTab, newTab: () => { activateSide(side); openFile(); }, move: (path, to) => { side.tabs.move(path, to); paintTabs(); saveSession(); }, menu: showTabMenu, carry }, platform === 'mac' ? '⌘T' : 'Ctrl T');
   parts.fold.onclick = () => focusOtherSide();
   const side: Side = { pane: new Pane<Tab>({ persist, notify }), tabs: new TabList<Tab>(), shown: undefined, scanNoticeShown: false, view: { letter, body, state, ...parts }, strip: tabsRow };
   state.querySelector<HTMLElement>('.primary')!.onclick = () => stateAction(side);
@@ -840,15 +841,25 @@ function closeTab(path: string) {
   if (path === LIBRARY_PATH) library.forgetScope();
 }
 
-let sessionTimer: ReturnType<typeof setTimeout> | undefined;
-/** Remembers the open tabs for the next launch; several changes in one tick are one write. */
+let sessionPending = false;
+/** The last session write, so a close waits for the ones in flight; desktop writes run one after another, so a late one never lands over a newer one. */
+let sessionWrite: Promise<void> = Promise.resolve();
+/** Remembers the open tabs for the next launch. The write is queued as a microtask, so it lands before the page can be reloaded or closed, and several changes in one task are one write. */
 function saveSession() {
-  if (sessionTimer) return;
-  sessionTimer = setTimeout(() => {
-    sessionTimer = undefined;
-    const session = sessionOf();
-    void saveTabs(session).catch(fail);
-  });
+  if (sessionPending) return;
+  sessionPending = true;
+  queueMicrotask(() => { if (sessionPending) writeSession(); });
+}
+function writeSession() {
+  sessionPending = false;
+  const session = sessionOf();
+  sessionWrite = desktop ? sessionWrite.then(() => saveTabs(session)).catch(fail) : saveTabs(session).catch(fail);
+}
+/** On the way out: writes a session change that has not been written yet (the divider's too, which waits for the drag to rest) and returns once every write has landed. In the browser the write itself is synchronous. */
+function flushSession(): Promise<void> {
+  if (ratioTimer) { clearTimeout(ratioTimer); ratioTimer = undefined; sessionPending = true; }
+  if (sessionPending) writeSession();
+  return sessionWrite;
 }
 
 const savedTab = (tab: Tab): SavedTab => ({ path: tab.path, name: tab.name, format: tab.format, ...(tab.scope ? { scope: tab.scope } : {}) });
@@ -869,7 +880,8 @@ const closableTab = () => cover === 'library' ? libraryTab : cover ? undefined :
 /** What the split commands need to know. */
 const documentCount = () => sides.reduce((total, side) => total + side.tabs.tabs.filter(tab => tab.path !== LIBRARY_PATH).length, 0);
 /** The width the panes really share: the reading area less the icon rail's room (`--workspace-clear`, which only applies from 720 px up). */
-const paneRoom = () => workspace.clientWidth - (matchMedia('(min-width: 720px)').matches ? parseFloat(getComputedStyle(workspace).getPropertyValue('--workspace-clear')) || 0 : 0);
+const paneRoomClear = () => matchMedia('(min-width: 720px)').matches ? parseFloat(getComputedStyle(workspace).getPropertyValue('--workspace-clear')) || 0 : 0;
+const paneRoom = () => workspace.clientWidth - paneRoomClear();
 const splitContext = (): SplitContext => ({ active: isSplit(), room: canSplit(paneRoom(), innerWidth), documents: documentCount() });
 /** Why Split right cannot run now for `tab` (the one showing, by default), or undefined. */
 const splitReason = (tab = focused.shown) => unavailableReason(COMMANDS.find(entry => entry.id === 'split-right')!, { hasDocument: Boolean(tab && tab.path !== LIBRARY_PATH), desktop, split: splitContext() });
@@ -905,7 +917,7 @@ function paintFolds() {
 }
 let ratioTimer: ReturnType<typeof setTimeout> | undefined;
 /** Moves the divider. A drag moves it on every frame, so the session is written once it has been still for a moment. */
-function setRatio(percent: number) { ratio = percent; applyLayout(); clearTimeout(ratioTimer); ratioTimer = setTimeout(saveSession, 300); }
+function setRatio(percent: number) { ratio = percent; applyLayout(); clearTimeout(ratioTimer); ratioTimer = setTimeout(() => { ratioTimer = undefined; saveSession(); }, 300); }
 /** The progress line and scrubber sit under the focused pane only. */
 function placeFooter() {
   if (!isSplit()) { footer.style.removeProperty('left'); footer.style.removeProperty('right'); return; }
@@ -991,29 +1003,33 @@ function addRightSide(moved: TabList<Tab>, percent: number) {
 }
 /**
  * Starts a split with `tab` (a document tab of the one side, shown or not) on a new pane on the right, which becomes the focused one; every other document tab
- * stays on the left, showing the one shown most recently.
+ * stays on the left, showing the one shown most recently. With `edge` `'left'` the sides are the other way round: `tab` stays alone on the left, which stays
+ * the focused pane, and every other document tab goes to the new pane on the right, showing the one the window was showing (else the one shown most recently).
  */
-function startSplit(tab: Tab) {
-  const left = focused;
+function startSplit(tab: Tab, edge: 'left' | 'right' = 'right') {
+  const left = focused, mirrored = edge === 'left';
   clearCover();
   if (left.pane.cancelPending) cancelOpen();
   syncBack(left); findBar.close(); zoomGesture.cancel();
   const entry = left.tabs.find(LIBRARY_PATH);
   if (entry) { left.tabs.detach(LIBRARY_PATH); libraryTab = entry; }
-  const right = addRightSide(splitOff(left.tabs, tab.path)!, DEFAULT_PERCENT);
-  tab.host?.setAttribute('data-pane', 'b'); tab.host?.classList.remove('tab-hidden');
+  const right = addRightSide((mirrored ? splitOffRest(left.tabs, tab.path) : splitOff(left.tabs, tab.path))!, DEFAULT_PERCENT);
+  const beside = right.tabs.active!;
+  for (const moved of right.tabs.tabs) moved.host?.setAttribute('data-pane', 'b');
+  beside.host?.classList.remove('tab-hidden');
   left.shown = undefined; applyLayout();
   show(left.tabs.active, true);
-  right.shown = tab; right.pane.show(tab); right.scanNoticeShown = tab.scanNoticeShown;
+  right.shown = beside; right.pane.show(beside); right.scanNoticeShown = beside.scanNoticeShown;
   activateSide(right);
-  if (!tab.reader && !tab.problem) void reopen(tab);
-  right.pane.host?.focus();
+  if (!beside.reader && !beside.problem) void reopen(beside);
+  if (mirrored) activateSide(left);
+  focused.pane.host?.focus();
 }
-/** Split right: `tab` (the shown one, by default) moves to a new pane on the right. */
-function splitRight(tab = focused.shown) {
+/** Split right: `tab` (the shown one, by default) moves to a new pane on the right; with `edge` `'left'` it becomes the left pane and the other documents the right one. */
+function splitRight(tab = focused.shown, edge: 'left' | 'right' = 'right') {
   const reason = splitReason(tab);
   if (reason || !tab) { notify(reason ?? 'Open a document to split'); return; }
-  startSplit(tab);
+  startSplit(tab, edge);
 }
 /** Opens a document in the right pane, splitting the window first when it is not split: the document is shown there, beside the documents that stay on the left. */
 function openInSplitRight(doc: { path: string; name: string; format: string }) {
@@ -1028,15 +1044,15 @@ function openInSplitRight(doc: { path: string; name: string; format: string }) {
   else if (holder(doc.path) === sides[1]) selectTab(doc.path);
   else moveTabToOtherSide(doc.path);
 }
-/** Moves a tab (the shown one, by default) to the other pane, which shows it and becomes the focused one; a pane left with no tab ends the split. */
-function moveTabToOtherSide(path = focused.shown?.path) {
+/** Moves a tab (the shown one, by default) to the other pane, at `at` (after its last tab by default), which shows it and becomes the focused one; a pane left with no tab ends the split. */
+function moveTabToOtherSide(path = focused.shown?.path, at?: number) {
   if (!isSplit() || !path || path === LIBRARY_PATH) return;
   if (focused.shown?.path !== path || cover) selectTab(path);
   const from = focused, to = sides.find(side => side !== from)!, tab = from.shown;
   if (!tab) return;
   if (from.pane.cancelPending) cancelOpen();
   syncBack(from); findBar.close(); zoomGesture.cancel();
-  moveAcross(from.tabs, to.tabs, tab.path);
+  moveAcross(from.tabs, to.tabs, tab.path, at);
   tab.host?.setAttribute('data-pane', to.view.letter);
   from.shown = undefined;
   if (from.tabs.size) show(from.tabs.active, true); else from.pane.show(undefined);
@@ -1100,7 +1116,7 @@ function restoreSplitView(session: TabSession, split: SavedSplit): boolean {
 
 const strip = createTabStrip(
   { strip: $('tab-strip'), home: $('home-tab'), list: $('tab-list'), add: $('tab-add'), overflow: $('tab-overflow') },
-  { select: selectTab, close: closeTab, newTab: () => openFile(), move: (path, to) => { if (isSplit()) return; sides[0].tabs.move(path, to); paintTabs(); saveSession(); }, menu: showTabMenu },
+  { select: selectTab, close: closeTab, newTab: () => openFile(), move: (path, to) => { if (isSplit()) return; sides[0].tabs.move(path, to); paintTabs(); saveSession(); }, menu: showTabMenu, carry },
   platform === 'mac' ? '⌘T' : 'Ctrl T',
 );
 /** The one context menu of the window's tabs and Home's cards (the library's own is the same component). */
@@ -1114,6 +1130,55 @@ function showTabMenu(path: string, anchor: HTMLElement, at: { x: number; y: numb
   entries.push({ label: 'Close', run: () => closeTab(path) });
   if (isSplit() && path !== LIBRARY_PATH) entries.push({ label: 'Close the split', run: () => endSplit() });
   contextMenu.show(entries, anchor, at);
+}
+/** The shade over where a dragged tab would land (the half of the reading area a split would take, or the pane it would move into). */
+const splitPreview = document.createElement('div');
+splitPreview.id = 'split-preview'; splitPreview.hidden = true; splitPreview.setAttribute('aria-hidden', 'true');
+workspace.append(splitPreview);
+type Edges = { left: number; right: number; top: number; bottom: number };
+/** The reading area: the workspace, less the icon rail's room on the side the library sits at (`--workspace-clear` only applies from 720 px up). */
+function readingArea(): Edges {
+  const box = workspace.getBoundingClientRect(), clear = paneRoomClear(), libraryRight = $('reader-layout').classList.contains('library-right');
+  return { left: box.left + (libraryRight ? 0 : clear), right: box.right - (libraryRight ? clear : 0), top: box.top, bottom: box.bottom };
+}
+const within = (box: Edges, x: number, y: number) => x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
+/** Where a tab dragged out of its strip would land at this point: a slot in the other pane's row, the other pane, or (not split) the left or right quarter of the reading area. */
+type Landing = { kind: 'row'; to: Side; slot: number } | { kind: 'pane'; to: Side } | { kind: 'edge'; edge: 'left' | 'right' };
+function landingAt(path: string, x: number, y: number): Landing | undefined {
+  const tab = known(path);
+  if (!tab || path === LIBRARY_PATH) return undefined; // The Library tab belongs to the window, not to a pane.
+  if (isSplit()) {
+    const from = holder(path), to = sides.find(side => side !== from);
+    if (!from || !to || workspace.classList.contains('is-single')) return undefined; // Folded, the other pane's row and page are out of sight.
+    const slot = to.strip.dropSlot(x, y);
+    if (slot !== undefined) return { kind: 'row', to, slot };
+    return !cover && within(to.view.body.getBoundingClientRect(), x, y) ? { kind: 'pane', to } : undefined;
+  }
+  if (splitReason(tab)) return undefined;
+  const area = readingArea();
+  if (!within(area, x, y)) return undefined;
+  const across = (x - area.left) / (area.right - area.left);
+  return across >= .75 ? { kind: 'edge', edge: 'right' } : across <= .25 ? { kind: 'edge', edge: 'left' } : undefined;
+}
+function showPreview(box: Edges) {
+  const origin = workspace.getBoundingClientRect();
+  Object.assign(splitPreview.style, { left: `${box.left - origin.left}px`, top: `${box.top - origin.top}px`, width: `${box.right - box.left}px`, height: `${box.bottom - box.top}px` });
+  splitPreview.hidden = false;
+}
+function carryClear() { splitPreview.hidden = true; for (const side of sides) side.strip.showDrop(undefined); }
+function carryOver(path: string, x: number, y: number) {
+  carryClear();
+  const landing = landingAt(path, x, y), tab = known(path);
+  if (!landing || !tab) return;
+  if (landing.kind === 'row') landing.to.strip.showDrop(landing.slot, tabTitle(tab));
+  else if (landing.kind === 'pane') showPreview(landing.to.view.body.getBoundingClientRect());
+  else { const area = readingArea(), middle = (area.left + area.right) / 2; showPreview(landing.edge === 'right' ? { ...area, left: middle } : { ...area, right: middle }); }
+}
+function carryDrop(path: string, x: number, y: number) {
+  const landing = landingAt(path, x, y);
+  carryClear();
+  if (landing?.kind === 'edge') splitRight(known(path), landing.edge);
+  else if (landing) moveTabToOtherSide(path, landing.kind === 'row' ? landing.slot : undefined);
 }
 /** A document card or row on Home: Open, and Open in split right. */
 function showHomeMenu(item: { path: string; name: string; format: string }, anchor: HTMLElement, at: { x: number; y: number } | undefined) {
@@ -1476,7 +1541,7 @@ async function initialize() {
     await listen('close-tab-request', () => { const tab = closableTab(); if (tab) closeTab(tab.path); else void getCurrentWindow().close(); });
     await listen<string | null>('reader-warning', event => { if (event.payload) notify(event.payload); });
     const appWindow = getCurrentWindow();
-    let closing = false; await appWindow.onCloseRequested(async event => { if (closing) return; event.preventDefault(); await Promise.all(sides.map(side => side.pane.flush())); closing = true; await appWindow.close(); });
+    let closing = false; await appWindow.onCloseRequested(async event => { if (closing) return; event.preventDefault(); await Promise.all(sides.map(side => side.pane.flush())); await flushSession(); closing = true; await appWindow.close(); });
     if (platform === 'windows') {
       const maximize = $('caption-maximize');
       const syncMaximized = async () => { const maximized = await appWindow.isMaximized(); document.documentElement.classList.toggle('window-maximized', maximized); maximize.setAttribute('aria-label', maximized ? 'Restore' : 'Maximize'); maximize.title = maximized ? 'Restore down' : 'Maximize'; };
@@ -1519,4 +1584,7 @@ async function initialize() {
   }
 }
 void initialize().catch(fail);
-window.addEventListener('beforeunload', () => { for (const side of sides) void side.pane.flush(); });
+/** A reload or quit: reading positions and a pending session write go out now. `pagehide` is the event that always fires (a mobile tab discard, the back-forward cache), `beforeunload` is kept for the rest; the second finds nothing pending. */
+const leaving = () => { for (const side of sides) void side.pane.flush(); void flushSession(); };
+window.addEventListener('beforeunload', leaving);
+window.addEventListener('pagehide', leaving);

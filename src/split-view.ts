@@ -86,12 +86,19 @@ export function paintDivider(divider: HTMLElement, percent: number) {
   divider.setAttribute('aria-valuetext', `${Math.round(percent)} % left, ${100 - Math.round(percent)} % right`);
 }
 
-/** The button at the end of a folded split's row: "⫴ Other side (n)", n being the documents the pane that is out of sight holds. Hidden when the panes are side by side. */
+/** Lucide's `columns-2`. */
+const COLUMNS_ICON = '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M12 3v18"/>';
+/** The button at the end of a folded split's row: a two-columns icon and "Other side (n)", n being the documents the pane that is out of sight holds. Hidden when the panes are side by side. */
 export function paintFold(fold: HTMLElement, folded: boolean, others: number) {
   fold.hidden = !folded;
   if (!folded) return;
-  const label = `⫴ Other side (${others})`;
-  if (fold.textContent !== label) fold.textContent = label;
+  const label = `Other side (${others})`;
+  if (fold.textContent !== label || !fold.querySelector('svg')) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    for (const [name, value] of Object.entries({ width: '13', height: '13', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' })) svg.setAttribute(name, value);
+    svg.innerHTML = COLUMNS_ICON;
+    fold.replaceChildren(svg, label);
+  }
   fold.setAttribute('aria-label', `Other side, ${others} ${others === 1 ? 'document' : 'documents'}`);
   fold.title = 'Show the other side (Ctrl \\)';
 }

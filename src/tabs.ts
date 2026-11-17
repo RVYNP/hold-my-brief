@@ -232,6 +232,24 @@ export function splitOff<T extends TabBase>(list: TabList<T>, path: string): Tab
   return right;
 }
 
+/**
+ * Split left: every tab but the one at `path` leaves `list` for a new list of its own, and `list` keeps that tab, shown. The new list shows the tab `list`
+ * was showing if it left, else the one shown most recently, else its first. Undefined, and nothing changed, when `path` is not in `list` or is its only tab.
+ */
+export function splitOffRest<T extends TabBase>(list: TabList<T>, path: string): TabList<T> | undefined {
+  if (!list.find(path) || list.size < 2) return undefined;
+  const showing = list.active?.path, recent = list.mostRecent(path)?.path;
+  const rest = new TabList<T>();
+  for (const tab of [...list.tabs]) {
+    if (tab.path === path) continue;
+    const taken = list.detach(tab.path)!;
+    rest.add(taken.tab); if (taken.live) rest.markLive(tab.path);
+  }
+  rest.activate(showing !== path && showing && rest.find(showing) ? showing : recent && rest.find(recent) ? recent : rest.tabs[0].path);
+  list.activate(path);
+  return rest;
+}
+
 /** Moves the tab at `path` from one list to another, at `at` (the end by default), and shows it there; the list it left shows the tab it would show after closing it. */
 export function moveAcross<T extends TabBase>(from: TabList<T>, to: TabList<T>, path: string, at?: number): boolean {
   if (to.find(path)) return false;
