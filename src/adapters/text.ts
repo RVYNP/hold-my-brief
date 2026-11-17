@@ -94,7 +94,7 @@ export function renderMarkdown(source: string): { html: string; outline: Outline
   md.renderer.rules.fence = (tokens, index) => {
     const language = tokens[index].info.trim().split(/\s+/)[0].toLowerCase();
     const named = language ? `, ${escape(language)}` : '';
-    const action = (name: 'copy' | 'open', label: string, paths: string) => `<button type="button" class="code-action" data-code-action="${name}" aria-label="${label} code${named}" title="${label} code${named}">${iconMarkup(paths)}<span>${label}</span></button>`;
+    const action = (name: 'copy' | 'open', label: string, paths: string) => `<button type="button" tabindex="0" class="code-action" data-code-action="${name}" aria-label="${label} code${named}" title="${label} code${named}">${iconMarkup(paths)}<span>${label}</span></button>`;
     return `<figure class="code-block"${language ? ` data-language="${escape(language)}"` : ''}><div class="code-head">${language ? `<span class="code-lang">${escape(language)}</span>` : ''}<span class="code-actions">${action('copy', 'Copy', icons.copy)}${action('open', 'Open', icons.open)}</span></div>`
       + `<pre tabindex="0" role="region" aria-label="Code block"${marker(tokens[index])}><code>${escape(tokens[index].content)}</code></pre></figure>\n`;
   };
