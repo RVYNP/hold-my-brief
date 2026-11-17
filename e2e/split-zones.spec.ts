@@ -184,6 +184,7 @@ test.describe('1440 × 900', () => {
     const target = await bodyOf(page, 'MD');
     for (const [across, down] of [[.92, .5], [.08, .5], [.5, .92], [.5, .08]]) {
       await pick(page, tabIn(page, 'EPUB'), point(await box(target), across, down));
+      await expect(tabIn(page, 'EPUB'), 'the drag is live, so a hidden preview means the drop is refused').toHaveClass(/is-carried/);
       await expect(preview(page)).toBeHidden();
       await page.mouse.up();
       await expect(panesShown(page)).toHaveCount(4);
@@ -192,7 +193,13 @@ test.describe('1440 × 900', () => {
     for (const format of ['PDF', 'MD', 'EPUB', 'TXT']) await expect(formatsIn(page, format)).toHaveText([format]);
     // The centre moves it: the EPUB joins the Markdown file's pane, and its own pane closes.
     await pick(page, tabIn(page, 'EPUB'), point(await box(target), .5));
-    await expect(preview(page)).toBeVisible();
+    await expect(tabIn(page, 'EPUB'), 'the drag is live').toHaveClass(/is-carried/);
+    const state = await page.evaluate(() => JSON.stringify({
+      workspace: document.querySelector('#workspace')!.className,
+      panes: [...document.querySelectorAll('.pane-body')].map(body => { const { left, top, right, bottom } = body.getBoundingClientRect(); return [(body as HTMLElement).dataset.pane, left, top, right, bottom].join(' '); }),
+      strips: [...document.querySelectorAll('.pane-strip')].map(row => { const { left, top, right, bottom } = row.getBoundingClientRect(); return [(row as HTMLElement).dataset.pane, left, top, right, bottom].join(' '); }),
+    }));
+    await expect(preview(page), `where the pointer is: ${JSON.stringify(point(await box(target), .5))}; ${state}`).toBeVisible();
     await page.mouse.up();
     await expect(panesShown(page)).toHaveCount(3);
     await expect(formatsIn(page, 'MD')).toHaveText(['MD', 'EPUB']);
