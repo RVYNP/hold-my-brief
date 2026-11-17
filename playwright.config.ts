@@ -44,8 +44,22 @@ export default defineConfig({
     ...(browser.executablePath ? { launchOptions: { executablePath: browser.executablePath } } : {}),
     viewport: { width: 420, height: 620 },
   },
-  // Never reuse a server: it could belong to another checkout. A busy port fails fast (Vite strictPort).
-  webServer: { command: `npm run dev -- --port ${port}`, url: `http://127.0.0.1:${port}`, reuseExistingServer: false },
+  // Never reuse a server: it could belong to another checkout. A busy port fails fast (strictPort).
+  //
+  // Locally: the Vite dev server, exactly as `npm run dev`.
+  // CI: `vite preview` of the production build the workflow made with `npm run build` just before.
+  // The dev server optimises a dependency the first time a page imports it (pdf.js, foliate, the
+  // lazily imported readers), then reloads every open page; a test that lost its page mid-setup
+  // waited for an element that never came ("app never mounted"). A built app has no optimiser and
+  // no HMR, and is closer to what ships. Server output goes to the job log.
+  webServer: {
+    command: process.env.CI
+      ? `npx vite preview --host 127.0.0.1 --port ${port} --strictPort`
+      : `npm run dev -- --port ${port}`,
+    url: `http://127.0.0.1:${port}`,
+    reuseExistingServer: false,
+    ...(process.env.CI ? { stdout: 'pipe' as const, stderr: 'pipe' as const } : {}),
+  },
   timeout: 30000,
   // The first document open on a cold dev server transforms pdfjs-dist/foliate on demand;
   // on a CI runner that alone took longer than the 5 s default and failed the first PDF test.

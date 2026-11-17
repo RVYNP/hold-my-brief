@@ -58,3 +58,5 @@ e2e-report-macOS-1 -D reports/1`, and likewise for 2 and 3), then
 rewrites `e2e/timings.json`. Commit it with the change; do not commit `reports/`.
 
 Refresh `e2e/timings.json` whenever a spec file is added or a shard runs over 8 min.
+
+- CI's e2e runs against `vite preview` of a production build (`npm run build` first, see `playwright.config.ts`); local runs use the dev server. To reproduce CI's server locally: `npm run build && CI=1 E2E_PORT=… npx playwright test …` (`CI=1` without a fresh `npm run build` serves a stale `dist/`).
