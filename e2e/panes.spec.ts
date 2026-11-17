@@ -459,7 +459,7 @@ test.describe('stills for the pull request', () => {
     await expect(page.locator('.reader-host:not(.tab-hidden)')).toHaveCount(3);
     await expect(page.locator('#loading')).toBeHidden();
     await page.mouse.move(700, 880);
-    await page.screenshot({ path: 'docs/media/panes-1b-dark.png' });
+    await page.screenshot({ path: 'docs/media/panes-1b-dark.png', animations: 'disabled' });
     await pick(page, 'a');
     await tab(page, 'a', 'second.pdf').click({ button: 'right' });
     await menuItem(page, 'Split down').click();
@@ -468,6 +468,6 @@ test.describe('stills for the pull request', () => {
     await expect(page.locator('.reader-host:not(.tab-hidden)')).toHaveCount(4);
     await expect(page.locator('#loading')).toBeHidden();
     await page.mouse.move(700, 880);
-    await page.screenshot({ path: 'docs/media/panes-1c-dark.png' });
+    await page.screenshot({ path: 'docs/media/panes-1c-dark.png', animations: 'disabled' });
   });
 });
