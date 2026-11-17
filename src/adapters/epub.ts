@@ -86,17 +86,26 @@ function offsetOfRange(doc: Document, range?: Range) {
 function rangeAtOffset(doc: Document, offset: number) {
   const root = doc.body ?? doc.documentElement;
   const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
-  let remaining = Math.max(0, offset);
+  let remaining = Math.max(0, offset), seeking = false, last: { node: Node; end: number } | undefined;
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    const n = node.nodeType === Node.TEXT_NODE ? node.textContent!.length : /^(img|svg)$/i.test((node as Element).localName) ? 1000 : 0;
-    if (n && remaining <= n) {
-      const range = doc.createRange();
-      if (node.nodeType === Node.TEXT_NODE) range.setStart(node, Math.min(remaining, n)); else range.setStartBefore(node);
-      range.collapse(true); return range;
+    const isText = node.nodeType === Node.TEXT_NODE;
+    const n = isText ? node.textContent!.length : /^(img|svg)$/i.test((node as Element).localName) ? 1000 : 0;
+    if (!n) continue;
+    // `offset` characters lie before the place, so the place is the first character after them: an offset at the end of one text node is the start of the next.
+    if (!seeking) {
+      if (remaining >= n) { remaining -= n; if (isText && /\S/.test(node.textContent!)) last = { node, end: n }; continue; }
+      seeking = true;
     }
-    remaining -= n;
+    // Whitespace between elements (the newline between two lines of a listing, a blank line) has no box, so Foliate has nothing to scroll to there: the place is the next text that shows.
+    if (isText && !/\S/.test(node.textContent!)) { remaining = 0; continue; }
+    const range = doc.createRange();
+    if (isText) range.setStart(node, Math.min(remaining, n)); else range.setStartBefore(node);
+    range.collapse(true); return range;
   }
-  const range = doc.createRange(); range.selectNodeContents(root); range.collapse(false); return range;
+  // Nothing shows after the offset: the end of the last text that did.
+  const range = doc.createRange();
+  if (last) { range.setStart(last.node, last.end); range.collapse(true); } else { range.selectNodeContents(root); range.collapse(false); }
+  return range;
 }
 
 /** Characters of a section's size that make one Foliate location, the unit of its page estimate (see its SectionProgress). */
@@ -714,14 +723,12 @@ export class EpubAdapter implements ReaderAdapter {
       changed.push([element, property, element.style.getPropertyValue(property), element.style.getPropertyPriority(property)]);
       element.style.setProperty(property, value, 'important');
     };
-    // A listing inside a frame paints one box: where both a wrapper (pandoc's `div.sourceCode`, Sphinx's `div.highlight`) and its `pre` have a background, or a left rule, the wrapper's is dropped.
+    // A listing inside a frame paints one box: where both a wrapper (pandoc's `div.sourceCode`, Sphinx's `div.highlight`) and its `pre` have a background, the wrapper's is dropped. (The `pre` has no rule of its own in a frame: `codeStyles` draws one border, on the wrapper.)
     for (const wrapper of Array.from(body.querySelectorAll<HTMLElement>(CODE_WRAPPERS))) {
       const pre = wrapper.parentElement?.closest(CODE_BLOCKS) ? null : wrapper.querySelector('pre');
       if (!pre) continue;
       const frame = view.getComputedStyle(wrapper), code = view.getComputedStyle(pre);
-      const rule = (style: CSSStyleDeclaration) => parseFloat(style.borderLeftWidth) > 0 && style.borderLeftStyle !== 'none';
       if (parseRgb(frame.backgroundColor) && parseRgb(code.backgroundColor)) set(wrapper, 'background-color', 'transparent');
-      if (rule(frame) && rule(code)) set(wrapper, 'border-left', 'none');
     }
     // Both tones are walked whole: a box set against the page's tone is mapped into it, and on a light page only text on a mapped box (or in code) is lifted.
     const walker = doc.createTreeWalker(body, NodeFilter.SHOW_ELEMENT, { acceptNode: node => (node as Element).namespaceURI === XHTML ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT });

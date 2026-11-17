@@ -11,6 +11,7 @@
  * The module is deliberately free of DOM and reader state so it can be unit-tested, and so
  * the palette and the shortcut reference dialog can both be generated from it.
  */
+import { MAX_PANES, MIN_PANE_WIDTH, MIN_SPLIT_WINDOW, SPLIT_HEIGHT, SPLIT_WIDTH } from './layout';
 import type { Format } from './types';
 
 export type CommandGroup = 'File' | 'Navigate' | 'View' | 'Window' | 'Reading' | 'Data';
@@ -32,8 +33,8 @@ export type Command = {
   formats?: readonly Format[];
   /** True when the command needs the desktop app (native IPC). */
   requiresDesktop?: boolean;
-  /** `off`: the window must not be split yet (and have room and a second document for it); `on`: it must be split. */
-  split?: 'off' | 'on';
+  /** `right` and `down`: splits a pane (the window needs room, fewer than four panes and, once split, a pane with a second tab); `on`: the window must be split; `two`: it must have exactly two panes. */
+  split?: 'right' | 'down' | 'on' | 'two';
 };
 
 /** Display order of the groups. */
@@ -49,8 +50,10 @@ export const COMMANDS: readonly Command[] = [
   { id: 'close-tab', label: 'Close tab', group: 'File', keywords: ['tabs', 'document', 'shut'], shortcut: 'Ctrl W' },
   { id: 'next-tab', label: 'Next tab', group: 'File', keywords: ['tabs', 'switch', 'right'], shortcut: 'Ctrl Tab' },
   { id: 'previous-tab', label: 'Previous tab', group: 'File', keywords: ['tabs', 'switch', 'left'], shortcut: 'Ctrl Shift Tab' },
-  { id: 'split-right', label: 'Split right', group: 'File', keywords: ['side by side', 'two documents', 'panes', 'divide', 'tabs'], shortcut: 'Ctrl \\', requiresDocument: true, split: 'off' },
-  { id: 'move-tab-side', label: 'Move tab to the other side', group: 'File', keywords: ['split', 'pane', 'left', 'right', 'tabs'], requiresDocument: true, split: 'on' },
+  { id: 'split-right', label: 'Split right', group: 'File', keywords: ['side by side', 'two documents', 'panes', 'divide', 'tabs', 'tile'], shortcut: 'Ctrl \\', requiresDocument: true, split: 'right' },
+  { id: 'split-down', label: 'Split down', group: 'File', keywords: ['above and below', 'two documents', 'panes', 'divide', 'tabs', 'tile', 'stack'], shortcut: 'Ctrl Shift \\', requiresDocument: true, split: 'down' },
+  { id: 'move-tab-side', label: 'Move tab to the other side', group: 'File', keywords: ['split', 'pane', 'left', 'right', 'tabs'], requiresDocument: true, split: 'two' },
+  { id: 'close-pane', label: 'Close pane', group: 'File', keywords: ['merge', 'panes', 'split', 'tabs', 'remove'], split: 'on' },
   { id: 'close-split', label: 'Close the split', group: 'File', keywords: ['merge', 'one pane', 'panes', 'unsplit', 'tabs'], split: 'on' },
   { id: 'library', label: 'Toggle document library', group: 'File', keywords: ['sidebar', 'books', 'collection'], shortcut: 'Ctrl B' },
   { id: 'library-search', label: 'Search the library', group: 'File', keywords: ['find', 'filter', 'folders', 'documents', 'tree', 'sidebar'], shortcut: 'Ctrl Shift F' },
@@ -140,15 +143,21 @@ export const SHORTCUTS: readonly Shortcut[] = [
   ...orCommand({ id: 'new-tab', key: 't' }),
   ...orCommand({ id: 'close-tab', key: 'w' }),
   ...orCommand({ id: 'split-right', key: '\\' }),
+  ...orCommand({ id: 'split-down', key: '\\', code: 'Backslash', shift: true }),
   { id: 'next-tab', key: 'tab', ctrl: true },
   { id: 'previous-tab', key: 'tab', ctrl: true, shift: true },
-  ...orCommand({ id: 'next-tab', key: 'arrowright', alt: true }),
-  ...orCommand({ id: 'previous-tab', key: 'arrowleft', alt: true }),
+  // Ctrl Alt (⌥⌘ on macOS) with an arrow moves the focus to the neighbouring pane. Not split there is none, and ← and → are the next and previous tab as they always were (see `main.ts`).
+  ...orCommand({ id: 'focus-pane-left', key: 'arrowleft', alt: true }),
+  ...orCommand({ id: 'focus-pane-right', key: 'arrowright', alt: true }),
+  ...orCommand({ id: 'focus-pane-up', key: 'arrowup', alt: true }),
+  ...orCommand({ id: 'focus-pane-down', key: 'arrowdown', alt: true }),
   ...TAB_DIGITS.flatMap(digit => [{ id: tabShortcutId(digit), key: String(digit), code: `Digit${digit}`, alt: true }, { id: tabShortcutId(digit), key: String(digit), code: `Digit${digit}`, meta: true }]),
 ];
 
+/** The shortcut ids that move the focus to a neighbouring pane, and the direction each means. */
+export const FOCUS_PANE_DIRECTIONS = { 'focus-pane-left': 'left', 'focus-pane-right': 'right', 'focus-pane-up': 'up', 'focus-pane-down': 'down' } as const;
 /** Shortcut ids that are interface affordances rather than dispatchable commands. */
-export const INTERFACE_SHORTCUTS: readonly string[] = ['command-palette', ...TAB_DIGITS.map(tabShortcutId)];
+export const INTERFACE_SHORTCUTS: readonly string[] = ['command-palette', ...Object.keys(FOCUS_PANE_DIRECTIONS), ...TAB_DIGITS.map(tabShortcutId)];
 
 /**
  * Which action an event reaches, or undefined. Modifier state must match exactly, except
@@ -168,19 +177,30 @@ export function appliesTo(command: Command, format: string | undefined): boolean
   return !command.formats || command.formats.some(candidate => candidate === format);
 }
 
-/** What the split commands need to know: whether the window is split, has room for two panes, and how many documents are open as tabs. */
-export type SplitContext = { active: boolean; room: boolean; documents: number };
+/**
+ * What the split commands need to know: how many panes the window has, how many documents are open as tabs, the window's width, and the pane that would be split (its size, in CSS px, and
+ * how many document tabs it holds). Not split, the one pane is the reading area and its tabs are the documents.
+ */
+export type SplitContext = { panes: number; documents: number; windowWidth: number; width: number; height: number; tabs: number };
+
+/** Why a pane cannot be split along `axis` (`right` puts the new pane beside it, `down` below it) now, or undefined when it can. */
+export function splitReason(axis: 'right' | 'down', context: SplitContext): string | undefined {
+  const split = context.panes > 1;
+  if (context.panes >= MAX_PANES) return 'A window holds at most four panes';
+  if (context.windowWidth < MIN_SPLIT_WINDOW || (!split && context.width < (axis === 'right' ? SPLIT_WIDTH : MIN_PANE_WIDTH))) return 'The window is too narrow to split';
+  if (axis === 'right' && context.width < SPLIT_WIDTH) return 'This pane is too narrow to split';
+  if (axis === 'down' && context.height < SPLIT_HEIGHT) return 'This pane is too short to split';
+  if (split ? context.tabs < 2 : context.documents < 2) return split ? 'Open another document first' : 'Open a second document to split';
+  return undefined;
+}
 
 /** Why a command cannot run right now, or undefined when it can. */
 export function unavailableReason(command: Command, context: { hasDocument: boolean; desktop: boolean; format?: string; split?: SplitContext }): string | undefined {
   if (command.requiresDocument && !context.hasDocument) return 'Open a document first';
   const split = context.split;
-  if (split && command.split === 'on' && !split.active) return 'Split the window first';
-  if (split && command.split === 'off') {
-    if (split.active) return 'Already split · Ctrl \\ moves to the other side';
-    if (!split.room) return 'The window is too narrow to split';
-    if (split.documents < 2) return 'Open a second document to split';
-  }
+  if (split && (command.split === 'on' || command.split === 'two') && split.panes < 2) return 'Split the window first';
+  if (split && command.split === 'two' && split.panes > 2) return "Choose a pane from the tab's menu ▸ Move to pane";
+  if (split && (command.split === 'right' || command.split === 'down')) { const reason = splitReason(command.split, split); if (reason) return reason; }
   if (command.requiresDesktop && !context.desktop) return 'Available in the desktop app';
   if (context.hasDocument && !appliesTo(command, context.format)) return `Available for ${command.formats!.map(format => format.toUpperCase()).join(' and ')} documents`;
   return undefined;
@@ -203,7 +223,8 @@ const INTERFACE_KEYS: readonly ShortcutRow[] = [
   { label: 'Command palette', keys: ['Ctrl', 'K'] },
   { label: 'Go to tab 1–8 / last tab', keys: ['Alt', '1…9'], note: 'or ⌘ 1…9 on macOS' },
   { label: 'Resize the library or the split', keys: ['←', '→'], note: 'on its divider' },
-  { label: 'Other side of the split', keys: ['Ctrl', '\\'], note: 'or ⌘ \\ on macOS' },
+  { label: 'Next pane, while split', keys: ['Ctrl', '\\'], note: 'or ⌘ \\ on macOS' },
+  { label: 'Focus the pane to the left / right / above / below', keys: ['Ctrl', 'Alt', '←→↑↓'], note: 'or ⌥ ⌘ on macOS' },
   { label: 'Close a dialog or popover', keys: ['Esc'] },
 ];
 

@@ -117,6 +117,37 @@ describe('TextAdapter interaction boundary', () => {
     expect(adapter.getPosition().label).toMatch(/^Line \d+ of 2$/);
     expect(adapter.getPosition().locator).toMatchObject({ kind: 'txt', blockLine: 1 });
   });
+  it('searches plain text by source line while a match is already marked', async () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    await adapter.open({ name: 'plain.txt', bytes: utf8('alpha\ngamma\ndelta beta\nomega'), format: 'txt' }, host, context, defaultOptions);
+    const [beta] = (await adapter.search('beta')).hits;
+    await adapter.revealSearchMatch(beta);
+    expect(host.querySelectorAll('mark.search-hit')).toHaveLength(1);
+    expect((await adapter.search('omega')).hits.map(hit => hit.unitLabel)).toEqual(['Line 4']);
+    const across = (await adapter.search('delta beta')).hits;
+    expect(across.map(hit => [hit.unitLabel, hit.text])).toEqual([['Line 3', 'delta beta']]);
+    await adapter.revealSearchMatch(across[0]);
+    expect(Array.from(host.querySelectorAll('mark.search-hit'), mark => mark.textContent).join('')).toBe('delta beta');
+  });
+  it('does not search a code block\'s language label or buttons as document text', async () => {
+    await adapter.open({ name: 'code.md', bytes: utf8('Intro\n\n```python\nx = 1\n```\n'), format: 'md' }, host, context, defaultOptions);
+    expect(host.querySelector('.code-lang')?.textContent).toBe('python');
+    for (const query of ['python', 'Copy', 'Open']) expect((await adapter.search(query)).hits).toEqual([]);
+    expect((await adapter.search('x = 1')).hits).toHaveLength(1);
+  });
+  it('reports the source line of a match inside a multi-line paragraph, fence or indented block', async () => {
+    const source = ['Intro', '', 'line one', 'line two', 'line three', '', '```js', 'a = 1', '', 'y = 2', '```', '', '    indented one', '    indented two', '', '> quoted', '> quote two'].join('\n');
+    await adapter.open({ name: 'lines.md', bytes: utf8(source), format: 'md' }, host, context, defaultOptions);
+    const line = async (query: string) => (await adapter.search(query)).hits.map(hit => hit.unit);
+    expect(await line('line one')).toEqual([3]);
+    expect(await line('line three')).toEqual([5]);
+    expect(await line('line two line three')).toEqual([4]);
+    expect(await line('a = 1')).toEqual([8]);
+    expect(await line('y = 2')).toEqual([10]);
+    expect(await line('indented two')).toEqual([14]);
+    expect(await line('quote two')).toEqual([17]);
+    expect((await adapter.search('y = 2')).hits[0].unitLabel).toBe('Line 10');
+  });
   it('rejects invalid Go to values without saving history or moving', async () => {
     await adapter.open({ name: 'plain.txt', bytes: utf8('one\ntwo'), format: 'txt' }, host, context, defaultOptions);
     const restore = vi.spyOn(adapter, 'restore');

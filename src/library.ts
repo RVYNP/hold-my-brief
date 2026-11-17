@@ -28,10 +28,10 @@ type Callbacks = {
   /** Gives a document a tab beside the one showing without showing it (⌘/Ctrl-click in the tree). */
   openBackground: (doc: LibraryDocument) => void;
   error: (error: unknown) => void;
-  /** Opens a document in the right pane, splitting the window first when it is not split (the tree's and the list's context menu). */
-  openSplit: (doc: LibraryDocument) => void;
-  /** Why `openSplit` cannot run for `doc` now (no other document open, no room), or undefined. */
-  splitReason: (doc: LibraryDocument) => string | undefined;
+  /** Opens a document in a new pane to the right of the active pane (`right`) or below it (`down`), splitting the window first when it is not split (the tree's and the list's context menu). */
+  openSplit: (doc: LibraryDocument, axis: 'right' | 'down') => void;
+  /** Why `openSplit` cannot run for `doc` now (four panes already, no other document open, no room), or undefined. */
+  splitReason: (doc: LibraryDocument, axis: 'right' | 'down') => string | undefined;
   /** The library changed (an edit, a refresh): the opening page shows part of it too. */
   changed?: (library: Library, progress: Readonly<Record<string, Progress>>) => void;
   /** Reading progress changed since it was last shown (the drawer was opened after some reading): Home and the rail show it too. */
@@ -704,7 +704,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   }
   const toggleFavorite = (doc: LibraryDocument) => void mutate(() => editLibrary({ action: 'updateDocument', path: doc.path, collectionIds: doc.collectionIds, favorite: !doc.favorite, tags: doc.tags, notes: doc.notes }));
   function openItemMenu(doc: LibraryDocument, anchor: HTMLElement, at?: { x: number; y: number }) {
-    const entries: MenuEntry[] = [{ label: 'Open in new tab', run: () => callbacks.openBackground(doc) }, { label: 'Open in split right', run: () => callbacks.openSplit(doc), unavailable: callbacks.splitReason(doc) }, { label: doc.favorite ? 'Remove from favorites' : 'Add to favorites', run: () => toggleFavorite(doc) }, { label: 'Details', run: () => referenceDetails(doc, anchor) }, { label: 'Organize…', run: () => organize(doc, anchor) }, { label: 'Remove from library…', run: () => removeReference(doc, anchor) }];
+    const entries: MenuEntry[] = [{ label: 'Open in new tab', run: () => callbacks.openBackground(doc) }, { label: 'Open in split right', run: () => callbacks.openSplit(doc, 'right'), unavailable: callbacks.splitReason(doc, 'right') }, { label: 'Open in split down', run: () => callbacks.openSplit(doc, 'down'), unavailable: callbacks.splitReason(doc, 'down') }, { label: doc.favorite ? 'Remove from favorites' : 'Add to favorites', run: () => toggleFavorite(doc) }, { label: 'Details', run: () => referenceDetails(doc, anchor) }, { label: 'Organize…', run: () => organize(doc, anchor) }, { label: 'Remove from library…', run: () => removeReference(doc, anchor) }];
     if (hasCover(doc) && !thumbs.peek(doc.path)) { entries.push({ label: 'New cover pattern', run: () => void rerollCovers([doc.path]) }); if (doc.coverSeed !== undefined) entries.push({ label: 'Reset cover', run: () => void rerollCovers([doc.path], true) }); }
     if (desktop) entries.push({ label: 'Locate original…', run: () => locateOriginal(doc) });
     showItemMenu(entries, anchor, at);

@@ -7,6 +7,8 @@
  * a document is open at most once, so opening one that is already open focuses its tab.
  */
 
+import { isSplit, panes, readLayout, removePane, type Layout } from './layout';
+
 /** At most this many tabs keep a live adapter and host; the least recently shown ones hibernate. */
 export const MAX_LIVE_TABS = 3;
 /** Upper bound on tabs, so the saved session and the strip stay sane. */
@@ -20,45 +22,75 @@ export const LIBRARY_PATH = 'hold-my-brief:library';
 
 /** The part of a tab that survives a restart: enough to draw it and to reopen its document. The Library tab (format `library`) also saves its `scope`. */
 export type SavedTab = { path: string; name: string; format: string; scope?: string };
-/** One pane of a saved split: the documents it holds, in order (by `path`), and the one it shows. */
+/** One pane of a saved layout: the documents it holds, in order (by `path`), and the one it shows. */
 export type SavedPane = { tabs: string[]; shown: string };
-/** A saved split: what each pane holds and shows, the divider's place (the left pane's percent of the room the panes share) and the pane that was active. */
+/** A saved layout: the tree of panes, what each pane (by id) holds and shows, and the pane that was active. A tree's ratios are the first subtree's percent of the room its two subtrees share. */
+export type SavedLayout = { tree: Layout; panes: Record<string, SavedPane>; active: string };
+/** A split as builds before layouts saved it: a left and a right pane, the divider's place (the left pane's percent of the room the panes share) and the pane that was active. */
 export type SavedSplit = { left: SavedPane; right: SavedPane; ratio: number; active: 'left' | 'right' };
 /**
  * The saved session: the tabs in order, and which one was showing (an index into `tabs`; none means Home). While split, `tabs` is the Library tab (if open),
- * the left pane's tabs, then the right pane's, so a build that does not know `split` still restores every document, in one strip; `active` is then the tab
+ * the first pane's tabs, then the next panes' in reading order, so a build that does not know `layout` still restores every document, in one strip; `active` is then the tab
  * the active pane shows, or the Library tab or none (Home) while one of them covers the panes.
+ *
+ * The saved session is user data that an older build, run after a downgrade or beside this one, must still read. So a split writes two keys:
+ * - `layout` is always written and is what this build reads first.
+ * - `split` (a build before layouts wrote only this) is written too, in exactly that build's shape, but only while the layout is two panes side by side;
+ *   any other layout (a pane split down, three or four panes) omits it, and an older build then brings back the flat tab list as it always did.
+ * On reading, `layout` wins when both are there; a session with only `split` reads as a layout of two panes in a row (`split` is never read back out).
  */
-export type TabSession = { tabs: SavedTab[]; active: number | null; split?: SavedSplit };
+export type TabSession = { tabs: SavedTab[]; active: number | null; layout?: SavedLayout; split?: SavedSplit };
+
+/** A layout in the shape of a build before layouts, when it is exactly two panes side by side; otherwise undefined. */
+export function legacySplit(saved: SavedLayout): SavedSplit | undefined {
+  const { tree } = saved;
+  if (!('axis' in tree) || tree.axis !== 'row' || 'axis' in tree.first || 'axis' in tree.second) return undefined;
+  const left = saved.panes[tree.first.pane], right = saved.panes[tree.second.pane];
+  return left && right ? { left, right, ratio: tree.ratio, active: saved.active === tree.second.pane ? 'right' : 'left' } : undefined;
+}
 
 export const emptySession = (): TabSession => ({ tabs: [], active: null });
 
 const record = (value: unknown): Record<string, unknown> => typeof value === 'object' && value !== null ? Object.fromEntries(Object.entries(value)) : {};
 
 /**
- * Reads a saved split against the tabs that were kept: each pane keeps the documents it names that are open (once, in the order named), a document no pane
- * names joins the left one, and a pane shows the tab it names or else its first. A split that leaves a pane with no document is no split; a ratio or an
- * active pane that is not valid takes its default.
+ * Settles a saved tree against the tabs that were kept: each pane keeps the documents it names that are open (once, in the order named; the last pane in
+ * reading order names first), a document no pane names joins the first one, and a pane shows the tab it names or else its first. A pane left with no
+ * document goes; a layout that is left with one pane is no layout. An active pane that is not one of them is the first.
  */
-function readSplit(value: unknown, tabs: readonly SavedTab[]): SavedSplit | undefined {
-  const raw = record(value);
+function settle(tree: Layout, named: Record<string, unknown>, active: unknown, tabs: readonly SavedTab[]): SavedLayout | undefined {
   const documents = tabs.filter(tab => tab.path !== LIBRARY_PATH).map(tab => tab.path), taken = new Set<string>();
-  const pane = (entry: unknown) => {
-    const named = record(entry), paths: string[] = [];
-    if (Array.isArray(named.tabs)) for (const path of named.tabs) if (typeof path === 'string' && documents.includes(path) && !taken.has(path)) { taken.add(path); paths.push(path); }
-    return { paths, shown: named.shown };
-  };
-  const right = pane(raw.right), left = pane(raw.left);
-  left.paths.push(...documents.filter(path => !taken.has(path)));
-  if (!left.paths.length || !right.paths.length) return undefined;
-  const shownOf = (side: { paths: string[]; shown: unknown }) => typeof side.shown === 'string' && side.paths.includes(side.shown) ? side.shown : side.paths[0];
-  const ratio = typeof raw.ratio === 'number' && Number.isFinite(raw.ratio) ? Math.max(0, Math.min(100, raw.ratio)) : 50;
-  return { left: { tabs: left.paths, shown: shownOf(left) }, right: { tabs: right.paths, shown: shownOf(right) }, ratio, active: raw.active === 'right' ? 'right' : 'left' };
+  const order = panes(tree), kept = new Map<string, { paths: string[]; shown: unknown }>();
+  for (const id of [...order].reverse()) {
+    const entry = record(named[id]), paths: string[] = [];
+    if (Array.isArray(entry.tabs)) for (const path of entry.tabs) if (typeof path === 'string' && documents.includes(path) && !taken.has(path)) { taken.add(path); paths.push(path); }
+    kept.set(id, { paths, shown: entry.shown });
+  }
+  kept.get(order[0])!.paths.push(...documents.filter(path => !taken.has(path)));
+  let settled: Layout = tree;
+  for (const id of order) {
+    if (kept.get(id)!.paths.length) continue;
+    const rest = removePane(settled, id);
+    if (!rest) return undefined;
+    settled = rest;
+  }
+  if (!isSplit(settled)) return undefined;
+  const left = panes(settled), shown = (id: string) => { const { paths, shown } = kept.get(id)!; return typeof shown === 'string' && paths.includes(shown) ? shown : paths[0]; };
+  return { tree: settled, panes: Object.fromEntries(left.map(id => [id, { tabs: kept.get(id)!.paths, shown: shown(id) }])), active: typeof active === 'string' && left.includes(active) ? active : left[0] };
 }
 
-/** Reads a session from untrusted storage: malformed entries and duplicates are dropped and `active` is kept pointing at the same tab; a saved split is kept when it still holds a document on each side. */
+/** Reads a saved layout, or else a split from before layouts (a pane on the left and one on the right, `ratio` the left one's percent, `active` `'left'` or `'right'`). Garbage in either is no layout. */
+function readLayoutOf(raw: { layout?: unknown; split?: unknown }, tabs: readonly SavedTab[]): SavedLayout | undefined {
+  const saved = record(raw.layout), tree = readLayout(saved.tree);
+  const fromLayout = tree && settle(tree, record(saved.panes), saved.active, tabs);
+  if (fromLayout) return fromLayout;
+  const split = record(raw.split), old = readLayout({ axis: 'row', ratio: split.ratio, first: { pane: 'a' }, second: { pane: 'b' } });
+  return old && settle(old, { a: split.left, b: split.right }, split.active === 'right' ? 'b' : 'a', tabs);
+}
+
+/** Reads a session from untrusted storage: malformed entries and duplicates are dropped and `active` is kept pointing at the same tab; a saved layout is kept when it still holds a document in each of two or more panes. */
 export function readSession(value: unknown): TabSession {
-  const raw = value as { tabs?: unknown; active?: unknown; split?: unknown } | null | undefined;
+  const raw = value as { tabs?: unknown; active?: unknown; layout?: unknown; split?: unknown } | null | undefined;
   if (!raw || !Array.isArray(raw.tabs)) return emptySession();
   const tabs: SavedTab[] = [];
   let active: number | null = null;
@@ -68,16 +100,18 @@ export function readSession(value: unknown): TabSession {
     if (index === raw.active) active = tabs.length;
     tabs.push({ path: tab.path, name: typeof tab.name === 'string' && tab.name ? tab.name : tab.path.split(/[\\/]/).pop() ?? tab.path, format: typeof tab.format === 'string' ? tab.format : '', ...(typeof tab.scope === 'string' && tab.scope ? { scope: tab.scope } : {}) });
   });
-  const split = readSplit(raw.split, tabs);
-  return { tabs, active, ...(split ? { split } : {}) };
+  const layout = readLayoutOf(raw, tabs);
+  return { tabs, active, ...(layout ? { layout } : {}) };
 }
+
+/** When a tab was last shown is counted across every list, so that the tabs of different panes can be told apart by it. */
+let clock = 0;
 
 export class TabList<T extends TabBase> {
   private items: T[] = [];
   private showing: string | undefined;
   private live = new Set<string>();
   private used = new Map<string, number>();
-  private clock = 0;
 
   get tabs(): readonly T[] { return this.items; }
   get size() { return this.items.length; }
@@ -92,7 +126,7 @@ export class TabList<T extends TabBase> {
   activate(path: string | undefined) {
     if (path !== undefined && !this.find(path)) return;
     this.showing = path;
-    if (path !== undefined) this.used.set(path, ++this.clock);
+    if (path !== undefined) this.used.set(path, ++clock);
   }
 
   /**
@@ -188,15 +222,17 @@ export class TabList<T extends TabBase> {
   markLive(path: string) { if (this.find(path)) this.live.add(path); }
   markHibernated(path: string) { this.live.delete(path); }
 
+  /** The live tabs, with when each was last shown (a count shared by every list) and whether it is the tab showing. */
+  liveUse(): { path: string; used: number; showing: boolean }[] {
+    return [...this.live].map(path => ({ path, used: this.used.get(path) ?? 0, showing: path === this.showing }));
+  }
+
   /**
    * The live tabs that must hibernate so that at most `limit` stay live, least recently shown first. The showing tab is never
    * one of them, however long ago it was used, so a limit of 0 still keeps it.
    */
   hibernation(limit = MAX_LIVE_TABS): string[] {
-    const ordered = [...this.live].sort((a, b) => (this.used.get(b) ?? 0) - (this.used.get(a) ?? 0));
-    const keep = new Set(ordered.filter(path => path === this.showing));
-    for (const path of ordered) if (keep.size < Math.max(limit, 1)) keep.add(path);
-    return ordered.filter(path => !keep.has(path)).reverse();
+    return hibernationAcross([this], limit).map(entry => entry.path);
   }
 
   /** The tabs as they are saved, with `describe` giving each one's name and format. */
@@ -204,6 +240,17 @@ export class TabList<T extends TabBase> {
     const at = this.activeIndex;
     return { tabs: this.items.map(describe), active: at < 0 ? null : at };
   }
+}
+
+/**
+ * The live tabs of every list that must hibernate so that, across the window and not per list, at most `limit` (or one per list, whichever is more) keep a live reader, least recently
+ * shown first. The tab each list shows is never one of them, however long ago it was used: every pane's shown tab stays live.
+ */
+export function hibernationAcross<T extends TabBase>(lists: readonly TabList<T>[], limit = MAX_LIVE_TABS): { list: TabList<T>; path: string }[] {
+  const live = lists.flatMap(list => list.liveUse().map(entry => ({ list, ...entry }))).sort((a, b) => b.used - a.used);
+  const keep = new Set(live.filter(entry => entry.showing));
+  for (const entry of live) if (keep.size < Math.max(limit, lists.length, 1)) keep.add(entry);
+  return live.filter(entry => !keep.has(entry)).reverse().map(({ list, path }) => ({ list, path }));
 }
 
 /**
@@ -272,15 +319,15 @@ export function mergeLists<T extends TabBase>(left: TabList<T>, right: TabList<T
 }
 
 /**
- * Starts a saved split from `list`, which holds every document tab: the tabs `split.right` names leave for a new list, in the order saved, and each list
- * shows the tab saved for it. Undefined, and nothing changed, when that would leave a side with no tab (a split that no longer holds a document on each side).
+ * Starts a saved layout from `list`, which holds every document tab. `saved` is each pane's tabs and shown tab, in reading order: every pane after the first takes the tabs it names
+ * from `list`, in the order saved, and the first keeps the rest. Returns the lists in that order (the first is `list`), each showing the tab saved for it. Undefined, and nothing
+ * changed, when that would leave a pane with no tab (a layout that no longer holds a document in each pane) or fewer than two panes were saved.
  */
-export function restoreSplit<T extends TabBase>(list: TabList<T>, split: SavedSplit): TabList<T> | undefined {
-  const named = split.right.tabs.filter(path => list.find(path));
-  if (!named.length || named.length >= list.size) return undefined;
-  const right = new TabList<T>();
-  for (const path of named) right.add(list.detach(path)!.tab);
-  const shown = (side: SavedPane, tabs: TabList<T>) => tabs.find(side.shown) ? side.shown : tabs.tabs[0].path;
-  list.activate(shown(split.left, list)); right.activate(shown(split.right, right));
-  return right;
+export function restorePanes<T extends TabBase>(list: TabList<T>, saved: readonly SavedPane[]): TabList<T>[] | undefined {
+  if (saved.length < 2) return undefined;
+  const taken = new Set<string>(), named = saved.slice(1).map(pane => pane.tabs.filter(path => list.find(path) && !taken.has(path) && taken.add(path)));
+  if (named.some(paths => !paths.length) || taken.size >= list.size) return undefined;
+  const lists = [list, ...named.map(paths => { const moved = new TabList<T>(); for (const path of paths) moved.add(list.detach(path)!.tab); return moved; })];
+  lists.forEach((tabs, index) => tabs.activate(tabs.find(saved[index].shown) ? saved[index].shown : tabs.tabs[0].path));
+  return lists;
 }

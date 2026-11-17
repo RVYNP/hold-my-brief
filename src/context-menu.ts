@@ -5,8 +5,8 @@
  */
 import { shortcutFor } from './commands';
 
-/** One command. `unavailable` is why it cannot run now; with it the entry is shown disabled. */
-export type MenuEntry = { label: string; run: () => void; unavailable?: string };
+/** One command, or (with `submenu`) a list of them that opens beside it. `unavailable` is why it cannot run now; with it the entry is shown disabled. */
+export type MenuEntry = { label: string; run?: () => void; unavailable?: string; submenu?: readonly MenuEntry[] };
 
 export type ContextMenu = {
   /** Shows `entries` at `at` (a window point), or under `anchor` when there is none; asking again for the same anchor from the keyboard closes it. */
@@ -51,31 +51,73 @@ export function createContextMenu(options: { className?: string; label?: string;
     options.closed?.(was);
     if (refocus && was.isConnected) was.focus();
   }
+  /** The submenu of the entry that has one: a menu of its own, laid beside that entry inside this one. */
+  let sub: HTMLElement | undefined, subOwner: HTMLElement | undefined;
+  const items = (scope: ParentNode) => [...scope.querySelectorAll<HTMLElement>(':scope > button:not(:disabled)')];
+  function closeSub(refocus = false) {
+    if (!sub || sub.hidden) return;
+    sub.hidden = true; sub.replaceChildren(); subOwner?.setAttribute('aria-expanded', 'false');
+    if (refocus) subOwner?.focus();
+    subOwner = undefined;
+  }
+  function openSub(owner: HTMLElement, entries: readonly MenuEntry[], focus: boolean) {
+    if (!sub) return;
+    if (subOwner === owner && !sub.hidden) { if (focus) items(sub)[0]?.focus(); return; }
+    closeSub();
+    for (const entry of entries) {
+      const item = document.createElement('button');
+      item.type = 'button'; item.textContent = entry.label; item.setAttribute('role', 'menuitem');
+      if (entry.unavailable) { item.disabled = true; item.title = entry.unavailable; }
+      else item.onclick = () => { close(false); entry.run?.(); };
+      sub.append(item);
+    }
+    subOwner = owner; owner.setAttribute('aria-expanded', 'true');
+    sub.hidden = false;
+    const box = owner.getBoundingClientRect();
+    sub.style.left = `${box.right + 2 + sub.offsetWidth > window.innerWidth - 4 ? Math.max(4, box.left - sub.offsetWidth - 2) : box.right + 2}px`;
+    sub.style.top = `${Math.max(4, Math.min(box.top - 5, window.innerHeight - sub.offsetHeight - 4))}px`;
+    if (focus) items(sub)[0]?.focus();
+  }
   function show(entries: readonly MenuEntry[], from: HTMLElement, at?: { x: number; y: number }) {
     if (options.blocked?.()) return;
     if (!at && !element.hidden && anchor === from) { close(); return; }
     if (open && open !== menu) open.close(false);
     close(false); element.replaceChildren();
+    sub = document.createElement('div'); sub.className = 'context-menu context-submenu'; sub.hidden = true; sub.setAttribute('role', 'menu');
+    subOwner = undefined;
     for (const entry of entries) {
       const item = document.createElement('button');
       item.type = 'button'; item.textContent = entry.label; item.setAttribute('role', 'menuitem');
       if (entry.unavailable) { item.disabled = true; item.title = entry.unavailable; }
-      else item.onclick = () => { close(false); entry.run(); };
+      else if (entry.submenu) {
+        const submenu = entry.submenu;
+        item.setAttribute('aria-haspopup', 'menu'); item.setAttribute('aria-expanded', 'false');
+        const arrow = document.createElement('span'); arrow.className = 'context-menu-arrow'; arrow.textContent = '▸'; arrow.setAttribute('aria-hidden', 'true'); item.append(arrow);
+        item.onclick = () => openSub(item, submenu, true);
+        item.addEventListener('pointerenter', () => openSub(item, submenu, false));
+      } else {
+        item.onclick = () => { close(false); entry.run?.(); };
+        item.addEventListener('pointerenter', () => closeSub());
+      }
       element.append(item);
     }
+    element.append(sub);
     anchor = from; open = menu;
     if (from.matches('button')) from.setAttribute('aria-expanded', 'true');
     options.opened?.(from);
     element.hidden = false;
     if (at) placeMenuAt(element, at.x, at.y); else placeMenu(element, from);
-    element.querySelector<HTMLElement>('button:not(:disabled)')?.focus();
+    items(element)[0]?.focus();
   }
   element.addEventListener('keydown', event => {
-    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); return; }
+    const inSub = Boolean(sub && !sub.hidden && sub.contains(event.target as Node));
+    if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (inSub) closeSub(true); else close(); return; }
     if (shortcutFor(event) !== 'command-palette') event.stopPropagation();
-    const items = [...element.querySelectorAll<HTMLElement>('button:not(:disabled)')], index = items.indexOf(document.activeElement as HTMLElement);
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); items[(index + (event.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]?.focus(); }
-    else if (event.key === 'Home' || event.key === 'End') { event.preventDefault(); items[event.key === 'Home' ? 0 : items.length - 1]?.focus(); }
+    const list = items(inSub ? sub! : element), index = list.indexOf(document.activeElement as HTMLElement);
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); list[(index + (event.key === 'ArrowDown' ? 1 : list.length - 1)) % list.length]?.focus(); }
+    else if (event.key === 'Home' || event.key === 'End') { event.preventDefault(); list[event.key === 'Home' ? 0 : list.length - 1]?.focus(); }
+    else if (event.key === 'ArrowRight' && !inSub && document.activeElement?.getAttribute('aria-haspopup') === 'menu') { event.preventDefault(); (document.activeElement as HTMLElement).click(); }
+    else if (event.key === 'ArrowLeft' && inSub) { event.preventDefault(); closeSub(true); }
     else if (event.key === 'Tab') close(false);
   });
   document.addEventListener('pointerdown', event => { const target = event.target as Node; if (!element.hidden && !element.contains(target) && !anchor?.contains(target)) close(false); });
