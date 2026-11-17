@@ -1294,7 +1294,7 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
    open footer nor the hover band that opens it ever lies over a thumbnail; the lane under the strip is painted
    in the strip's own colour (a shadow, so it takes no room). The pill's default spot rises with it (see clampPoint). */
 #reader-layout { --page-strip-height: 106px; --page-strip-room: calc(var(--page-strip-height) + var(--footer-height)); }
-#workspace:has(.pane-body[data-pane='a'].has-page-strip) .reader-host[data-pane='a'], #workspace:has(.pane-body[data-pane='b'].has-page-strip) .reader-host[data-pane='b'] { bottom: var(--page-strip-room); }
+#workspace:has(.pane-body[data-pane='a'].has-page-strip) .reader-host[data-pane='a'], #workspace:has(.pane-body[data-pane='b'].has-page-strip) .reader-host[data-pane='b'] { bottom: calc(var(--pane-bottom, 0px) + var(--page-strip-room)); }
 .pane-body.has-page-strip #view-controls { bottom: calc(var(--page-strip-room) + 8px); }
 #page-strip { position: absolute; z-index: 4; left: 0; right: 0; bottom: var(--footer-height); height: var(--page-strip-height); background: var(--raise); border-top: 1px solid var(--hairline); box-shadow: 0 var(--footer-height) 0 var(--raise); }
 /* The icon rail floats over the panel's edge while the library is closed, so the strip starts beside it, like the find bar. */
@@ -1540,7 +1540,7 @@ dd { margin: 0; color: var(--muted); }
   #reader-layout.library-right #find-bar { right: var(--workspace-clear); }
 }
 /* While the bar is open, shift the reading surface down so the first line is never hidden. */
-#workspace:has(.pane-body[data-pane='a'] > #find-bar:not([hidden])) .reader-host[data-pane='a'], #workspace:has(.pane-body[data-pane='b'] > #find-bar:not([hidden])) .reader-host[data-pane='b'] { top: calc(var(--pane-tabs, 0px) + var(--find-bar-height)); }
+#workspace:has(.pane-body[data-pane='a'] > #find-bar:not([hidden])) .reader-host[data-pane='a'], #workspace:has(.pane-body[data-pane='b'] > #find-bar:not([hidden])) .reader-host[data-pane='b'] { top: calc(var(--pane-top, 0px) + var(--pane-tabs, 0px) + var(--find-bar-height)); }
 #find-bar svg { flex-shrink: 0; margin-right: 2px; }
 #find-query { flex: 0 1 320px; min-width: 0; padding: 4px 8px; border: 0; border-radius: 6px; background: var(--hover-subtle); color: var(--fg); font: inherit; font-size: 12px; }
 #find-query::placeholder { color: var(--muted); }
@@ -1586,21 +1586,19 @@ dialog, dialog.drop, #menu, #appearance, .tab-menu, .zoom-menu { background-imag
 
 /* Split view: two documents side by side, each pane with a row of tabs. Not split, the one pane's layer (`.pane-body`) fills the reading panel and the row,
    the second pane and the divider are not drawn, so nothing differs from a single reader. The reading surfaces stay children of #workspace (a page
-   that moves in the document reloads its frames) and take their box from their pane's `data-pane`; what belongs to a pane (find bar, view controls,
-   page strip, the placeholder for a tab with no page) is laid on its layer. The panes share the reading width less the icon rail's or the docked
-   panel's room (--split-start / --split-end) and the 8 px divider; --ratio is the left pane's part of it. */
+   that moves in the document reloads its frames) and take their box from their pane's `data-pane`, which main.ts sets inline from the layout tree
+   (layout.ts): the panes share the reading area less the icon rail's or the docked panel's room and the 8 px dividers. A reading surface takes
+   its left and width inline and its top and bottom from --pane-top and --pane-bottom, so the find bar and the page strip still push it. What belongs to a pane (find bar, view controls,
+   page strip, the placeholder for a tab with no page) is laid on its layer. */
 .pane-strip, .pane-divider { display: none; }
 .pane-body { position: absolute; z-index: 6; inset: var(--pane-tabs, 0px) 0 0 0; container: pane / inline-size; pointer-events: none; }
 .pane-body > * { pointer-events: auto; }
-#workspace.is-split { --pane-tabs: 28px; --split-start: 0px; --split-end: 0px; --split-share: calc(100% - var(--split-start) - var(--split-end) - 8px); --split-a: calc(var(--split-share) * var(--ratio, .5)); }
-@media (min-width: 720px) {
-  #reader-layout:not(.library-right) #workspace.is-split { --split-start: var(--workspace-clear); }
-  #reader-layout.library-right #workspace.is-split { --split-end: var(--workspace-clear); }
-}
+#workspace.is-split { --pane-tabs: 28px; }
 /* Beaten otherwise by library.css's `#reader-layout:not(.library-right) .reader-host { left: var(--workspace-clear) }`, which loads later with the same weight. */
-#reader-layout #workspace.is-split [data-pane='a'] { --workspace-clear: 0px; left: var(--split-start); right: auto; width: var(--split-a); }
-#reader-layout #workspace.is-split [data-pane='b'] { --workspace-clear: 0px; left: calc(var(--split-start) + var(--split-a) + 8px); right: var(--split-end); width: auto; }
-#reader-layout #workspace.is-split .reader-host { top: var(--pane-tabs); }
+#reader-layout #workspace.is-split [data-pane] { --workspace-clear: 0px; right: auto; }
+#reader-layout #workspace.is-split .reader-host { top: calc(var(--pane-top, 0px) + var(--pane-tabs)); }
+/* Lighter than the page strip's rule, which keeps its room. */
+#workspace.is-split .reader-host { bottom: var(--pane-bottom, 0px); }
 #workspace.is-split .pane-strip { position: absolute; z-index: 7; top: 0; height: 28px; display: flex; align-items: center; gap: 2px; padding: 0 4px; background: var(--chrome); border-bottom: 1px solid var(--hairline); }
 #workspace.is-split .pane-strip .tab, #workspace.is-split .pane-strip .tab-add, #workspace.is-split .pane-strip .tab-overflow { height: 24px; }
 #workspace.is-split .pane-strip .tab-add, #workspace.is-split .pane-strip .tab-overflow { width: 24px; }
@@ -1629,12 +1627,11 @@ dialog, dialog.drop, #menu, #appearance, .tab-menu, .zoom-menu { background-imag
 #workspace.is-split:not(.is-covered, .is-single)[data-active='b'] .pane-body[data-pane='a'] .pane-dim { opacity: 1; visibility: visible; transition: opacity 120ms; }
 #split-preview { position: absolute; z-index: 8; pointer-events: none; outline: 2px solid var(--accent); outline-offset: -2px; background: color-mix(in srgb, var(--accent) 10%, transparent); }
 #split-preview[hidden] { display: none; }
-#workspace.is-split .pane-divider { display: block; position: absolute; z-index: 7; top: 0; bottom: 0; left: calc(var(--split-start) + var(--split-a)); width: 8px; background: var(--chrome); cursor: col-resize; touch-action: none; }
+#workspace.is-split .pane-divider { display: block; position: absolute; z-index: 7; background: var(--chrome); cursor: col-resize; touch-action: none; }
 .pane-divider::before { content: ''; position: absolute; left: 50%; top: 50%; width: 3px; height: 36px; translate: -50% -50%; border-radius: 2px; background: var(--track); }
 .pane-divider:hover::before, .pane-divider:focus-visible::before, .pane-divider.is-dragging::before { background: var(--accent); }
 .pane-divider:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 /* Too narrow for two panes (a window that shrank): only the active pane shows, and Ctrl \ swaps them. */
-#reader-layout #workspace.is-split.is-single [data-pane] { left: var(--split-start); right: var(--split-end); width: auto; }
 #workspace.is-split.is-single[data-active='a'] [data-pane='b'], #workspace.is-split.is-single[data-active='b'] [data-pane='a'] { visibility: hidden; pointer-events: none; }
 #workspace.is-split.is-single .pane-divider { display: none; }
 /* Home and the Library page take the reading area below the panes' rows, which stay so that a tab of either pane brings the split back as it was. */
