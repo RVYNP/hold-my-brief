@@ -1,3 +1,10 @@
+- **Fixes only (since 2026-11-17, until the owner lifts it here).** The app is being redesigned. Fixes
+  pass: a bug in behaviour already on `main`, security and dependency fixes, CI, tests, tooling, and docs
+  that describe `main`. Verdict `blocked` for a PR that adds or extends a feature, control, setting, menu
+  item, shortcut, theme, view or document type, restyles the UI, adds a capability through a dependency,
+  or removes a feature, unless the PR body has a line starting `Owner approved during freeze:` that names
+  that work. On a fix PR, anything beyond the fix (extra options, polish, refactors it does not need) is a
+  required change: take it out.
 - This repository is **public** (MIT, downloads published). Anything committed is published: no
   in-copyright documents or scans (tests build their own small documents; README media come from
   public-domain works via `scripts/reshoot-media.mjs`), no machine paths, keys or personal data.
