@@ -40,7 +40,7 @@ export function scrollRoom(g: number): number {
 }
 
 /** Longest listing whose lines get a box each: splitting a line off a text node copies what follows it, so the cost grows with the square of the length. */
-const MAX_LINES = 2000;
+export const MAX_LINES = 2000;
 /** The column a line's text starts at, counting a tab as a step of 4 like `tab-size`. */
 function indentOf(line: string): number {
   let column = 0;
@@ -57,8 +57,9 @@ function indentOf(line: string): number {
  * begins. Pandoc already sets each line in a `span`. Elsewhere a line is cut out with a range, which copies a token's `span` across the cut
  * when a string or comment runs over several lines. The text, and so every text offset, is unchanged. Runs once per document.
  */
-export function markLines(doc: Document) {
-  for (const pre of Array.from(doc.querySelectorAll('pre'))) {
+export function markLines(scope: Document | Element) {
+  const doc = (scope.nodeType === 9 ? scope : scope.ownerDocument) as Document;
+  for (const pre of Array.from(scope.querySelectorAll('pre'))) {
     if (pre.querySelector(`[${LINE}]`)) continue;
     const mark = (element: HTMLElement, line: string) => { element.setAttribute(LINE, ''); element.style.setProperty('--hmb-indent', String(indentOf(line))); };
     const spans = pre.matches('.sourceCode') ? Array.from(pre.querySelectorAll<HTMLElement>(':scope > code > span')) : [];

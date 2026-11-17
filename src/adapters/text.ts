@@ -1,5 +1,8 @@
 import MarkdownIt, { type Token } from 'markdown-it';
 import type { Locator, OutlineItem, Position, ReaderAdapter, ReaderContext, ReaderOptions, ReaderSource } from '../types';
+import { copyBlock, flash, iconMarkup, icons, openCodeSheet, type Sheet } from '../code-viewer';
+import { highlightCode } from '../code-highlight';
+import { markLines } from '../epub-code';
 import { searchUnits, type DocumentSearch, type SearchHit, type SearchOptions, type UnitText } from '../search';
 
 type SourceBlock = { element: HTMLElement; line: number; endLine: number };
@@ -88,7 +91,14 @@ export function renderMarkdown(source: string): { html: string; outline: Outline
   // Tight lists still need a semantic source anchor; spans retain CommonMark's list spacing.
   md.renderer.rules.paragraph_open = (tokens, index, options, _env, renderer) => tokens[index].hidden ? `<span${marker(tokens[index])}>` : renderer.renderToken(tokens, index, options);
   md.renderer.rules.paragraph_close = (tokens, index, options, _env, renderer) => tokens[index].hidden ? '</span>\n' : renderer.renderToken(tokens, index, options);
-  md.renderer.rules.fence = (tokens, index) => `<pre tabindex="0" role="region" aria-label="Code block"${marker(tokens[index])}><code>${escape(tokens[index].content)}</code></pre>\n`;
+  // The header sits outside the `pre`, so the block's text, its source-line marker and every offset into it are the code alone.
+  md.renderer.rules.fence = (tokens, index) => {
+    const language = tokens[index].info.trim().split(/\s+/)[0].toLowerCase();
+    const named = language ? `, ${escape(language)}` : '';
+    const action = (name: 'copy' | 'open', label: string, paths: string) => `<button type="button" tabindex="0" class="code-action" data-code-action="${name}" aria-label="${label} code${named}" title="${label} code${named}">${iconMarkup(paths)}<span>${label}</span></button>`;
+    return `<figure class="code-block"${language ? ` data-language="${escape(language)}"` : ''}><div class="code-head">${language ? `<span class="code-lang">${escape(language)}</span>` : ''}<span class="code-actions">${action('copy', 'Copy', icons.copy)}${action('open', 'Open', icons.open)}</span></div>`
+      + `<pre tabindex="0" role="region" aria-label="Code block"${marker(tokens[index])}><code>${highlightCode(tokens[index].content, language) ?? escape(tokens[index].content)}</code></pre></figure>\n`;
+  };
   md.renderer.rules.code_block = md.renderer.rules.fence;
   md.renderer.rules.table_open = (tokens, index, options, _env, renderer) => `<div class="reader-table-scroll" tabindex="0" role="region" aria-label="Table">${renderer.renderToken(tokens, index, options)}`;
   md.renderer.rules.table_close = () => '</table></div>\n';
@@ -109,14 +119,34 @@ export function renderMarkdown(source: string): { html: string; outline: Outline
 const styles = `
 .reader-text-content{box-sizing:border-box;min-height:100%;color:inherit;overflow-wrap:anywhere;max-width:calc(var(--measure) + 2 * var(--reader-margin));margin-inline:auto;font-family:var(--font-read);font-synthesis:weight style}
 .reader-text-content[data-wrap="false"]{max-width:none}
-.reader-text-content :is(p,h1,h2,h3,h4,h5,h6,pre,blockquote,ul,ol,table){margin-top:0;margin-bottom:1em}
+.reader-text-content :is(p,h1,h2,h3,h4,h5,h6,blockquote,ul,ol,table){margin-top:0;margin-bottom:1em}
 .reader-text-content :is(h1,h2,h3,h4,h5,h6){line-height:1.25;font-family:inherit;font-weight:400}
 .reader-text-content h1{font-size:2em;letter-spacing:normal;color:inherit}
 .reader-text-content h2{font-size:1.5em}.reader-text-content h3{font-size:1.25em}
 .reader-text-content a{color:var(--accent-ink);text-decoration:underline}
 .reader-text-content pre,.reader-table-scroll{max-width:100%;overflow:auto;overscroll-behavior:contain}
-.reader-text-content pre{padding:.7em;background:var(--code);white-space:pre;overflow-wrap:normal}
-.reader-text-content code{font-family:Consolas,monospace;font-size:.88em}
+.reader-text-content .code-block{margin:0 0 1em;border:1px solid var(--hairline);border-radius:8px;background:var(--code);overflow:hidden}
+.reader-text-content .code-head{display:flex;align-items:center;gap:8px;min-height:28px;padding:2px 6px 0 1em;user-select:none;-webkit-user-select:none}
+.reader-text-content .code-lang{font:11px/1 var(--font-mono);color:var(--muted)}
+.reader-text-content .code-actions{display:flex;gap:2px;margin-left:auto}
+.reader-text-content .code-action{display:inline-flex;align-items:center;gap:5px;padding:3px 6px;border:0;border-radius:4px;background:none;color:var(--muted);font:11px/1 var(--font-ui);cursor:pointer}
+.reader-text-content .code-action:hover{background:var(--hover);color:var(--fg)}
+.reader-text-content .code-action svg{flex:none}
+.reader-text-content pre{margin:0;padding:.25em 1em .9em;background:none;font:.88em/1.5 var(--font-mono);white-space:pre;overflow-wrap:normal;tab-size:4}
+.reader-text-content[data-wrap="true"] pre{white-space:pre-wrap;overflow-wrap:anywhere}
+/* A wrapped line hangs 2ch in from where its own line begins; markLines gives each line its indent. */
+.reader-text-content[data-wrap="true"] pre [data-hmb-line]{display:inline-block;padding-left:calc(1ch * (var(--hmb-indent, 0) + 2));text-indent:calc(-1ch * (var(--hmb-indent, 0) + 2))}
+.reader-text-content pre code{font:inherit}
+.reader-text-content pre code :is(.hljs-keyword,.hljs-built_in,.hljs-literal,.hljs-type,.hljs-selector-tag){color:var(--code-keyword)}
+.reader-text-content pre code :is(.hljs-string,.hljs-regexp,.hljs-symbol,.hljs-attr-value){color:var(--code-string)}
+.reader-text-content pre code :is(.hljs-title,.hljs-function,.hljs-attr,.hljs-property,.hljs-variable,.hljs-name){color:var(--code-name)}
+.reader-text-content pre code .hljs-number{color:var(--code-number)}
+.reader-text-content pre code :is(.hljs-comment,.hljs-quote,.hljs-meta){color:var(--code-comment);font-style:italic}
+.reader-text-content pre code .hljs-addition{color:var(--code-string);background:color-mix(in srgb,var(--code-string) 12%,transparent)}
+.reader-text-content pre code .hljs-deletion{color:var(--code-keyword);background:color-mix(in srgb,var(--code-keyword) 12%,transparent)}
+.reader-text-content :not(pre)>code{padding:.05em .35em;border:1px solid var(--hairline);border-radius:4px;background:var(--code);font:.88em var(--font-mono);-webkit-box-decoration-break:clone;box-decoration-break:clone}
+@media (forced-colors:active),(prefers-contrast:more){.reader-text-content pre code [class*='hljs-']{color:inherit;background:none;font-style:inherit}}
+@media (forced-colors:active){.reader-text-content .code-block,.reader-text-content :not(pre)>code{background:none;border-color:CanvasText}.reader-text-content .code-action:hover{background:none;outline:1px solid CanvasText}}
 .reader-text-content table{border-collapse:collapse;overflow-wrap:normal}
 .reader-text-content th,.reader-text-content td{border:1px solid var(--rule);padding:.4em .6em}
 .reader-text-content blockquote{margin-left:0;border-left:3px solid var(--rule);padding-left:1em}
@@ -127,6 +157,7 @@ const styles = `
 .reader-text-content :focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 /* The current search result: a soft highlight that stays legible in light and dark themes. */
 .reader-text-content mark.search-hit{background:var(--search-hit, #ffe08a);color:inherit;border-radius:2px;padding:0 .5px}
+.reader-text-content pre mark.search-hit{color:var(--ink)}
 `;
 
 export class TextAdapter implements ReaderAdapter {
@@ -149,6 +180,12 @@ export class TextAdapter implements ReaderAdapter {
   private frame = 0;
   private imageUrls: string[] = [];
   private listener?: (event: Event) => void;
+  private codeListener?: (event: Event) => void;
+  private codeKeyListener?: (event: Event) => void;
+  private options!: ReaderOptions;
+  /** The code sheet over the reading surface, while one is open. */
+  private sheet?: Sheet;
+  private copyTimers = new Map<HTMLElement, { current?: number }>();
   /** `<mark>` elements currently inserted by `revealSearchMatch`, removed on the next reveal. */
   private marks: HTMLElement[] = [];
 
@@ -166,6 +203,9 @@ export class TextAdapter implements ReaderAdapter {
       const rendered = renderMarkdown(this.source);
       this.content.innerHTML = rendered.html;
       this.headings = rendered.outline;
+      markLines(this.content);
+      // Cutting a line out of a token that starts or ends on the cut leaves the original token behind with no text in it.
+      for (const left of Array.from(this.content.querySelectorAll('pre [class*="hljs-"]:empty'))) left.remove();
     } else {
       // Group source lines to avoid one DOM element per line in large plain-text documents.
       for (let line = 0; line < this.offsets.length; line += 80) {
@@ -196,6 +236,28 @@ export class TextAdapter implements ReaderAdapter {
     };
     this.content.addEventListener('click', this.listener);
     this.content.addEventListener('auxclick', this.listener);
+    this.codeListener = event => {
+      const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('button[data-code-action]') : null;
+      const pre = button?.closest('.code-block')?.querySelector<HTMLElement>('pre');
+      if (!button || !pre) return;
+      if (button.dataset.codeAction === 'open') {
+        this.sheet = openCodeSheet({ host, block: pre, fontSize: this.options.fontSize, beside: true, restore: () => button.focus({ preventScroll: true }), copy: block => this.copyCode(block) });
+        return;
+      }
+      const label = button.querySelector('span')!;
+      void this.copyCode(pre).then(done => {
+        if (!done) return;
+        let timers = this.copyTimers.get(button);
+        if (!timers) this.copyTimers.set(button, timers = {});
+        flash(timers, copied => { label.textContent = copied ? 'Copied' : 'Copy'; button.querySelector('svg')!.innerHTML = copied ? icons.done : icons.copy; });
+      });
+    };
+    this.content.addEventListener('click', this.codeListener);
+    this.codeKeyListener = event => {
+      if ((event as KeyboardEvent).key !== ' ' && (event as KeyboardEvent).key !== 'Enter') return;
+      if (event.target instanceof Element && event.target.closest('button[data-code-action]')) event.stopPropagation();
+    };
+    this.content.addEventListener('keydown', this.codeKeyListener);
     host.addEventListener('scroll', this.onScroll, { passive: true });
     this.applyOptions(options);
     host.scrollTop = 0;
@@ -347,16 +409,23 @@ export class TextAdapter implements ReaderAdapter {
       let targetTop = block.element.getBoundingClientRect().top;
       const walker = document.createTreeWalker(block.element, NodeFilter.SHOW_TEXT);
       let node: Node | null;
+      let last: Node | null = null;
+      // An offset on the boundary between two text nodes is the start of the second: a code block's lines are one node each.
       while ((node = walker.nextNode())) {
         const length = node.textContent?.length ?? 0;
         if (!length) continue;
-        if (offset > length) { offset -= length; continue; }
-        if (length) {
-          const range = document.createRange();
-          range.setStart(node, Math.min(offset, length - 1)); range.setEnd(node, Math.min(offset + 1, length));
-          const rect = range.getBoundingClientRect(); if (rect.height) targetTop = rect.top;
-        }
+        last = node;
+        if (offset >= length) { offset -= length; continue; }
+        last = null;
+        const range = document.createRange();
+        range.setStart(node, offset); range.setEnd(node, offset + 1);
+        const rect = range.getBoundingClientRect(); if (rect.height) targetTop = rect.top;
         break;
+      }
+      if (last && offset === 0) {
+        const length = last.textContent?.length ?? 0, range = document.createRange();
+        range.setStart(last, length - 1); range.setEnd(last, length);
+        const rect = range.getBoundingClientRect(); if (rect.height) targetTop = rect.top;
       }
       this.host.scrollTop += targetTop - this.host.getBoundingClientRect().top - 2;
     } else this.host.scrollTop = 0;
@@ -365,7 +434,10 @@ export class TextAdapter implements ReaderAdapter {
     this.publish();
   }
 
+  private copyCode(block: HTMLElement): Promise<boolean> { return copyBlock(block).then(() => true, error => { this.context.onError(error); return false; }); }
+
   private applyOptions(options: ReaderOptions): void {
+    this.options = options;
     this.content.style.fontSize = `${options.fontSize}px`;
     this.content.style.lineHeight = String(options.lineHeight);
     this.content.style.padding = `${options.margin}px`;
@@ -447,29 +519,39 @@ export class TextAdapter implements ReaderAdapter {
   }
 
   /**
-   * Wraps the matched range in a `<mark>` when it sits inside one text node. A match spanning
-   * elements is navigated but not marked, because splitting the DOM across nodes could move
-   * the reading anchor.
+   * Marks the matched range piece by piece: one `<mark class="search-hit">` per text node the
+   * match overlaps, so a match that crosses inline elements (or the token spans of a highlighted
+   * code block) is marked in full. Every piece is found before the DOM changes; each mark
+   * is recorded so `clearSearchHighlights` can unwrap it.
    */
   private mark(root: HTMLElement, offset: number, length: number): void {
     const owner = root.ownerDocument;
     const walker = owner.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    let remaining = offset;
+    const end = offset + length;
+    const pieces: { node: Node; from: number; to: number }[] = [];
+    let position = 0;
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       const size = node.textContent?.length ?? 0;
-      if (remaining > size) { remaining -= size; continue; }
-      if (size === 0) break;
+      // Empty text nodes are left behind where a code block's lines were cut apart.
+      if (size === 0) continue;
+      const start = position;
+      position += size;
+      // A start on the boundary between two nodes belongs to the second.
+      if (position <= offset) continue;
+      if (start >= end) break;
+      pieces.push({ node, from: Math.max(offset, start) - start, to: Math.min(end, position) - start });
+    }
+    for (const piece of pieces) {
       const range = owner.createRange();
       try {
-        range.setStart(node, Math.min(remaining, size));
-        range.setEnd(node, Math.min(size, remaining + length));
-      } catch { return; }
+        range.setStart(piece.node, piece.from);
+        range.setEnd(piece.node, piece.to);
+      } catch { continue; }
       const mark = owner.createElement('mark');
       mark.className = 'search-hit';
-      try { mark.append(range.extractContents()); } catch { return; }
+      try { mark.append(range.extractContents()); } catch { continue; }
       range.insertNode(mark);
       this.marks.push(mark);
-      return;
     }
   }
 
@@ -488,6 +570,11 @@ export class TextAdapter implements ReaderAdapter {
     this.resize?.disconnect();
     if (this.frame) cancelAnimationFrame(this.frame);
     this.host?.removeEventListener('scroll', this.onScroll);
+    this.sheet?.close(false);
+    for (const timers of this.copyTimers.values()) clearTimeout(timers.current);
+    this.copyTimers.clear();
+    if (this.codeListener) this.content?.removeEventListener('click', this.codeListener);
+    if (this.codeKeyListener) this.content?.removeEventListener('keydown', this.codeKeyListener);
     if (this.listener) { this.content?.removeEventListener('click', this.listener); this.content?.removeEventListener('auxclick', this.listener); }
     this.imageUrls.forEach(url => URL.revokeObjectURL(url));
     this.imageUrls = []; this.blocks = []; this.history = []; this.source = ''; this.anchor = null;

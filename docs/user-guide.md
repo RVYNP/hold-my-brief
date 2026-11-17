@@ -116,7 +116,7 @@ needs one other document open), or when the window has no room: each pane needs 
 library panel while it is docked) must be 728 px wide, and the window at least 720 px.
 
 While split, **Ctrl+\\** moves between the panes. Click a pane, or its tabs, to make it the active one: the toolbar's title, find, the footer, the progress line and
-the keyboard act on it, and its shown tab carries the accent. A tab's menu is then **Move to the other side**, **Close** and **Close the split** (also in the
+the keyboard act on it, and its shown tab carries the accent. The active pane has the coloured line along its top edge; the other panes are dimmed. A tab's menu is then **Move to the other side**, **Close** and **Close the split** (also in the
 palette as *Move tab to the other side* and *Close the split*). Closing a pane's last tab ends the split, and the tabs of both sides go back to the one row, the right
 side's after the left's. Home and the Library tab belong to the window: they stay in the toolbar and cover both panes, and a pane's tab brings the split back as it was.
 Opening a document puts it in the active pane; one that is open on the other side is shown there.
@@ -212,6 +212,19 @@ dialog titles); the interface is set in Geist. Both are bundled with the app (SI
 so nothing is downloaded. Geist Serif has one weight, so bold and italic in a document are drawn from
 it rather than from a separate face. EPUB books keep their publisher's fonts, and PDFs their own.
 Positions, paths and key labels use JetBrains Mono, bundled as well.
+
+In Markdown, a fenced or indented code block is a rounded, tinted box set in JetBrains Mono, with the language (the first word after the
+opening fence) in its top-left corner. **Copy** and **Open** sit in the top-right corner: **Copy** puts the block's exact text on the
+clipboard and says *Copied* for a moment; **Open** shows the block in the same sheet EPUB code blocks use. The corner is not selectable, so
+selecting across a block and copying never takes the label or the buttons. A long line wraps, with the wrapped part indented under the
+line it continues, while the Wrap setting is on. Inline `code` is a small chip in the same face.
+
+A fenced block whose language is one of bash (`sh`, `zsh`, `console`), shell, JavaScript (`js`, `jsx`), TypeScript (`ts`, `tsx`), JSON, Python
+(`py`), CSS, HTML or XML (`html`), Markdown (`md`), YAML (`yml`), SQL, Rust, Go, Swift, diff or plaintext is coloured: keywords, strings, names,
+numbers and comments each take a colour of the current theme, and diff adds a tint to added and removed lines. The language is never guessed:
+a block with no language, or with one that is not in the list, stays in the ink colour and keeps its label. A block over 2,000 lines or 200 KB is
+left plain. The text itself is not changed, so Find, Copy and saved places work as before. With increased contrast or forced colours the
+blocks are not coloured. EPUB code blocks keep the publisher's colours.
 
 The theme design is inspired by [Tern](https://stencil.so/tern) by Stencil, and the Graphite theme
 uses Tern's default palette. See [Credits](../README.md#credits).

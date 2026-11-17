@@ -117,6 +117,9 @@ const activePane = () => focused.pane;
 const isSplit = () => sides.length === 2;
 /** What takes the whole reading area while split: Home, or the Library page. */
 let cover: 'home' | 'library' | undefined;
+/** While `restoreSplitView` opens the panes: the tabs it opens, and the side the user pressed, focused or selected since (that side keeps the focus). */
+let restoring: { tabs: (Tab | undefined)[]; picked?: Side } | undefined;
+const pick = (side: Side | undefined) => { if (restoring && side) restoring.picked = side; };
 /** The Library tab while split (not split, it is the first tab of the one side). */
 let libraryTab: Tab | undefined;
 /** The divider's position: the left pane's percent of the room the two panes share. Kept for as long as the split lasts. */
@@ -129,6 +132,8 @@ const known = (path: string): Tab | undefined => { for (const side of sides) { c
 const holder = (path: string) => sides.find(side => side.tabs.find(path));
 /** The side an event target is in (a reading surface, a row of tabs, or a pane's layer). */
 const sideAt = (target: EventTarget | null) => { const letter = target instanceof Element ? target.closest<HTMLElement>('[data-pane]')?.dataset.pane : undefined; return sides.find(side => side.view.letter === letter); };
+/** The pane whose area holds the press. `.pane-body` lets the pointer through (only its children take it), and a pane whose document has not mounted yet has no child there: such a press lands on #workspace itself, so the box decides. */
+const sideUnder = (event: PointerEvent) => event.target === workspace && !workspace.classList.contains('is-single') ? sides.find(side => { const box = side.view.body.getBoundingClientRect(); return event.clientX >= box.left && event.clientX < box.right && event.clientY >= box.top && event.clientY < box.bottom; }) : undefined;
 const carry = { over: (path: string, x: number, y: number) => carryOver(path, x, y), drop: (path: string, x: number, y: number) => carryDrop(path, x, y), clear: () => carryClear() };
 function makeSide(letter: SideLetter): Side {
   const parts = createRow(letter), body = createBody(letter);
@@ -640,7 +645,7 @@ async function load(open: () => Promise<Opened | null>, label = 'document', { ta
         const owner = holder(tab.path) ?? side;
         if (owner.pane.reader === current) { if (owner === focused) showPosition(p); else { owner.pane.position = p; owner.pane.markDirty(); paintTabs(); refreshGhost(owner); } }
         else if (tab.reader === current) tab.position = p;
-      }, onError: fail, openExternal, requestPassword: password, onFrame: doc => { pan.watchFrame(doc); watchFrameZoom(doc); doc.addEventListener('pointerdown', () => { const owner = holder(tab.path); if (owner && isSplit()) activateSide(owner); }, true); },
+      }, onError: fail, openExternal, requestPassword: password, onFrame: doc => { pan.watchFrame(doc); watchFrameZoom(doc); doc.addEventListener('pointerdown', () => { const owner = holder(tab.path); if (owner && isSplit()) { pick(owner); activateSide(owner); } }, true); },
       resolveImage: desktop ? async relative => { const result = await native<{bytes: number[]; mime: string}>('read_relative_image', { path: doc.path, relative }); const url = URL.createObjectURL(new Blob([new Uint8Array(result.bytes)], { type: result.mime })); urls.push(url); return url; } : undefined,
     }, prefs);
     // A reflowable book opens in the flow the reader last chose; with none saved the adapter picked one from the book, and it is kept from here on.
@@ -656,6 +661,8 @@ async function load(open: () => Promise<Opened | null>, label = 'document', { ta
     await pane.flush();
     if (!pane.isCurrent(token)) return false;
     doc.bytes = new Uint8Array();
+    // A split being restored does not let a document that finishes opening take the focus from the pane the user pressed meanwhile.
+    const held = restoring?.tabs.includes(target) ? restoring.picked : undefined, keep = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : undefined;
     if (focused !== side) activateSide(side); // The reader asked for another side while this one opened: the document goes where it was asked for.
     const swapping = replace && !side.tabs.find(tab.path) && side.shown === replace && side.tabs.find(replace.path) === replace ? replace : undefined;
     Object.assign(tab, { name: doc.name, format: doc.format, doc, reader: candidate, host: staging, options: prefs, position: candidate.getPosition(), hand: false, stripScroll: undefined, find: undefined, scanNoticeShown: false, resume: undefined, problem: undefined });
@@ -671,6 +678,7 @@ async function load(open: () => Promise<Opened | null>, label = 'document', { ta
     show(tab, true);
     showPosition(candidate.getPosition()); // A reopened or converted document saves its place and options again.
     staging.focus(); candidate = undefined; staging = undefined; pane.cancelPending = undefined;
+    if (held && focused !== held) { activateSide(held); (keep?.isConnected ? keep : held.pane.host)?.focus(); }
     if (doc.warning) notify(doc.warning);
     if (tab.format === 'epub') void homeThumbs.loadEpub(tab.path, () => Boolean(known(tab.path))).then(() => paintTabs());
     if (desktop) homeRecents = (await state()).recents; // The store moves the opened document to the front.
@@ -811,7 +819,7 @@ function selectTab(path: string | undefined) {
   if (isSplit() && (path === undefined || path === LIBRARY_PATH)) { showCover(path === undefined ? 'home' : 'library'); return; }
   const side = path === undefined ? focused : holder(path), tab = path === undefined ? undefined : side?.tabs.find(path);
   if (path !== undefined && !tab) return;
-  if (isSplit()) { clearCover(); if (side) activateSide(side); }
+  if (isSplit()) { clearCover(); pick(side); if (side) activateSide(side); }
   if (tab === focused.shown) return;
   if (focused.pane.loadingTarget !== tab) cancelOpen();
   show(tab);
@@ -969,7 +977,8 @@ function activateSide(side: Side) {
 }
 // The pane last clicked or focused is the active one. A press inside a book's frame never reaches the page (a fixed-layout book's frames report theirs, see `onFrame` in `load`),
 // but it moves the focus into the frame, which blurs the page: the pane that holds the element the page then reports as focused is the one.
-for (const type of ['pointerdown', 'focusin']) workspace.addEventListener(type, event => { const side = isSplit() ? sideAt(event.target) : undefined; if (side) activateSide(side); }, true);
+for (const type of ['pointerdown', 'focusin']) workspace.addEventListener(type, event => { const side = isSplit() ? sideAt(event.target) ?? (event instanceof PointerEvent ? sideUnder(event) : undefined) : undefined; if (side) { if (event.type === 'pointerdown') pick(side); activateSide(side); } }, true);
+workspace.addEventListener('keydown', event => pick(isSplit() ? sideAt(event.target) : undefined), true);
 window.addEventListener('blur', () => setTimeout(() => { const side = isSplit() ? sideAt(document.activeElement) : undefined; if (side) activateSide(side); }));
 
 /** While split, Home or the Library page takes the whole reading area; the panes, and what they show, stay as they were. */
@@ -1065,7 +1074,7 @@ function moveTabToOtherSide(path = focused.shown?.path, at?: number) {
 function focusOtherSide() {
   const other = sides.find(side => side !== focused);
   if (!other) return;
-  clearCover(); activateSide(other); other.pane.host?.focus();
+  pick(other); clearCover(); activateSide(other); other.pane.host?.focus();
 }
 /** Ends the split: the right pane's tabs follow the left pane's (the Library tab first), and the tab the focused pane shows stays shown. */
 function endSplit() {
@@ -1097,20 +1106,28 @@ function restoreSplitView(session: TabSession, split: SavedSplit): boolean {
   for (const side of sides) { side.shown = side.tabs.active; side.pane.show(side.shown); }
   $('empty').hidden = true;
   applyLayout(); paintTabState(); paintTabs();
-  // Anything else that changes the panes while the documents load (a file the app was launched with, a click on a tab, Home or a pane) ends the restore.
+  // Anything else that changes the panes while the documents load (a file the app was launched with, a click on a tab, Home or a pane) ends the restore. A pane the user presses, focuses or selects while it runs stays the active one:
+  // the documents still finish opening, but none of them takes the focus.
   const expected = sides.map(side => side.shown);
   const changed = () => sides.length !== 2 || sides.some((side, index) => side.shown !== expected[index] || side.pane.cancelPending !== undefined) || cover !== undefined;
+  const run: NonNullable<typeof restoring> = { tabs: expected };
+  restoring = run;
   void (async () => {
     for (const side of split.active === 'right' ? [left, right] : [right, left]) {
       if (changed()) return;
       activateSide(side);
-      if (side.shown && !side.shown.reader && !side.shown.problem) await reopen(side.shown);
+      if (side.shown && !side.shown.reader && !side.shown.problem) {
+        const opening = reopen(side.shown);
+        // A load is the focused side's from its start; once it runs, the pane the user pressed in the meantime gets the focus back.
+        if (run.picked) activateSide(run.picked);
+        await opening;
+      } else if (run.picked) activateSide(run.picked);
     }
-    if (changed()) return;
+    if (changed() || run.picked) return;
     // Home or the Library page was covering the panes: it does again, once they have opened.
     const showing = session.active === null ? undefined : session.tabs[session.active];
     if (!showing) showCover('home'); else if (showing.path === LIBRARY_PATH) showCover('library');
-  })().catch(fail);
+  })().catch(fail).finally(() => { if (restoring === run) restoring = undefined; });
   return true;
 }
 
