@@ -129,6 +129,12 @@ describe('TextAdapter interaction boundary', () => {
     await adapter.revealSearchMatch(across[0]);
     expect(Array.from(host.querySelectorAll('mark.search-hit'), mark => mark.textContent).join('')).toBe('delta beta');
   });
+  it('does not search a code block\'s language label or buttons as document text', async () => {
+    await adapter.open({ name: 'code.md', bytes: utf8('Intro\n\n```python\nx = 1\n```\n'), format: 'md' }, host, context, defaultOptions);
+    expect(host.querySelector('.code-lang')?.textContent).toBe('python');
+    for (const query of ['python', 'Copy', 'Open']) expect((await adapter.search(query)).hits).toEqual([]);
+    expect((await adapter.search('x = 1')).hits).toHaveLength(1);
+  });
   it('rejects invalid Go to values without saving history or moving', async () => {
     await adapter.open({ name: 'plain.txt', bytes: utf8('one\ntwo'), format: 'txt' }, host, context, defaultOptions);
     const restore = vi.spyOn(adapter, 'restore');

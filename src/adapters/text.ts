@@ -465,14 +465,14 @@ export class TextAdapter implements ReaderAdapter {
   /**
    * The text nodes the reader sees, in order. Search and `mark` both walk exactly this list, so an
    * offset into the concatenated text always lands on the characters it names. The code blocks'
-   * Copy and Open buttons are interface, not document text, and are left out.
+   * header (language label, Copy and Open buttons) is interface, not document text, and is left out.
    */
   private textNodes(): Text[] {
     const nodes: Text[] = [];
     const walker = this.content.ownerDocument.createTreeWalker(this.content, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null) {
       // Empty text nodes are left behind where a code block's lines were cut apart.
-      if (node.data.length === 0 || node.parentElement?.closest('button[data-code-action]')) continue;
+      if (node.data.length === 0 || node.parentElement?.closest('.code-head')) continue;
       nodes.push(node);
     }
     return nodes;
