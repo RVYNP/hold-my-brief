@@ -132,6 +132,8 @@ const known = (path: string): Tab | undefined => { for (const side of sides) { c
 const holder = (path: string) => sides.find(side => side.tabs.find(path));
 /** The side an event target is in (a reading surface, a row of tabs, or a pane's layer). */
 const sideAt = (target: EventTarget | null) => { const letter = target instanceof Element ? target.closest<HTMLElement>('[data-pane]')?.dataset.pane : undefined; return sides.find(side => side.view.letter === letter); };
+/** The pane whose area holds the press. `.pane-body` lets the pointer through (only its children take it), and a pane whose document has not mounted yet has no child there: such a press lands on #workspace itself, so the box decides. */
+const sideUnder = (event: PointerEvent) => event.target === workspace && !workspace.classList.contains('is-single') ? sides.find(side => { const box = side.view.body.getBoundingClientRect(); return event.clientX >= box.left && event.clientX < box.right && event.clientY >= box.top && event.clientY < box.bottom; }) : undefined;
 const carry = { over: (path: string, x: number, y: number) => carryOver(path, x, y), drop: (path: string, x: number, y: number) => carryDrop(path, x, y), clear: () => carryClear() };
 function makeSide(letter: SideLetter): Side {
   const parts = createRow(letter), body = createBody(letter);
@@ -660,7 +662,7 @@ async function load(open: () => Promise<Opened | null>, label = 'document', { ta
     if (!pane.isCurrent(token)) return false;
     doc.bytes = new Uint8Array();
     // A split being restored does not let a document that finishes opening take the focus from the pane the user pressed meanwhile.
-    const held = restoring?.tabs.includes(target) ? restoring.picked : undefined, keep = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+    const held = restoring?.tabs.includes(target) ? restoring.picked : undefined, keep = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : undefined;
     if (focused !== side) activateSide(side); // The reader asked for another side while this one opened: the document goes where it was asked for.
     const swapping = replace && !side.tabs.find(tab.path) && side.shown === replace && side.tabs.find(replace.path) === replace ? replace : undefined;
     Object.assign(tab, { name: doc.name, format: doc.format, doc, reader: candidate, host: staging, options: prefs, position: candidate.getPosition(), hand: false, stripScroll: undefined, find: undefined, scanNoticeShown: false, resume: undefined, problem: undefined });
@@ -975,7 +977,7 @@ function activateSide(side: Side) {
 }
 // The pane last clicked or focused is the active one. A press inside a book's frame never reaches the page (a fixed-layout book's frames report theirs, see `onFrame` in `load`),
 // but it moves the focus into the frame, which blurs the page: the pane that holds the element the page then reports as focused is the one.
-for (const type of ['pointerdown', 'focusin']) workspace.addEventListener(type, event => { const side = isSplit() ? sideAt(event.target) : undefined; if (side) { if (event.type === 'pointerdown') pick(side); activateSide(side); } }, true);
+for (const type of ['pointerdown', 'focusin']) workspace.addEventListener(type, event => { const side = isSplit() ? sideAt(event.target) ?? (event instanceof PointerEvent ? sideUnder(event) : undefined) : undefined; if (side) { if (event.type === 'pointerdown') pick(side); activateSide(side); } }, true);
 workspace.addEventListener('keydown', event => pick(isSplit() ? sideAt(event.target) : undefined), true);
 window.addEventListener('blur', () => setTimeout(() => { const side = isSplit() ? sideAt(document.activeElement) : undefined; if (side) activateSide(side); }));
 
