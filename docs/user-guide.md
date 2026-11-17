@@ -213,6 +213,12 @@ so nothing is downloaded. Geist Serif has one weight, so bold and italic in a do
 it rather than from a separate face. EPUB books keep their publisher's fonts, and PDFs their own.
 Positions, paths and key labels use JetBrains Mono, bundled as well.
 
+In Markdown, a fenced or indented code block is a rounded, tinted box set in JetBrains Mono, with the language (the first word after the
+opening fence) in its top-left corner. **Copy** and **Open** sit in the top-right corner: **Copy** puts the block's exact text on the
+clipboard and says *Copied* for a moment; **Open** shows the block in the same sheet EPUB code blocks use. The corner is not selectable, so
+selecting across a block and copying never takes the label or the buttons. A long line wraps, with the wrapped part indented under the
+line it continues, while the Wrap setting is on. Inline `code` is a small chip in the same face.
+
 The theme design is inspired by [Tern](https://stencil.so/tern) by Stencil, and the Graphite theme
 uses Tern's default palette. See [Credits](../README.md#credits).
 

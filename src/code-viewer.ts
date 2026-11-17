@@ -46,6 +46,9 @@ const PANDOC_FLAGS: Record<string, true> = { sourcecode: true, numbersource: tru
 const NO_LANGUAGE: Record<string, true> = { default: true, none: true };
 /** The language a block's classes name: `language-x` or `lang-x`, pandoc's `sourceCode x` on its `pre`/`code`, Sphinx's `highlight-x` around it. */
 export function languageOf(block: Element): string | undefined {
+  // The Markdown reader names the language on the figure around its blocks.
+  const tagged = block.closest<HTMLElement>('[data-language]')?.dataset.language;
+  if (tagged) return tagged;
   const tokens = (element: Element) => Array.from(element.classList, name => name.toLowerCase());
   const named = [block, ...Array.from(block.querySelectorAll('pre, code'))];
   for (const element of named) for (const token of tokens(element)) { const match = /^(?:language|lang)-(.+)$/.exec(token); if (match) return match[1]; }
@@ -69,7 +72,7 @@ export async function copyBlock(block: Element): Promise<void> {
 }
 
 /** Calls `mark(true)` now and `mark(false)` after COPIED_MS; a second call before then starts the time over. */
-function flash(timers: { current?: number }, mark: (copied: boolean) => void) {
+export function flash(timers: { current?: number }, mark: (copied: boolean) => void) {
   clearTimeout(timers.current);
   mark(true);
   timers.current = window.setTimeout(() => mark(false), COPIED_MS);
@@ -77,12 +80,14 @@ function flash(timers: { current?: number }, mark: (copied: boolean) => void) {
 
 // --- The controls drawn in the content frame ---
 
-const icons = {
+export const icons = {
   open: '<path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/>',
   copy: '<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
   done: '<path d="M20 6 9 17l-5-5"/>',
   close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
 };
+/** An icon as markup for HTML the app writes itself (the Markdown reader's block headers). */
+export const iconMarkup = (paths: string, size = 12): string => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
 /** An icon as an element of `doc`. A document of the book is XML, so its SVG is parsed as XML and imported rather than set as `innerHTML`. */
 function icon(doc: Document, paths: string, size = 14): Element {
   const parsed = new DOMParser().parseFromString(`<svg xmlns="${SVG}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`, 'image/svg+xml');
@@ -235,6 +240,8 @@ export type SheetOptions = {
   /** Called after the sheet closed, to give focus back. */
   restore: () => void;
   copy: CodeHooks['copy'];
+  /** The host scrolls its own content, so a sheet inside it would scroll away: the sheet is mounted beside it and follows its box. */
+  beside?: boolean;
 };
 
 const sameColor = (a: Rgb, b: Rgb) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
@@ -273,7 +280,7 @@ function codeNodes(block: Element, background: Rgb, ink: Rgb): { nodes: Node[]; 
 }
 
 /** Shows one code block full-width over `host`. Esc, the Close button, or a click outside the sheet closes it and calls `restore`. */
-export function openCodeSheet({ host, block, fontSize, restore, copy }: SheetOptions): Sheet {
+export function openCodeSheet({ host, block, fontSize, restore, copy, beside }: SheetOptions): Sheet {
   showing?.close(false);
   const text = blockText(block), language = languageOf(block);
   const scrim = document.createElement('div');
@@ -309,7 +316,15 @@ export function openCodeSheet({ host, block, fontSize, restore, copy }: SheetOpt
   body.append(gutter, pre);
   sheet.append(header, body);
   scrim.append(sheet);
-  host.append(scrim);
+  const mount = beside ? host.parentElement ?? host : host;
+  mount.append(scrim);
+  let follow: ResizeObserver | undefined;
+  if (mount !== host) {
+    const fit = () => { scrim.style.inset = 'auto'; scrim.style.left = `${host.offsetLeft}px`; scrim.style.top = `${host.offsetTop}px`; scrim.style.width = `${host.offsetWidth}px`; scrim.style.height = `${host.offsetHeight}px`; };
+    fit();
+    follow = new ResizeObserver(fit);
+    follow.observe(host);
+  }
 
   const render = () => {
     const style = getComputedStyle(sheet), background = parseRgb(style.backgroundColor), ink = parseRgb(style.color);
@@ -328,7 +343,7 @@ export function openCodeSheet({ host, block, fontSize, restore, copy }: SheetOpt
     close(returnFocus = true) {
       if (closed) return;
       closed = true; showing = undefined;
-      stop(); clearTimeout(timers.current);
+      stop(); follow?.disconnect(); clearTimeout(timers.current);
       document.removeEventListener('keydown', onKey, true);
       scrim.remove();
       if (returnFocus) restore();
