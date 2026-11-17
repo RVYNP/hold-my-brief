@@ -479,11 +479,12 @@ export class TextAdapter implements ReaderAdapter {
   }
 
   /**
-   * Searches the rendered text, so a query is what the reader sees: no `**`, backticks, link
+   * Markdown is searched as rendered, so a query is what the reader sees: no `**`, backticks, link
    * syntax or heading `#`s. Offsets are into the concatenated text nodes, the same string `mark`
-   * walks. A match never crosses a block (paragraph, heading, list item, table cell, code block).
-   * Markdown ignores how whitespace runs and soft line breaks fall. Plain text is searched as
-   * written: see `searchSource`.
+   * walks. A match never crosses a block (paragraph, heading, list item, table cell, code block),
+   * and whitespace runs and soft line breaks are ignored. Each hit reports its source line: the
+   * block's first line plus the line breaks before the match (a table cell reports its table's line).
+   * Plain text is searched as written: see `searchSource`.
    */
   async search(query: string, options: SearchOptions = {}): Promise<DocumentSearch> {
     if (this.disposed) return { hits: [], truncated: false };
@@ -492,24 +493,31 @@ export class TextAdapter implements ReaderAdapter {
     const hits: SearchHit[] = [];
     const limit = 2000;
     let truncated = false;
-    const searchUnit = (text: string, base: number, line: number) => {
+    const searchUnit = (text: string, base: number, block: Element) => {
       if (truncated || !text.trim()) return;
-      // Whitespace runs collapse to one space; `from`/`to` map each collapsed character back to the source run it came from.
-      const from: number[] = [], to: number[] = [];
-      const parts: string[] = [];
+      // Whitespace runs collapse to one space; `from`/`to` map each collapsed character back to the run it came from.
+      const from: number[] = [], to: number[] = [], parts: string[] = [];
       for (const [run, index] of Array.from(text.matchAll(/\s+|\S/g), found => [found[0], found.index!] as const)) {
         parts.push(/\s/.test(run[0]) ? ' ' : run);
         from.push(index); to.push(index + run.length);
       }
+      const carrier = block.closest<HTMLElement>('[data-source-line]');
+      const blockLine = Number(carrier?.dataset.sourceLine) || 1;
+      // Only a block that carries its own marker has line breaks that are source lines. A fence's code starts on the line after it.
+      const own = carrier === block;
+      const firstLine = blockLine + (own && block.tagName === 'PRE' && /^[\s>]*(`{3,}|~{3,})/.test(this.source.slice(this.offsets[blockLine - 1], this.offsets[blockLine])) ? 1 : 0);
+      let breaks = 0, scanned = 0;
       for (const match of findMatches(parts.join(''), needle, options)) {
         if (hits.length >= limit) { truncated = true; return; }
         const start = from[match.start], end = to[match.end - 1];
+        for (; scanned < start; scanned++) if (text.charCodeAt(scanned) === 10) breaks++;
+        const line = own ? firstLine + breaks : blockLine;
         hits.push({ text: text.slice(start, end), excerpt: excerpt(text, start, end), start: base + start, end: base + end, unit: line, unitLabel: `Line ${line}` });
       }
     };
     const blockOf = (node: Text) => node.parentElement?.closest(blockSelector) ?? this.content;
     let base = 0, unit = '', unitBase = 0, unitBlock: Element | undefined;
-    const flush = () => { if (unitBlock) searchUnit(unit, unitBase, Number(unitBlock.closest<HTMLElement>('[data-source-line]')?.dataset.sourceLine) || 1); unit = ''; };
+    const flush = () => { if (unitBlock) searchUnit(unit, unitBase, unitBlock); unit = ''; };
     for (const node of this.textNodes()) {
       const block = blockOf(node);
       if (block !== unitBlock) { flush(); unitBlock = block; unitBase = base; }
