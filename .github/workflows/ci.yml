@@ -84,7 +84,7 @@ jobs:
           echo "$files"
           echo
           echo "Reproduce this shard locally:"
-          echo "E2E_PORT=\$((20000 + $PR)) npx playwright test $(echo $files)"
+          echo "npm run build && CI=1 E2E_PORT=\$((20000 + $PR)) npx playwright test --workers=1 $(echo $files)"
 
       - name: Browser end-to-end tests (shard ${{ matrix.shard }}/3)
         env:
