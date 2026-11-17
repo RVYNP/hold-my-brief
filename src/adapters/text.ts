@@ -3,7 +3,10 @@ import type { Locator, OutlineItem, Position, ReaderAdapter, ReaderContext, Read
 import { copyBlock, flash, iconMarkup, icons, openCodeSheet, type Sheet } from '../code-viewer';
 import { highlightCode } from '../code-highlight';
 import { markLines } from '../epub-code';
-import { searchUnits, type DocumentSearch, type SearchHit, type SearchOptions, type UnitText } from '../search';
+import { excerpt, findMatches, type DocumentSearch, type SearchHit, type SearchOptions } from '../search';
+
+/** What ends a run of inline text: a match never crosses one of these. */
+const blockSelector = 'p, h1, h2, h3, h4, h5, h6, li, td, th, pre, blockquote, figure, div, span[data-source-line]';
 
 type SourceBlock = { element: HTMLElement; line: number; endLine: number };
 type TextAnchor = Locator & { line: number; blockLine: number; offset: number; context: string; contextOffset: number; fraction: number };
@@ -460,86 +463,103 @@ export class TextAdapter implements ReaderAdapter {
   }
 
   /**
-   * Searches the decoded source, one unit per source line, so every hit knows its line and
-   * absolute offset. Searching the source (rather than the rendered DOM) keeps results in
-   * document order and lets a hit be navigated straight to a source line, exactly like Go to.
+   * The text nodes the reader sees, in order. Search and `mark` both walk exactly this list, so an
+   * offset into the concatenated text always lands on the characters it names. The code blocks'
+   * Copy and Open buttons are interface, not document text, and are left out.
+   */
+  private textNodes(): Text[] {
+    const nodes: Text[] = [];
+    const walker = this.content.ownerDocument.createTreeWalker(this.content, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode() as Text | null; node; node = walker.nextNode() as Text | null) {
+      // Empty text nodes are left behind where a code block's lines were cut apart.
+      if (node.data.length === 0 || node.parentElement?.closest('button[data-code-action]')) continue;
+      nodes.push(node);
+    }
+    return nodes;
+  }
+
+  /**
+   * Searches the rendered text, so a query is what the reader sees: no `**`, backticks, link
+   * syntax or heading `#`s. Offsets are into the concatenated text nodes, the same string `mark`
+   * walks. A match never crosses a block (paragraph, heading, list item, table cell, code block).
+   * Markdown ignores how whitespace runs and soft line breaks fall; plain text searches line by
+   * line and matches exactly, as its source and its rendering are the same string.
    */
   async search(query: string, options: SearchOptions = {}): Promise<DocumentSearch> {
     if (this.disposed) return { hits: [], truncated: false };
-    const units: UnitText[] = [];
-    for (let line = 0; line < this.offsets.length; line++) {
-      const start = this.offsets[line];
-      const text = this.source.slice(start, this.offsets[line + 1] ?? this.source.length);
-      if (text.trim()) units.push({ text, number: line + 1, label: `Line ${line + 1}` });
+    const tolerant = this.format === 'md';
+    const needle = tolerant ? query.replace(/\s+/g, ' ') : query;
+    const hits: SearchHit[] = [];
+    const limit = 2000;
+    let truncated = false;
+    const searchUnit = (text: string, base: number, line: number) => {
+      if (truncated || !text.trim()) return;
+      // Whitespace runs collapse to one space; `from`/`to` map each collapsed character back to the source run it came from.
+      const from: number[] = [], to: number[] = [];
+      let collapsed = text;
+      if (tolerant) {
+        const parts: string[] = [];
+        for (const [run, index] of Array.from(text.matchAll(/\s+|\S/g), found => [found[0], found.index!] as const)) {
+          parts.push(/\s/.test(run[0]) ? ' ' : run);
+          from.push(index); to.push(index + run.length);
+        }
+        collapsed = parts.join('');
+      }
+      for (const match of findMatches(collapsed, needle, options)) {
+        if (hits.length >= limit) { truncated = true; return; }
+        const start = tolerant ? from[match.start] : match.start, end = tolerant ? to[match.end - 1] : match.end;
+        hits.push({ text: text.slice(start, end), excerpt: excerpt(text, start, end), start: base + start, end: base + end, unit: line, unitLabel: `Line ${line}` });
+      }
+    };
+    const blockOf = (node: Text) => node.parentElement?.closest(blockSelector) ?? this.content;
+    let base = 0, unit = '', unitBase = 0, unitBlock: Element | undefined;
+    const flush = () => { if (unitBlock) searchUnit(unit, unitBase, Number(unitBlock.closest<HTMLElement>('[data-source-line]')?.dataset.sourceLine) || 1); unit = ''; };
+    for (const node of this.textNodes()) {
+      if (this.format === 'txt') {
+        // One unit per source line; a chunk's text is its lines concatenated, so offsets equal source offsets.
+        const chunkLine = Number(node.parentElement?.closest<HTMLElement>('[data-source-line]')?.dataset.sourceLine) || 1;
+        let line = chunkLine;
+        for (const part of node.data.split(/(?<=\n)/)) { searchUnit(part, base, line++); base += part.length; if (truncated) break; }
+        continue;
+      }
+      const block = blockOf(node);
+      if (block !== unitBlock) { flush(); unitBlock = block; unitBase = base; }
+      unit += node.data;
+      base += node.data.length;
     }
-    const { hits, truncated } = searchUnits(units, query, options);
-    return { hits: hits.map(hit => ({ ...hit, start: this.offsets[hit.unit - 1] + hit.start, end: this.offsets[hit.unit - 1] + hit.end })), truncated };
+    if (this.format === 'md') flush();
+    return { hits, truncated };
   }
 
   /** Scrolls the block holding a match into view and marks the matched text. */
   async revealSearchMatch(hit: SearchHit): Promise<void> {
     if (this.disposed) return;
     this.clearSearchHighlights();
-    const block = this.blocks.filter(candidate => candidate.line <= hit.unit).at(-1) ?? this.blocks[0];
-    if (!block) return;
-    const offset = this.renderedOffset(block, hit);
-    if (offset >= 0) this.mark(block.element, offset, hit.text.length);
-    block.element.scrollIntoView({ block: 'center' });
+    const first = this.mark(hit.start, hit.end);
+    const block = first?.parentElement?.closest<HTMLElement>('[data-source-line]') ?? this.blocks.filter(candidate => candidate.line <= hit.unit).at(-1)?.element;
+    block?.scrollIntoView({ block: 'center' });
     // Focus stays wherever it was: the find bar keeps the caret while stepping through
     // results, and moving focus to the reader would swallow the next Enter.
     this.publish();
   }
 
   /**
-   * Finds where a source match sits in a block's rendered text.
-   *
-   * Source and rendering disagree on offsets: Markdown drops or rewrites syntax, HTML entities
-   * change length, and whitespace is collapsed. Scaling the source offset proportionally gets
-   * close, but is off by a character whenever the block begins with trimmed space, which is why
-   * the last step is to find the matched text itself inside the rendered string. If the text is
-   * not there (the match was syntax, or spans inline elements), the scaled guess is used.
+   * Marks the range `[start, end)` of the rendered text piece by piece: one `<mark class="search-hit">`
+   * per text node the match overlaps, so a match that crosses inline elements (or the token spans of
+   * a highlighted code block) is marked in full. Every piece is found before the DOM changes; each
+   * mark is recorded so `clearSearchHighlights` can unwrap it. Returns the first mark.
    */
-  private renderedOffset(block: SourceBlock, hit: SearchHit): number {
-    const blockStart = this.offsets[block.line - 1] ?? 0;
-    const rendered = block.element.textContent ?? '';
-    const sourceSpan = (this.offsets[block.endLine - 1] ?? this.source.length) - blockStart;
-    const scaled = this.format === 'txt'
-      ? hit.start - blockStart
-      : Math.round((hit.start - blockStart) / Math.max(1, sourceSpan) * rendered.length);
-    // Plain text renders 1:1, so its offset is already exact.
-    if (this.format === 'txt') return Math.max(0, scaled);
-    // Prefer the literal match, searching near the scaled position first so a repeated word
-    // in the same block is not confused with this one.
-    const needle = hit.text;
-    if (!needle) return Math.max(0, scaled);
-    const near = rendered.indexOf(needle, Math.max(0, scaled - 2));
-    if (near >= 0) return near;
-    const anywhere = rendered.indexOf(needle);
-    return anywhere >= 0 ? anywhere : Math.max(0, scaled);
-  }
-
-  /**
-   * Marks the matched range piece by piece: one `<mark class="search-hit">` per text node the
-   * match overlaps, so a match that crosses inline elements (or the token spans of a highlighted
-   * code block) is marked in full. Every piece is found before the DOM changes; each mark
-   * is recorded so `clearSearchHighlights` can unwrap it.
-   */
-  private mark(root: HTMLElement, offset: number, length: number): void {
-    const owner = root.ownerDocument;
-    const walker = owner.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    const end = offset + length;
-    const pieces: { node: Node; from: number; to: number }[] = [];
+  private mark(start: number, end: number): HTMLElement | undefined {
+    const owner = this.content.ownerDocument;
+    const pieces: { node: Text; from: number; to: number }[] = [];
     let position = 0;
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      const size = node.textContent?.length ?? 0;
-      // Empty text nodes are left behind where a code block's lines were cut apart.
-      if (size === 0) continue;
-      const start = position;
-      position += size;
+    for (const node of this.textNodes()) {
+      const nodeStart = position;
+      position += node.data.length;
       // A start on the boundary between two nodes belongs to the second.
-      if (position <= offset) continue;
-      if (start >= end) break;
-      pieces.push({ node, from: Math.max(offset, start) - start, to: Math.min(end, position) - start });
+      if (position <= start) continue;
+      if (nodeStart >= end) break;
+      pieces.push({ node, from: Math.max(start, nodeStart) - nodeStart, to: Math.min(end, position) - nodeStart });
     }
     for (const piece of pieces) {
       const range = owner.createRange();
@@ -553,6 +573,7 @@ export class TextAdapter implements ReaderAdapter {
       range.insertNode(mark);
       this.marks.push(mark);
     }
+    return this.marks[0];
   }
 
   clearSearchHighlights(): void {
