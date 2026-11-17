@@ -40,6 +40,31 @@ async function pickStraight(page: Page, from: Locator, to: { x: number; y: numbe
   await page.mouse.move(to.x, to.y, { steps: 40 });
 }
 
+/** Logs the pointer events a page gets (and a native drag or a selection starting), so a press that starts no drag can say what became of it. */
+const watchPointer = (page: Page) => page.addInitScript(() => {
+  const log: string[] = [];
+  (window as unknown as { pointerLog: string[] }).pointerLog = log;
+  const name = (node: EventTarget | null) => node instanceof Element ? `${node.tagName.toLowerCase()}.${(node.getAttribute('class') ?? '').trim().replace(/\s+/g, '.')}` : String(node);
+  let moves = 0;
+  for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'gotpointercapture', 'lostpointercapture', 'dragstart', 'selectstart', 'contextmenu']) {
+    window.addEventListener(type, event => {
+      if (type === 'pointermove' && ++moves > 3) return;
+      if (type === 'pointerdown') moves = 0;
+      const pointer = event as PointerEvent;
+      log.push(`${type} id=${pointer.pointerId ?? '-'} buttons=${pointer.buttons ?? '-'} primary=${pointer.isPrimary ?? '-'} at=${pointer.clientX ?? '-'},${pointer.clientY ?? '-'} target=${name(event.target)}`);
+    }, true);
+  }
+});
+/** What the page saw of the last press on `from` (called after `pick`): the element under its centre, the tab's box, the events since, the selection and the focus. */
+async function pressReport(page: Page, from: Locator, start: { x: number; y: number; width: number; height: number }) {
+  const state = await page.evaluate(({ x, y }) => {
+    const under = document.elementFromPoint(x, y), log = (window as unknown as { pointerLog: string[] }).pointerLog;
+    const at = (node: Element | null) => node ? `${node.tagName.toLowerCase()}.${(node.getAttribute('class') ?? '').trim().replace(/\s+/g, '.')}` : 'none';
+    return { under: at(under), selection: getSelection()?.toString() ?? '', focus: at(document.activeElement), events: log.splice(0) };
+  }, { x: start.x + start.width / 2, y: start.y + start.height / 2 });
+  return `the press at ${start.x + start.width / 2},${start.y + start.height / 2} on a tab at ${JSON.stringify(start)} (now ${JSON.stringify(await box(from))}): ${JSON.stringify(state)}`;
+}
+
 /** The PDF, an EPUB, a Markdown file and a text file open, the library closed; then Split right with the EPUB: the PDF, MD and TXT on the left, the EPUB on the right. */
 async function openSplit(page: Page) {
   await page.goto('/');
@@ -227,6 +252,7 @@ test.describe('1440 × 900', () => {
 
   test('at four panes an edge shows no preview and changes nothing, but the centre still moves the tab', async ({ page }) => {
     test.setTimeout(90_000);
+    await watchPointer(page);
     await openSplit(page);
     await drag(page, tabIn(page, 'TXT'), point(await box(await bodyOf(page, 'EPUB')), .5, .92)); // EPUB over TXT on the right.
     await drag(page, tabIn(page, 'MD'), point(await box(await bodyOf(page, 'PDF')), .5, .92)); // PDF over MD on the left.
@@ -237,8 +263,11 @@ test.describe('1440 × 900', () => {
     const before = await Promise.all(['PDF', 'MD', 'EPUB', 'TXT'].map(async format => box(rowOf(page, format))));
     const target = await bodyOf(page, 'MD');
     for (const [across, down] of [[.92, .5], [.08, .5], [.5, .92], [.5, .08]]) {
+      const start = await box(tabIn(page, 'EPUB'));
+      await page.evaluate(() => (window as unknown as { pointerLog: string[] }).pointerLog.length = 0);
       await pick(page, tabIn(page, 'EPUB'), point(await box(target), across, down));
-      await expect(tabIn(page, 'EPUB'), 'the drag is live, so a hidden preview means the drop is refused').toHaveClass(/is-carried/);
+      await expect(tabIn(page, 'EPUB'), `the drag is live, so a hidden preview means the drop is refused; ${await pressReport(page, tabIn(page, 'EPUB'), start)}`).toHaveClass(/is-carried/);
+      expect(await page.evaluate(() => getSelection()!.toString()), 'a tab pulled across the page selects no text').toBe('');
       await expect(preview(page)).toBeHidden();
       await page.mouse.up();
       await expect(panesShown(page)).toHaveCount(4);
@@ -246,8 +275,10 @@ test.describe('1440 × 900', () => {
     expect(await Promise.all(['PDF', 'MD', 'EPUB', 'TXT'].map(async format => box(rowOf(page, format))))).toEqual(before);
     for (const format of ['PDF', 'MD', 'EPUB', 'TXT']) await expect(formatsIn(page, format)).toHaveText([format]);
     // The centre moves it: the EPUB joins the Markdown file's pane, and its own pane closes.
+    const start = await box(tabIn(page, 'EPUB'));
+    await page.evaluate(() => (window as unknown as { pointerLog: string[] }).pointerLog.length = 0);
     await pick(page, tabIn(page, 'EPUB'), point(await box(target), .5));
-    await expect(tabIn(page, 'EPUB'), 'the drag is live').toHaveClass(/is-carried/);
+    await expect(tabIn(page, 'EPUB'), `the drag is live; ${await pressReport(page, tabIn(page, 'EPUB'), start)}`).toHaveClass(/is-carried/);
     const state = await page.evaluate(() => JSON.stringify({
       workspace: document.querySelector('#workspace')!.className,
       panes: [...document.querySelectorAll('.pane-body')].map(body => { const { left, top, right, bottom } = body.getBoundingClientRect(); return [(body as HTMLElement).dataset.pane, left, top, right, bottom].join(' '); }),
