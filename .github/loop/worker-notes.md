@@ -7,7 +7,8 @@ Hold My Brief is being redesigned, so the loop takes fixes, not features.
 - **Out of scope:** a new or extended feature, control, setting, menu item, shortcut, theme, view or
   document type; restyling; a dependency that adds a capability; removing features (that is redesign work).
 - **Exception:** a work order whose body has a line starting `Owner approved during freeze:` that names
-  the work. Only that named work is in scope.
+  the work. Only that named work is in scope. Keep that line verbatim in the PR body whenever you rewrite
+  it: the reviewer sees only the PR body and blocks a feature PR without it. Never write the line yourself.
 - An out-of-scope work order without that line: do not start it. Post
   `loop: blocked — fixes only: <what the order asks for>` and leave the PR a draft.
 - A fix that cannot work without a new control or setting: post `loop: blocked —` with the smallest
