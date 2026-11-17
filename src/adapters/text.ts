@@ -518,30 +518,39 @@ export class TextAdapter implements ReaderAdapter {
   }
 
   /**
-   * Wraps the matched range in a `<mark>` when it sits inside one text node. A match spanning
-   * elements is navigated but not marked, because splitting the DOM across nodes could move
-   * the reading anchor.
+   * Marks the matched range piece by piece: one `<mark class="search-hit">` per text node the
+   * match overlaps, so a match that crosses inline elements (or the token spans of a highlighted
+   * code block) is marked in full. Every piece is found before the DOM changes; each mark
+   * is recorded so `clearSearchHighlights` can unwrap it.
    */
   private mark(root: HTMLElement, offset: number, length: number): void {
     const owner = root.ownerDocument;
     const walker = owner.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    let remaining = offset;
+    const end = offset + length;
+    const pieces: { node: Node; from: number; to: number }[] = [];
+    let position = 0;
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       const size = node.textContent?.length ?? 0;
-      // Empty text nodes are left behind where a code block's lines were cut apart. A start on the boundary between two nodes belongs to the second.
+      // Empty text nodes are left behind where a code block's lines were cut apart.
       if (size === 0) continue;
-      if (remaining >= size) { remaining -= size; continue; }
+      const start = position;
+      position += size;
+      // A start on the boundary between two nodes belongs to the second.
+      if (position <= offset) continue;
+      if (start >= end) break;
+      pieces.push({ node, from: Math.max(offset, start) - start, to: Math.min(end, position) - start });
+    }
+    for (const piece of pieces) {
       const range = owner.createRange();
       try {
-        range.setStart(node, Math.min(remaining, size));
-        range.setEnd(node, Math.min(size, remaining + length));
-      } catch { return; }
+        range.setStart(piece.node, piece.from);
+        range.setEnd(piece.node, piece.to);
+      } catch { continue; }
       const mark = owner.createElement('mark');
       mark.className = 'search-hit';
-      try { mark.append(range.extractContents()); } catch { return; }
+      try { mark.append(range.extractContents()); } catch { continue; }
       range.insertNode(mark);
       this.marks.push(mark);
-      return;
     }
   }
 

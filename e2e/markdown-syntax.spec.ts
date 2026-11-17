@@ -126,6 +126,10 @@ test('find steps through matches inside coloured blocks, and a place inside one 
   await expect(page.locator('#find-status')).toHaveText('2 of 2');
   await expect(page.locator('.code-block pre mark.search-hit')).toHaveText('greet');
   await expect(page.locator('.code-block pre .hljs-title mark.search-hit')).toHaveCount(1);
+  // A match that crosses a token boundary is marked in every piece.
+  await page.locator('#find-query').fill('const label');
+  await expect(page.locator('#find-status')).toHaveText('1 of 1');
+  await expect(page.locator('.code-block pre mark.search-hit')).toHaveText(['const', ' label']);
   await page.locator('#find-query').fill('const');
   await expect(page.locator('#find-status')).toContainText('of');
   await page.keyboard.press('Enter');
