@@ -151,3 +151,139 @@ test('the palette reaches find, so Ctrl+F is not the only route', async ({ page 
   await page.keyboard.press('Enter');
   await expect(page.locator('#find-bar')).toBeVisible();
 });
+
+// Find matches the text on the page, not the Markdown source: a reader types what they see.
+const inline = [
+  '# Mixed *inline* title',
+  '',
+  'Start with **bold words here** and _em phrase_ then `inline code` plus a [link text](https://example.com/page) end.',
+  '',
+  'First line of a soft break',
+  'second line of it.',
+  '',
+  'Next block begins here.',
+  '',
+  ...Array.from({ length: 120 }, (_, index) => `Filler paragraph number ${index + 1} to make the document scroll.`),
+].join('\n');
+
+const openInline = async (page: import('@playwright/test').Page) => {
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles({ name: 'inline.md', mimeType: 'text/markdown', buffer: Buffer.from(inline) });
+  await expect(page.locator('#filename')).toHaveText('inline.md');
+  await page.keyboard.press('Control+f');
+  await expect(page.locator('#find-bar')).toBeVisible();
+};
+
+const markedText = (page: import('@playwright/test').Page) =>
+  page.locator('.reader-text-content mark.search-hit').evaluateAll(marks => marks.map(mark => mark.textContent).join(''));
+
+for (const [name, query, shown] of [
+  ['a bold boundary', 'words here and', 'words here and'],
+  ['inline code', 'then inline code plus', 'then inline code plus'],
+  ['a link', 'plus a link text end', 'plus a link text end'],
+  ['an em boundary and a different case', 'AND EM PHRASE THEN', 'and em phrase then'],
+  ['a soft line break, matched with a space', 'soft break second line', 'soft break\nsecond line'],
+] as const) {
+  test(`find across ${name} matches the rendered text and marks exactly it`, async ({ page }) => {
+    await openInline(page);
+    await page.locator('#find-query').fill(query);
+    await expect(page.locator('#find-status')).toHaveText('1 of 1');
+    await expect.poll(() => markedText(page)).toBe(shown);
+  });
+}
+
+test('find never matches markup the reader does not see, or text across blocks', async ({ page }) => {
+  await openInline(page);
+  for (const query of ['here** and', '_em phrase_', '`inline', '](https://', '# Mixed', 'titleStart', 'it.Next']) {
+    await page.locator('#find-query').fill(query);
+    await expect(page.locator('#find-status')).toHaveText('No matches');
+    await expect(page.locator('mark.search-hit')).toHaveCount(0);
+  }
+  await page.locator('#find-query').fill('mixed inline title');
+  await expect(page.locator('#find-status')).toHaveText('1 of 1');
+  await expect.poll(() => markedText(page)).toBe('Mixed inline title');
+});
+
+test('Escape removes every mark and leaves the text unchanged', async ({ page }) => {
+  await openInline(page);
+  const text = () => page.locator('.reader-text-content').evaluate(element => element.textContent);
+  const before = await text();
+  await page.locator('#find-query').fill('words here and');
+  await expect(page.locator('#find-status')).toHaveText('1 of 1');
+  expect(await page.locator('mark.search-hit').count()).toBeGreaterThan(1);
+  expect(await text()).toBe(before);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('mark.search-hit')).toHaveCount(0);
+  expect(await text()).toBe(before);
+});
+
+const savedPlaces = (page: import('@playwright/test').Page) => page.evaluate(() => Object.entries(localStorage)
+  .filter(([key]) => key.startsWith('hold-my-brief:'))
+  .map(([, value]) => { try { return (JSON.parse(value) as { locator?: unknown }).locator; } catch { return undefined; } })
+  .filter(Boolean));
+
+const openInlineQuiet = async (page: import('@playwright/test').Page) => {
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles({ name: 'inline.md', mimeType: 'text/markdown', buffer: Buffer.from(inline) });
+  await expect(page.locator('#filename')).toHaveText('inline.md');
+};
+
+test('find does not change the saved place', async ({ page }) => {
+  await openInlineQuiet(page);
+  await expect.poll(async () => (await savedPlaces(page)).length).toBeGreaterThan(0);
+  await page.waitForTimeout(600);
+  const before = await savedPlaces(page);
+  const label = await page.locator('#position').textContent();
+
+  // The match is already on screen at the top, so revealing it does not scroll: any change to the place would come from find itself.
+  await page.keyboard.press('Control+f');
+  await page.locator('#find-query').fill('words here and');
+  await expect(page.locator('#find-status')).toHaveText('1 of 1');
+  expect(await markedText(page)).toBe('words here and');
+  await page.waitForTimeout(600);
+  expect(await savedPlaces(page)).toEqual(before);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('mark.search-hit')).toHaveCount(0);
+  await page.waitForTimeout(600);
+  expect(await savedPlaces(page)).toEqual(before);
+  expect(await page.locator('#position').textContent()).toBe(label);
+});
+
+test('the place reached by a find is the same after a reload', async ({ page }) => {
+  await openInlineQuiet(page);
+  await page.keyboard.press('Control+f');
+  await page.locator('#find-query').fill('filler paragraph number 100 to');
+  await expect(page.locator('#find-status')).toHaveText('1 of 1');
+  expect(await markedText(page)).toBe('Filler paragraph number 100 to');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('mark.search-hit')).toHaveCount(0);
+  await expect.poll(async () => (await savedPlaces(page)).some(place => (place as { fraction?: number }).fraction! > 0.3)).toBe(true);
+  await page.waitForTimeout(600);
+  const before = await savedPlaces(page);
+  const label = await page.locator('#position').textContent();
+
+  await page.reload();
+  await page.locator('#file-input').setInputFiles({ name: 'inline.md', mimeType: 'text/markdown', buffer: Buffer.from(inline) });
+  await expect(page.locator('#filename')).toHaveText('inline.md');
+  await expect(page.locator('#position')).toHaveText(label!);
+  await page.waitForTimeout(600);
+  expect(await savedPlaces(page)).toEqual(before);
+});
+
+test('plain text is searched as written, markup characters included, one line at a time', async ({ page }) => {
+  const source = ['Some **bold words here** and `code`', 'second  line', 'third line'].join('\n');
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles({ name: 'plain.txt', mimeType: 'text/plain', buffer: Buffer.from(source) });
+  await expect(page.locator('#filename')).toHaveText('plain.txt');
+  await page.keyboard.press('Control+f');
+  await page.locator('#find-query').fill('words here** and `c');
+  await expect(page.locator('#find-status')).toHaveText('1 of 1');
+  await expect.poll(() => markedText(page)).toBe('words here** and `c');
+  // Text and spacing are exact: no crossing a line, no collapsing of a double space.
+  await page.locator('#find-query').fill('code second');
+  await expect(page.locator('#find-status')).toHaveText('No matches');
+  await page.locator('#find-query').fill('second line');
+  await expect(page.locator('#find-status')).toHaveText('No matches');
+  await page.locator('#find-query').fill('second  line');
+  await expect(page.locator('#find-status')).toHaveText('1 of 1');
+});
