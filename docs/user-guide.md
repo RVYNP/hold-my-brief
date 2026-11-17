@@ -116,7 +116,7 @@ needs one other document open), or when the window has no room: each pane needs 
 library panel while it is docked) must be 728 px wide, and the window at least 720 px.
 
 While split, **Ctrl+\\** moves between the panes. Click a pane, or its tabs, to make it the active one: the toolbar's title, find, the footer, the progress line and
-the keyboard act on it, and its shown tab carries the accent. A tab's menu is then **Move to the other side**, **Close** and **Close the split** (also in the
+the keyboard act on it, and its shown tab carries the accent. The active pane has the coloured line along its top edge; the other panes are dimmed. A tab's menu is then **Move to the other side**, **Close** and **Close the split** (also in the
 palette as *Move tab to the other side* and *Close the split*). Closing a pane's last tab ends the split, and the tabs of both sides go back to the one row, the right
 side's after the left's. Home and the Library tab belong to the window: they stay in the toolbar and cover both panes, and a pane's tab brings the split back as it was.
 Opening a document puts it in the active pane; one that is open on the other side is shown there.
@@ -213,6 +213,19 @@ so nothing is downloaded. Geist Serif has one weight, so bold and italic in a do
 it rather than from a separate face. EPUB books keep their publisher's fonts, and PDFs their own.
 Positions, paths and key labels use JetBrains Mono, bundled as well.
 
+In Markdown, a fenced or indented code block is a rounded, tinted box set in JetBrains Mono, with the language (the first word after the
+opening fence) in its top-left corner. **Copy** and **Open** sit in the top-right corner: **Copy** puts the block's exact text on the
+clipboard and says *Copied* for a moment; **Open** shows the block in the same sheet EPUB code blocks use. The corner is not selectable, so
+selecting across a block and copying never takes the label or the buttons. A long line wraps, with the wrapped part indented under the
+line it continues, while the Wrap setting is on. Inline `code` is a small chip in the same face.
+
+A fenced block whose language is one of bash (`sh`, `zsh`, `console`), shell, JavaScript (`js`, `jsx`), TypeScript (`ts`, `tsx`), JSON, Python
+(`py`), CSS, HTML or XML (`html`), Markdown (`md`), YAML (`yml`), SQL, Rust, Go, Swift, diff or plaintext is coloured: keywords, strings, names,
+numbers and comments each take a colour of the current theme, and diff adds a tint to added and removed lines. The language is never guessed:
+a block with no language, or with one that is not in the list, stays in the ink colour and keeps its label. A block over 2,000 lines or 200 KB is
+left plain. The text itself is not changed, so Find, Copy and saved places work as before. With increased contrast or forced colours the
+blocks are not coloured. EPUB code blocks keep the publisher's colours.
+
 The theme design is inspired by [Tern](https://stencil.so/tern) by Stencil, and the Graphite theme
 uses Tern's default palette. See [Credits](../README.md#credits).
 
@@ -267,8 +280,11 @@ no choice saved, it starts in Scroll if it looks like a reference book, that is,
 first 10 spine items, or `<pre>` and `<table>` hold at least a fifth of their text; otherwise in Pages. Your choice always wins afterwards.
 **A−** and **A+** step the text size by 2 px between 12 and 40 px, the same setting as the size stepper in **Appearance and text…**.
 Code blocks in a reflowable EPUB wrap instead of scrolling sideways, with wrapped lines indented under the line they continue, and are set
-at a tighter line height than the text. In Scroll a code block may run wider than the text column. A code background that is light on a
-dark page (or dark on a light one) takes a tint of the page, and its text is lifted to stay readable.
+at a tighter line height than the text. Each is framed like a Markdown block, a rounded box with a hairline border, and a block the book gave no
+background is tinted like one; the book's own fonts, colours and background are kept. When the book names the language of a block (a `language-…`
+class, pandoc's or Sphinx's markup), it is written small in the block's top-left corner, always. In Scroll a code block may run wider than the
+text column. A code background that is light on a dark page (or dark on a light one) takes a tint of the page, and its text is lifted to stay
+readable.
 Point at a code block, or Tab onto it, and two small buttons appear in its top-right corner: **Open code** shows the block in a sheet over
 the reading area, in the mono face at 0.9 of the text size and unwrapped, with line numbers, scrolling both ways and the language in the
 header when the book names one; **Copy code** copies the block's text exactly as the book has it (no line numbers) and says *Copied* for a

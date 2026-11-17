@@ -100,8 +100,8 @@ export interface ReaderAdapter {
    * Finds `query` in the document's text. Absent when the format cannot expose text at all,
    * such as images, where the find bar explains instead of searching.
    *
-   * Adapters extract their own plain text (PDF text layer, EPUB document text, the source
-   * string for Markdown/TXT) and report matches in their own units: pages, sections or
+   * Adapters extract their own plain text (PDF text layer, EPUB document text, the rendered text
+   * for Markdown, the source string for TXT) and report matches in their own units: pages, sections or
    * source lines. The find bar only shows results and asks `revealSearchMatch` to navigate.
    */
   search?(query: string, options?: SearchOptions): Promise<DocumentSearch>;

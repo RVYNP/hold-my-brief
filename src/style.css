@@ -29,6 +29,11 @@
   --accent-fill: light-dark(#db3435, #d93a3a);
   --sheen-a: light-dark(#e13a3a, #ff6a5e);
   --sheen-b: light-dark(#f08a3c, #ffb37a);
+  --code-keyword: light-dark(#952d2a, #ff968a);
+  --code-string: light-dark(#005d43, #51d2a6);
+  --code-name: light-dark(#6f5c00, #ceb74b);
+  --code-number: light-dark(#00648d, #5cc3ff);
+  --code-comment: light-dark(#6b5c5b, #a99896);
   --sheen-mix-light: 4%;
   --sheen-mix-dark: 1%;
   --scrim: light-dark(#1a18153d, #0000008c);
@@ -55,6 +60,11 @@
   --accent-fill: light-dark(#6358d8, #6a5fd8);
   --sheen-a: light-dark(#6358d8, #8b80f2);
   --sheen-b: light-dark(#c04fd8, #d58bf2);
+  --code-keyword: light-dark(#4c469f, #b0acff);
+  --code-string: light-dark(#7b4400, #f0a556);
+  --code-name: light-dark(#973d6a, #f893bb);
+  --code-number: light-dark(#3e6901, #92ca74);
+  --code-comment: light-dark(#5e5f6c, #9d9dab);
   --sheen-mix-light: 60%;
   --sheen-mix-dark: 12%;
   --scrim: light-dark(#2823333d, #0000008c);
@@ -81,6 +91,11 @@
   --accent-fill: light-dark(#a85632, #b0603a);
   --sheen-a: light-dark(#b4613a, #e08b5f);
   --sheen-b: light-dark(#d49a3a, #f0c070);
+  --code-keyword: light-dark(#8d3700, #ff9c69);
+  --code-string: light-dark(#005d55, #26d2c6);
+  --code-name: light-dark(#5b6200, #b1c25c);
+  --code-number: light-dark(#225fa6, #89b9ff);
+  --code-comment: light-dark(#6c5e59, #aa9b94);
   --sheen-mix-light: 18%;
   --sheen-mix-dark: 1%;
   --scrim: light-dark(#2a24183d, #0000008c);
@@ -107,6 +122,11 @@
   --accent-fill: light-dark(#2f63f0, #2a5fe0);
   --sheen-a: light-dark(#3d6fff, #5a8cff);
   --sheen-b: light-dark(#7b5cff, #9d7bff);
+  --code-keyword: light-dark(#2e4da0, #94b6ff);
+  --code-string: light-dark(#8c3800, #fc9b70);
+  --code-name: light-dark(#8d417e, #ea97d9);
+  --code-number: light-dark(#5a6300, #b6c158);
+  --code-comment: light-dark(#5b606c, #979daa);
   --sheen-mix-light: 60%;
   --sheen-mix-dark: 37%;
   --scrim: light-dark(#f4f4f180, #0000008c);
@@ -133,6 +153,11 @@
   --accent-fill: light-dark(#22729a, #2a7499);
   --sheen-a: light-dark(#2b7fa8, #5db2d8);
   --sheen-b: light-dark(#2fb5a0, #6ee7c8);
+  --code-keyword: light-dark(#00587b, #38c7ff);
+  --code-string: light-dark(#903040, #ff95a7);
+  --code-name: light-dark(#724c9d, #c3a4ff);
+  --code-number: light-dark(#795900, #e3ad4b);
+  --code-comment: light-dark(#56636a, #8f9ea5);
   --sheen-mix-light: 21%;
   --sheen-mix-dark: 9%;
   --scrim: light-dark(#1a26333d, #0000008c);
@@ -162,6 +187,11 @@
   --accent-fill: light-dark(#c03153, #c33d59);
   --sheen-a: light-dark(#c03153, #e16479);
   --sheen-b: light-dark(#e0704a, #f09a7a);
+  --code-keyword: light-dark(#942b41, #ff95a3);
+  --code-string: light-dark(#005f2d, #72cf8e);
+  --code-name: light-dark(#7b5800, #e1af4a);
+  --code-number: light-dark(#00677f, #3ac9f3);
+  --code-comment: light-dark(#6d5d5f, #a99899);
   --sheen-mix-light: 39%;
   --sheen-mix-dark: 14%;
   --scrim: light-dark(#2a181c3d, #0000008c);
@@ -188,6 +218,11 @@
   --accent-fill: light-dark(#c50381, #cd0087);
   --sheen-a: light-dark(#c50381, #ee45a6);
   --sheen-b: light-dark(#8e3fd8, #b47bff);
+  --code-keyword: light-dark(#8c2d61, #fb92c6);
+  --code-string: light-dark(#395c00, #9cc86b);
+  --code-name: light-dark(#8e4e00, #f4a25c);
+  --code-number: light-dark(#00696e, #17d0d8);
+  --code-comment: light-dark(#6b5d63, #a7989f);
   --sheen-mix-light: 60%;
   --sheen-mix-dark: 48%;
   --scrim: light-dark(#2a16203d, #0000008c);
@@ -198,6 +233,14 @@
 [data-page='sepia'] { --paper: light-dark(#f5eddb, #2a2419); --ink: light-dark(#43361f, #e2d4b6); }
 /* Dim lowers glare within the active family: a page between chrome and surface, softer ink. */
 [data-page='dim'] { --paper: light-dark(color-mix(in srgb, var(--chrome) 55%, var(--surface)), color-mix(in srgb, var(--hover) 70%, var(--surface))); --ink: light-dark(color-mix(in srgb, var(--fg) 85%, var(--muted)), color-mix(in srgb, var(--fg) 70%, var(--muted))); }
+/* The page tones above do not reach the ten glow themes (their blocks come later and set --paper and --ink themselves). A dark family on a white page sits on light paper: its code colours are the light ones, one set per family. */
+:root[data-theme='dark'][data-page='white']:where(:not([data-palette]), [data-palette='brief']) { --code-keyword: #9f3730; --code-string: #00684d; --code-name: #776600; --code-number: #006c9c; --code-comment: #766664; }
+:root[data-theme='dark'][data-page='white'][data-palette='lilac'] { --code-keyword: #5a4fa9; --code-string: #864f00; --code-name: #a0446c; --code-number: #3f731b; --code-comment: #676874; }
+:root[data-theme='dark'][data-page='white'][data-palette='birch'] { --code-keyword: #994100; --code-string: #006660; --code-name: #606d00; --code-number: #3367b1; --code-comment: #756761; }
+:root[data-theme='dark'][data-page='white'][data-palette='graphite'] { --code-keyword: #3458ac; --code-string: #984111; --code-name: #944887; --code-number: #646b00; --code-comment: #636975; }
+:root[data-theme='dark'][data-page='white'][data-palette='arctic'] { --code-keyword: #006282; --code-string: #9b3a50; --code-name: #7455a8; --code-number: #885f00; --code-comment: #5e6b72; }
+:root[data-theme='dark'][data-page='white'][data-palette='blossom'] { --code-keyword: #9f364b; --code-string: #006a34; --code-name: #866000; --code-number: #00708b; --code-comment: #756667; }
+:root[data-theme='dark'][data-page='white'][data-palette='peony'] { --code-keyword: #97386c; --code-string: #426600; --code-name: #9b5400; --code-number: #007176; --code-comment: #74666c; }
 /* Bundled so the app never fetches a font and looks the same on every system (SIL Open Font License
    1.1, src/fonts/OFL-*.txt): Geist and Geist Serif (Vercel), JetBrains Mono (JetBrains). Geist Serif
    has one weight and no italic; JetBrains Mono ships the two weights the interface uses. */
@@ -357,6 +400,11 @@
   --accent-fill: #6ee7c8;
   --sheen-a: #2bd9a3;
   --sheen-b: #8b5cf6;
+  --code-keyword: #46d3a3;
+  --code-string: #cca1f9;
+  --code-name: #57c4ff;
+  --code-number: #ff939b;
+  --code-comment: #83928b;
   --sheen-mix-light: 60%;
   --sheen-mix-dark: 60%;
   --on-accent: #04130f;
@@ -403,6 +451,11 @@
   --accent-fill: #ffb37a;
   --sheen-a: #ff7a59;
   --sheen-b: #b45ae0;
+  --code-keyword: #ff977d;
+  --code-string: #40d2b3;
+  --code-name: #c4bc4f;
+  --code-number: #71bfff;
+  --code-comment: #988884;
   --sheen-mix-light: 60%;
   --sheen-mix-dark: 60%;
   --on-accent: #1a0e06;
@@ -449,6 +502,11 @@
   --accent-fill: #9db4ff;
   --sheen-a: #e040fb;
   --sheen-b: #5b7bff;
+  --code-keyword: #e098ed;
+  --code-string: #c9ba4d;
+  --code-name: #ff9783;
+  --code-number: #49d2ad;
+  --code-comment: #8d848f;
   --sheen-mix-light: 60%;
   --sheen-mix-dark: 60%;
   --on-accent: #0b0b1f;
@@ -495,6 +553,11 @@
   --accent-fill: #ffb547;
   --sheen-a: #ff8a00;
   --sheen-b: #ffd166;
+  --code-keyword: #fa9f56;
+  --code-string: #18d0d4;
+  --code-name: #a0c768;
+  --code-number: #98b5ff;
+  --code-comment: #968981;
   --sheen-mix-light: 60%;
   --sheen-mix-dark: 60%;
   --on-accent: #1a1104;
@@ -541,6 +604,11 @@
   --accent-fill: #ff9a55;
   --sheen-a: #ff5a3c;
   --sheen-b: #ffa000;
+  --code-keyword: #ff9781;
+  --code-string: #46d2af;
+  --code-name: #c7ba4d;
+  --code-number: #6bc0ff;
+  --code-comment: #968783;
   --sheen-mix-light: 60%;
   --sheen-mix-dark: 60%;
   --on-accent: #1a0c04;
@@ -587,6 +655,11 @@
   --accent-fill: #f08ce0;
   --sheen-a: #e040b8;
   --sheen-b: #9b5cff;
+  --code-keyword: #f292d4;
+  --code-string: #adc35e;
+  --code-name: #fa9d68;
+  --code-number: #22d1c9;
+  --code-comment: #92858d;
   --sheen-mix-light: 60%;
   --sheen-mix-dark: 60%;
   --on-accent: #1a0716;
@@ -633,6 +706,11 @@
   --accent-fill: #1a5db0;
   --sheen-a: #1a5db0;
   --sheen-b: #2fc4a8;
+  --code-keyword: #1958a5;
+  --code-string: #973b21;
+  --code-name: #8e4b90;
+  --code-number: #6b6600;
+  --code-comment: #5f6772;
   --sheen-mix-light: 32%;
   --sheen-mix-dark: 32%;
   --on-accent: #ffffff;
@@ -679,6 +757,11 @@
   --accent-fill: #a63409;
   --sheen-a: #a63409;
   --sheen-b: #d9467a;
+  --code-keyword: #9b3717;
+  --code-string: #006253;
+  --code-name: #696500;
+  --code-number: #0767a9;
+  --code-comment: #71625e;
   --sheen-mix-light: 60%;
   --sheen-mix-dark: 60%;
   --on-accent: #ffffff;
@@ -725,6 +808,11 @@
   --accent-fill: #095f7b;
   --sheen-a: #095f7b;
   --sheen-b: #3b7be8;
+  --code-keyword: #005e7b;
+  --code-string: #96364f;
+  --code-name: #7154a8;
+  --code-number: #865b00;
+  --code-comment: #59676e;
   --sheen-mix-light: 60%;
   --sheen-mix-dark: 60%;
   --on-accent: #ffffff;
@@ -771,6 +859,11 @@
   --accent-fill: #4b680a;
   --sheen-a: #4b680a;
   --sheen-b: #9a9a1e;
+  --code-keyword: #446000;
+  --code-string: #3854a1;
+  --code-name: #006f70;
+  --code-number: #944683;
+  --code-comment: #62675b;
   --sheen-mix-light: 44%;
   --sheen-mix-dark: 44%;
   --on-accent: #ffffff;
@@ -1201,7 +1294,7 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
    open footer nor the hover band that opens it ever lies over a thumbnail; the lane under the strip is painted
    in the strip's own colour (a shadow, so it takes no room). The pill's default spot rises with it (see clampPoint). */
 #reader-layout { --page-strip-height: 106px; --page-strip-room: calc(var(--page-strip-height) + var(--footer-height)); }
-#workspace:has(.pane-body[data-pane='a'].has-page-strip) .reader-host[data-pane='a'], #workspace:has(.pane-body[data-pane='b'].has-page-strip) .reader-host[data-pane='b'] { bottom: var(--page-strip-room); }
+#workspace:has(.pane-body[data-pane='a'].has-page-strip) .reader-host[data-pane='a'], #workspace:has(.pane-body[data-pane='b'].has-page-strip) .reader-host[data-pane='b'] { bottom: calc(var(--pane-bottom, 0px) + var(--page-strip-room)); }
 .pane-body.has-page-strip #view-controls { bottom: calc(var(--page-strip-room) + 8px); }
 #page-strip { position: absolute; z-index: 4; left: 0; right: 0; bottom: var(--footer-height); height: var(--page-strip-height); background: var(--raise); border-top: 1px solid var(--hairline); box-shadow: 0 var(--footer-height) 0 var(--raise); }
 /* The icon rail floats over the panel's edge while the library is closed, so the strip starts beside it, like the find bar. */
@@ -1447,7 +1540,7 @@ dd { margin: 0; color: var(--muted); }
   #reader-layout.library-right #find-bar { right: var(--workspace-clear); }
 }
 /* While the bar is open, shift the reading surface down so the first line is never hidden. */
-#workspace:has(.pane-body[data-pane='a'] > #find-bar:not([hidden])) .reader-host[data-pane='a'], #workspace:has(.pane-body[data-pane='b'] > #find-bar:not([hidden])) .reader-host[data-pane='b'] { top: calc(var(--pane-tabs, 0px) + var(--find-bar-height)); }
+#workspace:has(.pane-body[data-pane='a'] > #find-bar:not([hidden])) .reader-host[data-pane='a'], #workspace:has(.pane-body[data-pane='b'] > #find-bar:not([hidden])) .reader-host[data-pane='b'] { top: calc(var(--pane-top, 0px) + var(--pane-tabs, 0px) + var(--find-bar-height)); }
 #find-bar svg { flex-shrink: 0; margin-right: 2px; }
 #find-query { flex: 0 1 320px; min-width: 0; padding: 4px 8px; border: 0; border-radius: 6px; background: var(--hover-subtle); color: var(--fg); font: inherit; font-size: 12px; }
 #find-query::placeholder { color: var(--muted); }
@@ -1490,31 +1583,22 @@ dd { margin: 0; color: var(--muted); }
 /* The sheen, placement 6: a 1 px hairline at 60 % inside the top edge of sheets, dialogs and popovers (the docked library panel and
    the library's own menus are in library.css, the EPUB code sheet's in code-viewer.css). The long ids are there for specificity: their rules set `background` as a shorthand. */
 dialog, dialog.drop, #menu, #appearance, .tab-menu, .zoom-menu { background-image: var(--sheen-edge); background-size: 100% 1px; background-position: top; background-repeat: no-repeat; }
-/* Under forced colours and more contrast every sheen placement is today's flat token: the bars keep --accent on --track and --hairline,
-   the washes and the primary button their flat fill, the sheets their plain edge, and the tab no line. Keep this block last. */
-@media (forced-colors: active), (prefers-contrast: more) {
-  :root, [data-palette] { --sheen: none; --sheen-wash: none; --sheen-edge: none; --sheen-primary: none; --sheen-primary-hover: none; }
-  footer::after { background: linear-gradient(to right, var(--accent) var(--scrub-fill), var(--track) var(--scrub-fill)); }
-  .tab.is-active::before, #home-tab.is-active::before { display: none; }
-}
 
 /* Split view: two documents side by side, each pane with a row of tabs. Not split, the one pane's layer (`.pane-body`) fills the reading panel and the row,
    the second pane and the divider are not drawn, so nothing differs from a single reader. The reading surfaces stay children of #workspace (a page
-   that moves in the document reloads its frames) and take their box from their pane's `data-pane`; what belongs to a pane (find bar, view controls,
-   page strip, the placeholder for a tab with no page) is laid on its layer. The panes share the reading width less the icon rail's or the docked
-   panel's room (--split-start / --split-end) and the 8 px divider; --ratio is the left pane's part of it. */
+   that moves in the document reloads its frames) and take their box from their pane's `data-pane`, which main.ts sets inline from the layout tree
+   (layout.ts): the panes share the reading area less the icon rail's or the docked panel's room and the 8 px dividers. A reading surface takes
+   its left and width inline and its top and bottom from --pane-top and --pane-bottom, so the find bar and the page strip still push it. What belongs to a pane (find bar, view controls,
+   page strip, the placeholder for a tab with no page) is laid on its layer. */
 .pane-strip, .pane-divider { display: none; }
 .pane-body { position: absolute; z-index: 6; inset: var(--pane-tabs, 0px) 0 0 0; container: pane / inline-size; pointer-events: none; }
 .pane-body > * { pointer-events: auto; }
-#workspace.is-split { --pane-tabs: 28px; --split-start: 0px; --split-end: 0px; --split-share: calc(100% - var(--split-start) - var(--split-end) - 8px); --split-a: calc(var(--split-share) * var(--ratio, .5)); }
-@media (min-width: 720px) {
-  #reader-layout:not(.library-right) #workspace.is-split { --split-start: var(--workspace-clear); }
-  #reader-layout.library-right #workspace.is-split { --split-end: var(--workspace-clear); }
-}
+#workspace.is-split { --pane-tabs: 28px; }
 /* Beaten otherwise by library.css's `#reader-layout:not(.library-right) .reader-host { left: var(--workspace-clear) }`, which loads later with the same weight. */
-#reader-layout #workspace.is-split [data-pane='a'] { --workspace-clear: 0px; left: var(--split-start); right: auto; width: var(--split-a); }
-#reader-layout #workspace.is-split [data-pane='b'] { --workspace-clear: 0px; left: calc(var(--split-start) + var(--split-a) + 8px); right: var(--split-end); width: auto; }
-#reader-layout #workspace.is-split .reader-host { top: var(--pane-tabs); }
+#reader-layout #workspace.is-split [data-pane] { --workspace-clear: 0px; right: auto; }
+#reader-layout #workspace.is-split .reader-host { top: calc(var(--pane-top, 0px) + var(--pane-tabs)); }
+/* Lighter than the page strip's rule, which keeps its room. */
+#workspace.is-split .reader-host { bottom: var(--pane-bottom, 0px); }
 #workspace.is-split .pane-strip { position: absolute; z-index: 7; top: 0; height: 28px; display: flex; align-items: center; gap: 2px; padding: 0 4px; background: var(--chrome); border-bottom: 1px solid var(--hairline); }
 #workspace.is-split .pane-strip .tab, #workspace.is-split .pane-strip .tab-add, #workspace.is-split .pane-strip .tab-overflow { height: 24px; }
 #workspace.is-split .pane-strip .tab-add, #workspace.is-split .pane-strip .tab-overflow { width: 24px; }
@@ -1524,16 +1608,30 @@ dialog, dialog.drop, #menu, #appearance, .tab-menu, .zoom-menu { background-imag
 #workspace.is-split .pane-strip .pane-fold[hidden] { display: none; }
 #workspace.is-split .pane-strip .pane-fold:hover { background: var(--hover); }
 #workspace.is-split .pane-strip .pane-fold:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-/* The shown tab of the pane that is not the active one is selected, without the sheen. */
+/* Which pane is active (hillclimb 2C). Its row carries the sheen as a 2 px line across the full top edge, in place of the per-tab sheen the panes' rows
+   do not draw; every other pane's row steps back in colour (muted text and icons, no card on its shown tab; AA holds, which an opacity would not) and its reading surface is dimmed by `.pane-dim`, which takes no pointer. A lone pane (not split,
+   covered by Home or the Library page, or a folded split) is marked by neither. Forced colours and more contrast are at the end of the file. */
+/* The rows' own tabs draw no sheen. The line is emptied, not removed, and the pane that is not the active one still has it `display: none` (its shown tab is selected, without the line). */
+#workspace.is-split .pane-strip .tab.is-active::before { background: none; }
 .pane-strip.is-inactive .tab.is-active::before { display: none; }
+.pane-strip .tab, .pane-strip .tab-format, .pane-strip .tab-title, .pane-strip .tab-where, .pane-strip .tab-hint, .pane-strip .tab-close, .pane-strip .tab-add, .pane-strip .tab-overflow { transition: color 120ms, background-color 120ms, border-color 120ms, box-shadow 120ms; }
+.pane-edge { display: none; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--sheen); pointer-events: none; }
+.pane-dim { position: absolute; inset: 0; z-index: 10; background: light-dark(rgb(0 0 0 / .08), rgb(0 0 0 / .28)); pointer-events: none; opacity: 0; visibility: hidden; transition: opacity 120ms, visibility 0s 120ms; }
+#workspace.is-split:not(.is-covered, .is-single)[data-active='a'] .pane-strip[data-pane='a'] .pane-edge,
+#workspace.is-split:not(.is-covered, .is-single)[data-active='b'] .pane-strip[data-pane='b'] .pane-edge { display: block; }
+#workspace.is-split:not(.is-covered, .is-single)[data-active='a'] .pane-strip[data-pane='b'] .tab.is-active,
+#workspace.is-split:not(.is-covered, .is-single)[data-active='b'] .pane-strip[data-pane='a'] .tab.is-active { background: none; border-color: transparent; box-shadow: none; }
+#workspace.is-split:not(.is-covered, .is-single)[data-active='a'] .pane-strip[data-pane='b'] :is(.tab, .tab-format, .tab.is-active .tab-format, .tab-title, .tab-where, .tab-hint, .tab-close, .tab-add, .tab-overflow),
+#workspace.is-split:not(.is-covered, .is-single)[data-active='b'] .pane-strip[data-pane='a'] :is(.tab, .tab-format, .tab.is-active .tab-format, .tab-title, .tab-where, .tab-hint, .tab-close, .tab-add, .tab-overflow) { color: var(--muted); }
+#workspace.is-split:not(.is-covered, .is-single)[data-active='a'] .pane-body[data-pane='b'] .pane-dim,
+#workspace.is-split:not(.is-covered, .is-single)[data-active='b'] .pane-body[data-pane='a'] .pane-dim { opacity: 1; visibility: visible; transition: opacity 120ms; }
 #split-preview { position: absolute; z-index: 8; pointer-events: none; outline: 2px solid var(--accent); outline-offset: -2px; background: color-mix(in srgb, var(--accent) 10%, transparent); }
 #split-preview[hidden] { display: none; }
-#workspace.is-split .pane-divider { display: block; position: absolute; z-index: 7; top: 0; bottom: 0; left: calc(var(--split-start) + var(--split-a)); width: 8px; background: var(--chrome); cursor: col-resize; touch-action: none; }
+#workspace.is-split .pane-divider { display: block; position: absolute; z-index: 7; background: var(--chrome); cursor: col-resize; touch-action: none; }
 .pane-divider::before { content: ''; position: absolute; left: 50%; top: 50%; width: 3px; height: 36px; translate: -50% -50%; border-radius: 2px; background: var(--track); }
 .pane-divider:hover::before, .pane-divider:focus-visible::before, .pane-divider.is-dragging::before { background: var(--accent); }
 .pane-divider:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 /* Too narrow for two panes (a window that shrank): only the active pane shows, and Ctrl \ swaps them. */
-#reader-layout #workspace.is-split.is-single [data-pane] { left: var(--split-start); right: var(--split-end); width: auto; }
 #workspace.is-split.is-single[data-active='a'] [data-pane='b'], #workspace.is-split.is-single[data-active='b'] [data-pane='a'] { visibility: hidden; pointer-events: none; }
 #workspace.is-split.is-single .pane-divider { display: none; }
 /* Home and the Library page take the reading area below the panes' rows, which stay so that a tab of either pane brings the split back as it was. */
@@ -1551,3 +1649,13 @@ dialog, dialog.drop, #menu, #appearance, .tab-menu, .zoom-menu { background-imag
 .pill-ghost .view-group, .pill-ghost .view-segmented, .pill-ghost .view-size, .pill-ghost [data-was='view-reading'] { display: flex; align-items: center; gap: 2px; }
 .pill-ghost .view-sep { width: 1px; height: 16px; background: var(--hairline); }
 .pill-ghost .view-text { width: auto; padding: 0 8px; font: 500 12px/1 var(--font-ui); white-space: nowrap; }
+/* Under forced colours and more contrast every sheen placement is today's flat token: the bars keep --accent on --track and --hairline,
+   the washes and the primary button their flat fill, the sheets their plain edge, the tab no line, and the active pane's edge a solid accent line with the other panes' dimming off. Keep this block last. */
+@media (forced-colors: active), (prefers-contrast: more) {
+  :root, [data-palette] { --sheen: none; --sheen-wash: none; --sheen-edge: none; --sheen-primary: none; --sheen-primary-hover: none; }
+  footer::after { background: linear-gradient(to right, var(--accent) var(--scrub-fill), var(--track) var(--scrub-fill)); }
+  .tab.is-active::before, #home-tab.is-active::before { display: none; }
+  .pane-edge { background: var(--accent); }
+  .pane-dim { display: none; }
+  @media (forced-colors: active) { .pane-edge { forced-color-adjust: none; background: Highlight; } }
+}
