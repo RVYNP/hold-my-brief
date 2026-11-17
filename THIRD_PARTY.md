@@ -9,6 +9,7 @@ Versions below are the installed direct frontend dependencies for this candidate
 | foliate-js | 1.0.1 | MIT | EPUB layout and CFI navigation |
 | @zip.js/zip.js | 2.24.0 | BSD-3-Clause | Bounded archive resource reads |
 | markdown-it | 15.0.3 | MIT | Markdown parsing with raw HTML disabled |
+| highlight.js (core and 16 languages) | 11.12.0 | BSD-3-Clause | Syntax colour in Markdown code blocks; no auto-detection, no stylesheet (colours come from the theme's `--code-*` tokens) |
 | Geist, Geist Serif (vercel/geist-font) | 1.9.0 | OFL-1.1 | Bundled interface and reading typefaces (`src/fonts/`, licence in `src/fonts/OFL-Geist.txt`) |
 | JetBrains Mono (JetBrains/JetBrainsMono) | 2.304 | OFL-1.1 | Bundled monospace typeface, regular and bold (`src/fonts/`, licence in `src/fonts/OFL-JetBrainsMono.txt`) |
 

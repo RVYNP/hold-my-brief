@@ -18,7 +18,13 @@ async function drag(page: Page, type: 'dragenter' | 'dragover' | 'dragleave' | '
   }, names.map(name => ({ name, text: body(name) })));
   await page.dispatchEvent('body', type, { dataTransfer: transfer, clientX: x, clientY: y });
 }
-const centre = async (locator: Locator) => { const box = (await locator.boundingBox())!; return { x: box.x + box.width / 2, y: box.y + box.height / 2, box }; };
+/** The centre of an element, read once it has a box. A tree row opened a moment ago is rebuilt when the library refreshes: the locator can resolve the row being replaced, which has no box, and finds its replacement on the next try. */
+const centre = async (locator: Locator) => {
+  let found: { x: number; y: number; width: number; height: number } | null = null;
+  await expect.poll(async () => { found = await locator.boundingBox(); return found !== null; }, { message: 'the element has a box' }).toBe(true);
+  const box = found!;
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2, box };
+};
 /** A point on the strip just past the right edge of tab `index`, which is the slot after it. */
 const afterTab = async (page: Page, index: number) => { const box = (await page.locator('#tab-list .tab').nth(index).boundingBox())!; return { x: box.x + box.width + 1, y: box.y + box.height / 2 }; };
 const READING = { x: 600, y: 400 };

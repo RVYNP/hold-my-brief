@@ -4,7 +4,7 @@
  * in a shadow root on the frame's `html` element, after `body`, so neither text offsets nor CFIs move; the sheet is built from a copy.
  */
 import './code-viewer.css';
-import { CODE_BLOCKS } from './epub-code';
+import { CODE_BLOCKS, LABELLED } from './epub-code';
 import { liftInk, onAppearanceChange, parseRgb, rgbToHex, type Rgb } from './theme';
 
 const XHTML = 'http://www.w3.org/1999/xhtml';
@@ -15,6 +15,8 @@ const COPIED_MS = 1200;
 const NUMBERS = '.linenos, .linenodiv, .lineno';
 /** The size the controls take, and what separates them from the block's corner. */
 const BUTTON = 24, GAP = 4, INSET = 8;
+/** Where a language label sits: this far below the block's top edge, and in line with the code's own left padding (`0.9em` of the block's size, past the 1px border). */
+const LABEL_TOP = 6;
 
 /** The code block `node` belongs to, as the outermost of nested ones, or null when it is in none (or only in a line-number column). */
 export function outerBlock(node: Node | null): HTMLElement | null {
@@ -46,6 +48,9 @@ const PANDOC_FLAGS: Record<string, true> = { sourcecode: true, numbersource: tru
 const NO_LANGUAGE: Record<string, true> = { default: true, none: true };
 /** The language a block's classes name: `language-x` or `lang-x`, pandoc's `sourceCode x` on its `pre`/`code`, Sphinx's `highlight-x` around it. */
 export function languageOf(block: Element): string | undefined {
+  // The Markdown reader names the language on the figure around its blocks.
+  const tagged = block.closest<HTMLElement>('[data-language]')?.dataset.language;
+  if (tagged) return tagged;
   const tokens = (element: Element) => Array.from(element.classList, name => name.toLowerCase());
   const named = [block, ...Array.from(block.querySelectorAll('pre, code'))];
   for (const element of named) for (const token of tokens(element)) { const match = /^(?:language|lang)-(.+)$/.exec(token); if (match) return match[1]; }
@@ -69,7 +74,7 @@ export async function copyBlock(block: Element): Promise<void> {
 }
 
 /** Calls `mark(true)` now and `mark(false)` after COPIED_MS; a second call before then starts the time over. */
-function flash(timers: { current?: number }, mark: (copied: boolean) => void) {
+export function flash(timers: { current?: number }, mark: (copied: boolean) => void) {
   clearTimeout(timers.current);
   mark(true);
   timers.current = window.setTimeout(() => mark(false), COPIED_MS);
@@ -77,12 +82,14 @@ function flash(timers: { current?: number }, mark: (copied: boolean) => void) {
 
 // --- The controls drawn in the content frame ---
 
-const icons = {
+export const icons = {
   open: '<path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="m21 3-7 7"/><path d="m3 21 7-7"/>',
   copy: '<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
   done: '<path d="M20 6 9 17l-5-5"/>',
   close: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
 };
+/** An icon as markup for HTML the app writes itself (the Markdown reader's block headers). */
+export const iconMarkup = (paths: string, size = 12): string => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
 /** An icon as an element of `doc`. A document of the book is XML, so its SVG is parsed as XML and imported rather than set as `innerHTML`. */
 function icon(doc: Document, paths: string, size = 14): Element {
   const parsed = new DOMParser().parseFromString(`<svg xmlns="${SVG}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`, 'image/svg+xml');
@@ -90,8 +97,11 @@ function icon(doc: Document, paths: string, size = 14): Element {
 }
 
 const controlStyles = `
-:host { all: initial; position: absolute; z-index: 2147483647; display: none; align-items: center; gap: ${GAP}px; font: 12px/1 system-ui, sans-serif; }
-:host([data-shown]) { display: flex; }
+:host { all: initial; position: absolute; top: 0; left: 0; z-index: 2147483647; pointer-events: none; }
+.controls { position: absolute; display: none; align-items: center; gap: ${GAP}px; font: 12px/1 system-ui, sans-serif; pointer-events: auto; }
+.controls[data-shown] { display: flex; }
+.language { position: absolute; display: block; max-width: 24ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px/14px ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: color-mix(in srgb, var(--hmb-ink, #000) 60%, transparent); pointer-events: none; user-select: none; }
+.language[hidden] { display: none; }
 button { all: unset; box-sizing: border-box; display: grid; place-items: center; width: ${BUTTON}px; height: ${BUTTON}px; border: 1px solid color-mix(in srgb, var(--hmb-ink, #000) 24%, transparent); border-radius: 6px; background: color-mix(in srgb, var(--hmb-paper, #fff) 92%, var(--hmb-ink, #000)); color: var(--hmb-ink, #000); cursor: pointer; }
 button:hover { background: color-mix(in srgb, var(--hmb-paper, #fff) 82%, var(--hmb-ink, #000)); }
 button:focus-visible { outline: 2px solid var(--hmb-accent, currentColor); outline-offset: 1px; }
@@ -111,13 +121,24 @@ export type CodeHooks = {
 };
 
 /**
- * Makes the code blocks of one content frame focusable and draws Open and Copy in the top-right corner of the one hovered or focused.
+ * Makes the code blocks of one content frame focusable and draws Open and Copy in the top-right corner of the one hovered or focused. A block
+ * whose language is known also shows it, always, in its top-left corner; the book's markup gets one attribute for it and nothing else.
  * Tab reaches a block, then Open, then Copy, then goes on to what follows the block; Shift+Tab goes back the same way.
  */
 export function attachCodeControls(doc: Document, hooks: CodeHooks): void {
   const view = doc.defaultView;
   if (!view || !doc.body) return;
-  for (const element of Array.from(doc.querySelectorAll<HTMLElement>(CODE_BLOCKS))) if (outerBlock(element) === element) element.setAttribute('tabindex', '0');
+  const labels = new Map<HTMLElement, HTMLElement>();
+  for (const element of Array.from(doc.querySelectorAll<HTMLElement>(CODE_BLOCKS))) {
+    if (outerBlock(element) !== element) continue;
+    element.setAttribute('tabindex', '0');
+    const language = languageOf(element);
+    if (!language) continue;
+    element.setAttribute(LABELLED, '');
+    const tag = doc.createElementNS(XHTML, 'span') as HTMLElement;
+    tag.className = 'language'; tag.setAttribute('aria-hidden', 'true'); tag.textContent = language;
+    labels.set(element, tag);
+  }
 
   const host = doc.createElementNS(XHTML, 'div') as HTMLElement;
   const shadow = host.attachShadow({ mode: 'open' });
@@ -132,7 +153,10 @@ export function attachCodeControls(doc: Document, hooks: CodeHooks): void {
   const open = button('Open code', icons.open), copy = button('Copy code', icons.copy);
   const said = doc.createElementNS(XHTML, 'span');
   said.className = 'copied'; said.setAttribute('role', 'status');
-  shadow.append(style, said, open, copy);
+  const controls = doc.createElementNS(XHTML, 'div') as HTMLElement;
+  controls.className = 'controls';
+  controls.append(said, open, copy);
+  shadow.append(style, ...labels.values(), controls);
   doc.documentElement.append(host);
 
   // `keyboard` is who moved last: the pointer's block leads the controls until a key is pressed, the focused one until the pointer moves.
@@ -148,18 +172,44 @@ export function attachCodeControls(doc: Document, hooks: CodeHooks): void {
     const seen = (rect: DOMRect) => !frame || (frame.left + rect.right > area.left && frame.left + rect.left < area.right && frame.top + rect.bottom > area.top && frame.top + rect.top < area.bottom);
     const under = pointer && rects.find(rect => pointer!.x >= rect.left && pointer!.x <= rect.right && pointer!.y >= rect.top && pointer!.y <= rect.bottom);
     const rect = under ?? rects.find(seen) ?? rects[0];
-    host.style.left = `${Math.max(0, rect.right - INSET - 2 * BUTTON - GAP) + view.scrollX}px`;
+    controls.style.left = `${Math.max(0, rect.right - INSET - 2 * BUTTON - GAP) + view.scrollX}px`;
     // A block taller than the screen keeps its controls at the top of what is in view, so they are in reach wherever it is read.
     const top = Math.max(rect.top, frame ? area.top - frame.top : rect.top);
-    host.style.top = `${Math.max(rect.top, Math.min(top, rect.bottom - BUTTON - 2 * INSET)) + INSET + view.scrollY}px`;
+    controls.style.top = `${Math.max(rect.top, Math.min(top, rect.bottom - BUTTON - 2 * INSET)) + INSET + view.scrollY}px`;
     return true;
   };
   const show = (block: HTMLElement | null) => {
     if (block !== current) said.textContent = '';
     current = block;
-    if (block?.isConnected && place(block)) host.setAttribute('data-shown', '');
-    else { host.removeAttribute('data-shown'); current = null; }
+    if (block?.isConnected && place(block)) controls.setAttribute('data-shown', '');
+    else { controls.removeAttribute('data-shown'); current = null; }
   };
+  // A label goes at the top-left of the first box of its block. Layout moves under it (a style sheet arrives, an image loads, the window or the text size changes), so it is set again then. The frame is sandboxed without scripts, and WebKit never runs callbacks made in its realm, so the observers and the frame callback come from the app window, as Foliate's own do.
+  const placeLabels = () => {
+    for (const [block, tag] of labels) {
+      const rect = block.isConnected ? Array.from(block.getClientRects()).find(box => box.width > 0 && box.height > 0) : undefined;
+      tag.hidden = !rect;
+      if (!rect) continue;
+      tag.style.left = `${rect.left + 1 + 0.9 * parseFloat(view.getComputedStyle(block).fontSize) + view.scrollX}px`;
+      tag.style.top = `${rect.top + LABEL_TOP + view.scrollY}px`;
+    }
+  };
+  if (labels.size) {
+    let queued = false;
+    const relayout = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; if (view.document === doc) placeLabels(); });
+    };
+    const observer = new ResizeObserver(relayout);
+    observer.observe(doc.documentElement); observer.observe(doc.body);
+    for (const block of labels.keys()) observer.observe(block);
+    if (doc.head) new MutationObserver(relayout).observe(doc.head, { childList: true, subtree: true, characterData: true, attributes: true });
+    doc.addEventListener('load', relayout, true);
+    view.addEventListener('resize', relayout);
+    void doc.fonts?.ready.then(relayout);
+    placeLabels();
+  }
   const refresh = () => {
     const held = inControls() ? current : focused();
     show(keyboard ? held ?? hover : hover ?? held);
@@ -235,6 +285,8 @@ export type SheetOptions = {
   /** Called after the sheet closed, to give focus back. */
   restore: () => void;
   copy: CodeHooks['copy'];
+  /** The host scrolls its own content, so a sheet inside it would scroll away: the sheet is mounted beside it and follows its box. */
+  beside?: boolean;
 };
 
 const sameColor = (a: Rgb, b: Rgb) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
@@ -273,7 +325,7 @@ function codeNodes(block: Element, background: Rgb, ink: Rgb): { nodes: Node[]; 
 }
 
 /** Shows one code block full-width over `host`. Esc, the Close button, or a click outside the sheet closes it and calls `restore`. */
-export function openCodeSheet({ host, block, fontSize, restore, copy }: SheetOptions): Sheet {
+export function openCodeSheet({ host, block, fontSize, restore, copy, beside }: SheetOptions): Sheet {
   showing?.close(false);
   const text = blockText(block), language = languageOf(block);
   const scrim = document.createElement('div');
@@ -309,7 +361,15 @@ export function openCodeSheet({ host, block, fontSize, restore, copy }: SheetOpt
   body.append(gutter, pre);
   sheet.append(header, body);
   scrim.append(sheet);
-  host.append(scrim);
+  const mount = beside ? host.parentElement ?? host : host;
+  mount.append(scrim);
+  let follow: ResizeObserver | undefined;
+  if (mount !== host) {
+    const fit = () => { scrim.style.inset = 'auto'; scrim.style.left = `${host.offsetLeft}px`; scrim.style.top = `${host.offsetTop}px`; scrim.style.width = `${host.offsetWidth}px`; scrim.style.height = `${host.offsetHeight}px`; };
+    fit();
+    follow = new ResizeObserver(fit);
+    follow.observe(host);
+  }
 
   const render = () => {
     const style = getComputedStyle(sheet), background = parseRgb(style.backgroundColor), ink = parseRgb(style.color);
@@ -328,7 +388,7 @@ export function openCodeSheet({ host, block, fontSize, restore, copy }: SheetOpt
     close(returnFocus = true) {
       if (closed) return;
       closed = true; showing = undefined;
-      stop(); clearTimeout(timers.current);
+      stop(); follow?.disconnect(); clearTimeout(timers.current);
       document.removeEventListener('keydown', onKey, true);
       scrim.remove();
       if (returnFocus) restore();
