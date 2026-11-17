@@ -86,18 +86,26 @@ function offsetOfRange(doc: Document, range?: Range) {
 function rangeAtOffset(doc: Document, offset: number) {
   const root = doc.body ?? doc.documentElement;
   const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
-  let remaining = Math.max(0, offset);
+  let remaining = Math.max(0, offset), seeking = false, last: { node: Node; end: number } | undefined;
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    const n = node.nodeType === Node.TEXT_NODE ? node.textContent!.length : /^(img|svg)$/i.test((node as Element).localName) ? 1000 : 0;
-    // `offset` characters lie before the place, so the place is the first character after them: an offset at the end of one text node is the start of the next. Ending the range there instead (on a listing's newline between two lines, which has no box) leaves Foliate nothing to scroll to.
-    if (n && remaining < n) {
-      const range = doc.createRange();
-      if (node.nodeType === Node.TEXT_NODE) range.setStart(node, Math.min(remaining, n)); else range.setStartBefore(node);
-      range.collapse(true); return range;
+    const isText = node.nodeType === Node.TEXT_NODE;
+    const n = isText ? node.textContent!.length : /^(img|svg)$/i.test((node as Element).localName) ? 1000 : 0;
+    if (!n) continue;
+    // `offset` characters lie before the place, so the place is the first character after them: an offset at the end of one text node is the start of the next.
+    if (!seeking) {
+      if (remaining >= n) { remaining -= n; if (isText && /\S/.test(node.textContent!)) last = { node, end: n }; continue; }
+      seeking = true;
     }
-    remaining -= n;
+    // Whitespace between elements (the newline between two lines of a listing, a blank line) has no box, so Foliate has nothing to scroll to there: the place is the next text that shows.
+    if (isText && !/\S/.test(node.textContent!)) { remaining = 0; continue; }
+    const range = doc.createRange();
+    if (isText) range.setStart(node, Math.min(remaining, n)); else range.setStartBefore(node);
+    range.collapse(true); return range;
   }
-  const range = doc.createRange(); range.selectNodeContents(root); range.collapse(false); return range;
+  // Nothing shows after the offset: the end of the last text that did.
+  const range = doc.createRange();
+  if (last) { range.setStart(last.node, last.end); range.collapse(true); } else { range.selectNodeContents(root); range.collapse(false); }
+  return range;
 }
 
 /** Characters of a section's size that make one Foliate location, the unit of its page estimate (see its SectionProgress). */

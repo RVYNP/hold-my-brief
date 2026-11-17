@@ -8,9 +8,9 @@ const flowOf = (page: Page) => page.evaluate(() => (document.querySelector('.rea
 /** The book's content frame. Foliate keeps its iframe in a closed shadow root, so it is found as a frame of the page, not by selector. */
 const frameOf = (page: Page): Frame => page.frames().filter(frame => frame.url().startsWith('blob:')).at(-1)!;
 
-async function open(page: Page, book: Buffer, scheme: 'light' | 'dark', flow: 'pages' | 'scroll', ready?: string) {
+async function open(page: Page, book: Buffer, scheme: 'light' | 'dark', flow: 'pages' | 'scroll', ready?: string, height = 760) {
   await page.emulateMedia({ colorScheme: scheme });
-  await page.setViewportSize({ width: 1080, height: 760 });
+  await page.setViewportSize({ width: 1080, height });
   await page.goto('/');
   await page.locator('#file-input').setInputFiles({ name: 'code.epub', mimeType: 'application/epub+zip', buffer: book });
   await expect(page.locator('#position')).toContainText('%');
@@ -127,10 +127,11 @@ test('Open and Copy still appear on hover over a labelled listing, beside its la
   await expect(frameOf(page).locator('.language', { hasText: 'python' }).first()).toBeVisible();
 });
 
-for (const flow of ['pages', 'scroll'] as const) {
-  test(`a saved place inside a framed listing is restored there in ${flow}`, async ({ page }) => {
+// 600 px is a height at which the page read to ends on a blank line of the listing, whose own text is only the newline after it.
+for (const [flow, height] of [['pages', 760], ['scroll', 760], ['pages', 600], ['scroll', 600]] as const) {
+  test(`a saved place inside a framed listing is restored there in ${flow} at ${height} px`, async ({ page }) => {
     const book = await codeBook();
-    await open(page, book, 'light', flow, 'div.sourceCode#cb2');
+    await open(page, book, 'light', flow, 'div.sourceCode#cb2', height);
     const view = '.reader-host:not(.staging):not(.tab-hidden) foliate-view';
     // The first line of the 60-line listing that is in view, by its number.
     const topLine = () => page.evaluate(selector => {
@@ -167,6 +168,7 @@ for (const flow of ['pages', 'scroll'] as const) {
   // The flow change re-lays the book out and goes back to the place, queued behind aria-busy; a renderer call made meanwhile can wait on that load forever.
   await expect(page.locator('.reader-host:not(.staging):not(.tab-hidden)')).not.toHaveAttribute('aria-busy', 'true');
     await expect(frameOf(page).locator('div.sourceCode#cb3')).toBeAttached();
-    await expect.poll(topLine).toBe(before);
+    // A restore is exact to the line in Pages. In Scroll Foliate puts the saved row a few pixels from the top of the view, so the line read as first may be the one before: a line off, not the page or more it was before.
+    await expect.poll(async () => Math.abs((await topLine()) - before)).toBeLessThanOrEqual(flow === 'scroll' ? 1 : 0);
   });
 }
