@@ -161,7 +161,8 @@ test('a place inside a coloured code block is restored there after a reload', as
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
   await page.locator('#file-input').setInputFiles(file);
-  await expect(page.locator('.code-block pre .hljs-comment').first()).toBeAttached();
+  await expect(page.locator('#filename')).toHaveText('long.md');
+  await expect(page.locator('.reader-host:not(.staging) .code-block pre .hljs-comment').first()).toBeAttached();
   await page.keyboard.press('Control+g');
   await page.locator('#target').fill('100');
   await page.getByRole('button', { name: 'Go to location', exact: true }).click();
@@ -177,7 +178,8 @@ test('a place inside a coloured code block is restored there after a reload', as
   await expect.poll(() => page.evaluate(() => Math.max(0, ...Object.entries(localStorage).filter(([key]) => key.startsWith('hold-my-brief:')).map(([, value]) => { try { return Number(JSON.parse(value).locator?.line) || 0; } catch { return 0; } })))).toBeGreaterThan(50);
   await page.reload();
   await page.locator('#file-input').setInputFiles(file);
-  await expect(page.locator('.code-block pre .hljs-comment').first()).toBeAttached();
+  await expect(page.locator('#filename')).toHaveText('long.md');
+  await expect(page.locator('.reader-host:not(.staging) .code-block pre .hljs-comment').first()).toBeAttached();
   await expect.poll(async () => Math.abs((await topLine()).scroll - before.scroll)).toBeLessThan(30);
   expect((await topLine()).text).toBe(before.text);
 });
