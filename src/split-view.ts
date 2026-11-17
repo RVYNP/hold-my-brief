@@ -35,13 +35,15 @@ export function createRow(letter: SideLetter) {
   overflow.hidden = true;
   const fold = make('button', 'pane-fold', { type: 'button' });
   fold.hidden = true;
-  row.append(list, add, overflow, fold);
+  row.append(make('span', 'pane-edge', { 'aria-hidden': 'true' }), list, add, overflow, fold);
   return { row, list, add, overflow, fold };
 }
 
-/** The layer over a pane's reading surface. It takes no pointer; what is laid on it does. */
+/** The layer over a pane's reading surface. It takes no pointer; what is laid on it does. It ends with the dimming the pane wears while it is not the active one, which takes none either. */
 export function createBody(letter: SideLetter) {
-  return make('div', 'pane-body', { 'data-pane': letter });
+  const body = make('div', 'pane-body', { 'data-pane': letter });
+  body.append(make('span', 'pane-dim', { 'aria-hidden': 'true' }));
+  return body;
 }
 
 export type DividerHandlers = {

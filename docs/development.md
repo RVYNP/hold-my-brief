@@ -168,9 +168,9 @@ The animated library demo (`library-resize.gif`) comes from
 with a drawn cursor, steps every CSS animation one frame at a time so each run is identical, and
 encodes with ffmpeg's two-pass palette (Homebrew's build; set `FFMPEG` to use another).
 
-The split view still (`split-view.png`) is the one image that needs no documents of your own: the Playwright spec builds a
+The split view stills (`split-view.png`, and `split-view-dark.png` beside it) are the images that need no documents of your own: the Playwright spec builds a
 PDF, an EPUB and a Markdown file itself. Start nothing; run `HMB_SHOT=1 npx playwright test e2e/split.spec.ts -g "split view still"`
-(Brief, light, 1440 × 900). Without `HMB_SHOT` that test is skipped.
+(Brief, light and dark, 1440 × 900). Without `HMB_SHOT` that test is skipped.
 
 Never commit in-copyright scans; the README's Credits section names the documents in use.
 
