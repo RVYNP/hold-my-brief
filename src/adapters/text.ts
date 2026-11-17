@@ -157,6 +157,7 @@ const styles = `
 .reader-text-content :focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 /* The current search result: a soft highlight that stays legible in light and dark themes. */
 .reader-text-content mark.search-hit{background:var(--search-hit, #ffe08a);color:inherit;border-radius:2px;padding:0 .5px}
+.reader-text-content pre mark.search-hit{color:var(--ink)}
 `;
 
 export class TextAdapter implements ReaderAdapter {

@@ -140,6 +140,20 @@ test('find steps through matches inside coloured blocks, and a place inside one 
   expect(first).toBe(TS + '\n');
 });
 
+test('a find hit inside a code token keeps the block ink, not the token colour', async ({ page }) => {
+  await openDoc(page, 'dark', { mode: 'dark', palette: 'brief' });
+  await page.keyboard.press('Control+f');
+  await page.locator('#find-query').fill('Greets');
+  await expect(page.locator('#find-status')).toHaveText('1 of 1');
+  const mark = page.locator('.code-block pre .hljs-comment mark.search-hit');
+  await expect(mark).toHaveText('Greets');
+  const [hit, ink] = await Promise.all([
+    mark.evaluate(element => getComputedStyle(element).color),
+    mark.evaluate(element => getComputedStyle(element.closest('pre code')!).color),
+  ]);
+  expect(hit).toBe(ink);
+});
+
 test('a place inside a coloured code block is restored there after a reload', async ({ page }) => {
   const lines = Array.from({ length: 160 }, (_, i) => `value_${i + 1} = compute(${i + 1})  # a comment that makes this line longer`);
   const long = ['# Long listing', '', 'Intro.', '', '```python', ...lines, '```', '', 'Outro.'].join('\n');
