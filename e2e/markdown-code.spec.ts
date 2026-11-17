@@ -163,7 +163,7 @@ test('a place inside a code block is restored there after a reload', async ({ pa
   const before = await topLine();
   expect(before.scroll).toBeGreaterThan(500);
   expect(before.text).toMatch(/^line_\d+$/);
-  await page.waitForTimeout(800);
+  await expect.poll(() => page.evaluate(() => Math.max(0, ...Object.entries(localStorage).filter(([key]) => key.startsWith('hold-my-brief:')).map(([, value]) => { try { return Number(JSON.parse(value).locator?.line) || 0; } catch { return 0; } })))).toBeGreaterThan(50);
   await page.reload();
   await page.locator('#file-input').setInputFiles(file);
   await expect(page.locator('.code-block').first()).toBeVisible();
