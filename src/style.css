@@ -1599,7 +1599,7 @@ dialog, dialog.drop, #menu, #appearance, .tab-menu, .zoom-menu { background-imag
 #reader-layout #workspace.is-split .reader-host { top: calc(var(--pane-top, 0px) + var(--pane-tabs)); }
 /* Lighter than the page strip's rule, which keeps its room. */
 #workspace.is-split .reader-host { bottom: var(--pane-bottom, 0px); }
-#workspace.is-split .pane-strip { position: absolute; z-index: 7; top: 0; height: 28px; display: flex; align-items: center; gap: 2px; padding: 0 4px; background: var(--chrome); border-bottom: 1px solid var(--hairline); }
+#workspace.is-split .pane-strip { position: absolute; z-index: 7; top: 0; height: 28px; display: flex; align-items: center; gap: 2px; padding: 0 4px; background: var(--chrome); border-bottom: 1px solid var(--hairline); -webkit-user-select: none; user-select: none; }
 #workspace.is-split .pane-strip .tab, #workspace.is-split .pane-strip .tab-add, #workspace.is-split .pane-strip .tab-overflow { height: 24px; }
 #workspace.is-split .pane-strip .tab-add, #workspace.is-split .pane-strip .tab-overflow { width: 24px; }
 #workspace.is-split .pane-strip .tab-list { flex: 0 1 auto; }
