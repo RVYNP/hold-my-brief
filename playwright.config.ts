@@ -49,9 +49,10 @@ export default defineConfig({
   // Locally: the Vite dev server, exactly as `npm run dev`.
   // CI: `vite preview` of the production build the workflow made with `npm run build` just before.
   // The dev server optimises a dependency the first time a page imports it (pdf.js, foliate, the
-  // lazily imported readers), then reloads every open page; a test that lost its page mid-setup
-  // waited for an element that never came ("app never mounted"). A built app has no optimiser and
-  // no HMR, and is closer to what ships. Server output goes to the job log.
+  // lazily imported readers) and may then reload every open page. That is a suspected cause of the
+  // earlier "app never mounted" failures, not an observed one: #97 did not see such a reload on Vite 8.
+  // The preview build is used because it has no on-demand optimiser at all and is closer to what
+  // ships. Server output goes to the job log.
   webServer: {
     command: process.env.CI
       ? `npx vite preview --host 127.0.0.1 --port ${port} --strictPort`
