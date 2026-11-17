@@ -29,8 +29,8 @@ const look = (page: Page, selector: string) => frameOf(page).locator(selector).e
   const pre = element.localName === 'pre' ? null : element.querySelector('pre'), nested = pre && win.getComputedStyle(pre);
   const shadow = Array.from(doc.documentElement.children).find(child => child.shadowRoot)!.shadowRoot!;
   const tags = Array.from(shadow.querySelectorAll<HTMLElement>('.language')).filter(tag => !tag.hidden);
-  const box = element.getBoundingClientRect();
-  // The label that sits inside this block's top-left corner.
+  const box = Array.from(element.getClientRects()).find(rect => rect.width > 0 && rect.height > 0)!;
+  // The label that sits inside this block's top-left corner. A listing that runs over a page turn is several boxes, and the label is on the first; its bounding rect would reach up into the next column.
   const tag = tags.find(candidate => { const rect = candidate.getBoundingClientRect(); return rect.left >= box.left && rect.left < box.right && rect.top >= box.top && rect.top < box.bottom; });
   const walker = doc.createTreeWalker(pre ?? element, NodeFilter.SHOW_TEXT);
   let first = walker.nextNode();
@@ -148,10 +148,17 @@ for (const flow of ['pages', 'scroll'] as const) {
       await page.keyboard.press('PageDown');
       await expect(page.locator('#position')).not.toHaveText(before);
     }
-    await expect.poll(topLine).toBeGreaterThanOrEqual(20);
-    // Wait for the saved place to be one inside that listing: its text offset is well past the first listings.
-    await expect.poll(() => page.evaluate(() => Math.max(0, ...Object.entries(localStorage).filter(([key]) => key.startsWith('hold-my-brief:')).map(([, value]) => { try { return Number(JSON.parse(value).locator?.offset) || 0; } catch { return 0; } })))).toBeGreaterThan(1000);
-    const before = await topLine();
+    // The view may still be easing to its stop: take the line once it has been the same on two reads.
+    let before = -1;
+    await expect.poll(async () => { const now = await topLine(); const settled = now === before; before = now; return settled && now >= 20; }, { intervals: [300] }).toBe(true);
+    // The place is written 650 ms after the last move, so an earlier turn's write can already be there: wait for the one at this line (the one before it may be the partly visible top of the page), by its text offset.
+    const wanted = await page.evaluate(([selector, line]) => {
+      const foliate = document.querySelector(selector as string) as unknown as { renderer: { getContents: () => { doc: Document }[] } };
+      const doc = foliate.renderer.getContents()[0].doc, range = doc.createRange();
+      range.setStart(doc.body, 0); range.setEndBefore(doc.getElementById(`cb3-${line}`)!);
+      return range.toString().length;
+    }, [view, Math.max(1, before - 2)] as const);
+    await expect.poll(() => page.evaluate(() => Math.max(0, ...Object.entries(localStorage).filter(([key]) => key.startsWith('hold-my-brief:')).map(([, value]) => { try { return Number(JSON.parse(value).locator?.offset) || 0; } catch { return 0; } })))).toBeGreaterThanOrEqual(wanted);
     await page.reload();
     await page.locator('#file-input').setInputFiles({ name: 'code.epub', mimeType: 'application/epub+zip', buffer: book });
     await expect(page.locator('#position')).toContainText('%');
