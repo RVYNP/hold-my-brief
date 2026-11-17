@@ -116,7 +116,7 @@ needs one other document open), or when the window has no room: each pane needs 
 library panel while it is docked) must be 728 px wide, and the window at least 720 px.
 
 While split, **Ctrl+\\** moves between the panes. Click a pane, or its tabs, to make it the active one: the toolbar's title, find, the footer, the progress line and
-the keyboard act on it, and its shown tab carries the accent. A tab's menu is then **Move to the other side**, **Close** and **Close the split** (also in the
+the keyboard act on it, and its shown tab carries the accent. The active pane has the coloured line along its top edge; the other panes are dimmed. A tab's menu is then **Move to the other side**, **Close** and **Close the split** (also in the
 palette as *Move tab to the other side* and *Close the split*). Closing a pane's last tab ends the split, and the tabs of both sides go back to the one row, the right
 side's after the left's. Home and the Library tab belong to the window: they stay in the toolbar and cover both panes, and a pane's tab brings the split back as it was.
 Opening a document puts it in the active pane; one that is open on the other side is shown there.
