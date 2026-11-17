@@ -104,12 +104,14 @@ export function readSession(value: unknown): TabSession {
   return { tabs, active, ...(layout ? { layout } : {}) };
 }
 
+/** When a tab was last shown is counted across every list, so that the tabs of different panes can be told apart by it. */
+let clock = 0;
+
 export class TabList<T extends TabBase> {
   private items: T[] = [];
   private showing: string | undefined;
   private live = new Set<string>();
   private used = new Map<string, number>();
-  private clock = 0;
 
   get tabs(): readonly T[] { return this.items; }
   get size() { return this.items.length; }
@@ -124,7 +126,7 @@ export class TabList<T extends TabBase> {
   activate(path: string | undefined) {
     if (path !== undefined && !this.find(path)) return;
     this.showing = path;
-    if (path !== undefined) this.used.set(path, ++this.clock);
+    if (path !== undefined) this.used.set(path, ++clock);
   }
 
   /**
@@ -220,15 +222,17 @@ export class TabList<T extends TabBase> {
   markLive(path: string) { if (this.find(path)) this.live.add(path); }
   markHibernated(path: string) { this.live.delete(path); }
 
+  /** The live tabs, with when each was last shown (a count shared by every list) and whether it is the tab showing. */
+  liveUse(): { path: string; used: number; showing: boolean }[] {
+    return [...this.live].map(path => ({ path, used: this.used.get(path) ?? 0, showing: path === this.showing }));
+  }
+
   /**
    * The live tabs that must hibernate so that at most `limit` stay live, least recently shown first. The showing tab is never
    * one of them, however long ago it was used, so a limit of 0 still keeps it.
    */
   hibernation(limit = MAX_LIVE_TABS): string[] {
-    const ordered = [...this.live].sort((a, b) => (this.used.get(b) ?? 0) - (this.used.get(a) ?? 0));
-    const keep = new Set(ordered.filter(path => path === this.showing));
-    for (const path of ordered) if (keep.size < Math.max(limit, 1)) keep.add(path);
-    return ordered.filter(path => !keep.has(path)).reverse();
+    return hibernationAcross([this], limit).map(entry => entry.path);
   }
 
   /** The tabs as they are saved, with `describe` giving each one's name and format. */
@@ -236,6 +240,17 @@ export class TabList<T extends TabBase> {
     const at = this.activeIndex;
     return { tabs: this.items.map(describe), active: at < 0 ? null : at };
   }
+}
+
+/**
+ * The live tabs of every list that must hibernate so that, across the window and not per list, at most `limit` (or one per list, whichever is more) keep a live reader, least recently
+ * shown first. The tab each list shows is never one of them, however long ago it was used: every pane's shown tab stays live.
+ */
+export function hibernationAcross<T extends TabBase>(lists: readonly TabList<T>[], limit = MAX_LIVE_TABS): { list: TabList<T>; path: string }[] {
+  const live = lists.flatMap(list => list.liveUse().map(entry => ({ list, ...entry }))).sort((a, b) => b.used - a.used);
+  const keep = new Set(live.filter(entry => entry.showing));
+  for (const entry of live) if (keep.size < Math.max(limit, lists.length, 1)) keep.add(entry);
+  return live.filter(entry => !keep.has(entry)).reverse().map(({ list, path }) => ({ list, path }));
 }
 
 /**
@@ -304,15 +319,15 @@ export function mergeLists<T extends TabBase>(left: TabList<T>, right: TabList<T
 }
 
 /**
- * Starts a saved split from `list`, which holds every document tab: the tabs `right` names leave for a new list, in the order saved, and each list
- * shows the tab saved for it. Undefined, and nothing changed, when that would leave a side with no tab (a split that no longer holds a document on each side).
+ * Starts a saved layout from `list`, which holds every document tab. `saved` is each pane's tabs and shown tab, in reading order: every pane after the first takes the tabs it names
+ * from `list`, in the order saved, and the first keeps the rest. Returns the lists in that order (the first is `list`), each showing the tab saved for it. Undefined, and nothing
+ * changed, when that would leave a pane with no tab (a layout that no longer holds a document in each pane) or fewer than two panes were saved.
  */
-export function restoreSplit<T extends TabBase>(list: TabList<T>, left: SavedPane, right: SavedPane): TabList<T> | undefined {
-  const named = right.tabs.filter(path => list.find(path));
-  if (!named.length || named.length >= list.size) return undefined;
-  const moved = new TabList<T>();
-  for (const path of named) moved.add(list.detach(path)!.tab);
-  const shown = (side: SavedPane, tabs: TabList<T>) => tabs.find(side.shown) ? side.shown : tabs.tabs[0].path;
-  list.activate(shown(left, list)); moved.activate(shown(right, moved));
-  return moved;
+export function restorePanes<T extends TabBase>(list: TabList<T>, saved: readonly SavedPane[]): TabList<T>[] | undefined {
+  if (saved.length < 2) return undefined;
+  const taken = new Set<string>(), named = saved.slice(1).map(pane => pane.tabs.filter(path => list.find(path) && !taken.has(path) && taken.add(path)));
+  if (named.some(paths => !paths.length) || taken.size >= list.size) return undefined;
+  const lists = [list, ...named.map(paths => { const moved = new TabList<T>(); for (const path of paths) moved.add(list.detach(path)!.tab); return moved; })];
+  lists.forEach((tabs, index) => tabs.activate(tabs.find(saved[index].shown) ? saved[index].shown : tabs.tabs[0].path));
+  return lists;
 }

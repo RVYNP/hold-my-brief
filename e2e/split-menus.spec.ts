@@ -53,7 +53,7 @@ for (const size of [{ width: 1440, height: 900 }, { width: 1080, height: 760 }])
       await openThree(page);
       await setLibrary(page, false);
       await barTabs(page).filter({ has: page.locator('.tab-format', { hasText: 'EPUB' }) }).click({ button: 'right' });
-      await expect(page.getByRole('menuitem')).toHaveText(['Split right', 'Close']);
+      await expect(page.getByRole('menuitem')).toHaveText(['Split right', 'Split down', 'Close']);
       await menuItem(page, 'Split right').click();
       await expect(row(page, 'b').locator('.tab-format')).toHaveText(['EPUB']);
       await expect(row(page, 'a').locator('.tab-format')).toHaveText(['PDF', 'MD']);
@@ -71,9 +71,9 @@ for (const size of [{ width: 1440, height: 900 }, { width: 1080, height: 760 }])
       await menuItem(page, 'Split right').click();
       await expect(row(page, 'b').locator('.tab-format')).toHaveText(['MD']);
       await expect(row(page, 'a').locator('.tab-format')).toHaveText(['PDF', 'EPUB']);
-      // While split the tab's menu is Move to the other side, Close and Close the split.
+      // While split the tab's menu also has Move to the other side, Close pane and Close the split.
       await row(page, 'a').first().click({ button: 'right' });
-      await expect(page.getByRole('menuitem')).toHaveText(['Move to the other side', 'Close', 'Close the split']);
+      await expect(page.getByRole('menuitem')).toHaveText(['Split right', 'Split down', 'Move to the other side', 'Close', 'Close pane', 'Close the split']);
       await menuItem(page, 'Move to the other side').click();
       await expect(row(page, 'b').locator('.tab-format')).toHaveText(['MD', 'PDF']);
       await expect(row(page, 'a').locator('.tab-format')).toHaveText(['EPUB']);
@@ -110,6 +110,8 @@ for (const size of [{ width: 1440, height: 900 }, { width: 1080, height: 760 }])
       await page.keyboard.press('ContextMenu');
       await expect(menuItem(page, 'Close')).toBeVisible();
       await page.keyboard.press('ArrowDown');
+      await expect(menuItem(page, 'Split down')).toBeFocused();
+      await page.keyboard.press('ArrowDown');
       await expect(menuItem(page, 'Close')).toBeFocused();
       await page.keyboard.press('Escape');
       await expect(page.getByRole('menu')).toHaveCount(0);
@@ -118,7 +120,7 @@ for (const size of [{ width: 1440, height: 900 }, { width: 1080, height: 760 }])
       await run(page, 'Split right');
       await row(page, 'a').first().focus();
       await page.keyboard.press('Shift+F10');
-      await expect(page.getByRole('menuitem')).toHaveText(['Move to the other side', 'Close', 'Close the split']);
+      await expect(page.getByRole('menuitem')).toHaveText(['Split right', 'Split down', 'Move to the other side', 'Close', 'Close pane', 'Close the split']);
       await page.keyboard.press('Escape');
       await expect(page.getByRole('menu')).toHaveCount(0);
       await expect(row(page, 'a').first()).toBeFocused();
@@ -134,7 +136,7 @@ for (const size of [{ width: 1440, height: 900 }, { width: 1080, height: 760 }])
       await page.locator('#home-tab').click();
       const card = page.locator('.home-open', { hasText: 'extra' }).first();
       await card.click({ button: 'right' });
-      await expect(page.getByRole('menuitem')).toHaveText(['Open', 'Open in split right']);
+      await expect(page.getByRole('menuitem')).toHaveText(['Open', 'Open in split right', 'Open in split down']);
       await menuItem(page, 'Open in split right').click();
       await expect(row(page, 'b').locator('.tab-title')).toHaveText(['extra.txt']);
       await expect(row(page, 'a').locator('.tab-format')).toHaveText(['PDF', 'EPUB', 'MD']);
@@ -181,11 +183,15 @@ test.describe('1440 × 900', () => {
     await expect(row(page, 'b').locator('.tab-title')).toHaveText(['extra.txt']);
     await expect(row(page, 'a').locator('.tab-format')).toHaveText(['PDF', 'EPUB', 'MD']);
     await expect(workspace(page)).toHaveAttribute('data-active', 'b');
-    // With the split open the next one goes to the right pane too, and a document open on the left crosses over.
+    // The pane is 549 px wide, too narrow for another beside it (the tooltip says so): the next one opens below the active pane, and a document open in another pane crosses over.
     await page.getByRole('treeitem', { name: 'moby.md' }).click({ button: 'right' });
-    await menuItem(page, 'Open in split right').click();
-    await expect(row(page, 'b').locator('.tab-title')).toHaveText(['extra.txt', 'moby.md']);
+    await expect(menuItem(page, 'Open in split right')).toBeDisabled();
+    await expect(menuItem(page, 'Open in split right')).toHaveAttribute('title', 'This pane is too narrow to split');
+    await menuItem(page, 'Open in split down').click();
+    await expect(row(page, 'b').locator('.tab-title')).toHaveText(['extra.txt']);
+    await expect(row(page, 'c').locator('.tab-title')).toHaveText(['moby.md']);
     await expect(row(page, 'a').locator('.tab-format')).toHaveText(['PDF', 'EPUB']);
+    await expect(workspace(page)).toHaveAttribute('data-active', 'c');
   });
 
   test('a tree row of a document that is already open is moved to the right pane, not opened twice', async ({ page }) => {
@@ -265,7 +271,7 @@ test.describe('1080 × 760', () => {
     await expect(page.locator('.reader-host[data-pane=b]:not(.tab-hidden)')).toBeVisible();
   });
 
-  test('a folded split\'s menus: the tree opens a document in the right pane, which then shows', async ({ page }) => {
+  test('a folded split\'s menus: the tree cannot open a document beside a pane with no room, and says why; below it still can', async ({ page }) => {
     await widePanel(page);
     await openThree(page);
     await setLibrary(page, false);
@@ -278,11 +284,13 @@ test.describe('1080 × 760', () => {
     await setLibrary(page, true);
     await expect(workspace(page)).toHaveClass(/is-single/);
     await page.getByRole('treeitem', { name: 'extra.txt' }).click({ button: 'right' });
-    await expect(menuItem(page, 'Open in split right')).toBeEnabled();
-    await menuItem(page, 'Open in split right').click();
-    await expect(workspace(page)).toHaveAttribute('data-active', 'b');
-    await expect(page.locator('.pane-strip[data-pane=b] .tab.is-active .tab-title')).toHaveText('extra.txt');
-    await expect(page.getByRole('button', { name: /Other side/ })).toHaveText('Other side (2)');
+    await expect(menuItem(page, 'Open in split right')).toBeDisabled();
+    await expect(menuItem(page, 'Open in split right')).toHaveAttribute('title', 'This pane is too narrow to split');
+    await expect(menuItem(page, 'Open in split down')).toBeEnabled();
+    await menuItem(page, 'Open in split down').click();
+    await expect(workspace(page)).toHaveAttribute('data-active', 'c');
+    await expect(page.locator('.pane-strip[data-pane=c] .tab.is-active .tab-title')).toHaveText('extra.txt');
+    await expect(page.getByRole('button', { name: /Other panes/ })).toHaveText('Other panes (3)');
   });
 });
 

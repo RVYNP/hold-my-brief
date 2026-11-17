@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { COMMANDS, INTERFACE_SHORTCUTS, SHORTCUTS, appliesTo, tabShortcutId, tabDigit, groupCommands, parseIntent, scoreCommand, searchCommands, shortcutFor, shortcutReference, unavailableReason, type Command } from '../src/commands';
+import { COMMANDS, FOCUS_PANE_DIRECTIONS, INTERFACE_SHORTCUTS, SHORTCUTS, appliesTo, tabShortcutId, tabDigit, groupCommands, parseIntent, scoreCommand, searchCommands, shortcutFor, shortcutReference, splitReason, unavailableReason, type Command } from '../src/commands';
 
 const byId = (id: string): Command => {
   const found = COMMANDS.find(command => command.id === id);
   if (!found) throw new Error(`No command ${id}`);
   return found;
 };
+const event = (key: string, modifiers: Partial<{ ctrlKey: boolean; altKey: boolean; shiftKey: boolean; metaKey: boolean; code: string }> = {}) => ({ key, ctrlKey: false, altKey: false, shiftKey: false, ...modifiers });
 
 describe('command catalog', () => {
   it('has unique ids', () => {
@@ -30,8 +31,6 @@ describe('command catalog', () => {
 });
 
 describe('shortcut matching', () => {
-  const event = (key: string, modifiers: Partial<{ ctrlKey: boolean; altKey: boolean; shiftKey: boolean; metaKey: boolean; code: string }> = {}) => ({ key, ctrlKey: false, altKey: false, shiftKey: false, ...modifiers });
-
   it('reaches the palette on Ctrl+K and not on a bare k', () => {
     expect(shortcutFor(event('k', { ctrlKey: true }))).toBe('command-palette');
     expect(shortcutFor(event('k'))).toBeUndefined();
@@ -83,8 +82,8 @@ describe('shortcut matching', () => {
     expect(shortcutFor(event('w', { metaKey: true }))).toBe('close-tab');
     expect(shortcutFor(event('Tab', { ctrlKey: true }))).toBe('next-tab');
     expect(shortcutFor(event('Tab', { ctrlKey: true, shiftKey: true }))).toBe('previous-tab');
-    expect(shortcutFor(event('ArrowRight', { ctrlKey: true, altKey: true }))).toBe('next-tab');
-    expect(shortcutFor(event('ArrowLeft', { metaKey: true, altKey: true }))).toBe('previous-tab');
+    expect(shortcutFor(event('ArrowRight', { ctrlKey: true, altKey: true }))).toBe('focus-pane-right'); // Not split, main.ts runs these two as next and previous tab.
+    expect(shortcutFor(event('ArrowLeft', { metaKey: true, altKey: true }))).toBe('focus-pane-left');
     expect(shortcutFor(event('ArrowLeft', { altKey: true }))).toBe('back');
     expect(shortcutFor(event('t', { ctrlKey: true, metaKey: true }))).toBeUndefined();
   });
@@ -157,6 +156,80 @@ describe('command availability', () => {
     expect(unavailableReason(previews, pdf)).toBeUndefined();
     expect(unavailableReason(previews, { ...pdf, format: 'md' })).toBe('Available for PDF documents');
     expect(unavailableReason(previews, { ...pdf, hasDocument: false })).toBe('Open a document first');
+  });
+});
+
+describe('splitting panes', () => {
+  const room = { panes: 1, documents: 2, windowWidth: 1440, width: 1100, height: 831, tabs: 2 };
+  const split = { ...room, panes: 2 };
+
+  it('splits a pane along an axis when it has room and a second document', () => {
+    for (const axis of ['right', 'down'] as const) {
+      expect(splitReason(axis, room)).toBeUndefined();
+      expect(splitReason(axis, split)).toBeUndefined();
+      expect(splitReason(axis, { ...split, panes: 3 })).toBeUndefined();
+    }
+  });
+
+  it('holds at most four panes, whatever else is wrong', () => {
+    expect(splitReason('right', { ...split, panes: 4 })).toBe('A window holds at most four panes');
+    expect(splitReason('down', { ...split, panes: 4, width: 100, tabs: 1 })).toBe('A window holds at most four panes');
+  });
+
+  it('needs 2 × 360 + 8 px of width to split right and 2 × 240 + 8 px of height to split down', () => {
+    expect(splitReason('right', { ...split, width: 728 })).toBeUndefined();
+    expect(splitReason('right', { ...split, width: 727 })).toBe('This pane is too narrow to split');
+    expect(splitReason('down', { ...split, height: 488 })).toBeUndefined();
+    expect(splitReason('down', { ...split, height: 487 })).toBe('This pane is too short to split');
+    // The other axis is not the pane's problem: a narrow pane can still be split down, a short one right.
+    expect(splitReason('down', { ...split, width: 400 })).toBeUndefined();
+    expect(splitReason('right', { ...split, height: 300 })).toBeUndefined();
+  });
+
+  it('says the window is too narrow when it is not split yet and the room is not there, or the window is under 720 px', () => {
+    expect(splitReason('right', { ...room, width: 700 })).toBe('The window is too narrow to split');
+    expect(splitReason('down', { ...room, windowWidth: 700 })).toBe('The window is too narrow to split');
+    expect(splitReason('right', { ...split, windowWidth: 700 })).toBe('The window is too narrow to split');
+  });
+
+  it('wants another document: the window\'s second one when not split, a second tab in the pane once split', () => {
+    expect(splitReason('right', { ...room, documents: 1, tabs: 1 })).toBe('Open a second document to split');
+    expect(splitReason('right', { ...split, tabs: 1 })).toBe('Open another document first');
+    expect(splitReason('down', { ...split, documents: 4, tabs: 1 })).toBe('Open another document first');
+  });
+
+  it('gives the split commands their reasons, and the pane commands theirs', () => {
+    const open = { hasDocument: true, desktop: false };
+    expect(unavailableReason(byId('split-right'), { ...open, split: { ...split, panes: 4 } })).toBe('A window holds at most four panes');
+    expect(unavailableReason(byId('split-down'), { ...open, split: { ...split, height: 300 } })).toBe('This pane is too short to split');
+    expect(unavailableReason(byId('split-down'), { ...open, hasDocument: false, split })).toBe('Open a document first');
+    expect(unavailableReason(byId('close-pane'), { ...open, split: room })).toBe('Split the window first');
+    expect(unavailableReason(byId('close-pane'), { ...open, split })).toBeUndefined();
+    expect(unavailableReason(byId('close-split'), { ...open, split: room })).toBe('Split the window first');
+    expect(unavailableReason(byId('move-tab-side'), { ...open, split })).toBeUndefined();
+    expect(unavailableReason(byId('move-tab-side'), { ...open, split: { ...split, panes: 3 } })).toMatch(/Move to pane/);
+  });
+
+  it('splits down with Ctrl or ⌘ and Shift on the backslash key, whatever it types under Shift', () => {
+    expect(shortcutFor(event('\\', { ctrlKey: true }))).toBe('split-right');
+    expect(shortcutFor(event('|', { ctrlKey: true, shiftKey: true, code: 'Backslash' }))).toBe('split-down');
+    expect(shortcutFor(event('\\', { metaKey: true, shiftKey: true, code: 'Backslash' }))).toBe('split-down');
+    expect(byId('split-down').shortcut).toBe('Ctrl Shift \\');
+  });
+
+  it('moves the focus between panes with Ctrl Alt (⌥⌘ on macOS) and the arrows', () => {
+    for (const [key, id] of [['ArrowLeft', 'focus-pane-left'], ['ArrowRight', 'focus-pane-right'], ['ArrowUp', 'focus-pane-up'], ['ArrowDown', 'focus-pane-down']] as const) {
+      expect(shortcutFor(event(key, { ctrlKey: true, altKey: true }))).toBe(id);
+      expect(shortcutFor(event(key, { metaKey: true, altKey: true }))).toBe(id);
+    }
+    expect(FOCUS_PANE_DIRECTIONS['focus-pane-up']).toBe('up');
+  });
+
+  it('lists the pane keys in the shortcut reference', () => {
+    const rows = shortcutReference({ desktop: false }).flatMap(section => section.rows);
+    expect(rows.find(row => row.label === 'Split down')?.keys).toEqual(['Ctrl', 'Shift', '\\']);
+    expect(rows.some(row => /Focus the pane/.test(row.label) && row.keys.includes('Alt'))).toBe(true);
+    expect(rows.some(row => /Next pane/.test(row.label) && row.keys.includes('\\'))).toBe(true);
   });
 });
 

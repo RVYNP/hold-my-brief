@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_PANES, boxes, canSplit, clampRatio, evenRatio, fits, freeId, minSize, neighbour, nudgePercent, panes, percentAt, ratioLimits, readLayout, removePane, renamePanes, setRatio, shareOf, snapPercent, splitAt, splitPane, type Layout, type Split } from '../src/layout';
+import { MAX_PANES, boxes, canSplit, clampRatio, evenRatio, fits, freeId, minSize, neighbour, nudgePercent, panes, percentAt, ratioLimits, readLayout, receiver, removePane, renamePanes, setRatio, shareOf, snapPercent, splitAt, splitPane, type Layout, type Split } from '../src/layout';
 
 const leaf = (pane: string): Layout => ({ pane });
 const row = (first: Layout, second: Layout, ratio = 50): Split => ({ axis: 'row', ratio, first, second });
@@ -50,6 +50,18 @@ describe('splitting and removing panes', () => {
   it('removes nothing from a lone pane or for a pane that is not there', () => {
     expect(removePane(leaf('a'), 'a')).toBeUndefined();
     expect(removePane(oneB, 'zz')).toBeUndefined();
+  });
+
+  it('names the pane that takes a closed pane\'s room: its sibling, or the first pane of the sibling subtree', () => {
+    expect(receiver(row(leaf('a'), leaf('b')), 'a')).toBe('b');
+    expect(receiver(oneB, 'a')).toBe('b'); // The sibling is the two stacked panes: the one on top.
+    expect(receiver(oneB, 'b')).toBe('c');
+    expect(receiver(oneB, 'c')).toBe('b');
+    const grid = row(column(leaf('a'), leaf('c')), column(leaf('b'), leaf('d')));
+    expect(receiver(grid, 'c')).toBe('a');
+    expect(receiver(row(leaf('a'), column(leaf('b'), row(leaf('c'), leaf('d')))), 'b')).toBe('c');
+    expect(receiver(leaf('a'), 'a')).toBeUndefined();
+    expect(receiver(oneB, 'zz')).toBeUndefined();
   });
 
   it('hands out the first free id, and renames panes', () => {

@@ -22,6 +22,9 @@ export const DIVIDER_WIDTH = 8;
 /** The narrowest and the shortest a pane may be (a pane's row of tabs is part of its height). */
 export const MIN_PANE_WIDTH = 360;
 export const MIN_PANE_HEIGHT = 240;
+/** What a pane needs to be split along an axis: both halves at their minimum and the divider between them. */
+export const SPLIT_WIDTH = 2 * MIN_PANE_WIDTH + DIVIDER_WIDTH;
+export const SPLIT_HEIGHT = 2 * MIN_PANE_HEIGHT + DIVIDER_WIDTH;
 /** Below this window width a split shows one pane at a time. */
 export const MIN_SPLIT_WINDOW = 720;
 /** Where a divider settles when it is let go close to them, and how close counts (CSS px). */
@@ -42,6 +45,15 @@ export function panes(tree: Layout): string[] {
 
 /** The first id of `PANE_IDS` that no pane of `tree` has; undefined when all are taken. */
 export const freeId = (tree: Layout): string | undefined => PANE_IDS.find(id => !panes(tree).includes(id));
+
+/** The pane that takes `pane`'s room when it goes: its sibling in the tree, or that sibling's first pane in reading order. Undefined when `pane` is not in the tree or is its only pane. */
+export function receiver(tree: Layout, pane: string): string | undefined {
+  if (!isSplit(tree)) return undefined;
+  const { first, second } = tree;
+  if (!isSplit(first) && first.pane === pane) return panes(second)[0];
+  if (!isSplit(second) && second.pane === pane) return panes(first)[0];
+  return receiver(first, pane) ?? receiver(second, pane);
+}
 
 /** The split at `path`, or undefined when there is none there. */
 export function splitAt(tree: Layout, path: Path): Split | undefined {
@@ -118,7 +130,7 @@ export function fits(tree: Layout, rect: Pick<Rect, 'width' | 'height'>): boolea
 
 /** Whether a reading area `workspaceWidth` wide, in a window `windowWidth` wide, has room for two panes side by side. */
 export function canSplit(workspaceWidth: number, windowWidth: number): boolean {
-  return windowWidth >= MIN_SPLIT_WINDOW && workspaceWidth >= 2 * MIN_PANE_WIDTH + DIVIDER_WIDTH;
+  return windowWidth >= MIN_SPLIT_WINDOW && workspaceWidth >= SPLIT_WIDTH;
 }
 
 /** The room the two subtrees of a split share, given the split's extent along its axis: what is left after the divider. */

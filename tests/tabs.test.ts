@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LIBRARY_PATH, MAX_LIVE_TABS, MAX_TABS, TabList, emptySession, legacySplit, mergeLists, moveAcross, readSession, restoreSplit, slotAt, splitOff, splitOffRest } from '../src/tabs';
+import { LIBRARY_PATH, MAX_LIVE_TABS, MAX_TABS, TabList, emptySession, hibernationAcross, legacySplit, mergeLists, moveAcross, readSession, restorePanes, slotAt, splitOff, splitOffRest } from '../src/tabs';
 
 type Tab = { path: string; name: string };
 const tab = (path: string): Tab => ({ path, name: path.toUpperCase() });
@@ -207,6 +207,23 @@ describe('live tabs', () => {
     expect(list.hibernation(0)).toEqual(['b']);
   });
 
+  it('counts the live tabs across the lists: at most the limit or one per list, whichever is more, and each list keeps the tab it shows', () => {
+    const [left, right, below, corner] = [listOf('a', 'b', 'c'), listOf('d', 'e', 'f'), listOf('g', 'h'), listOf('i', 'j')];
+    for (const [list, names] of [[left, ['a', 'b', 'c']], [right, ['d', 'e', 'f']], [below, ['g', 'h']], [corner, ['i', 'j']]] as const) live(list, ...names);
+    const shown = [left, right, below, corner].map(list => list.active!.path);
+    const goes = (lists: TabList<Tab>[]) => hibernationAcross(lists).map(entry => entry.path);
+    expect(shown).toEqual(['c', 'f', 'h', 'j']);
+    // Four panes: four readers, the shown tabs, however old.
+    expect(goes([left, right, below, corner])).toEqual(['a', 'b', 'd', 'e', 'g', 'i']);
+    // Two panes: three readers, the two shown tabs and the one shown most recently besides.
+    left.activate('a'); right.activate('f');
+    expect(goes([left, right])).toEqual(['b', 'c', 'd']);
+    // A shown tab survives even when the others are all more recent.
+    live(right, 'd', 'e'); left.activate('a'); right.activate(undefined);
+    expect(goes([left, right]).includes('f')).toBe(true);
+    expect(goes([left, right]).includes('a')).toBe(false);
+  });
+
   it('marks only tabs that exist', () => {
     const list = listOf('a');
     list.markLive('ghost');
@@ -347,20 +364,25 @@ describe('the saved layout', () => {
     expect(readSession({ tabs: docs, active: 0, layout: { ...layout, tree: row(400) } }).layout?.tree).toMatchObject({ ratio: 100 });
   });
 
-  it('starts a split from a list: the right pane\'s tabs leave in the saved order and each pane shows its saved tab', () => {
-    const list = listOf('a', 'b', 'c', 'd');
-    const right = restoreSplit(list, { tabs: ['a', 'b'], shown: 'a' }, { tabs: ['d', 'c'], shown: 'c' })!;
-    expect(paths(list)).toEqual(['a', 'b']);
-    expect(list.active?.path).toBe('a');
-    expect(paths(right)).toEqual(['d', 'c']);
-    expect(right.active?.path).toBe('c');
+  it('starts a layout from a list: every pane after the first takes its tabs in the saved order, the first keeps the rest, and each pane shows its saved tab', () => {
+    const list = listOf('a', 'b', 'c', 'd', 'e');
+    const [first, second, third] = restorePanes(list, [{ tabs: ['a', 'b'], shown: 'a' }, { tabs: ['d', 'c'], shown: 'c' }, { tabs: ['e'], shown: 'gone' }])!;
+    expect(first).toBe(list);
+    expect(paths(first)).toEqual(['a', 'b']);
+    expect(first.active?.path).toBe('a');
+    expect(paths(second)).toEqual(['d', 'c']);
+    expect(second.active?.path).toBe('c');
+    expect(paths(third)).toEqual(['e']);
+    expect(third.active?.path).toBe('e');
   });
 
-  it('starts no split, and changes nothing, when a side would be left with no tab', () => {
-    const list = listOf('a', 'b');
-    expect(restoreSplit(list, { tabs: ['a'], shown: 'a' }, { tabs: ['gone'], shown: 'gone' })).toBeUndefined();
-    expect(restoreSplit(list, { tabs: [], shown: '' }, { tabs: ['a', 'b'], shown: 'a' })).toBeUndefined();
-    expect(paths(list)).toEqual(['a', 'b']);
+  it('starts no layout, and changes nothing, when a pane would be left with no tab', () => {
+    const list = listOf('a', 'b', 'c');
+    expect(restorePanes(list, [{ tabs: ['a'], shown: 'a' }, { tabs: ['gone'], shown: 'gone' }])).toBeUndefined();
+    expect(restorePanes(list, [{ tabs: ['a'], shown: 'a' }, { tabs: ['b'], shown: 'b' }, { tabs: ['b'], shown: 'b' }])).toBeUndefined(); // The third names only what the second has.
+    expect(restorePanes(list, [{ tabs: [], shown: '' }, { tabs: ['a', 'b', 'c'], shown: 'a' }])).toBeUndefined();
+    expect(restorePanes(list, [{ tabs: ['a'], shown: 'a' }])).toBeUndefined();
+    expect(paths(list)).toEqual(['a', 'b', 'c']);
   });
 
   it('shows the first tab on the left when Home was showing and no tab was ever shown', () => {

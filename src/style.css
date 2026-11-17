@@ -1294,7 +1294,7 @@ footer:hover #progress:enabled::-webkit-slider-thumb, #progress:focus-visible::-
    open footer nor the hover band that opens it ever lies over a thumbnail; the lane under the strip is painted
    in the strip's own colour (a shadow, so it takes no room). The pill's default spot rises with it (see clampPoint). */
 #reader-layout { --page-strip-height: 106px; --page-strip-room: calc(var(--page-strip-height) + var(--footer-height)); }
-#workspace:has(.pane-body[data-pane='a'].has-page-strip) .reader-host[data-pane='a'], #workspace:has(.pane-body[data-pane='b'].has-page-strip) .reader-host[data-pane='b'] { bottom: calc(var(--pane-bottom, 0px) + var(--page-strip-room)); }
+#workspace:has(.pane-body[data-pane='a'].has-page-strip) .reader-host[data-pane='a'], #workspace:has(.pane-body[data-pane='b'].has-page-strip) .reader-host[data-pane='b'], #workspace:has(.pane-body[data-pane='c'].has-page-strip) .reader-host[data-pane='c'], #workspace:has(.pane-body[data-pane='d'].has-page-strip) .reader-host[data-pane='d'] { bottom: calc(var(--pane-bottom, 0px) + var(--page-strip-room)); }
 .pane-body.has-page-strip #view-controls { bottom: calc(var(--page-strip-room) + 8px); }
 #page-strip { position: absolute; z-index: 4; left: 0; right: 0; bottom: var(--footer-height); height: var(--page-strip-height); background: var(--raise); border-top: 1px solid var(--hairline); box-shadow: 0 var(--footer-height) 0 var(--raise); }
 /* The icon rail floats over the panel's edge while the library is closed, so the strip starts beside it, like the find bar. */
@@ -1540,7 +1540,7 @@ dd { margin: 0; color: var(--muted); }
   #reader-layout.library-right #find-bar { right: var(--workspace-clear); }
 }
 /* While the bar is open, shift the reading surface down so the first line is never hidden. */
-#workspace:has(.pane-body[data-pane='a'] > #find-bar:not([hidden])) .reader-host[data-pane='a'], #workspace:has(.pane-body[data-pane='b'] > #find-bar:not([hidden])) .reader-host[data-pane='b'] { top: calc(var(--pane-top, 0px) + var(--pane-tabs, 0px) + var(--find-bar-height)); }
+#workspace:has(.pane-body[data-pane='a'] > #find-bar:not([hidden])) .reader-host[data-pane='a'], #workspace:has(.pane-body[data-pane='b'] > #find-bar:not([hidden])) .reader-host[data-pane='b'], #workspace:has(.pane-body[data-pane='c'] > #find-bar:not([hidden])) .reader-host[data-pane='c'], #workspace:has(.pane-body[data-pane='d'] > #find-bar:not([hidden])) .reader-host[data-pane='d'] { top: calc(var(--pane-top, 0px) + var(--pane-tabs, 0px) + var(--find-bar-height)); }
 #find-bar svg { flex-shrink: 0; margin-right: 2px; }
 #find-query { flex: 0 1 320px; min-width: 0; padding: 4px 8px; border: 0; border-radius: 6px; background: var(--hover-subtle); color: var(--fg); font: inherit; font-size: 12px; }
 #find-query::placeholder { color: var(--muted); }
@@ -1618,21 +1618,30 @@ dialog, dialog.drop, #menu, #appearance, .tab-menu, .zoom-menu { background-imag
 .pane-edge { display: none; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--sheen); pointer-events: none; }
 .pane-dim { position: absolute; inset: 0; z-index: 10; background: light-dark(rgb(0 0 0 / .08), rgb(0 0 0 / .28)); pointer-events: none; opacity: 0; visibility: hidden; transition: opacity 120ms, visibility 0s 120ms; }
 #workspace.is-split:not(.is-covered, .is-single)[data-active='a'] .pane-strip[data-pane='a'] .pane-edge,
-#workspace.is-split:not(.is-covered, .is-single)[data-active='b'] .pane-strip[data-pane='b'] .pane-edge { display: block; }
-#workspace.is-split:not(.is-covered, .is-single)[data-active='a'] .pane-strip[data-pane='b'] .tab.is-active,
-#workspace.is-split:not(.is-covered, .is-single)[data-active='b'] .pane-strip[data-pane='a'] .tab.is-active { background: none; border-color: transparent; box-shadow: none; }
-#workspace.is-split:not(.is-covered, .is-single)[data-active='a'] .pane-strip[data-pane='b'] :is(.tab, .tab-format, .tab.is-active .tab-format, .tab-title, .tab-where, .tab-hint, .tab-close, .tab-add, .tab-overflow),
-#workspace.is-split:not(.is-covered, .is-single)[data-active='b'] .pane-strip[data-pane='a'] :is(.tab, .tab-format, .tab.is-active .tab-format, .tab-title, .tab-where, .tab-hint, .tab-close, .tab-add, .tab-overflow) { color: var(--muted); }
-#workspace.is-split:not(.is-covered, .is-single)[data-active='a'] .pane-body[data-pane='b'] .pane-dim,
-#workspace.is-split:not(.is-covered, .is-single)[data-active='b'] .pane-body[data-pane='a'] .pane-dim { opacity: 1; visibility: visible; transition: opacity 120ms; }
+#workspace.is-split:not(.is-covered, .is-single)[data-active='b'] .pane-strip[data-pane='b'] .pane-edge,
+#workspace.is-split:not(.is-covered, .is-single)[data-active='c'] .pane-strip[data-pane='c'] .pane-edge,
+#workspace.is-split:not(.is-covered, .is-single)[data-active='d'] .pane-strip[data-pane='d'] .pane-edge { display: block; }
+#workspace.is-split:not(.is-covered, .is-single)[data-active='a'] .pane-strip:not([data-pane='a']) .tab.is-active,
+#workspace.is-split:not(.is-covered, .is-single)[data-active='b'] .pane-strip:not([data-pane='b']) .tab.is-active,
+#workspace.is-split:not(.is-covered, .is-single)[data-active='c'] .pane-strip:not([data-pane='c']) .tab.is-active,
+#workspace.is-split:not(.is-covered, .is-single)[data-active='d'] .pane-strip:not([data-pane='d']) .tab.is-active { background: none; border-color: transparent; box-shadow: none; }
+#workspace.is-split:not(.is-covered, .is-single)[data-active='a'] .pane-strip:not([data-pane='a']) :is(.tab, .tab-format, .tab.is-active .tab-format, .tab-title, .tab-where, .tab-hint, .tab-close, .tab-add, .tab-overflow),
+#workspace.is-split:not(.is-covered, .is-single)[data-active='b'] .pane-strip:not([data-pane='b']) :is(.tab, .tab-format, .tab.is-active .tab-format, .tab-title, .tab-where, .tab-hint, .tab-close, .tab-add, .tab-overflow),
+#workspace.is-split:not(.is-covered, .is-single)[data-active='c'] .pane-strip:not([data-pane='c']) :is(.tab, .tab-format, .tab.is-active .tab-format, .tab-title, .tab-where, .tab-hint, .tab-close, .tab-add, .tab-overflow),
+#workspace.is-split:not(.is-covered, .is-single)[data-active='d'] .pane-strip:not([data-pane='d']) :is(.tab, .tab-format, .tab.is-active .tab-format, .tab-title, .tab-where, .tab-hint, .tab-close, .tab-add, .tab-overflow) { color: var(--muted); }
+#workspace.is-split:not(.is-covered, .is-single)[data-active='a'] .pane-body:not([data-pane='a']) .pane-dim,
+#workspace.is-split:not(.is-covered, .is-single)[data-active='b'] .pane-body:not([data-pane='b']) .pane-dim,
+#workspace.is-split:not(.is-covered, .is-single)[data-active='c'] .pane-body:not([data-pane='c']) .pane-dim,
+#workspace.is-split:not(.is-covered, .is-single)[data-active='d'] .pane-body:not([data-pane='d']) .pane-dim { opacity: 1; visibility: visible; transition: opacity 120ms; }
 #split-preview { position: absolute; z-index: 8; pointer-events: none; outline: 2px solid var(--accent); outline-offset: -2px; background: color-mix(in srgb, var(--accent) 10%, transparent); }
 #split-preview[hidden] { display: none; }
 #workspace.is-split .pane-divider { display: block; position: absolute; z-index: 7; background: var(--chrome); cursor: col-resize; touch-action: none; }
 .pane-divider::before { content: ''; position: absolute; left: 50%; top: 50%; width: 3px; height: 36px; translate: -50% -50%; border-radius: 2px; background: var(--track); }
+.pane-divider[aria-orientation='horizontal']::before { width: 36px; height: 3px; }
 .pane-divider:hover::before, .pane-divider:focus-visible::before, .pane-divider.is-dragging::before { background: var(--accent); }
 .pane-divider:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-/* Too narrow for two panes (a window that shrank): only the active pane shows, and Ctrl \ swaps them. */
-#workspace.is-split.is-single[data-active='a'] [data-pane='b'], #workspace.is-split.is-single[data-active='b'] [data-pane='a'] { visibility: hidden; pointer-events: none; }
+/* Too narrow for the panes (a window that shrank): only the active pane shows, and Ctrl \ moves on to the next. */
+#workspace.is-split.is-single[data-active='a'] [data-pane]:not([data-pane='a']), #workspace.is-split.is-single[data-active='b'] [data-pane]:not([data-pane='b']), #workspace.is-split.is-single[data-active='c'] [data-pane]:not([data-pane='c']), #workspace.is-split.is-single[data-active='d'] [data-pane]:not([data-pane='d']) { visibility: hidden; pointer-events: none; }
 #workspace.is-split.is-single .pane-divider { display: none; }
 /* Home and the Library page take the reading area below the panes' rows, which stay so that a tab of either pane brings the split back as it was. */
 #workspace.is-covered :is(.pane-body, .reader-host, .pane-divider) { visibility: hidden; pointer-events: none; }

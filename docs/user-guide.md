@@ -49,8 +49,8 @@ Ctrl+2, Ctrl+3 and Ctrl+4 stay fit width, two-page spread and page previews, whi
 
 Each tab keeps its own position, zoom and fit, text settings, hand tool, page-preview scroll and find text. The pin, size lock,
 appearance, library and the position of the view controls are shared by the whole window. At most three tabs keep their page in memory (the three
-shown most recently); the others are put away and reopen at the place you left them, with the usual
-"Opening…" notice, the next time you select them. Switching between the three live tabs is instant.
+shown most recently; with more than three panes, one per pane, and the tab each pane shows always keeps its page); the others are put away and reopen at the place you left them, with the usual
+"Opening…" notice, the next time you select them. Switching between the live tabs is instant.
 
 The open tabs, their order and the one showing are remembered and restored at the next launch (in the browser preview, in this
 browser's storage). Only the tab that was showing opens at once (while split, the tab each pane showed); the others open when selected. A tab whose file has gone shows
@@ -97,43 +97,58 @@ is on screen, and the first time you drag to select on one, a notice explains wh
 selected. Hold My Brief doesn't run OCR in
 this build, so run the PDF through an OCR tool first if you need its text. This is a known limit.
 
-## Two documents side by side
+## Panes
 
-Read two documents at once: each side has its own row of tabs, its own page, zoom, position and view controls. Split the window by any of these:
+Read up to four documents at once. The window tiles into **panes**: each pane has its own row of tabs, its own page, zoom, position and view controls, and any pane
+can be split again to the right or downwards, to at most four panes. Split the window by any of these:
 
-- **Right-click a document tab ▸ Split right** (the context-menu key or Shift+F10 on a focused tab does the same). That tab moves to a new pane on the
-  right and every other tab stays on the left. The menu has **Close** too.
-- **Split right** in the command palette, or **Ctrl+\\** (⌘\\ on macOS) when the window is not split.
-- **Right-click a document in the library tree ▸ Open in split right**: it opens in the right pane (it moves there when it is open already), and the
-  split is made first when there is none, with the document you were reading, or the one you read last, staying on the left.
-- **Right-click a document card or row on Home ▸ Open in split right** (**Open** is the other choice there). From Home the document you read last stays on the left.
-
+- **Right-click a document tab ▸ Split right** or **Split down** (the context-menu key or Shift+F10 on a focused tab does the same). That tab moves out of its pane into a
+  new pane to the right of it or below it, which shows the tab and becomes the active pane; every other tab stays where it was.
+- **Split right** and **Split down** in the command palette, or **Ctrl+\\** (⌘\\ on macOS) and **Ctrl+Shift+\\** (⌘⇧\\). They split the active pane's shown tab. Ctrl+\\ splits
+  only while the window is not split; once it is, it cycles through the panes (see below).
+- **Right-click a document in the library tree ▸ Open in split right** or **Open in split down**: the document opens in a new pane to the right of the active pane, or below it (it
+  moves there when it is open already), and the window is split first when it is not, with the document you were reading, or the one you read last, staying where it was.
+- **Right-click a document card or row on Home ▸ Open in split right** or **Open in split down** (**Open** is the other choice there). From Home the document you read last stays on the left.
 - **Drag a tab onto the reading area's right quarter** (or the left quarter) while the window is not split: a shaded half and an outline show where it will go, and
   letting go does what Split right does for that tab (on the left quarter the dragged tab becomes the left pane, and the other documents the right one).
 
-Split right is unavailable, and its menu entry is greyed out with the reason as its tooltip, when only one document tab is open (a tree row or Home card
-needs one other document open), or when the window has no room: each pane needs 360 px, so the reading area (the window less the icon rail, or the
-library panel while it is docked) must be 728 px wide, and the window at least 720 px.
+A split is unavailable, and its menu entry is greyed out with the reason as its tooltip (the palette shows the reason too), when:
 
-While split, **Ctrl+\\** moves between the panes. Click a pane, or its tabs, to make it the active one: the toolbar's title, find, the footer, the progress line and
-the keyboard act on it, and its shown tab carries the accent. The active pane has the coloured line along its top edge; the other panes are dimmed. A tab's menu is then **Move to the other side**, **Close** and **Close the split** (also in the
-palette as *Move tab to the other side* and *Close the split*). Closing a pane's last tab ends the split, and the tabs of both sides go back to the one row, the right
-side's after the left's. Home and the Library tab belong to the window: they stay in the toolbar and cover both panes, and a pane's tab brings the split back as it was.
-Opening a document puts it in the active pane; one that is open on the other side is shown there.
+- the window already holds four panes (*A window holds at most four panes*);
+- the pane has no room: each pane needs 360 px of width and 240 px of height, so a pane must be 728 px wide to split right (*This pane is too narrow to split*) and 488 px high to
+  split down (*This pane is too short to split*). A window that is not split needs a reading area (the window less the icon rail, or the library panel while it is docked) 728 px wide,
+  and a window of at least 720 px (*The window is too narrow to split*);
+- the pane has only one tab (*Open another document first*; before the first split, *Open a second document to split*). A tree row or Home card needs one other document open.
 
-**Dragging tabs while split.** Drag a tab onto the other pane's row to put it there, at the marked slot, or onto the other pane's page to put it after that pane's last
-tab; it is shown there. Drag within a row to reorder it, as before. Esc during a drag, or letting go anywhere else, changes nothing. Home and the Library tab can't be
-dragged into a pane, and no split preview shows in a window or reading area too narrow for two panes. Folded, the other pane is out of sight, so a drag has nowhere to land on it: use **Move to the other side**.
+**The active pane.** Click a pane, or its tabs, to make it the active one: the toolbar's title, find (Ctrl+F searches that pane's document), the footer, the progress line and the
+scrubber (which span the active pane's left and right edges, at the window's bottom) and the keyboard act on it, and its shown tab carries the accent. The active pane has the coloured line along its
+top edge; the other panes are dimmed. Opening a document puts it in the active pane; one that is open in another pane is shown there.
 
-Drag the **divider** between the panes to resize them; it snaps to 40, 50 and 60 % when you let go near them, keeps each pane at least 360 px wide, goes back to 50 % on
-a double-click and moves 2 % with ← and → when it has focus (Home and End go to the limits).
+**Keys.** While split, **Ctrl+\\** (⌘\\) moves the focus to the next pane in reading order (left before right, top before bottom), and from the last to the first. **Ctrl+Alt+←, →, ↑, ↓**
+(⌥⌘ and the arrows on macOS) move it to the neighbouring pane in that direction. While the window is not split, Ctrl+Alt+← and → are Previous tab and Next tab, as always. The keyboard shortcut reference (*Keyboard shortcuts*) lists them all.
 
-**Folding.** When the reading area is narrower than 728 px (2 × 360 plus the 8 px divider), for example after docking the library or in a narrower window, only the
-active pane shows and its row ends with **Other side (n)** (a two-columns icon beside it), n being the tabs on the other side. Press it, or Ctrl+\\, to swap the panes. The two panes appear
-again by themselves as soon as there is room. In a window under 720 px a split is always folded.
+**Moving a tab.** A tab's menu has **Move to the other side** while there are two panes, and **Move to pane ▸** while there are three or four: the submenu names each other pane
+by the document it shows. The tab goes to the end of that pane, which shows it and becomes the active one. When the moved tab was its pane's last, the pane closes (below). Drag a tab onto another
+pane's row to put it there, at the marked slot, or onto another pane's page to put it after that pane's last tab; it is shown there. Drag within a row to reorder it, as before. Esc during a drag, or letting go anywhere
+else, changes nothing. Home and the Library tab can't be dragged into a pane, and no split preview shows in a window or reading area too narrow for the panes. Folded, the other panes are out of
+sight, so a drag has nowhere to land on them: use the menu.
 
-The split is remembered with the tabs: at the next launch both rows, the divider's place, the active pane and the document each pane showed come back, each shown
-document at the place you left it (the other tabs open when selected). A session saved before the split existed opens as it always did.
+**Closing a pane.** **Close pane** in a tab's menu (and in the palette) closes that pane: its tabs join the pane that takes its room (its sibling in the layout, or the first pane of the sibling's
+group, in reading order), and that pane becomes the active one. Closing or moving a pane's last tab closes the pane the same way. **Close the split** (a tab's menu, the palette) merges every
+pane's tabs into one row, in reading order, after the Library tab. Home and the Library tab belong to the window: they stay in the toolbar and cover all the panes, and a pane's tab brings the panes back as they were.
+
+**Dividers.** Every split has its own **divider**. Drag it to resize the two groups of panes it separates; it snaps to 40, 50 and 60 % when you let go near them, never takes a pane under 360 px
+wide or 240 px high, goes back to 50 % on a double-click and moves 2 % with the arrow keys along its direction when it has focus (Home and End go to the limits).
+
+**Readers.** The window keeps at most three documents (or one per pane, when that is more) open as live readers, counted across the panes; the others are put to sleep with their place and
+reopen where they were when shown. The document each pane shows is always live.
+
+**Folding.** When the reading area is narrower than the panes need (728 px for two side by side, more for more), for example after docking the library or in a narrower window, only the
+active pane shows and its row ends with **Other side (n)** (**Other panes (n)** with more than two panes), n being the tabs in the panes out of sight. Press it, or Ctrl+\\, to move on to the next pane. The panes
+appear again by themselves as soon as there is room. In a window under 720 px the panes are always folded.
+
+The panes are remembered with the tabs: at the next launch the layout (every divider's place), each pane's row, the document each pane showed and the active pane come back, each shown
+document at the place you left it (the other tabs open when selected). A session saved before panes existed opens as it always did.
 
 ## The window
 

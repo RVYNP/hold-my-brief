@@ -23,7 +23,7 @@ export type PaletteContext = {
   /** Format of the open document, for commands that apply to some formats only. */
   format: () => string | undefined;
   desktop: boolean;
-  /** Whether the window is split, has room to be, and how many documents are open; absent where there is no split. */
+  /** How many panes the window has, the room and tabs of the active pane, and how many documents are open; absent where there is no split. */
   split?: () => SplitContext;
   /** Runs a command by id. Errors are the caller's to report. */
   run: (id: string) => void | Promise<void>;

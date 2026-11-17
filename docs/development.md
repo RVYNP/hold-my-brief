@@ -172,6 +172,9 @@ The split view stills (`split-view.png`, and `split-view-dark.png` beside it) ar
 PDF, an EPUB and a Markdown file itself. Start nothing; run `HMB_SHOT=1 npx playwright test e2e/split.spec.ts -g "split view still"`
 (Brief, light and dark, 1440 × 900). Without `HMB_SHOT` that test is skipped.
 
+The panes stills (`panes-1b-dark.png`: three panes, an EPUB above a Markdown file beside the PDFs; `panes-1c-dark.png`: four panes in a 2 × 2 layout) come the same way, from
+`HMB_SHOT=1 npx playwright test e2e/panes.spec.ts -g "stills for the pull request"` (Brief dark, 1440 × 900, documents built by the fixtures). Without `HMB_SHOT` that test is skipped.
+
 Never commit in-copyright scans; the README's Credits section names the documents in use.
 
 ## Security model

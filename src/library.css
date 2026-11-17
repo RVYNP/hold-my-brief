@@ -133,6 +133,10 @@
 .library-scope-menu .library-menu-heading { margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--hairline); }
 .library-item-menu button, .context-menu button { padding: 6px 10px; text-align: left; }
 .library-item-menu button:disabled, .context-menu button:disabled { color: var(--muted); opacity: .6; cursor: default; }
+/* A submenu (a tab's Move to pane): the entry that opens it ends with an arrow, and the list sits beside it, inside the same menu. */
+.context-menu button[aria-haspopup] { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.context-menu button[aria-expanded='true'] { background: var(--hover); }
+.context-menu-arrow { color: var(--muted); }
 /* The marker after the last document rendered; reaching it renders the next batch (see `sentinelObserver` in library.ts). */
 .library-sentinel { height: 1px; pointer-events: none; }
 .library-documents { flex: 1 1 0; min-height: 78px; overflow-y: auto; overflow-x: hidden; padding: 2px; margin: -2px; scrollbar-width: thin; scrollbar-gutter: stable; }

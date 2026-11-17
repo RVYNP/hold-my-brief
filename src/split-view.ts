@@ -22,11 +22,11 @@ export function withoutIds<T extends Element>(copy: T): T {
   return copy;
 }
 
-const sideName = (id: string) => id === 'a' ? 'left' : id === 'b' ? 'right' : `pane ${id}`;
+const sideName = (id: string) => `pane ${id.toUpperCase()}`;
 
 /** A pane's row of tabs: the same parts the toolbar's strip is made of (a list, +, and an overflow button), without Home. */
 export function createRow(id: string) {
-  const row = make('nav', 'pane-strip', { 'data-pane': id, 'aria-label': `Documents on the ${sideName(id)}` });
+  const row = make('nav', 'pane-strip', { 'data-pane': id, 'aria-label': `Documents in ${sideName(id)}` });
   const list = make('div', 'tab-list', { role: 'tablist', 'aria-label': `Documents, ${sideName(id)}` });
   const add = make('button', 'tab-add', { type: 'button', 'aria-label': `New tab, ${sideName(id)}`, title: 'New tab' });
   const overflow = make('button', 'tab-overflow', { type: 'button', 'aria-label': `All tabs, ${sideName(id)}`, title: 'All tabs', 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
@@ -94,17 +94,17 @@ export function paintDivider(divider: HTMLElement, percent: number, axis: Axis) 
 
 /** Lucide's `columns-2`. */
 const COLUMNS_ICON = '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M12 3v18"/>';
-/** The button at the end of a folded split's row: a two-columns icon and "Other side (n)", n being the documents the pane that is out of sight holds. Hidden when the panes are side by side. */
-export function paintFold(fold: HTMLElement, folded: boolean, others: number) {
+/** The button at the end of a folded split's row: a two-columns icon and "Other side (n)" (with more than two panes, "Other panes (n)"), n being the documents the panes that are out of sight hold. Hidden when the panes are side by side. */
+export function paintFold(fold: HTMLElement, folded: boolean, others: number, panes = 2) {
   fold.hidden = !folded;
   if (!folded) return;
-  const label = `Other side (${others})`;
+  const side = panes > 2 ? 'panes' : 'side', label = `Other ${side} (${others})`;
   if (fold.textContent !== label || !fold.querySelector('svg')) {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     for (const [name, value] of Object.entries({ width: '13', height: '13', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'aria-hidden': 'true' })) svg.setAttribute(name, value);
     svg.innerHTML = COLUMNS_ICON;
     fold.replaceChildren(svg, label);
   }
-  fold.setAttribute('aria-label', `Other side, ${others} ${others === 1 ? 'document' : 'documents'}`);
-  fold.title = 'Show the other side (Ctrl \\)';
+  fold.setAttribute('aria-label', `Other ${side}, ${others} ${others === 1 ? 'document' : 'documents'}`);
+  fold.title = panes > 2 ? 'Show the next pane (Ctrl \\)' : 'Show the other side (Ctrl \\)';
 }
