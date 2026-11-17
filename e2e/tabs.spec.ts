@@ -223,7 +223,7 @@ test('the tabs, their order and the active one come back after a reload; only th
   await page.goto('/');
   await openAll(page, 'a.txt', 'b.txt', 'c.txt');
   await goTo(page, '77');
-  await tab(page, 'c.txt').dragTo(tab(page, 'a.txt'));
+  await tab(page, 'c.txt').dragTo(tab(page, 'a.txt'), { targetPosition: { x: 8, y: 10 } }); // The left of a's tab: its exact middle is a coin toss once hover no longer widens it under the pointer.
   await expect(titles(page)).toHaveText(['c.txt', 'a.txt', 'b.txt']);
   await tab(page, 'a.txt').click(); await shown(page, 'a.txt');
   await goTo(page, '33');
