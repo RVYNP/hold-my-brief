@@ -143,6 +143,22 @@ test('closing the last tab of a pane ends the split', async ({ page }) => {
   await expect(page.locator('#tab-list .tab.is-active .tab-format')).toHaveText('PDF');
 });
 
+test('a divider moved just before the page goes away is stored by pagehide, without waiting for the drag to rest', async ({ page }) => {
+  await split(page);
+  const handle = divider(page);
+  await handle.focus();
+  const stored = await page.evaluate(() => {
+    const ratio = () => JSON.parse(localStorage.getItem('hold-my-brief-tabs')!).split.ratio;
+    const before = ratio();
+    document.querySelector('.pane-divider')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    const unsaved = ratio();
+    window.dispatchEvent(new Event('pagehide'));
+    return { before, unsaved, after: ratio() };
+  });
+  expect(stored.unsaved).toBe(stored.before);
+  expect(stored.after).toBe(stored.before + 2);
+});
+
 test('the divider drags with a snap to 40, 50 and 60 %, resets on a double-click and moves 2 % with the arrows', async ({ page }) => {
   await split(page);
   const handle = divider(page);

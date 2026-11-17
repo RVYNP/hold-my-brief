@@ -841,15 +841,25 @@ function closeTab(path: string) {
   if (path === LIBRARY_PATH) library.forgetScope();
 }
 
-let sessionTimer: ReturnType<typeof setTimeout> | undefined;
-/** Remembers the open tabs for the next launch; several changes in one tick are one write. */
+let sessionPending = false;
+/** The last session write, so a close waits for the ones in flight; desktop writes run one after another, so a late one never lands over a newer one. */
+let sessionWrite: Promise<void> = Promise.resolve();
+/** Remembers the open tabs for the next launch. The write is queued as a microtask, so it lands before the page can be reloaded or closed, and several changes in one task are one write. */
 function saveSession() {
-  if (sessionTimer) return;
-  sessionTimer = setTimeout(() => {
-    sessionTimer = undefined;
-    const session = sessionOf();
-    void saveTabs(session).catch(fail);
-  });
+  if (sessionPending) return;
+  sessionPending = true;
+  queueMicrotask(() => { if (sessionPending) writeSession(); });
+}
+function writeSession() {
+  sessionPending = false;
+  const session = sessionOf();
+  sessionWrite = desktop ? sessionWrite.then(() => saveTabs(session)).catch(fail) : saveTabs(session).catch(fail);
+}
+/** On the way out: writes a session change that has not been written yet (the divider's too, which waits for the drag to rest) and returns once every write has landed. In the browser the write itself is synchronous. */
+function flushSession(): Promise<void> {
+  if (ratioTimer) { clearTimeout(ratioTimer); ratioTimer = undefined; sessionPending = true; }
+  if (sessionPending) writeSession();
+  return sessionWrite;
 }
 
 const savedTab = (tab: Tab): SavedTab => ({ path: tab.path, name: tab.name, format: tab.format, ...(tab.scope ? { scope: tab.scope } : {}) });
@@ -907,7 +917,7 @@ function paintFolds() {
 }
 let ratioTimer: ReturnType<typeof setTimeout> | undefined;
 /** Moves the divider. A drag moves it on every frame, so the session is written once it has been still for a moment. */
-function setRatio(percent: number) { ratio = percent; applyLayout(); clearTimeout(ratioTimer); ratioTimer = setTimeout(saveSession, 300); }
+function setRatio(percent: number) { ratio = percent; applyLayout(); clearTimeout(ratioTimer); ratioTimer = setTimeout(() => { ratioTimer = undefined; saveSession(); }, 300); }
 /** The progress line and scrubber sit under the focused pane only. */
 function placeFooter() {
   if (!isSplit()) { footer.style.removeProperty('left'); footer.style.removeProperty('right'); return; }
@@ -1531,7 +1541,7 @@ async function initialize() {
     await listen('close-tab-request', () => { const tab = closableTab(); if (tab) closeTab(tab.path); else void getCurrentWindow().close(); });
     await listen<string | null>('reader-warning', event => { if (event.payload) notify(event.payload); });
     const appWindow = getCurrentWindow();
-    let closing = false; await appWindow.onCloseRequested(async event => { if (closing) return; event.preventDefault(); await Promise.all(sides.map(side => side.pane.flush())); closing = true; await appWindow.close(); });
+    let closing = false; await appWindow.onCloseRequested(async event => { if (closing) return; event.preventDefault(); await Promise.all(sides.map(side => side.pane.flush())); await flushSession(); closing = true; await appWindow.close(); });
     if (platform === 'windows') {
       const maximize = $('caption-maximize');
       const syncMaximized = async () => { const maximized = await appWindow.isMaximized(); document.documentElement.classList.toggle('window-maximized', maximized); maximize.setAttribute('aria-label', maximized ? 'Restore' : 'Maximize'); maximize.title = maximized ? 'Restore down' : 'Maximize'; };
@@ -1574,4 +1584,7 @@ async function initialize() {
   }
 }
 void initialize().catch(fail);
-window.addEventListener('beforeunload', () => { for (const side of sides) void side.pane.flush(); });
+/** A reload or quit: reading positions and a pending session write go out now. `pagehide` is the event that always fires (a mobile tab discard, the back-forward cache), `beforeunload` is kept for the rest; the second finds nothing pending. */
+const leaving = () => { for (const side of sides) void side.pane.flush(); void flushSession(); };
+window.addEventListener('beforeunload', leaving);
+window.addEventListener('pagehide', leaving);
