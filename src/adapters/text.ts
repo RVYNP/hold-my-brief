@@ -1,6 +1,7 @@
 import MarkdownIt, { type Token } from 'markdown-it';
 import type { Locator, OutlineItem, Position, ReaderAdapter, ReaderContext, ReaderOptions, ReaderSource } from '../types';
 import { copyBlock, flash, iconMarkup, icons, openCodeSheet, type Sheet } from '../code-viewer';
+import { highlightCode } from '../code-highlight';
 import { markLines } from '../epub-code';
 import { searchUnits, type DocumentSearch, type SearchHit, type SearchOptions, type UnitText } from '../search';
 
@@ -96,7 +97,7 @@ export function renderMarkdown(source: string): { html: string; outline: Outline
     const named = language ? `, ${escape(language)}` : '';
     const action = (name: 'copy' | 'open', label: string, paths: string) => `<button type="button" tabindex="0" class="code-action" data-code-action="${name}" aria-label="${label} code${named}" title="${label} code${named}">${iconMarkup(paths)}<span>${label}</span></button>`;
     return `<figure class="code-block"${language ? ` data-language="${escape(language)}"` : ''}><div class="code-head">${language ? `<span class="code-lang">${escape(language)}</span>` : ''}<span class="code-actions">${action('copy', 'Copy', icons.copy)}${action('open', 'Open', icons.open)}</span></div>`
-      + `<pre tabindex="0" role="region" aria-label="Code block"${marker(tokens[index])}><code>${escape(tokens[index].content)}</code></pre></figure>\n`;
+      + `<pre tabindex="0" role="region" aria-label="Code block"${marker(tokens[index])}><code>${highlightCode(tokens[index].content, language) ?? escape(tokens[index].content)}</code></pre></figure>\n`;
   };
   md.renderer.rules.code_block = md.renderer.rules.fence;
   md.renderer.rules.table_open = (tokens, index, options, _env, renderer) => `<div class="reader-table-scroll" tabindex="0" role="region" aria-label="Table">${renderer.renderToken(tokens, index, options)}`;
@@ -136,7 +137,15 @@ const styles = `
 /* A wrapped line hangs 2ch in from where its own line begins; markLines gives each line its indent. */
 .reader-text-content[data-wrap="true"] pre [data-hmb-line]{display:inline-block;padding-left:calc(1ch * (var(--hmb-indent, 0) + 2));text-indent:calc(-1ch * (var(--hmb-indent, 0) + 2))}
 .reader-text-content pre code{font:inherit}
+.reader-text-content pre code :is(.hljs-keyword,.hljs-built_in,.hljs-literal,.hljs-type,.hljs-selector-tag){color:var(--code-keyword)}
+.reader-text-content pre code :is(.hljs-string,.hljs-regexp,.hljs-symbol,.hljs-attr-value){color:var(--code-string)}
+.reader-text-content pre code :is(.hljs-title,.hljs-function,.hljs-attr,.hljs-property,.hljs-variable,.hljs-name){color:var(--code-name)}
+.reader-text-content pre code .hljs-number{color:var(--code-number)}
+.reader-text-content pre code :is(.hljs-comment,.hljs-quote,.hljs-meta){color:var(--code-comment);font-style:italic}
+.reader-text-content pre code .hljs-addition{color:var(--code-string);background:color-mix(in srgb,var(--code-string) 12%,transparent)}
+.reader-text-content pre code .hljs-deletion{color:var(--code-keyword);background:color-mix(in srgb,var(--code-keyword) 12%,transparent)}
 .reader-text-content :not(pre)>code{padding:.05em .35em;border:1px solid var(--hairline);border-radius:4px;background:var(--code);font:.88em var(--font-mono);-webkit-box-decoration-break:clone;box-decoration-break:clone}
+@media (forced-colors:active),(prefers-contrast:more){.reader-text-content pre code [class*='hljs-']{color:inherit;background:none;font-style:inherit}}
 @media (forced-colors:active){.reader-text-content .code-block,.reader-text-content :not(pre)>code{background:none;border-color:CanvasText}.reader-text-content .code-action:hover{background:none;outline:1px solid CanvasText}}
 .reader-text-content table{border-collapse:collapse;overflow-wrap:normal}
 .reader-text-content th,.reader-text-content td{border:1px solid var(--rule);padding:.4em .6em}
@@ -194,6 +203,8 @@ export class TextAdapter implements ReaderAdapter {
       this.content.innerHTML = rendered.html;
       this.headings = rendered.outline;
       markLines(this.content);
+      // Cutting a line out of a token that starts or ends on the cut leaves the original token behind with no text in it.
+      for (const left of Array.from(this.content.querySelectorAll('pre [class*="hljs-"]:empty'))) left.remove();
     } else {
       // Group source lines to avoid one DOM element per line in large plain-text documents.
       for (let line = 0; line < this.offsets.length; line += 80) {
