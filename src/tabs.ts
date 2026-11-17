@@ -26,13 +26,28 @@ export type SavedTab = { path: string; name: string; format: string; scope?: str
 export type SavedPane = { tabs: string[]; shown: string };
 /** A saved layout: the tree of panes, what each pane (by id) holds and shows, and the pane that was active. A tree's ratios are the first subtree's percent of the room its two subtrees share. */
 export type SavedLayout = { tree: Layout; panes: Record<string, SavedPane>; active: string };
+/** A split as builds before layouts saved it: a left and a right pane, the divider's place (the left pane's percent of the room the panes share) and the pane that was active. */
+export type SavedSplit = { left: SavedPane; right: SavedPane; ratio: number; active: 'left' | 'right' };
 /**
  * The saved session: the tabs in order, and which one was showing (an index into `tabs`; none means Home). While split, `tabs` is the Library tab (if open),
  * the first pane's tabs, then the next panes' in reading order, so a build that does not know `layout` still restores every document, in one strip; `active` is then the tab
- * the active pane shows, or the Library tab or none (Home) while one of them covers the panes. A session written before layouts has `split` (a left and a right pane, a ratio and the active
- * one) in place of `layout`: it reads as a layout of two panes in a row.
+ * the active pane shows, or the Library tab or none (Home) while one of them covers the panes.
+ *
+ * The saved session is user data that an older build, run after a downgrade or beside this one, must still read. So a split writes two keys:
+ * - `layout` is always written and is what this build reads first.
+ * - `split` (a build before layouts wrote only this) is written too, in exactly that build's shape, but only while the layout is two panes side by side;
+ *   any other layout (a pane split down, three or four panes) omits it, and an older build then brings back the flat tab list as it always did.
+ * On reading, `layout` wins when both are there; a session with only `split` reads as a layout of two panes in a row (`split` is never read back out).
  */
-export type TabSession = { tabs: SavedTab[]; active: number | null; layout?: SavedLayout };
+export type TabSession = { tabs: SavedTab[]; active: number | null; layout?: SavedLayout; split?: SavedSplit };
+
+/** A layout in the shape of a build before layouts, when it is exactly two panes side by side; otherwise undefined. */
+export function legacySplit(saved: SavedLayout): SavedSplit | undefined {
+  const { tree } = saved;
+  if (!('axis' in tree) || tree.axis !== 'row' || 'axis' in tree.first || 'axis' in tree.second) return undefined;
+  const left = saved.panes[tree.first.pane], right = saved.panes[tree.second.pane];
+  return left && right ? { left, right, ratio: tree.ratio, active: saved.active === tree.second.pane ? 'right' : 'left' } : undefined;
+}
 
 export const emptySession = (): TabSession => ({ tabs: [], active: null });
 

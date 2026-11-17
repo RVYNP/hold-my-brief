@@ -25,7 +25,7 @@ import { createZoomGesture } from './zoom-gesture';
 import type { Hold, Spot } from './zoom-anchor';
 import { createZoomMenu } from './zoom-menu';
 import { createProgressPreview } from './progress-preview';
-import { LIBRARY_PATH, TabList, mergeLists, moveAcross, restoreSplit, splitOff, splitOffRest, type SavedLayout, type SavedTab, type TabSession } from './tabs';
+import { LIBRARY_PATH, TabList, legacySplit, mergeLists, moveAcross, restoreSplit, splitOff, splitOffRest, type SavedLayout, type SavedTab, type TabSession } from './tabs';
 import { createTabStrip, type TabStrip, type TabView } from './tab-strip';
 import { titleHints } from './tab-titles';
 import { baseName, ghostLabel, insertionIndex, overlayNames, splitDropped, unsupportedNotice } from './drop';
@@ -873,14 +873,16 @@ function flushSession(): Promise<void> {
 const savedTab = (tab: Tab): SavedTab => ({ path: tab.path, name: tab.name, format: tab.format, ...(tab.scope ? { scope: tab.scope } : {}) });
 /**
  * The tabs as they are saved. Split or not, one strip in order (the Library tab, then each pane's tabs in reading order), so a build that does not know
- * the split still brings back every document; split, the session also holds the layout: its tree (the dividers' places among them), each pane's tabs and shown tab, and the active pane.
+ * the split still brings back every document; split, the session also holds the layout: its tree (the dividers' places among them), each pane's tabs and shown tab, and the active pane,
+ * and, for two panes side by side, the same as an older build saved it (see `TabSession`).
  */
 function sessionOf(): TabSession {
   if (!isSplit()) return focused.tabs.session(savedTab);
   const ordered = [...(libraryTab ? [libraryTab] : []), ...sides.flatMap(side => side.tabs.tabs)];
   const showing = cover === 'library' ? libraryTab : cover ? undefined : focused.shown;
   const pane = (side: Side) => ({ tabs: side.tabs.tabs.map(tab => tab.path), shown: side.shown?.path ?? side.tabs.tabs[0]?.path ?? '' });
-  return { tabs: ordered.map(savedTab), active: showing ? ordered.indexOf(showing) : null, layout: { tree: layout, panes: Object.fromEntries(sides.map(side => [side.view.id, pane(side)])), active: focused.view.id } };
+  const saved: SavedLayout = { tree: layout, panes: Object.fromEntries(sides.map(side => [side.view.id, pane(side)])), active: focused.view.id }, split = legacySplit(saved);
+  return { tabs: ordered.map(savedTab), active: showing ? ordered.indexOf(showing) : null, layout: saved, ...(split ? { split } : {}) };
 }
 /** The tab Close tab (Ctrl W) closes: the one the reader sees, which is the Library tab while its page covers the split. */
 const closableTab = () => cover === 'library' ? libraryTab : cover ? undefined : focused.shown;

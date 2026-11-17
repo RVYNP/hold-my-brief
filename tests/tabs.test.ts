@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LIBRARY_PATH, MAX_LIVE_TABS, MAX_TABS, TabList, emptySession, mergeLists, moveAcross, readSession, restoreSplit, slotAt, splitOff, splitOffRest } from '../src/tabs';
+import { LIBRARY_PATH, MAX_LIVE_TABS, MAX_TABS, TabList, emptySession, legacySplit, mergeLists, moveAcross, readSession, restoreSplit, slotAt, splitOff, splitOffRest } from '../src/tabs';
 
 type Tab = { path: string; name: string };
 const tab = (path: string): Tab => ({ path, name: path.toUpperCase() });
@@ -324,6 +324,20 @@ describe('the saved layout', () => {
     const other = { ...layout, tree: row(30) };
     expect(readSession({ tabs: docs, active: 0, layout: other, split }).layout?.tree).toEqual(row(30));
     expect(readSession({ tabs: docs, active: 0, layout: 'no', split }).layout).toEqual(layout);
+  });
+
+  it('writes the split an older build reads, in its exact shape, for two panes side by side', () => {
+    expect(legacySplit(layout)).toEqual(split);
+    expect(legacySplit({ ...layout, active: 'a' })).toMatchObject({ active: 'left' });
+    // Both keys together read as this build's layout, and an older build's reader of `split` alone gets the same panes.
+    expect(readSession(JSON.parse(JSON.stringify({ tabs: docs, active: 2, layout, split: legacySplit(layout) })))).toEqual({ tabs: docs, active: 2, layout });
+  });
+
+  it('writes no split for any other layout: a pane split down, or three or four panes', () => {
+    const column = { tree: { ...row(50), axis: 'column' as const }, panes: layout.panes, active: 'a' };
+    const three = { tree: { axis: 'row' as const, ratio: 40, first: { pane: 'a' }, second: { axis: 'column' as const, ratio: 70, first: { pane: 'b' }, second: { pane: 'c' } } }, panes: { a: { tabs: ['a'], shown: 'a' }, b: { tabs: ['b'], shown: 'b' }, c: { tabs: ['c', 'd'], shown: 'c' } }, active: 'c' };
+    const nested = { tree: { axis: 'row' as const, ratio: 50, first: { axis: 'row' as const, ratio: 50, first: { pane: 'a' }, second: { pane: 'b' } }, second: { pane: 'c' } }, panes: three.panes, active: 'a' };
+    for (const other of [column, three, nested]) expect(legacySplit(other)).toBeUndefined();
   });
 
   it('clamps a ratio outside 0 to 100', () => {
