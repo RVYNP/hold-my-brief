@@ -280,8 +280,11 @@ no choice saved, it starts in Scroll if it looks like a reference book, that is,
 first 10 spine items, or `<pre>` and `<table>` hold at least a fifth of their text; otherwise in Pages. Your choice always wins afterwards.
 **A−** and **A+** step the text size by 2 px between 12 and 40 px, the same setting as the size stepper in **Appearance and text…**.
 Code blocks in a reflowable EPUB wrap instead of scrolling sideways, with wrapped lines indented under the line they continue, and are set
-at a tighter line height than the text. In Scroll a code block may run wider than the text column. A code background that is light on a
-dark page (or dark on a light one) takes a tint of the page, and its text is lifted to stay readable.
+at a tighter line height than the text. Each is framed like a Markdown block, a rounded box with a hairline border, and a block the book gave no
+background is tinted like one; the book's own fonts, colours and background are kept. When the book names the language of a block (a `language-…`
+class, pandoc's or Sphinx's markup), it is written small in the block's top-left corner, always. In Scroll a code block may run wider than the
+text column. A code background that is light on a dark page (or dark on a light one) takes a tint of the page, and its text is lifted to stay
+readable.
 Point at a code block, or Tab onto it, and two small buttons appear in its top-right corner: **Open code** shows the block in a sheet over
 the reading area, in the mono face at 0.9 of the text size and unwrapped, with line numbers, scrolling both ways and the language in the
 header when the book names one; **Copy code** copies the block's text exactly as the book has it (no line numbers) and says *Copied* for a
