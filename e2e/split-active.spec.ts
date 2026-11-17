@@ -1,6 +1,7 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { chapterBook } from './epub-book';
 import { pagedPdf } from './paged-pdf';
+import { lowestRowContrast } from './pane-row-contrast';
 
 /** Which pane of a split is the active one: a 2 px line along its top edge, the other panes dimmed (hillclimb 2C). */
 
@@ -89,4 +90,30 @@ test('forced colours draw the edge in the system highlight and do not dim the ot
   await expect(edge(page, 'a')).toBeVisible();
   await expect(dim(page, 'b')).toBeHidden();
   expect(await edge(page, 'a').evaluate(line => getComputedStyle(line).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
+});
+
+// Every palette: the seven families in light and in dark, and the ten glow themes (each has one scheme of its own, which src/theme.ts's glowSchemes keeps).
+const everyTheme: [string, string, string][] = [
+  ...['brief', 'lilac', 'birch', 'graphite', 'arctic', 'blossom', 'peony'].flatMap(palette => [[`${palette} light`, palette, 'light'], [`${palette} dark`, palette, 'dark']] as [string, string, string][]),
+  ...([['aurora', 'dark'], ['dusk', 'dark'], ['nebula', 'dark'], ['solar', 'dark'], ['ember', 'dark'], ['orchid', 'dark'], ['glacier', 'light'], ['peach', 'light'], ['lagoon', 'light'], ['moss', 'light']]).map(([palette, scheme]) => [palette, palette, scheme] as [string, string, string]),
+];
+
+test('the row of the pane that is not active keeps its text at 4.5:1 and its icons at 3:1 in all 24 theme/mode combinations', async ({ page }) => {
+  test.setTimeout(180_000);
+  await splitPdfEpub(page);
+  await expect.poll(() => quiet(page, 'b')).toBe(true);
+  await page.mouse.move(700, 600); // away from the rows: no hover
+  expect(everyTheme).toHaveLength(24);
+  const worst: Record<string, string> = {};
+  for (const [name, palette, scheme] of everyTheme) {
+    await page.evaluate(([palette, scheme]) => { document.documentElement.dataset.palette = palette; document.documentElement.dataset.theme = scheme; }, [palette, scheme]);
+    expect(await page.evaluate(() => { const probe = document.createElement('span'); probe.style.color = 'light-dark(rgb(1, 1, 1), rgb(2, 2, 2))'; document.body.append(probe); const colour = getComputedStyle(probe).color; probe.remove(); return colour; }), `${name}: the scheme in use`).toBe(scheme === 'dark' ? 'rgb(2, 2, 2)' : 'rgb(1, 1, 1)');
+    const lowest = await lowestRowContrast(page, '.pane-strip[data-pane=b]');
+    worst[name] = `text ${lowest.text.ratio.toFixed(2)} (${lowest.text.label}), icons ${lowest.icon.ratio.toFixed(2)} (${lowest.icon.label})`;
+    expect(lowest.texts, name).toBeGreaterThanOrEqual(2); // the title and the format at least
+    expect(lowest.icons, name).toBeGreaterThanOrEqual(2); // the × and the +
+    expect(lowest.text.ratio, `${name}: ${lowest.text.label}`).toBeGreaterThanOrEqual(4.5);
+    expect(lowest.icon.ratio, `${name}: ${lowest.icon.label}`).toBeGreaterThanOrEqual(3);
+  }
+  console.log('worst inactive row contrast:', JSON.stringify(worst));
 });
