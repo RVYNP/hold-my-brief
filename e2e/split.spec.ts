@@ -271,6 +271,9 @@ test('reloading while split brings the split back with every document at its pla
   await expect(row(page, 'a').locator('.tab-format')).toHaveText(['PDF']);
   await expect(row(page, 'b').locator('.tab-format')).toHaveText(['MD']);
   await expect(barTabs(page)).toHaveCount(0);
+  // The restore opens the pane that is not the active one first and ends on the active one (here the Markdown pane): until its position shows, a press in the PDF pane is
+  // overridden when the restore moves the focus on.
+  await expect(page.locator('#position')).toContainText('Moby');
   await page.locator('.reader-host[data-pane=a]:not(.tab-hidden)').click({ position: { x: 40, y: 200 } });
   await expect(page.locator('#position')).toContainText('Page 4 of 5');
 });
