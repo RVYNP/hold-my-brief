@@ -264,49 +264,78 @@ describe('the saved session', () => {
   });
 });
 
-describe('the saved split', () => {
+describe('the saved layout', () => {
   const docs = ['a', 'b', 'c', 'd'].map(path => ({ path, name: path.toUpperCase(), format: 'pdf' }));
+  const row = (ratio: number) => ({ axis: 'row' as const, ratio, first: { pane: 'a' }, second: { pane: 'b' } });
+  const layout = { tree: row(60), panes: { a: { tabs: ['a', 'b'], shown: 'b' }, b: { tabs: ['c', 'd'], shown: 'c' } }, active: 'b' };
+  /** What today's build wrote: two panes, the left one's and the right one's. */
   const split = { left: { tabs: ['a', 'b'], shown: 'b' }, right: { tabs: ['c', 'd'], shown: 'c' }, ratio: 60, active: 'right' };
 
-  it('reads each pane\'s tabs and shown tab, the ratio and the active pane back as they were saved', () => {
-    const saved = { tabs: docs, active: 2, split };
-    expect(readSession(JSON.parse(JSON.stringify(saved)))).toEqual(saved);
+  it('reads a written layout back as it was, whatever the tree', () => {
+    const tree = { axis: 'row' as const, ratio: 40, first: { pane: 'a' }, second: { axis: 'column' as const, ratio: 70, first: { pane: 'b' }, second: { pane: 'c' } } };
+    const three = { tree, panes: { a: { tabs: ['a'], shown: 'a' }, b: { tabs: ['b', 'c'], shown: 'c' }, c: { tabs: ['d'], shown: 'd' } }, active: 'c' };
+    for (const saved of [{ tabs: docs, active: 2, layout }, { tabs: docs, active: 0, layout: three }]) expect(readSession(JSON.parse(JSON.stringify(saved)))).toEqual(saved);
   });
 
-  it('reads a session with no split, or written before there was one, as it always was', () => {
+  it('reads the split of today\'s build as the same layout of two panes in a row', () => {
+    const read = readSession({ tabs: docs, active: 2, split });
+    expect(read).toEqual({ tabs: docs, active: 2, layout });
+    expect('split' in read).toBe(false);
+    expect(readSession({ tabs: docs, active: 2, split: { ...split, active: 'left' } }).layout?.active).toBe('a');
+  });
+
+  it('reads a session with no layout, or written before there was one, as it always was', () => {
     const old = { tabs: docs, active: 1 };
     expect(readSession(old)).toEqual(old);
-    expect(readSession({ ...old, split: null })).toEqual(old);
-    expect('split' in readSession(old)).toBe(false);
+    expect(readSession({ ...old, split: null, layout: null })).toEqual(old);
+    expect('layout' in readSession(old)).toBe(false);
   });
 
-  it('ignores a split that is not one: no pane, a pane with no open document, wrong types', () => {
+  it('ignores a layout or a split that is not one: no pane, a pane with no open document, wrong types', () => {
     const base = { tabs: docs, active: 0 };
     for (const garbage of [undefined, 3, 'right', [], {}, { left: 1, right: 2 }, { left: { tabs: ['a'] } }, { left: { tabs: ['a'] }, right: { tabs: ['zz'] } }, { left: { tabs: 'a' }, right: { tabs: [4, null] } }]) {
       expect(readSession({ ...base, split: garbage })).toEqual(base);
+      expect(readSession({ ...base, layout: garbage })).toEqual(base);
     }
+    const bad = [{ pane: 'a' }, { axis: 'diagonal', ratio: 50, first: { pane: 'a' }, second: { pane: 'b' } }, row(50).second, { ...row(50), second: { pane: 'a' } }, { ...row(50), second: { pane: 'zz' } }, { ...row(50), first: null }];
+    for (const tree of bad) expect(readSession({ ...base, layout: { ...layout, tree } })).toEqual(base);
+    expect(readSession({ ...base, layout: { ...layout, tree: row(50), panes: { a: { tabs: ['a', 'b', 'c', 'd'] }, b: { tabs: ['gone'] } } } })).toEqual(base);
   });
 
-  it('keeps what is valid inside a split and gives the rest its default', () => {
+  it('keeps what is valid inside a layout and gives the rest its default', () => {
     const read = readSession({ tabs: docs, active: 0, split: { left: { tabs: ['a', 'a', 'x'], shown: 'zz' }, right: { tabs: ['b', 'c'], shown: 'c' }, ratio: 'wide', active: 'middle' } });
-    // `d` is named by no pane, so it joins the left one; a repeated or unknown path is dropped; an unknown shown tab becomes the pane's first.
-    expect(read.split).toEqual({ left: { tabs: ['a', 'd'], shown: 'a' }, right: { tabs: ['b', 'c'], shown: 'c' }, ratio: 50, active: 'left' });
+    // `d` is named by no pane, so it joins the first one; a repeated or unknown path is dropped; an unknown shown tab becomes the pane's first.
+    expect(read.layout).toEqual({ tree: row(50), panes: { a: { tabs: ['a', 'd'], shown: 'a' }, b: { tabs: ['b', 'c'], shown: 'c' } }, active: 'a' });
+    expect(readSession({ tabs: docs, active: 0, layout: { ...layout, active: 'q' } }).layout?.active).toBe('a');
   });
 
-  it('keeps a document in one pane only, the right pane\'s claim first, and never lists the Library tab in a pane', () => {
+  it('keeps a document in one pane only, the last pane\'s claim first, and never lists the Library tab in a pane', () => {
     const read = readSession({ tabs: [{ path: LIBRARY_PATH, name: 'All', format: 'library' }, ...docs], active: 1, split: { left: { tabs: [LIBRARY_PATH, 'a', 'b'], shown: 'a' }, right: { tabs: ['b', 'c', 'd'], shown: 'd' }, ratio: 40, active: 'right' } });
-    expect(read.split).toEqual({ left: { tabs: ['a'], shown: 'a' }, right: { tabs: ['b', 'c', 'd'], shown: 'd' }, ratio: 40, active: 'right' });
+    expect(read.layout).toEqual({ tree: row(40), panes: { a: { tabs: ['a'], shown: 'a' }, b: { tabs: ['b', 'c', 'd'], shown: 'd' } }, active: 'b' });
+  });
+
+  it('drops a pane that holds no document, and its sibling takes its room; one pane left is no layout', () => {
+    const tree = { axis: 'row' as const, ratio: 40, first: { pane: 'a' }, second: { axis: 'column' as const, ratio: 70, first: { pane: 'b' }, second: { pane: 'c' } } };
+    const read = readSession({ tabs: docs, active: 0, layout: { tree, panes: { a: { tabs: ['a', 'b'], shown: 'a' }, b: { tabs: ['c', 'd'], shown: 'c' }, c: { tabs: ['gone'], shown: 'gone' } }, active: 'c' } });
+    expect(read.layout).toEqual({ tree: { axis: 'row', ratio: 40, first: { pane: 'a' }, second: { pane: 'b' } }, panes: { a: { tabs: ['a', 'b'], shown: 'a' }, b: { tabs: ['c', 'd'], shown: 'c' } }, active: 'a' });
+  });
+
+  it('prefers a layout to a split, and falls back to the split when the layout is garbage', () => {
+    const other = { ...layout, tree: row(30) };
+    expect(readSession({ tabs: docs, active: 0, layout: other, split }).layout?.tree).toEqual(row(30));
+    expect(readSession({ tabs: docs, active: 0, layout: 'no', split }).layout).toEqual(layout);
   });
 
   it('clamps a ratio outside 0 to 100', () => {
-    expect(readSession({ tabs: docs, active: 0, split: { ...split, ratio: 400 } }).split?.ratio).toBe(100);
-    expect(readSession({ tabs: docs, active: 0, split: { ...split, ratio: -3 } }).split?.ratio).toBe(0);
-    expect(readSession({ tabs: docs, active: 0, split: { ...split, ratio: Number.NaN } }).split?.ratio).toBe(50);
+    expect(readSession({ tabs: docs, active: 0, split: { ...split, ratio: 400 } }).layout?.tree).toMatchObject({ ratio: 100 });
+    expect(readSession({ tabs: docs, active: 0, split: { ...split, ratio: -3 } }).layout?.tree).toMatchObject({ ratio: 0 });
+    expect(readSession({ tabs: docs, active: 0, split: { ...split, ratio: Number.NaN } }).layout?.tree).toMatchObject({ ratio: 50 });
+    expect(readSession({ tabs: docs, active: 0, layout: { ...layout, tree: row(400) } }).layout?.tree).toMatchObject({ ratio: 100 });
   });
 
   it('starts a split from a list: the right pane\'s tabs leave in the saved order and each pane shows its saved tab', () => {
     const list = listOf('a', 'b', 'c', 'd');
-    const right = restoreSplit(list, { left: { tabs: ['a', 'b'], shown: 'a' }, right: { tabs: ['d', 'c'], shown: 'c' }, ratio: 50, active: 'left' })!;
+    const right = restoreSplit(list, { tabs: ['a', 'b'], shown: 'a' }, { tabs: ['d', 'c'], shown: 'c' })!;
     expect(paths(list)).toEqual(['a', 'b']);
     expect(list.active?.path).toBe('a');
     expect(paths(right)).toEqual(['d', 'c']);
@@ -315,8 +344,8 @@ describe('the saved split', () => {
 
   it('starts no split, and changes nothing, when a side would be left with no tab', () => {
     const list = listOf('a', 'b');
-    expect(restoreSplit(list, { left: { tabs: ['a'], shown: 'a' }, right: { tabs: ['gone'], shown: 'gone' }, ratio: 50, active: 'left' })).toBeUndefined();
-    expect(restoreSplit(list, { left: { tabs: [], shown: '' }, right: { tabs: ['a', 'b'], shown: 'a' }, ratio: 50, active: 'left' })).toBeUndefined();
+    expect(restoreSplit(list, { tabs: ['a'], shown: 'a' }, { tabs: ['gone'], shown: 'gone' })).toBeUndefined();
+    expect(restoreSplit(list, { tabs: [], shown: '' }, { tabs: ['a', 'b'], shown: 'a' })).toBeUndefined();
     expect(paths(list)).toEqual(['a', 'b']);
   });
 
