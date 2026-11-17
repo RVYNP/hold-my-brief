@@ -89,7 +89,8 @@ function rangeAtOffset(doc: Document, offset: number) {
   let remaining = Math.max(0, offset);
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     const n = node.nodeType === Node.TEXT_NODE ? node.textContent!.length : /^(img|svg)$/i.test((node as Element).localName) ? 1000 : 0;
-    if (n && remaining <= n) {
+    // `offset` characters lie before the place, so the place is the first character after them: an offset at the end of one text node is the start of the next. Ending the range there instead (on a listing's newline between two lines, which has no box) leaves Foliate nothing to scroll to.
+    if (n && remaining < n) {
       const range = doc.createRange();
       if (node.nodeType === Node.TEXT_NODE) range.setStart(node, Math.min(remaining, n)); else range.setStartBefore(node);
       range.collapse(true); return range;
@@ -714,14 +715,12 @@ export class EpubAdapter implements ReaderAdapter {
       changed.push([element, property, element.style.getPropertyValue(property), element.style.getPropertyPriority(property)]);
       element.style.setProperty(property, value, 'important');
     };
-    // A listing inside a frame paints one box: where both a wrapper (pandoc's `div.sourceCode`, Sphinx's `div.highlight`) and its `pre` have a background, or a left rule, the wrapper's is dropped.
+    // A listing inside a frame paints one box: where both a wrapper (pandoc's `div.sourceCode`, Sphinx's `div.highlight`) and its `pre` have a background, the wrapper's is dropped. (The `pre` has no rule of its own in a frame: `codeStyles` draws one border, on the wrapper.)
     for (const wrapper of Array.from(body.querySelectorAll<HTMLElement>(CODE_WRAPPERS))) {
       const pre = wrapper.parentElement?.closest(CODE_BLOCKS) ? null : wrapper.querySelector('pre');
       if (!pre) continue;
       const frame = view.getComputedStyle(wrapper), code = view.getComputedStyle(pre);
-      const rule = (style: CSSStyleDeclaration) => parseFloat(style.borderLeftWidth) > 0 && style.borderLeftStyle !== 'none';
       if (parseRgb(frame.backgroundColor) && parseRgb(code.backgroundColor)) set(wrapper, 'background-color', 'transparent');
-      if (rule(frame) && rule(code)) set(wrapper, 'border-left', 'none');
     }
     // Both tones are walked whole: a box set against the page's tone is mapped into it, and on a light page only text on a mapped box (or in code) is lifted.
     const walker = doc.createTreeWalker(body, NodeFilter.SHOW_ELEMENT, { acceptNode: node => (node as Element).namespaceURI === XHTML ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT });

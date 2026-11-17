@@ -1,7 +1,8 @@
 /**
  * Reader CSS and colours for code blocks in reflowable EPUBs. Publisher code is a nowrap scroll box inside the prose measure with the
  * reading line height on every line; here it wraps with a hanging indent, sits at 1.45 line height, and in Scroll flow may run wider
- * than the prose column. Publisher fonts and syntax colours are kept. Everything is `:where()` so it adds no specificity of its own.
+ * than the prose column. Publisher fonts and syntax colours are kept. Each outer listing is framed like a Markdown block (8px radius, a hairline border) and, when
+ * the publisher gave it no background, filled with `CODE_BACKGROUND`. Everything is `:where()` so it adds no specificity of its own.
  */
 import { isDark, type Rgb } from './theme';
 
@@ -18,6 +19,11 @@ const WITHIN = `:where(${BLOCKS})`;
 const inBlock = `${WITHIN} *`;
 /** A listing not inside another: the one that carries margin, padding, and the Scroll width. */
 const OUTER = `${WITHIN}:not(${inBlock})`;
+
+/** Set on a listing that shows a language label (`attachCodeControls`): it gets the top padding the label sits in. */
+export const LABELLED = 'data-hmb-labelled';
+/** The room above a labelled listing's first line, beside its own `0.6em`: the label is 14px tall. */
+const LABEL_ROOM = '14px';
 
 /** The element selector for `closest()`. */
 export const CODE_BLOCKS = BLOCKS;
@@ -97,14 +103,19 @@ export function codeStyles(room?: number): string {
   const rules = [
     `:where(${BOXES}) { overflow: visible !important; max-height: none !important; }`,
     `:where(${WRAPPED}) { white-space: pre-wrap !important; overflow-wrap: anywhere !important; tab-size: 4 !important; }`,
-    `${OUTER} { box-sizing: border-box !important; font-size: max(12px, 0.82em) !important; margin: 0.9em 0 !important; padding: 0.6em 0.9em !important; }`,
+    `${OUTER} { box-sizing: border-box !important; font-size: max(12px, 0.82em) !important; margin: 0.9em 0 !important; padding: 0.6em 0.9em !important; border: 1px solid color-mix(in srgb, var(--hmb-ink) 14%, transparent) !important; border-radius: 8px !important; }`,
+    // Not `!important`: a background the publisher set stays (and a dark page maps it), so this only fills a listing that has none.
+    `${OUTER} { background-color: ${CODE_BACKGROUND}; }`,
     `${WITHIN}, ${inBlock} { line-height: 1.45 !important; }`,
     `${WITHIN} :where(pre, code) { font-size: inherit !important; }`,
     // A listing that wraps a `pre` is only its frame: the `pre` takes the padding, so the two are one box.
     `${OUTER}:where(:has(pre)) { padding: 0 !important; }`,
     // A block the keyboard has reached (the viewer makes each one a Tab stop) shows where it is.
     `${OUTER}:focus-visible { outline: 2px solid var(--hmb-accent, Highlight) !important; outline-offset: 2px !important; }`,
-    `${WITHIN} :where(pre) { box-sizing: border-box !important; margin: 0 !important; padding: 0.6em 0.9em !important; }`,
+    // The `pre` in a frame is the same box, not a second one: the frame's border and corners are the only ones, and the `pre` fills it.
+    `${WITHIN} :where(pre) { box-sizing: border-box !important; margin: 0 !important; padding: 0.6em 0.9em !important; border: 0 !important; border-radius: 7px !important; }`,
+    // The language label sits in the top padding: the listing itself, or the first `pre` in the frame that wraps one.
+    `:where(${OUTER}[${LABELLED}]:not(:has(pre))), :where(${OUTER}[${LABELLED}] pre:first-of-type) { padding-top: calc(0.6em + ${LABEL_ROOM}) !important; }`,
     // A wrapped line hangs 2ch in from where its own line begins (its indent, which `markLines` sets), so each line is a box of its own.
     `${WITHIN} [${LINE}] { display: inline-block !important; padding-left: calc(1ch * (var(--hmb-indent, 0) + 2)) !important; text-indent: calc(-1ch * (var(--hmb-indent, 0) + 2)) !important; }`,
   ];
