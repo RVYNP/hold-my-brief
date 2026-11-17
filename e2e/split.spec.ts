@@ -271,11 +271,40 @@ test('reloading while split brings the split back with every document at its pla
   await expect(row(page, 'a').locator('.tab-format')).toHaveText(['PDF']);
   await expect(row(page, 'b').locator('.tab-format')).toHaveText(['MD']);
   await expect(barTabs(page)).toHaveCount(0);
-  // The restore opens the pane that is not the active one first and ends on the active one (here the Markdown pane): until its position shows, a press in the PDF pane is
-  // overridden when the restore moves the focus on.
-  await expect(page.locator('#position')).toContainText('Moby');
   await page.locator('.reader-host[data-pane=a]:not(.tab-hidden)').click({ position: { x: 40, y: 200 } });
   await expect(page.locator('#position')).toContainText('Page 4 of 5');
+});
+
+test('a click on a pane while the split is still restoring keeps that pane active, and the other document still opens at its place', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles(pdf);
+  await expect(page.locator('#position')).toContainText('Page 1 of 5');
+  await goTo(page, '4');
+  await expect(page.locator('#position')).toContainText('Page 4 of 5');
+  await page.locator('#file-input').setInputFiles(markdown);
+  await expect(page.locator('#tab-list .tab')).toHaveCount(2);
+  await goTo(page, '60');
+  await expect(page.locator('#position')).toContainText('Moby · ≈34% position');
+  await run(page, 'Split right');
+  await expect(row(page, 'b')).toHaveCount(1);
+  const where = (side: 'a' | 'b') => page.locator(`.pane-strip[data-pane=${side}] .tab.is-active .tab-where`);
+  await expect(where('b')).toHaveText('34 %');
+  await expect(where('a')).toHaveText('4 / 5');
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('hold-my-brief-tabs')!).split?.right.tabs.length)).toBe(1);
+  await expect.poll(() => page.evaluate(() => Object.entries(localStorage).filter(([key, value]) => key.startsWith('hold-my-brief:') && /"locator"/.test(value)).length)).toBe(2);
+  // The restore opens the PDF pane first and the Markdown pane (the active one) second. Hold the Markdown reader's code back so that the user's click lands in between.
+  const { promise: held, resolve: release } = Promise.withResolvers<void>();
+  await page.route(/\/(assets\/text-[^/]*\.js|src\/adapters\/text\.ts)/, async route => { await held; await route.continue(); });
+  await page.reload();
+  await expect(where('a')).toHaveText('4 / 5');
+  await page.locator('.reader-host[data-pane=a]:not(.tab-hidden)').click({ position: { x: 40, y: 200 } });
+  await expect(page.locator('#position')).toContainText('Page 4 of 5');
+  release();
+  await expect(where('b')).toHaveText('34 %');
+  await expect(page.locator('#position')).toContainText('Page 4 of 5');
+  await expect(page.locator('.pane-strip[data-pane=a]')).not.toHaveClass(/is-inactive/);
+  await expect(page.locator('.pane-strip[data-pane=b]')).toHaveClass(/is-inactive/);
+  await expect(page.locator('.reader-host[data-pane=a]:not(.tab-hidden)')).toBeFocused();
 });
 
 test('the icon rail\'s room is not counted: a 760 px window with the panel closed is too narrow to split', async ({ page }) => {
