@@ -171,6 +171,7 @@ export class TextAdapter implements ReaderAdapter {
   private imageUrls: string[] = [];
   private listener?: (event: Event) => void;
   private codeListener?: (event: Event) => void;
+  private codeKeyListener?: (event: Event) => void;
   private options!: ReaderOptions;
   /** The code sheet over the reading surface, while one is open. */
   private sheet?: Sheet;
@@ -240,6 +241,11 @@ export class TextAdapter implements ReaderAdapter {
       });
     };
     this.content.addEventListener('click', this.codeListener);
+    this.codeKeyListener = event => {
+      if ((event as KeyboardEvent).key !== ' ' && (event as KeyboardEvent).key !== 'Enter') return;
+      if (event.target instanceof Element && event.target.closest('button[data-code-action]')) event.stopPropagation();
+    };
+    this.content.addEventListener('keydown', this.codeKeyListener);
     host.addEventListener('scroll', this.onScroll, { passive: true });
     this.applyOptions(options);
     host.scrollTop = 0;
@@ -547,6 +553,7 @@ export class TextAdapter implements ReaderAdapter {
     for (const timers of this.copyTimers.values()) clearTimeout(timers.current);
     this.copyTimers.clear();
     if (this.codeListener) this.content?.removeEventListener('click', this.codeListener);
+    if (this.codeKeyListener) this.content?.removeEventListener('keydown', this.codeKeyListener);
     if (this.listener) { this.content?.removeEventListener('click', this.listener); this.content?.removeEventListener('auxclick', this.listener); }
     this.imageUrls.forEach(url => URL.revokeObjectURL(url));
     this.imageUrls = []; this.blocks = []; this.history = []; this.source = ''; this.anchor = null;

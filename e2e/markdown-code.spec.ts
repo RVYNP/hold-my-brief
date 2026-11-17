@@ -102,6 +102,22 @@ test('Copy and Open are reached with Tab and show a focus ring', async ({ page }
   await expect(page.locator('.reader-host .code-block').first().locator('pre')).toBeFocused();
 });
 
+test('Space on a focused Copy button copies and does not scroll the page', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  const filler = Array.from({ length: 120 }, (_, i) => `Filler paragraph ${i + 1}.\n`).join('\n');
+  await openDoc(page, ['```shell', SHELL, '```', '', filler].join('\n'));
+  const host = page.locator('.reader-host:not(.staging)');
+  expect(await host.evaluate(element => element.scrollHeight - element.clientHeight)).toBeGreaterThan(900);
+  const copy = page.getByRole('button', { name: 'Copy code, shell' });
+  await copy.focus();
+  const before = await host.evaluate(element => element.scrollTop);
+  await page.keyboard.press('Space');
+  await expect(copy).toContainText('Copied');
+  // A screen-next scroll is most of the host's height; the few pixels the reader settles by after opening are not.
+  expect(Math.abs(await host.evaluate(element => element.scrollTop) - before)).toBeLessThan(await host.evaluate(element => element.clientHeight / 2));
+  expect(await clipboard(page)).toBe(SHELL + '\n');
+});
+
 test('find highlights a word inside a block and Enter steps through the matches', async ({ page }) => {
   await openDoc(page);
   await page.keyboard.press('Control+f');
