@@ -234,38 +234,41 @@ test.describe('1080 × 760', () => {
   /** The library panel at 340 px (the default is 280): 1080 less the panel and its margin is then under the 728 px two panes need. */
   const widePanel = (page: Page) => page.addInitScript(() => localStorage.setItem('hold-my-brief:library-width', '340'));
 
-  test('docking the library folds the split to the active pane, "Other side" swaps the panes, and closing the library unfolds it', async ({ page }) => {
+  test('docking the library folds the split to the active pane, the pane map\'s menu swaps the panes, and closing the library unfolds it', async ({ page }) => {
     await widePanel(page);
     await openThree(page);
     await setLibrary(page, false);
     await run(page, 'Split right');
     await expect(row(page, 'b')).toHaveCount(1);
     await expect(workspace(page)).not.toHaveClass(/is-single/);
-    await expect(page.getByRole('button', { name: /Other side/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Panes, / })).toHaveCount(0);
     await expect(page.locator('.pane-divider')).toBeVisible();
     await setLibrary(page, true);
     await expect(workspace(page)).toHaveClass(/is-single/);
     await expect(page.locator('.pane-divider')).toBeHidden();
-    // The active pane (the EPUB's, on the right) is the one that shows; its row ends with the button, which counts the other side's tabs.
-    const fold = page.getByRole('button', { name: /Other side/ });
+    // The active pane (the EPUB's, on the right) is the one that shows; its row ends with the pane map's button.
+    const fold = page.getByRole('button', { name: /^Panes, / });
     await expect(fold).toBeVisible();
-    await expect(fold).toHaveText('Other side (2)');
+    await expect(fold).toHaveText('2 panes');
+    await expect(fold).toHaveAccessibleName(/^Panes, 2; showing THE GENERATED BOOK/);
     await expect(page.locator('.pane-strip[data-pane=a]')).toBeHidden();
     await expect(page.locator('.reader-host[data-pane=b]:not(.tab-hidden)')).toBeVisible();
     await expect(page.locator('.reader-host[data-pane=a]:not(.tab-hidden)')).toBeHidden();
     const shown = await box(page.locator('.pane-body[data-pane=b]'));
     expect(shown.width).toBeGreaterThan(360);
     await fold.click();
+    await expect(page.getByRole('menuitem')).toHaveCount(2);
+    await page.getByRole('menuitem').first().click();
     await expect(workspace(page)).toHaveAttribute('data-active', 'a');
     await expect(page.locator('.reader-host[data-pane=a]:not(.tab-hidden)')).toBeVisible();
     await expect(page.locator('.reader-host[data-pane=b]:not(.tab-hidden)')).toBeHidden();
     await expect(page.locator('#position')).toContainText('Page 1 of 5');
-    await expect(page.getByRole('button', { name: /Other side/ })).toHaveText('Other side (1)');
+    await expect(page.getByRole('button', { name: /^Panes, / })).toHaveText('2 panes');
     await expect(page.locator('.pane-strip[data-pane=b]')).toBeHidden();
     // The library's room back: both panes unfold by themselves.
     await setLibrary(page, false);
     await expect(workspace(page)).not.toHaveClass(/is-single/);
-    await expect(page.getByRole('button', { name: /Other side/ })).toBeHidden();
+    await expect(page.getByRole('button', { name: /^Panes, / })).toBeHidden();
     await expect(page.locator('.pane-divider')).toBeVisible();
     await expect(page.locator('.reader-host[data-pane=a]:not(.tab-hidden)')).toBeVisible();
     await expect(page.locator('.reader-host[data-pane=b]:not(.tab-hidden)')).toBeVisible();
@@ -290,7 +293,7 @@ test.describe('1080 × 760', () => {
     await menuItem(page, 'Open in split down').click();
     await expect(workspace(page)).toHaveAttribute('data-active', 'c');
     await expect(page.locator('.pane-strip[data-pane=c] .tab.is-active .tab-title')).toHaveText('extra.txt');
-    await expect(page.getByRole('button', { name: /Other panes/ })).toHaveText('Other panes (3)');
+    await expect(page.getByRole('button', { name: /^Panes, / })).toHaveText('3 panes');
   });
 });
 
@@ -489,7 +492,7 @@ test.describe('stills for the pull request', () => {
     await expect(row(page, 'b')).toHaveCount(1);
     await setLibrary(page, true);
     await expect(workspace(page)).toHaveClass(/is-single/);
-    await expect(page.getByRole('button', { name: /Other side/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Panes, / })).toBeVisible();
     await page.mouse.move(700, 740);
     await page.screenshot({ path: 'test-results/sv2b-split-folded-1080.png' });
   });

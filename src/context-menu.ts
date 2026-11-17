@@ -6,7 +6,7 @@
 import { shortcutFor } from './commands';
 
 /** One command, or (with `submenu`) a list of them that opens beside it. `unavailable` is why it cannot run now; with it the entry is shown disabled. */
-export type MenuEntry = { label: string; run?: () => void; unavailable?: string; submenu?: readonly MenuEntry[] };
+export type MenuEntry = { label: string; run?: () => void; unavailable?: string; submenu?: readonly MenuEntry[]; /** A small picture drawn before the label (hidden from assistive technology: the label says it all). */ icon?: () => Element };
 
 export type ContextMenu = {
   /** Shows `entries` at `at` (a window point), or under `anchor` when there is none; asking again for the same anchor from the keyboard closes it. */
@@ -51,6 +51,7 @@ export function createContextMenu(options: { className?: string; label?: string;
     options.closed?.(was);
     if (refocus && was.isConnected) was.focus();
   }
+  const fill = (item: HTMLElement, entry: MenuEntry) => { if (entry.icon) item.append(entry.icon(), entry.label); else item.textContent = entry.label; };
   /** The submenu of the entry that has one: a menu of its own, laid beside that entry inside this one. */
   let sub: HTMLElement | undefined, subOwner: HTMLElement | undefined;
   const items = (scope: ParentNode) => [...scope.querySelectorAll<HTMLElement>(':scope > button:not(:disabled)')];
@@ -66,7 +67,7 @@ export function createContextMenu(options: { className?: string; label?: string;
     closeSub();
     for (const entry of entries) {
       const item = document.createElement('button');
-      item.type = 'button'; item.textContent = entry.label; item.setAttribute('role', 'menuitem');
+      item.type = 'button'; item.setAttribute('role', 'menuitem'); fill(item, entry);
       if (entry.unavailable) { item.disabled = true; item.title = entry.unavailable; }
       else item.onclick = () => { close(false); entry.run?.(); };
       sub.append(item);
@@ -87,7 +88,7 @@ export function createContextMenu(options: { className?: string; label?: string;
     subOwner = undefined;
     for (const entry of entries) {
       const item = document.createElement('button');
-      item.type = 'button'; item.textContent = entry.label; item.setAttribute('role', 'menuitem');
+      item.type = 'button'; item.setAttribute('role', 'menuitem'); fill(item, entry);
       if (entry.unavailable) { item.disabled = true; item.title = entry.unavailable; }
       else if (entry.submenu) {
         const submenu = entry.submenu;

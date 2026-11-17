@@ -109,8 +109,7 @@ can be split again to the right or downwards, to at most four panes. Split the w
 - **Right-click a document in the library tree ▸ Open in split right** or **Open in split down**: the document opens in a new pane to the right of the active pane, or below it (it
   moves there when it is open already), and the window is split first when it is not, with the document you were reading, or the one you read last, staying where it was.
 - **Right-click a document card or row on Home ▸ Open in split right** or **Open in split down** (**Open** is the other choice there). From Home the document you read last stays on the left.
-- **Drag a tab onto the reading area's right quarter** (or the left quarter) while the window is not split: a shaded half and an outline show where it will go, and
-  letting go does what Split right does for that tab (on the left quarter the dragged tab becomes the left pane, and the other documents the right one).
+- **Drag a tab onto a pane's edge** (see *Dropping a tab on a pane* below): the pane splits that way, with the dragged tab in the new pane. While the window is not split, the pane is the reading area.
 
 A split is unavailable, and its menu entry is greyed out with the reason as its tooltip (the palette shows the reason too), when:
 
@@ -129,9 +128,18 @@ top edge; the other panes are dimmed. Opening a document puts it in the active p
 
 **Moving a tab.** A tab's menu has **Move to the other side** while there are two panes, and **Move to pane ▸** while there are three or four: the submenu names each other pane
 by the document it shows. The tab goes to the end of that pane, which shows it and becomes the active one. When the moved tab was its pane's last, the pane closes (below). Drag a tab onto another
-pane's row to put it there, at the marked slot, or onto another pane's page to put it after that pane's last tab; it is shown there. Drag within a row to reorder it, as before. Esc during a drag, or letting go anywhere
-else, changes nothing. Home and the Library tab can't be dragged into a pane, and no split preview shows in a window or reading area too narrow for the panes. Folded, the other panes are out of
-sight, so a drag has nowhere to land on them: use the menu.
+pane's row to put it there, at the marked slot. Drag within a row to reorder it, as before.
+
+**Dropping a tab on a pane.** While you drag a tab over a pane's page, where the pointer is decides what letting go does:
+
+- **The outer quarter on a side** (left, right, top or bottom; in a corner, the nearer side) splits that pane that way, with the dragged tab in the new pane. A shaded half and an outline show the half the
+  new pane will take. Not split, this is the reading area's four quarters: the right and bottom ones do what Split right and Split down do for that tab, and on the left or top the dragged tab becomes the
+  first pane and the other documents the second.
+- **The centre** moves the tab into that pane, after its last tab, where it is shown; the whole pane is shaded. A tab dropped on the centre of its own pane does nothing.
+
+The same rules as the menus apply: at four panes, or where the panes that would result don't fit (each needs 360 px by 240 px), no split preview shows and letting go changes nothing, while the centre still moves the
+tab. A pane's only tab can't split its own pane (*Open another document first*). Esc during a drag, or letting go anywhere else, changes nothing. Home and the Library tab can't be dragged into panes.
+Folded, the other panes are out of sight, so a drag has nowhere to land on them: use the menu.
 
 **Closing a pane.** **Close pane** in a tab's menu (and in the palette) closes that pane: its tabs join the pane that takes its room (its sibling in the layout, or the first pane of the sibling's
 group, in reading order), and that pane becomes the active one. Closing or moving a pane's last tab closes the pane the same way. **Close the split** (a tab's menu, the palette) merges every
@@ -144,8 +152,9 @@ wide or 240 px high, goes back to 50 % on a double-click and moves 2 % with the 
 reopen where they were when shown. The document each pane shows is always live.
 
 **Folding.** When the reading area is narrower than the panes need (728 px for two side by side, more for more), for example after docking the library or in a narrower window, only the
-active pane shows and its row ends with **Other side (n)** (**Other panes (n)** with more than two panes), n being the tabs in the panes out of sight. Press it, or Ctrl+\\, to move on to the next pane. The panes
-appear again by themselves as soon as there is room. In a window under 720 px the panes are always folded.
+active pane shows, at full size, and its row ends with the **pane map**: a small picture of the layout, one cell per pane laid out like the panes, the active pane's cell filled and the others outlined,
+and "n panes" beside it. Press it for a menu with a row per pane (the map with that pane filled, and the name of the document it shows); choosing a row makes that pane the active one. Ctrl+\\ still moves
+on to the next pane. The panes appear again by themselves as soon as there is room. In a window under 720 px the panes are always folded.
 
 The panes are remembered with the tabs: at the next launch the layout (every divider's place), each pane's row, the document each pane showed and the active pane come back, each shown
 document at the place you left it (the other tabs open when selected). A session saved before panes existed opens as it always did.

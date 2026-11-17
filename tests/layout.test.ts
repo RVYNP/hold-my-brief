@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_PANES, boxes, canSplit, clampRatio, evenRatio, fits, freeId, minSize, neighbour, nudgePercent, panes, percentAt, ratioLimits, readLayout, receiver, removePane, renamePanes, setRatio, shareOf, snapPercent, splitAt, splitPane, type Layout, type Split } from '../src/layout';
+import { MAX_PANES, boxes, canSplit, clampRatio, evenRatio, fits, freeId, minSize, neighbour, nudgePercent, panes, percentAt, ratioLimits, readLayout, receiver, removePane, renamePanes, setRatio, shareOf, sketch, snapPercent, splitAt, splitPane, type Layout, type Split } from '../src/layout';
 
 const leaf = (pane: string): Layout => ({ pane });
 const row = (first: Layout, second: Layout, ratio = 50): Split => ({ axis: 'row', ratio, first, second });
@@ -282,5 +282,30 @@ describe('reading a saved tree', () => {
     for (const garbage of [undefined, null, 3, 'a', [], {}, leaf('a'), { axis: 'row' }, { ...row(leaf('a'), leaf('a')) }, row(leaf('a'), leaf('q')), row(leaf('a'), { pane: 4 } as never), { ...row(leaf('a'), leaf('b')), axis: 'diagonal' }, row(leaf('a'), column(leaf('b'), { axis: 'row' } as never)), five]) {
       expect(readLayout(garbage)).toBeUndefined();
     }
+  });
+});
+
+describe('the pane map sketch', () => {
+  const small = { x: 0, y: 0, width: 22, height: 14 };
+
+  it('gives one cell per pane in reading order, laid out like the panes, with the gap between them', () => {
+    const cells = sketch(oneB, small, 2);
+    expect(cells.map(cell => cell.pane)).toEqual(['a', 'b', 'c']);
+    const [a, b, c] = cells.map(cell => cell.rect);
+    expect(a).toEqual({ x: 0, y: 0, width: 10, height: 14 });
+    expect(b).toEqual({ x: 12, y: 0, width: 10, height: 6 });
+    expect(c).toEqual({ x: 12, y: 8, width: 10, height: 6 });
+  });
+
+  it('follows a split\'s ratio, but never draws a cell thinner than a fifth of its room', () => {
+    expect(sketch(row(leaf('a'), leaf('b'), 70), small, 2).map(cell => cell.rect.width)).toEqual([14, 6]);
+    expect(sketch(row(leaf('a'), leaf('b'), 2), small, 2).map(cell => cell.rect.width)).toEqual([4, 16]);
+    const [top, bottom] = sketch(column(leaf('a'), leaf('b'), 100), small, 2).map(cell => cell.rect.height);
+    expect(top).toBeCloseTo(9.6);
+    expect(bottom).toBeCloseTo(2.4);
+  });
+
+  it('draws a single pane as the whole room', () => {
+    expect(sketch(leaf('a'), small, 2)).toEqual([{ pane: 'a', rect: small }]);
   });
 });
