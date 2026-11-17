@@ -18,6 +18,8 @@ async function open(page: Page, book: Buffer, scheme: 'light' | 'dark', flow: 'p
   await expect(page.locator('.reader-host.staging')).toHaveCount(0);
   await page.locator(flow === 'scroll' ? '#flow-scroll' : '#flow-pages').click();
   await expect.poll(() => flowOf(page)).toBe(flow === 'scroll' ? 'scrolled' : 'paginated');
+  // The flow change re-lays the book out and goes back to the place, queued behind aria-busy; a renderer call made meanwhile can wait on that load forever.
+  await expect(page.locator('.reader-host:not(.staging):not(.tab-hidden)')).not.toHaveAttribute('aria-busy', 'true');
   if (ready) await expect(frameOf(page).locator(ready)).toBeVisible();
 }
 
@@ -155,6 +157,8 @@ for (const flow of ['pages', 'scroll'] as const) {
     await expect(page.locator('#position')).toContainText('%');
     // The flow is part of the saved options: the book reopens in it without a click.
     await expect.poll(() => flowOf(page)).toBe(flow === 'scroll' ? 'scrolled' : 'paginated');
+  // The flow change re-lays the book out and goes back to the place, queued behind aria-busy; a renderer call made meanwhile can wait on that load forever.
+  await expect(page.locator('.reader-host:not(.staging):not(.tab-hidden)')).not.toHaveAttribute('aria-busy', 'true');
     await expect(frameOf(page).locator('div.sourceCode#cb3')).toBeAttached();
     await expect.poll(topLine).toBe(before);
   });
