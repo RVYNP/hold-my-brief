@@ -92,9 +92,10 @@ for (const flow of ['pages', 'scroll'] as const) {
   });
 
   test(`a bare pre is framed and filled, and has no label, in ${flow}`, async ({ page }) => {
-    await open(page, await chapterBook({ code: true }), 'light', flow);
+    await open(page, await chapterBook({ code: true }), 'light', flow, 'h1');
     // The first chapter is the title page; the code is at the head of the next ones.
     await page.evaluate(async () => { await (document.querySelector('.reader-host:not(.staging):not(.tab-hidden) foliate-view') as unknown as { renderer: { goTo: (target: { index: number }) => Promise<void> } }).renderer.goTo({ index: 1 }); });
+    await expect.poll(() => frameOf(page).locator('pre').count().catch(() => 0)).toBe(1);
     await expect(frameOf(page).locator('pre')).toBeVisible();
     const seen = await look(page, 'pre');
     expect(seen.radius).toBe('8px');
