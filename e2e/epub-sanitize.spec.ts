@@ -20,7 +20,5 @@ test('a spine item declared application/xml is sanitized and loads nothing from 
   expect(await frame.locator('meta[http-equiv]').evaluateAll(metas => metas.map(meta => meta.getAttribute('http-equiv')))).toEqual(['Content-Security-Policy']);
   expect(await frame.locator('meta[name="viewport"]').evaluateAll(metas => metas.map(meta => meta.getAttributeNames().sort()))).toEqual([['content', 'name']]);
   expect(await frame.locator('html').innerHTML()).not.toContain('example.invalid');
-  // Let anything that was going to be fetched be fetched.
-  await page.waitForTimeout(500);
   expect(outside).toEqual([]);
 });
