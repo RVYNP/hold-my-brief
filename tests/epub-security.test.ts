@@ -69,6 +69,18 @@ describe('EPUB content boundary', () => {
       expect(doc.querySelector('body')?.textContent).toContain('Words');
       expect(doc.querySelector('iframe')).toBeNull();
     });
+    it.each([
+      ['a decoy head in the body', '<html xmlns="http://www.w3.org/1999/xhtml"><body><x:wrap xmlns:x="urn:x"><x:head/></x:wrap><p>Words</p></body></html>'],
+      ['an html root with no namespace', '<html><head/><body><p>Words</p></body></html>'],
+    ])('puts the policy in the XHTML head of an XHTML html root, not in %s', async (_name, source) => {
+      const { markup } = await handled('application/xml', source);
+      const doc = parse(markup), root = doc.documentElement, xhtml = 'http://www.w3.org/1999/xhtml';
+      expect([root.localName, root.namespaceURI]).toEqual(['html', xhtml]);
+      const first = root.firstElementChild!;
+      expect([first.localName, first.namespaceURI]).toEqual(['head', xhtml]);
+      expect(first.querySelector('meta[http-equiv="Content-Security-Policy"]')?.getAttribute('content')).toContain("frame-src 'none'");
+      expect(doc.querySelector('body')?.textContent).toContain('Words');
+    });
     it('keeps the type of HTML and SVG, and sanitizes SVG, which has no element to carry a policy', async () => {
       expect((await handled('text/html')).type).toBe('text/html');
       const svg = await handled('image/svg+xml', '<svg xmlns="http://www.w3.org/2000/svg"><style>@import url(https://example.invalid/s.css); rect { fill: red }</style><foreignObject><iframe xmlns="http://www.w3.org/1999/xhtml"/></foreignObject><rect fill="url(https://example.invalid/g)" width="1" height="1"/><script>1</script></svg>');

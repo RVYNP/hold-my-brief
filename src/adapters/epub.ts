@@ -129,13 +129,13 @@ export function sanitizeEpubMarkup(markup: string, mime = 'application/xhtml+xml
   // An SVG document has no element that carries a policy (a `<meta>` in a `foreignObject` is not read, and `foreignObject` is removed anyway).
   if (root.localName !== 'svg' || root.namespaceURI !== SVG) {
     let html = root;
-    if (root.localName !== 'html' && mime !== 'image/svg+xml') {
-      // Any other XML root becomes the body of an XHTML page, so the policy has a head to sit in.
+    if (mime !== 'image/svg+xml' && (root.localName !== 'html' || root.namespaceURI !== XHTML)) {
+      // Any other root, or an `html` outside the XHTML namespace, becomes the body of an XHTML page: only a head of an XHTML `html` root applies a policy.
       html = doc.createElementNS(XHTML, 'html');
       const body = doc.createElementNS(XHTML, 'body'); body.append(root); html.append(body); doc.append(html);
     }
-    if (html.localName === 'html') {
-      const head = html.querySelector('head') ?? html.insertBefore(doc.createElementNS(XHTML, 'head'), html.firstChild);
+    if (html.localName === 'html' && html.namespaceURI === XHTML) {
+      const head = Array.from(html.children).find(child => child.localName === 'head' && child.namespaceURI === XHTML) ?? html.insertBefore(doc.createElementNS(XHTML, 'head'), html.firstChild);
       const csp = doc.createElementNS(XHTML, 'meta'); csp.setAttribute('http-equiv', 'Content-Security-Policy'); csp.setAttribute('content', CONTENT_CSP); head.prepend(csp);
     }
   }
