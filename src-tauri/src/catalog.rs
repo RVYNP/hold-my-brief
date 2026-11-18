@@ -166,14 +166,18 @@ fn prune_ids(transaction: &Transaction<'_>, table: &str, ids: &HashSet<&str>) ->
     Ok(())
 }
 
-fn canonical_file(path: &Path) -> Result<PathBuf, String> {
+/// The real file behind `path`: a regular file whose resolved name is a supported document. Checking the resolved path
+/// (not the name as given) is what stops `brief.pdf -> some-key-file` from passing for a document.
+pub fn canonical_file(path: &Path) -> Result<PathBuf, String> {
     let path = fs::canonicalize(path).map_err(|e| format!("Original is unavailable: {e}. Connect its storage or use Locate."))?;
     if !path.is_file() { return Err("The original is not a regular file.".into()); }
+    if crate::document_format(&path).is_err() { return Err("The original is not a supported document.".into()); }
     Ok(path)
 }
 
-pub fn resolve_under_root(root: &Path, relative: &str) -> Result<PathBuf, String> {
-    // Reject Windows prefixes/ADS even when tests or imports run on another platform.
+/// `relative` with `\` read as `/`, if it is a relative path of plain names only. Rejects Windows prefixes and streams
+/// even when tests or imports run on another platform. A leading `./` is still allowed here; `image_path` refuses it.
+pub fn normal_relative(relative: &str) -> Result<String, String> {
     if relative.is_empty() || relative.contains(':') || relative.starts_with(['/', '\\']) || relative.contains('\0') {
         return Err("Original path must be relative to the authorized root.".into());
     }
@@ -181,6 +185,11 @@ pub fn resolve_under_root(root: &Path, relative: &str) -> Result<PathBuf, String
     if Path::new(&normalized).components().any(|c| !matches!(c, Component::Normal(_) | Component::CurDir)) {
         return Err("Original path must not traverse outside its root.".into());
     }
+    Ok(normalized)
+}
+
+pub fn resolve_under_root(root: &Path, relative: &str) -> Result<PathBuf, String> {
+    let normalized = normal_relative(relative)?;
     let root = fs::canonicalize(root).map_err(|e| format!("Source root is unavailable: {e}"))?;
     let candidate = canonical_file(&root.join(normalized))?;
     if !candidate.starts_with(&root) { return Err("Original resolves outside the authorized root.".into()); }

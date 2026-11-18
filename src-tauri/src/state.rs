@@ -4,7 +4,7 @@ use std::{
     collections::{HashMap, HashSet},
     fs,
     io::Write,
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -418,13 +418,41 @@ impl<'de> Deserialize<'de> for SavedState {
     }
 }
 
+pub const NOT_AUTHORIZED: &str = "This file has not been authorized. Use Open, drop the file here, or open it from the system file browser.";
+
+/// What the library and the recents vouch for: the real documents they name (each by its canonical path and by the spelling
+/// stored, which may be a symlink that still has to resolve to a document) and the folders that hold library sources.
+/// Entries that do not resolve, are not regular files, or have no supported format are left out.
+fn authorized_from(saved: &SavedState) -> (HashSet<PathBuf>, HashSet<PathBuf>) {
+    let mut files = HashSet::new();
+    for path in saved.library.documents.iter().map(|d| d.path.as_str()).chain(saved.recents.iter().map(|r| r.path.as_str())) {
+        if let Ok(canonical) = crate::catalog::canonical_file(Path::new(path)) {
+            files.insert(PathBuf::from(path));
+            files.insert(canonical);
+        }
+    }
+    let folders = saved
+        .library
+        .roots
+        .iter()
+        .filter_map(|root| root.path.as_deref())
+        .filter_map(|path| fs::canonicalize(path).ok())
+        .filter(|path| path.is_dir())
+        .collect();
+    (files, folders)
+}
+
 pub struct Store {
     pub saved: SavedState,
     pub file: PathBuf,
     pub warning: Option<String>,
     pub writable: bool,
     pub dirty: bool,
-    pub authorized: HashSet<PathBuf>,
+    /// Real documents the user chose, dropped or opened, and those already in the library or recents (canonical paths, plus the
+    /// stored spelling of a library or recent path). Only these may be opened or read.
+    pub authorized_files: HashSet<PathBuf>,
+    /// Folders the user chose as a source or to index. Never consulted when a document is opened or read.
+    pub authorized_folders: HashSet<PathBuf>,
     pub opened: HashMap<String, Recent>,
     pub opened_aliases: HashMap<(String, String), Recent>,
     /// Files the OS asked to open before the page was listening, in order.
@@ -485,21 +513,15 @@ impl Store {
             writable = false;
             warning = Some(format!("Library database is unavailable: {error}. Existing files are untouched; restart after resolving the error."));
         }
-        let authorized = saved
-            .library
-            .documents
-            .iter()
-            .map(|d| d.path.as_str())
-            .chain(saved.recents.iter().map(|r| r.path.as_str()))
-            .filter_map(|path| fs::canonicalize(path).ok())
-            .collect();
+        let (authorized_files, authorized_folders) = authorized_from(&saved);
         Self {
             saved,
             file,
             warning,
             writable,
             dirty: false,
-            authorized,
+            authorized_files,
+            authorized_folders,
             opened: HashMap::new(),
             opened_aliases: HashMap::new(),
             pending: Vec::new(),
@@ -574,7 +596,44 @@ impl Store {
             LibraryChange::RemoveDocument { path } => Some(path.as_str()),
             _ => None,
         };
-        self.commit_library(library, removed)
+        let committed = self.commit_library(library, removed);
+        if removed.is_some() && committed.is_ok() {
+            self.rebuild_authorized();
+        }
+        committed
+    }
+
+    /// Forgets every authorization that is not backed by the library or the recents any more (what a removal must revoke).
+    pub fn rebuild_authorized(&mut self) {
+        (self.authorized_files, self.authorized_folders) = authorized_from(&self.saved);
+    }
+
+    /// Drops one recent and, unless the library still holds the path, its authorization.
+    pub fn remove_recent(&mut self, path: &str) -> Result<(), String> {
+        self.saved.recents.retain(|r| r.path != path);
+        self.rebuild_authorized();
+        self.persist()
+    }
+
+    /// Drops every recent and the authorization of each that the library does not hold.
+    pub fn clear_recents(&mut self) -> Result<(), String> {
+        self.saved.recents.clear();
+        self.rebuild_authorized();
+        self.persist()
+    }
+
+    /// The real document behind `given`. The path as given is compared with the authorized set first, before any file system
+    /// call, so a path that was never authorized (a `\\host\share` path on Windows included) is never resolved, and no network
+    /// authentication starts. The resolved path must be a regular, supported document that is authorized too.
+    pub fn authorized_file(&self, given: &str) -> Result<PathBuf, String> {
+        if !self.authorized_files.contains(Path::new(given)) {
+            return Err(NOT_AUTHORIZED.into());
+        }
+        let resolved = crate::catalog::canonical_file(Path::new(given))?;
+        if !self.authorized_files.contains(&resolved) {
+            return Err(NOT_AUTHORIZED.into());
+        }
+        Ok(resolved)
     }
 
     pub fn add_documents(&mut self, documents: Vec<LibraryDocument>, collection_id: Option<&str>) -> Result<Library, String> {
@@ -831,7 +890,7 @@ mod tests {
         store.add_documents(vec![LibraryDocument::from(&recent(&path))], Some("collection")).unwrap();
         store.edit_library(LibraryChange::UpdateDocument { path: path.clone(), collection_ids: vec![], favorite: true, tags: vec![], notes: String::new() }).unwrap();
         let mut loaded = Store::load(file.clone());
-        assert!(loaded.authorized.contains(&canonical));
+        assert!(loaded.authorized_files.contains(&canonical));
         assert!(loaded.saved.recents.is_empty());
         assert_eq!(loaded.saved.library.collections[0].name, "Reading");
         assert!(loaded.saved.library.documents[0].favorite);
