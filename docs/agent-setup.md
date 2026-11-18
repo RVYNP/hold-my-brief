@@ -24,10 +24,13 @@ stop to ask the user whenever a step says so.
 
 - Prefer the official release download. Build from source only if no release fits this computer or the
   user asks for it.
-- Always verify downloads against `SHA256SUMS.txt` from the same release. If a checksum doesn't match,
-  stop and tell the user. Do not run the file.
+- Always verify downloads from the same release, in this order: first the build attestation
+  (`gh attestation verify <file> --repo RVYNP/hold-my-brief`), then `SHA256SUMS.txt`. The attestation
+  proves which workflow built the file; the checksum only proves the download is complete. If either
+  check fails, stop and tell the user. Do not run the file.
 - Do not turn off system protections (SmartScreen, Gatekeeper, antivirus) globally. Only clear a
-  download's own quarantine flag, only after its checksum matches, and only with the user's permission.
+  download's own quarantine flag, only after its attestation and checksum both pass, and only with the
+  user's permission.
 - Do not change the user's default apps. The Windows installer already adds Hold My Brief to
   **Open with** without taking over any file type.
 - Do not open, upload or copy the user's documents. Hold My Brief needs no account and no network
@@ -69,10 +72,15 @@ Use `tag_name` and the `assets[].browser_download_url` values. Asset names follo
 If the request returns 404 or no matching asset exists, there is no published release for this computer
 yet. Go to step 3.
 
-Download the matching file and `SHA256SUMS.txt` into a temporary folder, then compare checksums:
+Download the matching file and `SHA256SUMS.txt` into a temporary folder, then verify, in this order:
 
-- Windows: `(Get-FileHash <file> -Algorithm SHA256).Hash.ToLower()`
-- macOS: `shasum -a 256 <file>`
+1. Attestation: `gh attestation verify <file> --repo RVYNP/hold-my-brief`. It must report that
+   verification succeeded, with this repository's release workflow as the builder. If `gh` is not
+   installed, ask the user before installing it. Release v0.1.0 was published before attestations
+   existed and has none: say so to the user and ask whether to continue with the checksum alone.
+2. Checksum (it only proves the download is complete):
+   - Windows: `(Get-FileHash <file> -Algorithm SHA256).Hash.ToLower()`
+   - macOS: `shasum -a 256 <file>`
 
 #### Windows
 
@@ -87,8 +95,9 @@ Download the matching file and `SHA256SUMS.txt` into a temporary folder, then co
 4. Find the installed app: look under
    `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\*` for `DisplayName` "Hold My Brief" and use
    its `InstallLocation`. It also appears in the Start menu.
-5. If the user opens it from a browser download and sees "Windows protected your PC", tell them to
-   choose **More info**, then **Run anyway**. This happens because the app isn't code-signed yet.
+5. Only after the attestation and checksum passed: if the user opens it from a browser download and
+   sees "Windows protected your PC", tell them to choose **More info**, then **Run anyway**. This
+   happens because the app isn't code-signed yet.
 
 #### macOS
 
@@ -106,7 +115,7 @@ Download the matching file and `SHA256SUMS.txt` into a temporary folder, then co
    - macOS 15 or later: **System Settings › Privacy & Security**, scroll down, **Open Anyway**.
    - macOS 14 or earlier: Control-click the app, choose **Open**, then **Open** again.
 
-   With the user's permission, and only after the checksum matched, you may instead run
+   With the user's permission, and only after the attestation and checksum passed, you may instead run
    `xattr -dr com.apple.quarantine "/Applications/Hold My Brief.app"`.
 
 ### 3. Build from source (fallback)
