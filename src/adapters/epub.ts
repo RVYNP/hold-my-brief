@@ -142,6 +142,16 @@ export function sanitizeEpubMarkup(markup: string, mime = 'application/xhtml+xml
   return new XMLSerializer().serializeToString(doc);
 }
 
+/** Sanitizes one markup file read from the archive. The package's declared type decides how it is parsed; a `.html`/`.htm` file declared as XHTML that is not well-formed is read as HTML, as it was by extension alone. */
+export function sanitizeArchiveText(name: string, text: string, declared?: string): string {
+  const mime = declared !== undefined ? markupType(declared) : /\.(xhtml|html|htm|svg)$/i.test(name) ? (/\.svg$/i.test(name) ? 'image/svg+xml' : /\.(html|htm)$/i.test(name) ? 'text/html' : 'application/xhtml+xml') : undefined;
+  if (!mime) return text;
+  try { return sanitizeEpubMarkup(text, mime); } catch (error) {
+    if (mime === 'application/xhtml+xml' && /\.html?$/i.test(name)) return sanitizeEpubMarkup(text, 'text/html');
+    throw error;
+  }
+}
+
 const weight = (root: Node): number => (root.textContent?.length ?? 0) + (root instanceof Element || root instanceof DocumentFragment ? root.querySelectorAll('img,svg').length * 1000 : 0);
 function offsetOfRange(doc: Document, range?: Range) {
   if (!range) return 0;
@@ -271,10 +281,7 @@ export class EpubAdapter implements ReaderAdapter {
     const types = new Map<string, string>();
     const loadText = async (name: string): Promise<string | null> => {
       const blob = await read(name); if (!blob) return null;
-      const text = await blob.text();
-      const declared = types.get(name);
-      const mime = declared !== undefined ? markupType(declared) : /\.(xhtml|html|htm|svg)$/i.test(name) ? (/\.svg$/i.test(name) ? 'image/svg+xml' : /\.(html|htm)$/i.test(name) ? 'text/html' : 'application/xhtml+xml') : undefined;
-      return mime ? sanitizeEpubMarkup(text, mime) : text;
+      return sanitizeArchiveText(name, await blob.text(), types.get(name));
     };
     const encryption = await loadText('META-INF/encryption.xml');
     if (encryption) {

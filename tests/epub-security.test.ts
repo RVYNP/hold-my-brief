@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { guardResource, sanitizeEpubMarkup, validArchivePath } from '../src/adapters/epub';
+import { guardResource, sanitizeArchiveText, sanitizeEpubMarkup, validArchivePath } from '../src/adapters/epub';
 
 const chapter = (body: string, head = '') => `<html xmlns="http://www.w3.org/1999/xhtml"><head>${head}</head><body>${body}</body></html>`;
 const parse = (markup: string) => new DOMParser().parseFromString(markup, 'application/xhtml+xml');
@@ -107,6 +107,21 @@ describe('EPUB content boundary', () => {
       const doc = parse(sanitizeEpubMarkup(chapter('<p>x</p>', '<meta name="viewport"/><meta http-equiv="Content-Security-Policy" content="default-src *"/><meta charset="utf-8"/><meta name="author" content="a"/>')));
       expect(Array.from(doc.querySelectorAll('meta')).map(meta => meta.getAttribute('http-equiv'))).toEqual(['Content-Security-Policy']);
       expect(doc.querySelector('meta')?.getAttribute('content')).toContain("script-src 'none'");
+    });
+  });
+  describe('archive text', () => {
+    const htmlSyntax = '<html xmlns="http://www.w3.org/1999/xhtml"><body><p>a<br>b&nbsp;c</p></body></html>';
+    it('reads a .html file declared as XHTML that is not well-formed as HTML, as it was by extension', () => {
+      const markup = sanitizeArchiveText('OPS/c.html', htmlSyntax, 'application/xhtml+xml');
+      expect(markup).toContain('a<br />b\u00a0c');
+      expect(markup).toMatch(/<head><meta http-equiv="Content-Security-Policy"/);
+    });
+    it('still rejects malformed markup in an .xhtml file', () => {
+      expect(() => sanitizeArchiveText('OPS/c.xhtml', htmlSyntax, 'application/xhtml+xml')).toThrow('malformed markup');
+    });
+    it('goes by extension when the package declares nothing, and leaves other files alone', () => {
+      expect(sanitizeArchiveText('OPS/c.htm', htmlSyntax)).toContain('Content-Security-Policy');
+      expect(sanitizeArchiveText('META-INF/container.xml', '<a/>')).toBe('<a/>');
     });
   });
 });
