@@ -555,6 +555,9 @@ fn authorize_paths(store: &mut Store, paths: Vec<PathBuf>) -> (Vec<String>, Vec<
         match crate::catalog::canonical_file(&path) {
             Ok(canonical) => {
                 opened.push(canonical.to_string_lossy().into_owned());
+                // The spelling the OS used is authorized too: `Store::authorized_file` compares the path as given first, and
+                // a caller that kept the OS spelling (on Windows the canonical path is `\\?\`-prefixed) must still be accepted.
+                store.authorized_files.insert(path.clone());
                 store.authorized_files.insert(canonical);
             }
             Err(_) => unsupported.push(path.file_name().unwrap_or_default().to_string_lossy().into_owned()),
@@ -819,7 +822,7 @@ mod tests {
         assert!(store.authorized_files.contains(&fs::canonicalize(&book).unwrap()));
         assert!(store.authorized_files.contains(&fs::canonicalize(&note).unwrap()));
         assert!(!store.authorized_files.contains(&fs::canonicalize(&archive).unwrap()));
-        assert_eq!(store.authorized_files.len(), 2);
+        assert!(store.authorized_files.contains(&note) && store.authorized_files.contains(&book) && !store.authorized_files.contains(&archive));
         // Authorizing queues nothing: only `route_open` does.
         assert!(store.pending.is_empty());
     }
@@ -904,6 +907,8 @@ mod tests {
         assert_eq!(opened, vec![real.to_string_lossy().into_owned()]);
         assert!(unsupported.is_empty());
         assert_eq!(resolve_readable(&store, &opened[0]).unwrap(), real);
+        // The spelling the OS named is accepted as given as well (the native smoke test reads the path it launched with).
+        assert_eq!(resolve_readable(&store, &link.to_string_lossy()).unwrap(), real);
         assert_eq!(read_bounded(&real, MAX_DOCUMENT).unwrap(), b"%PDF-1.4");
         // A recent that was stored as the link keeps working after a restart.
         store.saved.recents.push(recent_at(&link));
