@@ -1,0 +1,656 @@
+{
+  "anthropic": [
+    {
+      "model": "model-1",
+      "max_tokens": 1024,
+      "system": "You are the assistant.",
+      "tools": [
+        {
+          "name": "go_to",
+          "description": "go_to tool",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "name": "open_document",
+          "description": "open_document tool",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ],
+      "messages": [
+        {
+          "role": "user",
+          "content": "take me to page 7"
+        }
+      ]
+    },
+    {
+      "model": "model-1",
+      "max_tokens": 1024,
+      "system": "You are the assistant.",
+      "tools": [
+        {
+          "name": "go_to",
+          "description": "go_to tool",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "name": "open_document",
+          "description": "open_document tool",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ],
+      "messages": [
+        {
+          "role": "user",
+          "content": "take me to page 7"
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Going there."
+            },
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "go_to",
+              "input": {
+                "target": "7"
+              }
+            },
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "missing",
+              "input": {}
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "{\"position\":\"Page 7\"}"
+            },
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": "There is no tool called missing.",
+              "is_error": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "model": "model-1",
+      "max_tokens": 1024,
+      "system": "You are the assistant.",
+      "tools": [
+        {
+          "name": "go_to",
+          "description": "go_to tool",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "name": "open_document",
+          "description": "open_document tool",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ],
+      "messages": [
+        {
+          "role": "user",
+          "content": "take me to page 7"
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Going there."
+            },
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "go_to",
+              "input": {
+                "target": "7"
+              }
+            },
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "missing",
+              "input": {}
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "{\"position\":\"Page 7\"}"
+            },
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": "There is no tool called missing.",
+              "is_error": true
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "You are on page 7."
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": "open the book"
+        }
+      ]
+    },
+    {
+      "model": "model-1",
+      "max_tokens": 1024,
+      "system": "You are the assistant.",
+      "tools": [
+        {
+          "name": "go_to",
+          "description": "go_to tool",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "name": "open_document",
+          "description": "open_document tool",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "target": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ],
+      "messages": [
+        {
+          "role": "user",
+          "content": "take me to page 7"
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Going there."
+            },
+            {
+              "type": "tool_use",
+              "id": "t1",
+              "name": "go_to",
+              "input": {
+                "target": "7"
+              }
+            },
+            {
+              "type": "tool_use",
+              "id": "t2",
+              "name": "missing",
+              "input": {}
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t1",
+              "content": "{\"position\":\"Page 7\"}"
+            },
+            {
+              "type": "tool_result",
+              "tool_use_id": "t2",
+              "content": "There is no tool called missing.",
+              "is_error": true
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "You are on page 7."
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": "open the book"
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "t3",
+              "name": "open_document",
+              "input": {
+                "target": "doc-1"
+              }
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "t3",
+              "content": "{\"opened\":\"Book\"}"
+            }
+          ]
+        },
+        {
+          "role": "assistant",
+          "content": [
+            {
+              "type": "text",
+              "text": "Opened Book. Ask again to read it."
+            }
+          ]
+        },
+        {
+          "role": "user",
+          "content": "what does it say?"
+        }
+      ]
+    }
+  ],
+  "chat": [
+    {
+      "model": "model-1",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are the assistant."
+        },
+        {
+          "role": "user",
+          "content": "take me to page 7"
+        }
+      ],
+      "max_tokens": 1024,
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "go_to",
+            "description": "go_to tool",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "open_document",
+            "description": "open_document tool",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "model": "model-1",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are the assistant."
+        },
+        {
+          "role": "user",
+          "content": "take me to page 7"
+        },
+        {
+          "role": "assistant",
+          "content": "Going there.",
+          "tool_calls": [
+            {
+              "id": "t1",
+              "type": "function",
+              "function": {
+                "name": "go_to",
+                "arguments": "{\"target\":\"7\"}"
+              }
+            },
+            {
+              "id": "t2",
+              "type": "function",
+              "function": {
+                "name": "missing",
+                "arguments": "{}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "t1",
+          "content": "{\"position\":\"Page 7\"}"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "t2",
+          "content": "Error: There is no tool called missing."
+        }
+      ],
+      "max_tokens": 1024,
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "go_to",
+            "description": "go_to tool",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "open_document",
+            "description": "open_document tool",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "model": "model-1",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are the assistant."
+        },
+        {
+          "role": "user",
+          "content": "take me to page 7"
+        },
+        {
+          "role": "assistant",
+          "content": "Going there.",
+          "tool_calls": [
+            {
+              "id": "t1",
+              "type": "function",
+              "function": {
+                "name": "go_to",
+                "arguments": "{\"target\":\"7\"}"
+              }
+            },
+            {
+              "id": "t2",
+              "type": "function",
+              "function": {
+                "name": "missing",
+                "arguments": "{}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "t1",
+          "content": "{\"position\":\"Page 7\"}"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "t2",
+          "content": "Error: There is no tool called missing."
+        },
+        {
+          "role": "assistant",
+          "content": "You are on page 7."
+        },
+        {
+          "role": "user",
+          "content": "open the book"
+        }
+      ],
+      "max_tokens": 1024,
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "go_to",
+            "description": "go_to tool",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "open_document",
+            "description": "open_document tool",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "model": "model-1",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are the assistant."
+        },
+        {
+          "role": "user",
+          "content": "take me to page 7"
+        },
+        {
+          "role": "assistant",
+          "content": "Going there.",
+          "tool_calls": [
+            {
+              "id": "t1",
+              "type": "function",
+              "function": {
+                "name": "go_to",
+                "arguments": "{\"target\":\"7\"}"
+              }
+            },
+            {
+              "id": "t2",
+              "type": "function",
+              "function": {
+                "name": "missing",
+                "arguments": "{}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "t1",
+          "content": "{\"position\":\"Page 7\"}"
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "t2",
+          "content": "Error: There is no tool called missing."
+        },
+        {
+          "role": "assistant",
+          "content": "You are on page 7."
+        },
+        {
+          "role": "user",
+          "content": "open the book"
+        },
+        {
+          "role": "assistant",
+          "content": null,
+          "tool_calls": [
+            {
+              "id": "t3",
+              "type": "function",
+              "function": {
+                "name": "open_document",
+                "arguments": "{\"target\":\"doc-1\"}"
+              }
+            }
+          ]
+        },
+        {
+          "role": "tool",
+          "tool_call_id": "t3",
+          "content": "{\"opened\":\"Book\"}"
+        },
+        {
+          "role": "assistant",
+          "content": "Opened Book. Ask again to read it."
+        },
+        {
+          "role": "user",
+          "content": "what does it say?"
+        }
+      ],
+      "max_tokens": 1024,
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "go_to",
+            "description": "go_to tool",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "open_document",
+            "description": "open_document tool",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
