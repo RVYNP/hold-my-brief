@@ -96,17 +96,14 @@ async fn open_file(app: AppHandle, path: Option<String>) -> Result<Option<Opened
     tauri::async_runtime::spawn_blocking(move || {
         let shared = app.state::<Shared>();
         let candidate = if let Some(path) = path {
-            let canonical = fs::canonicalize(&path).map_err(|e| format!("Could not find or access this file: {e}. Use Open to locate it."))?;
-            if !shared.lock().map_err(|_| "Reading state is unavailable")?.authorized.contains(&canonical) {
-                return Err("This file has not been authorized. Use Open, drop the file here, or open it from the system file browser.".into());
-            }
-            canonical
+            let store = shared.lock().map_err(|_| "Reading state is unavailable")?;
+            store.authorized_file(&path)?
         } else {
             let mut dialog = rfd::FileDialog::new().set_title("Open a document or image").add_filter("Documents and images", &["pdf", "epub", "md", "markdown", "txt", "png", "jpg", "jpeg", "webp", "gif", "avif", "bmp"]);
             if let Some(window) = app.get_webview_window("main") { dialog = dialog.set_parent(&window); }
             let Some(chosen) = dialog.pick_file() else { return Ok(None); };
-            let canonical = fs::canonicalize(chosen).map_err(|e| e.to_string())?;
-            shared.lock().map_err(|_| "Reading state is unavailable")?.authorized.insert(canonical.clone());
+            let canonical = crate::catalog::canonical_file(&chosen)?;
+            shared.lock().map_err(|_| "Reading state is unavailable")?.authorized_files.insert(canonical.clone());
             canonical
         };
         let path = candidate.to_string_lossy().into_owned();
@@ -120,6 +117,9 @@ fn opened_document(shared: &Shared, resolved: &Path, path: &str) -> Result<Opene
         .unwrap_or_default()
         .to_string_lossy()
         .into_owned();
+    if !resolved.is_file() {
+        return Err("The original is not a regular file.".into());
+    }
     let format = document_format(resolved)?;
     let mut store = shared.lock().map_err(|_| "Reading state is unavailable")?;
     let previous_state = store.saved.documents.get(path).cloned();
@@ -155,11 +155,7 @@ fn resolve_readable(store: &Store, path: &str) -> Result<PathBuf, String> {
             Err(_) => {}
         }
     }
-    let canonical = fs::canonicalize(path).map_err(|e| format!("Original is unavailable: {e}. Use Locate to reconnect it."))?;
-    if !store.authorized.contains(&canonical) {
-        return Err("This file has not been authorized. Use Open, drop the file here, or open it from the system file browser.".into());
-    }
-    Ok(canonical)
+    store.authorized_file(path)
 }
 
 /// Streams a document's bytes as a raw IPC response instead of JSON numbers.
@@ -190,11 +186,7 @@ fn resolve_original(store: &Store, library_path: &str) -> Result<PathBuf, String
         .iter()
         .find(|d| d.path == library_path)
         .ok_or("Item is no longer in the library.")?;
-    let candidate = fs::canonicalize(&document.path).map_err(|e| format!("Original is unavailable: {e}. Use Locate to reconnect it."))?;
-    if !store.authorized.contains(&candidate) {
-        return Err("This document has not been authorized on this machine.".into());
-    }
-    Ok(candidate)
+    store.authorized_file(&document.path)
 }
 
 #[tauri::command]
@@ -215,7 +207,7 @@ async fn choose_source_root(id: String, app: AppHandle) -> Result<Library, Strin
         let root = library.roots.iter_mut().find(|root| root.id == id).ok_or("Source root is no longer in the library.")?;
         let canonical = fs::canonicalize(&chosen).map_err(|e| format!("Could not access this folder: {e}"))?;
         root.path = Some(canonical.to_string_lossy().into_owned());
-        store.authorized.insert(canonical);
+        store.authorized_folders.insert(canonical);
         drop(store);
         let mut store = shared.lock().map_err(|_| "Reading state is unavailable")?;
         store.commit_library(library, None)
@@ -238,7 +230,7 @@ async fn locate_library_document(path: String, app: AppHandle) -> Result<Library
             let shared = app.state::<Shared>();
             return shared.lock().map_err(|_| "Reading state is unavailable")?.library();
         };
-        let canonical = fs::canonicalize(&chosen).map_err(|e| format!("Could not access this file: {e}"))?;
+        let canonical = crate::catalog::canonical_file(&chosen)?;
         let shared = app.state::<Shared>();
         let mut store = shared.lock().map_err(|_| "Reading state is unavailable")?;
         let library = store.saved.library.clone();
@@ -246,7 +238,7 @@ async fn locate_library_document(path: String, app: AppHandle) -> Result<Library
             let catalog = store.catalog.as_mut().ok_or("Library database is unavailable.")?;
             catalog.locate(&library, &path, &canonical)?;
         }
-        store.authorized.insert(canonical);
+        store.authorized_files.insert(canonical);
         store.commit_library(library, None)
     })
     .await
@@ -283,7 +275,7 @@ async fn index_folder(app: AppHandle) -> Result<Library, String> {
         let mut store = shared.lock().map_err(|_| "Reading state is unavailable")?;
         let merged = folder_index::merge(&store.library()?, &index)?;
         let library = store.commit_library(merged, None)?;
-        store.authorized.insert(index.root);
+        store.authorized_folders.insert(index.root);
         Ok(library)
     })
     .await
@@ -365,7 +357,7 @@ async fn add_documents(app: AppHandle, collection_id: Option<String>) -> Result<
         }
         let mut store = shared.lock().map_err(|_| "Reading state is unavailable")?;
         let library = store.add_documents(documents, collection_id.as_deref())?;
-        store.authorized.extend(paths);
+        store.authorized_files.extend(paths);
         Ok(library)
     }).await.map_err(|e| e.to_string())?
 }
@@ -435,15 +427,13 @@ fn retry_save(state: State<'_, Shared>) -> Result<(), String> {
 #[tauri::command]
 fn clear_recents(state: State<'_, Shared>) -> Result<(), String> {
     let mut store = state.lock().map_err(|_| "Reading state is unavailable")?;
-    store.saved.recents.clear();
-    store.persist()
+    store.clear_recents()
 }
 
 #[tauri::command]
 fn remove_recent(path: String, state: State<'_, Shared>) -> Result<(), String> {
     let mut store = state.lock().map_err(|_| "Reading state is unavailable")?;
-    store.saved.recents.retain(|r| r.path != path);
-    store.persist()
+    store.remove_recent(&path)
 }
 
 #[tauri::command]
@@ -460,15 +450,18 @@ struct ImageData {
     mime: &'static str,
 }
 
+/// A relative image path is a path of plain names only: `..`, `.`, a root or a prefix is refused before the path is joined
+/// to anything or looked up, so nothing on disk is touched for a path that cannot be right.
 fn image_path(document: &Path, relative: &str) -> Result<PathBuf, String> {
-    if relative.is_empty() || relative.contains(':') || Path::new(relative).is_absolute() {
+    let normalized = crate::catalog::normal_relative(relative).map_err(|_| "Only relative local images are supported.".to_string())?;
+    if normalized.split('/').any(|part| part == "." || part == "..") {
         return Err("Only relative local images are supported.".into());
     }
     let root = document
         .parent()
         .ok_or("Document directory is unavailable")?;
     let candidate =
-        fs::canonicalize(root.join(relative)).map_err(|_| "Image is missing or unavailable")?;
+        fs::canonicalize(root.join(&normalized)).map_err(|_| "Image is missing or unavailable")?;
     if !candidate.starts_with(root) {
         return Err("Image is outside the authorized document directory.".into());
     }
@@ -495,9 +488,7 @@ async fn read_relative_image(
         document = if store.saved.library.documents.iter().any(|d| d.path == path) {
             store.catalog.as_ref().ok_or("Library database is unavailable")?.resolve(&store.saved.library, &path)?
         } else {
-            let canonical = fs::canonicalize(&path).map_err(|_| "Document is unavailable")?;
-            if !store.authorized.contains(&canonical) { return Err("Document is not authorized.".into()); }
-            canonical
+            store.authorized_file(&path).map_err(|_| "Document is not authorized.".to_string())?
         };
         drop(store);
         let candidate = image_path(&document, &relative)?;
@@ -560,13 +551,17 @@ fn paths_from_urls(urls: &[tauri::Url]) -> Vec<PathBuf> {
 fn authorize_paths(store: &mut Store, paths: Vec<PathBuf>) -> (Vec<String>, Vec<String>) {
     let (mut opened, mut unsupported) = (Vec::new(), Vec::new());
     for path in paths {
-        if document_format(&path).is_err() {
-            unsupported.push(path.file_name().unwrap_or_default().to_string_lossy().into_owned());
-            continue;
+        // The real file decides, not the name it came under: a `brief.pdf` that points at a key file is not a document.
+        match crate::catalog::canonical_file(&path) {
+            Ok(canonical) => {
+                opened.push(canonical.to_string_lossy().into_owned());
+                // The spelling the OS used is authorized too: `Store::authorized_file` compares the path as given first, and
+                // a caller that kept the OS spelling (on Windows the canonical path is `\\?\`-prefixed) must still be accepted.
+                store.authorized_files.insert(path.clone());
+                store.authorized_files.insert(canonical);
+            }
+            Err(_) => unsupported.push(path.file_name().unwrap_or_default().to_string_lossy().into_owned()),
         }
-        let canonical = fs::canonicalize(&path).unwrap_or(path);
-        opened.push(canonical.to_string_lossy().into_owned());
-        store.authorized.insert(canonical);
     }
     (opened, unsupported)
 }
@@ -824,10 +819,10 @@ mod tests {
         let text = |path: &PathBuf| fs::canonicalize(path).unwrap().to_string_lossy().into_owned();
         assert_eq!(opened, vec![text(&note), text(&book)]);
         assert_eq!(unsupported, vec!["archive.zip"]);
-        assert!(store.authorized.contains(&fs::canonicalize(&book).unwrap()));
-        assert!(store.authorized.contains(&fs::canonicalize(&note).unwrap()));
-        assert!(!store.authorized.contains(&fs::canonicalize(&archive).unwrap()));
-        assert_eq!(store.authorized.len(), 2);
+        assert!(store.authorized_files.contains(&fs::canonicalize(&book).unwrap()));
+        assert!(store.authorized_files.contains(&fs::canonicalize(&note).unwrap()));
+        assert!(!store.authorized_files.contains(&fs::canonicalize(&archive).unwrap()));
+        assert!(store.authorized_files.contains(&note) && store.authorized_files.contains(&book) && !store.authorized_files.contains(&archive));
         // Authorizing queues nothing: only `route_open` does.
         assert!(store.pending.is_empty());
     }
@@ -867,5 +862,142 @@ mod tests {
         fs::write(&path, b"12345").unwrap();
         assert!(read_bounded(&path, 4).is_err());
         assert_eq!(read_bounded(&path, 5).unwrap(), b"12345");
+    }
+
+    fn recent_at(path: &Path) -> Recent {
+        let path = path.to_string_lossy().into_owned();
+        Recent { id: path.clone(), path, name: "book.pdf".into(), format: "pdf".into(), last_opened: 1 }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_pdf_named_symlink_to_a_file_that_is_not_a_document_is_not_authorized_or_readable() {
+        let dir = tempfile::tempdir().unwrap();
+        let key = dir.path().join("id_rsa");
+        let link = dir.path().join("brief.pdf");
+        fs::write(&key, b"secret").unwrap();
+        std::os::unix::fs::symlink(&key, &link).unwrap();
+        let mut store = Store::load(dir.path().join("state.json"));
+        let (opened, unsupported) = authorize_paths(&mut store, vec![link.clone()]);
+        assert!(opened.is_empty());
+        assert_eq!(unsupported, vec!["brief.pdf"]);
+        assert!(store.authorized_files.is_empty());
+        assert!(resolve_readable(&store, &link.to_string_lossy()).is_err());
+        // Even a stored spelling of the link (a library entry or recent) never makes the key file readable.
+        store.authorized_files.insert(link.clone());
+        store.authorized_files.insert(fs::canonicalize(&key).unwrap());
+        assert!(resolve_readable(&store, &link.to_string_lossy()).is_err());
+        assert!(resolve_readable(&store, &fs::canonicalize(&key).unwrap().to_string_lossy()).is_err());
+        store.saved.recents.push(recent_at(&link));
+        store.rebuild_authorized();
+        assert!(store.authorized_files.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_pdf_named_symlink_to_a_real_pdf_still_opens() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("real.pdf");
+        let link = dir.path().join("brief.pdf");
+        fs::write(&target, b"%PDF-1.4").unwrap();
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        let mut store = Store::load(dir.path().join("state.json"));
+        let (opened, unsupported) = authorize_paths(&mut store, vec![link.clone()]);
+        let real = fs::canonicalize(&target).unwrap();
+        assert_eq!(opened, vec![real.to_string_lossy().into_owned()]);
+        assert!(unsupported.is_empty());
+        assert_eq!(resolve_readable(&store, &opened[0]).unwrap(), real);
+        // The spelling the OS named is accepted as given as well (the native smoke test reads the path it launched with).
+        assert_eq!(resolve_readable(&store, &link.to_string_lossy()).unwrap(), real);
+        assert_eq!(read_bounded(&real, MAX_DOCUMENT).unwrap(), b"%PDF-1.4");
+        // A recent that was stored as the link keeps working after a restart.
+        store.saved.recents.push(recent_at(&link));
+        store.rebuild_authorized();
+        assert_eq!(resolve_readable(&store, &link.to_string_lossy()).unwrap(), real);
+        let shared: Shared = Arc::new(Mutex::new(store));
+        assert!(opened_document(&shared, &real, &opened[0]).is_ok());
+    }
+
+    #[test]
+    fn a_path_that_does_not_exist_is_dropped_and_never_resolved() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("missing.pdf");
+        let mut store = Store::load(dir.path().join("state.json"));
+        let (opened, unsupported) = authorize_paths(&mut store, vec![missing.clone()]);
+        assert!(opened.is_empty());
+        assert_eq!(unsupported, vec!["missing.pdf"]);
+        assert!(store.authorized_files.is_empty() && store.authorized_folders.is_empty());
+        // Refused as unauthorized, not as unavailable: the file system was never asked.
+        assert_eq!(resolve_readable(&store, &missing.to_string_lossy()), Err(crate::state::NOT_AUTHORIZED.to_string()));
+    }
+
+    #[test]
+    fn a_folder_named_like_a_document_cannot_be_opened_as_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = dir.path().join("x.md");
+        fs::create_dir(&folder).unwrap();
+        let mut store = Store::load(dir.path().join("state.json"));
+        let (opened, unsupported) = authorize_paths(&mut store, vec![folder.clone()]);
+        assert!(opened.is_empty());
+        assert_eq!(unsupported, vec!["x.md"]);
+        assert!(store.authorized_files.is_empty());
+        let real = fs::canonicalize(&folder).unwrap();
+        store.authorized_files.insert(real.clone());
+        assert!(resolve_readable(&store, &real.to_string_lossy()).is_err());
+        let shared: Shared = Arc::new(Mutex::new(store));
+        assert!(opened_document(&shared, &real, &real.to_string_lossy()).is_err());
+        assert!(shared.lock().unwrap().opened.is_empty());
+    }
+
+    #[test]
+    fn image_paths_with_dot_components_are_refused_before_the_file_system_is_asked() {
+        // Neither the document nor its directory exists: a lookup would say "missing", so the refusal came first.
+        let document = Path::new("/no/such/directory/a.md");
+        let refused = Err("Only relative local images are supported.".to_string());
+        for relative in ["a/../b.png", "./b.png", "a/./b.png", "../b.png", "a/..", "/b.png", "C:\\b.png", "\\\\host\\share\\b.png"] {
+            assert_eq!(image_path(document, relative), refused, "{relative}");
+        }
+        assert_eq!(image_path(document, "b.png"), Err("Image is missing or unavailable".to_string()));
+    }
+
+    #[test]
+    fn removing_a_recent_that_is_not_in_the_library_revokes_it_in_the_same_session() {
+        let dir = tempfile::tempdir().unwrap();
+        let kept = dir.path().join("kept.pdf");
+        let loose = dir.path().join("loose.pdf");
+        let other = dir.path().join("other.pdf");
+        for path in [&kept, &loose, &other] {
+            fs::write(path, b"%PDF-1.4").unwrap();
+        }
+        let (kept, loose, other) = (fs::canonicalize(kept).unwrap(), fs::canonicalize(loose).unwrap(), fs::canonicalize(other).unwrap());
+        let mut store = Store::load(dir.path().join("state.json"));
+        store.add_documents(vec![LibraryDocument { path: kept.to_string_lossy().into_owned(), name: "kept.pdf".into(), format: "pdf".into(), ..LibraryDocument::default() }], None).unwrap();
+        store.saved.recents = vec![recent_at(&kept), recent_at(&loose), recent_at(&other)];
+        store.rebuild_authorized();
+        let readable = |store: &Store, path: &Path| resolve_readable(store, &path.to_string_lossy()).is_ok();
+        assert!(readable(&store, &kept) && readable(&store, &loose) && readable(&store, &other));
+        store.remove_recent(&loose.to_string_lossy()).unwrap();
+        assert!(!readable(&store, &loose), "no longer in the library or recents");
+        assert!(readable(&store, &kept) && readable(&store, &other));
+        store.remove_recent(&kept.to_string_lossy()).unwrap();
+        assert!(readable(&store, &kept), "still in the library");
+        store.clear_recents().unwrap();
+        assert!(!readable(&store, &other));
+        assert!(readable(&store, &kept));
+        // Removing the library document revokes it too.
+        store.edit_library(crate::state::LibraryChange::RemoveDocument { path: kept.to_string_lossy().into_owned() }).unwrap();
+        assert!(!readable(&store, &kept));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_unc_path_that_was_never_authorized_is_refused_without_asking_the_file_system() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::load(dir.path().join("state.json"));
+        // An unreachable host would answer "Original is unavailable" only after a network lookup.
+        for path in [r"\\host\share\x.pdf", r"\\?\UNC\host\share\x.pdf"] {
+            assert_eq!(resolve_readable(&store, path), Err(crate::state::NOT_AUTHORIZED.to_string()), "{path}");
+            assert_eq!(store.authorized_file(path), Err(crate::state::NOT_AUTHORIZED.to_string()), "{path}");
+        }
     }
 }

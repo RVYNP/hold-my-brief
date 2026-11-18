@@ -271,7 +271,7 @@ fn lookup(app: &AppHandle, paths: &[String]) -> Vec<Result<(PathBuf, String), St
                 Ok((primary, PathBuf::from(&doc.path), doc.format.clone()))
             })
             .collect();
-        (planned, store.authorized.clone())
+        (planned, store.authorized_files.clone())
     };
     planned
         .into_iter()
@@ -280,7 +280,10 @@ fn lookup(app: &AppHandle, paths: &[String]) -> Vec<Result<(PathBuf, String), St
             if let Some(resolved) = primary.and_then(|original| original.open().ok()) {
                 return Ok((resolved, format));
             }
-            let candidate = fs::canonicalize(&fallback).map_err(|e| format!("Original is unavailable: {e}. Use Locate to reconnect it."))?;
+            if !authorized.contains(&fallback) {
+                return Err("This document has not been authorized on this machine.".into());
+            }
+            let candidate = crate::catalog::canonical_file(&fallback)?;
             if !authorized.contains(&candidate) {
                 return Err("This document has not been authorized on this machine.".into());
             }
@@ -293,13 +296,37 @@ fn lookup_one(app: &AppHandle, path: &str) -> Result<(PathBuf, String), String> 
     lookup(app, std::slice::from_ref(&path.to_string())).remove(0)
 }
 
+/// Largest width or height that is decoded, in pixels.
+const MAX_DECODE_EDGE: u32 = 16384;
+/// Largest decoded image (and decoder allocation), in bytes: a few small, highly compressed images must not add up to gigabytes.
+const MAX_DECODE_BYTES: u64 = 128 * 1024 * 1024;
+
+/// Decodes `bytes` only if the header says the image stays within `MAX_DECODE_EDGE` and `MAX_DECODE_BYTES`; the check
+/// runs on the dimensions alone, before any pixel buffer is allocated.
+fn decode_bounded(bytes: &[u8]) -> Result<DynamicImage, String> {
+    let refused = || "Image could not be decoded.".to_string();
+    let mut reader = image::ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format().map_err(|_| refused())?;
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(MAX_DECODE_EDGE);
+    limits.max_image_height = Some(MAX_DECODE_EDGE);
+    limits.max_alloc = Some(MAX_DECODE_BYTES);
+    reader.limits(limits);
+    let decoder = reader.into_decoder().map_err(|_| refused())?;
+    let (width, height) = image::ImageDecoder::dimensions(&decoder);
+    let decoded = u64::from(width) * u64::from(height) * u64::from(image::ImageDecoder::color_type(&decoder).bytes_per_pixel());
+    if width > MAX_DECODE_EDGE || height > MAX_DECODE_EDGE || decoded > MAX_DECODE_BYTES {
+        return Err(refused());
+    }
+    DynamicImage::from_decoder(decoder).map_err(|_| refused())
+}
+
 /// Scales a decoded image to at most `MAX_EDGE` px and encodes it as JPEG. `None` when the `image`
 /// crate cannot decode the format here (AVIF), which the webview then handles.
 fn make_thumbnail(bytes: &[u8], format: &str) -> Result<Option<(u32, u32, Vec<u8>)>, String> {
     if !NATIVE_FORMATS.contains(&format.to_ascii_lowercase().as_str()) {
         return Ok(None);
     }
-    let image = image::load_from_memory(bytes).map_err(|_| "Image could not be decoded.".to_string())?;
+    let image = decode_bounded(bytes)?;
     let scaled = if image.width() > MAX_EDGE || image.height() > MAX_EDGE { image.thumbnail(MAX_EDGE, MAX_EDGE) } else { image };
     let rgb = flatten(scaled);
     let mut jpeg = Vec::new();
@@ -604,6 +631,42 @@ mod tests {
         assert!(make_thumbnail(b"not an image", "png").is_err());
         assert!(make_thumbnail(&png, "avif").unwrap().is_none(), "AVIF and PDF are left to the webview");
         assert!(make_thumbnail(&png, "pdf").unwrap().is_none());
+    }
+
+    /// A grey PNG of `width` x `height`: all zero, so it compresses to a few KiB however large it is.
+    fn blank_png(width: u32, height: u32) -> Vec<u8> {
+        use image::codecs::png::{CompressionType, FilterType, PngEncoder};
+        let pixels = vec![0u8; width as usize * height as usize];
+        let mut png = Vec::new();
+        PngEncoder::new_with_quality(&mut png, CompressionType::Default, FilterType::NoFilter)
+            .write_image(&pixels, width, height, image::ExtendedColorType::L8)
+            .unwrap();
+        png
+    }
+
+    #[test]
+    fn an_image_larger_than_the_limits_is_refused_before_it_is_decoded() {
+        let huge = blank_png(20_000, 20_000);
+        assert!(huge.len() < 1024 * 1024, "the file is small ({} bytes); only its decoded size is large", huge.len());
+        let dimensions = image::ImageReader::new(std::io::Cursor::new(&huge)).with_guessed_format().unwrap().into_dimensions().unwrap();
+        assert_eq!(dimensions, (20_000, 20_000), "a well-formed image, so only the limit can refuse it");
+        assert_eq!(make_thumbnail(&huge, "png"), Err("Image could not be decoded.".to_string()));
+        // The edge limit itself: 16384 px is decoded, one more is not.
+        assert!(make_thumbnail(&blank_png(MAX_DECODE_EDGE, 1), "png").unwrap().is_some());
+        assert_eq!(make_thumbnail(&blank_png(MAX_DECODE_EDGE + 1, 1), "png"), Err("Image could not be decoded.".to_string()));
+    }
+
+    #[test]
+    fn an_ordinary_photo_sized_image_still_makes_a_thumbnail() {
+        let mut pixels = image::RgbImage::new(2000, 1500);
+        for (x, y, pixel) in pixels.enumerate_pixels_mut() {
+            *pixel = image::Rgb([(x % 256) as u8, (y % 256) as u8, 90]);
+        }
+        let mut png = Vec::new();
+        DynamicImage::ImageRgb8(pixels).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+        let (width, height, jpeg) = make_thumbnail(&png, "png").unwrap().unwrap();
+        assert_eq!((width, height), (480, 360));
+        assert!(is_jpeg(&jpeg));
     }
 
     #[test]
