@@ -105,7 +105,7 @@ export function createAssistantPanel(layout: HTMLElement, options: { env: Reader
     <div class="choices" role="radiogroup" aria-label="Provider">${(Object.keys(providers) as Provider[]).map(id => `<button type="button" role="radio" data-provider="${id}" aria-checked="false">${providers[id].name}</button>`).join('')}</div>
     <div class="assistant-on" hidden><p class="assistant-connected"></p><label for="assistant-model">Model</label><select id="assistant-model"></select><p class="assistant-error" role="alert"></p></div>
     <dl class="assistant-terms">
-      <dt>Sent</dt><dd>Only when you ask: your question and what it reads to answer it, such as the page you're on, search results, the contents, and the titles, tags and folders of library documents. It goes <span data-sent-to></span>.</dd>
+      <dt>Sent</dt><dd>Only when you ask: your question and what it reads to answer it, such as the page you're on, search results, the contents, and the titles, tags and folders of library documents. When you ask, text from a document you open through the assistant can be sent too, one document per question. It goes <span data-sent-to></span>.</dd>
       <dt>Never sent</dt><dd>Full file paths and your notes.</dd>
       <dt>Your key</dt><dd>Kept in ${store}, never in the app's files.</dd>
     </dl>

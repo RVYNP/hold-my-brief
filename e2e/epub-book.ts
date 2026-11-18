@@ -26,6 +26,22 @@ export async function chapterBook({ chapters = 4, paragraphs = 40, pageList = fa
   return pack(files);
 }
 
+/**
+ * A two-chapter EPUB whose first spine item is declared `application/xml` and holds what a hostile book would: a frame, a form, a
+ * remote image, a remote stylesheet url and a redirect. The second chapter is ordinary XHTML.
+ */
+export async function xmlChapterBook(remote = 'https://example.invalid') {
+  const xhtml = (body: string, head = '') => `<html xmlns="http://www.w3.org/1999/xhtml"><head><title>t</title>${head}</head><body>${body}</body></html>`;
+  return pack({
+    mimetype: 'application/epub+zip',
+    'META-INF/container.xml': '<?xml version="1.0"?><container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0"><rootfiles><rootfile full-path="OPS/book.opf" media-type="application/oebps-package+xml"/></rootfiles></container>',
+    'OPS/book.opf': '<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:identifier id="id">xml-chapter-book</dc:identifier><dc:title>XML CHAPTER BOOK</dc:title><dc:language>en</dc:language></metadata><manifest><item id="x1" href="x1.xml" media-type="application/xml"/><item id="c2" href="c2.xhtml" media-type="application/xhtml+xml"/><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/></manifest><spine><itemref idref="x1"/><itemref idref="c2"/></spine></package>',
+    'OPS/nav.xhtml': xhtml('<nav xmlns:epub="http://www.idpf.org/2007/ops" epub:type="toc"><ol><li><a href="x1.xml">First</a></li><li><a href="c2.xhtml">Second</a></li></ol></nav>'),
+    'OPS/x1.xml': xhtml(`<h1>Declared as plain XML</h1><p style="background:url(${remote}/inline.png)">The first chapter text is still here.</p><iframe src="${remote}/frame.html"></iframe><form action="${remote}/post"><input name="q"/></form><img src="${remote}/x.png" alt="remote"/>`, `<style>p { background-image: url(${remote}/sheet.png); }</style><meta http-equiv="refresh" content="0;url=${remote}/away.html"/><meta name="viewport" http-equiv="refresh" content="width=800"/>`),
+    'OPS/c2.xhtml': xhtml('<h1>Second chapter</h1><p>Ordinary text of the second chapter.</p>'),
+  });
+}
+
 async function pack(files: Record<string, string>) {
   const writer = new ZipWriter(new Uint8ArrayWriter(), { useWebWorkers: false });
   for (const [name, text] of Object.entries(files)) await writer.add(name, new TextReader(text), { level: name === 'mimetype' ? 0 : 6, lastModDate: new Date('2026-01-01T00:00:00Z'), extendedTimestamp: false });

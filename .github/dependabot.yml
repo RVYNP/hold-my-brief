@@ -1,0 +1,9 @@
+# Keeps the pinned GitHub Actions current. Only github-actions: npm and cargo
+# security updates are handled by the repository's Dependabot security settings.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
