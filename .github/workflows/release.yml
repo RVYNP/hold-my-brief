@@ -160,7 +160,7 @@ jobs:
           Compress-Archive -Path $stage -DestinationPath (Join-Path $out "Hold-My-Brief-$env:VERSION-windows-x64-portable.zip")
           Get-ChildItem $out | Format-Table Name, Length
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-windows
           path: release-assets/*
@@ -222,7 +222,7 @@ jobs:
           lipo -archs "$app/Contents/MacOS/$exe" | grep -qw arm64
           ls -l release-assets
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-macos
           path: release-assets/*
@@ -282,7 +282,7 @@ jobs:
           envsubst '${VERSION} ${TAG} ${COMMIT} ${RUN_URL}' < .github/release-notes.md > RELEASE_NOTES.md
           cat RELEASE_NOTES.md
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Hold-My-Brief-${{ needs.prepare.outputs.version }}-release
           path: |
