@@ -7,7 +7,8 @@
 # channel 'msedge' and the smoke scripts hardcoded dist/Hold My Brief.exe.
 #
 # No secrets are used and nothing is published. Each job only builds and tests;
-# the unsigned Windows installer is kept as a short-lived workflow artifact.
+# the unsigned Windows installer is kept as a short-lived workflow artifact, except for
+# pull requests from forks.
 #
 # Layout, per OS: three e2e shards, `checks` and `build`, all starting together.
 # No job `needs:` another and no matrix is computed by an earlier job: the agent
@@ -52,10 +53,10 @@ jobs:
           - os: macos-latest
             label: macOS
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -94,7 +95,7 @@ jobs:
       # The JSON report is what scripts/e2e-timings.mjs turns into e2e/timings.json.
       - name: Keep the e2e report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: e2e-report-${{ runner.os }}-${{ matrix.shard }}
           path: e2e-report.json
@@ -119,21 +120,23 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Rust (1.100.0, the same version as release.yml)
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: 1.100.0
 
       # Keyed per OS and per job: `checks` builds test profiles, `build` builds release,
       # and each must not overwrite the other's cache.
       - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: src-tauri
           key: ${{ matrix.os }}-checks
@@ -179,19 +182,21 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Rust (1.100.0, the same version as release.yml)
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: 1.100.0
 
       - name: Cache Rust
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: src-tauri
           key: ${{ matrix.os }}-build
@@ -227,9 +232,14 @@ jobs:
           HOLD_MY_BRIEF_BINARY: src-tauri/target/release/hold-my-brief.exe
         run: npm run test:native
 
+      # Not uploaded for fork pull requests: the installer is unsigned and built from
+      # code the maintainers have not reviewed, so it must not pass as an official build.
       - name: Keep the Windows installer
-        if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
+        if: >-
+          runner.os == 'Windows' &&
+          (github.event_name != 'pull_request' ||
+          github.event.pull_request.head.repo.full_name == github.repository)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: hold-my-brief-windows-nsis
           path: src-tauri/target/release/bundle/nsis/*.exe

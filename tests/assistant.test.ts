@@ -181,3 +181,67 @@ describe('palette and model choices', () => {
     expect(chooseModel([{ id: 'o3' }], null, 'openai')).toBe('o3');
   });
 });
+
+describe('opening a document ends the turn', () => {
+  const library = [{ path: '/books/Rust Book.pdf', name: 'Rust Book.pdf', format: 'pdf', lastOpened: 0, collectionIds: [], favorite: false, tags: [], notes: '' }] as LibraryDocument[];
+  const environment = (): ReaderEnvironment => ({
+    snapshot: () => ({}), hasDocument: () => true,
+    goTo: async target => `Page ${target}`, readText: vi.fn(async () => ({ label: 'Page 1', text: 'current text' })),
+    search: async () => ({ hits: [], truncated: false }), showMatch: async () => 'Page 1', outline: () => [],
+    library: async () => library, open: vi.fn(async () => true),
+    setAppearance: () => 'Brief · Dark', runCommand: async id => id,
+    filterLibrary: async () => ({ colour: null, query: '', matches: 0, names: [], pending: 0 }), colourNames: ['green'],
+  });
+
+  it('sends nothing more to the model after open_document, so a document cannot steer what is read next', async () => {
+    const env = environment();
+    const history: Message[] = [];
+    const send = scripted(
+      reply(call('s', 'search_library', { query: 'rust' })),
+      reply(call('o', 'open_document', { id: 'doc-1' }), call('r', 'read_current_text'), call('o2', 'open_document', { id: 'doc-1' })),
+      reply({ type: 'text', text: 'must never be requested' }),
+    );
+    const steps: string[] = [];
+    const turn = await converse(history, 'open the rust book', { ...options(send, readerTools(env)), onStep: step => steps.push(step) });
+
+    expect(turn).toEqual({ answer: 'Opened Rust Book.pdf. Ask again to read it.', steps: ['Opened Rust Book.pdf'] });
+    expect(steps).toEqual(['Opened Rust Book.pdf']);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(env.open).toHaveBeenCalledTimes(1);
+    // The calls after the open were not run: the new document's text is never read.
+    expect(env.readText).not.toHaveBeenCalled();
+    // The history stays valid for the next question: every call has its result, then the answer.
+    expect(history.map(message => message.role)).toEqual(['user', 'assistant', 'user', 'assistant', 'user', 'assistant']);
+    const results = history[4].content as ContentBlock[];
+    expect(results.map(block => block.type === 'tool_result' && block.tool_use_id)).toEqual(['o', 'r', 'o2']);
+    expect(results[0]).toMatchObject({ content: '{"opened":"Rust Book.pdf"}' });
+    expect(results.slice(1).every(block => block.type === 'tool_result' && block.is_error)).toBe(true);
+    expect(history[5].content).toEqual([{ type: 'text', text: 'Opened Rust Book.pdf. Ask again to read it.' }]);
+  });
+
+  it('lets the next question read the opened document in a new turn', async () => {
+    const env = environment();
+    const history: Message[] = [];
+    const tools = readerTools(env);
+    await converse(history, 'open it', options(scripted(reply(call('s', 'search_library', { query: '' })), reply(call('o', 'open_document', { id: 'doc-1' }))), tools));
+    const send = scripted(reply(call('r', 'read_current_text')), reply({ type: 'text', text: 'It says current text.' }));
+    const turn = await converse(history, 'what does it say?', options(send, tools));
+    expect(turn.answer).toBe('It says current text.');
+    expect(env.readText).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it('still loops after the current document’s own tools and after a failed open', async () => {
+    const env = { ...environment(), open: vi.fn(async () => false) };
+    const send = scripted(
+      reply(call('s', 'search_library', { query: '' })),
+      reply(call('r', 'read_current_text')),
+      reply(call('o', 'open_document', { id: 'doc-1' })),
+      reply({ type: 'text', text: 'Could not open it.' }),
+    );
+    const turn = await converse([], 'read then open', options(send, readerTools(env)));
+    expect(turn).toEqual({ answer: 'Could not open it.', steps: ['Read Page 1'] });
+    expect(send).toHaveBeenCalledTimes(4);
+    expect(env.readText).toHaveBeenCalledTimes(1);
+  });
+});

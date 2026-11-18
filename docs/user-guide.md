@@ -482,8 +482,11 @@ files outside your library, delete anything, change your library or reach the fi
 **What is sent:** only when you ask, your question and the results of what it looked at (text from
 the page you're on, search excerpts, the contents, and the titles, tags and folder names of library
 documents; never full file paths or your notes) go to your chosen provider over HTTPS from the app's
-native side. With OpenRouter, the request is forwarded to the provider of the model you pick. That
-provider's terms for your account apply to the data. Use is billed to your API key.
+native side. When you ask it to open a document from your library, text from that document can be
+sent too, one document per question: opening a document ends the answer, so reading it takes a new
+question. Text in a document is treated as data, never as instructions. With OpenRouter, the request
+is forwarded to the provider of the model you pick. That provider's terms for your account apply to
+the data. Use is billed to your API key.
 
 ### Keyboard shortcuts
 

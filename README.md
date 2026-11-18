@@ -201,8 +201,17 @@ sign up for.
 | **Windows** (64-bit) | `Hold-My-Brief-0.1.0-windows-x64-setup.exe` installs it just for you, no administrator needed. Prefer not to install? Unzip `Hold-My-Brief-0.1.0-windows-x64-portable.zip` anywhere and run **Hold My Brief.exe**. |
 | **Mac** with Apple silicon (M1 or later) | `Hold-My-Brief-0.1.0-macos-arm64.dmg`. There's no version for Intel Macs yet. |
 
-The version number in each file name changes with every release. To check a download, compare it
-with `SHA256SUMS.txt` on the same page.
+The version number in each file name changes with every release.
+
+**Check your download first.** Before you open it, check where it came from and that it is
+complete, in this order:
+
+1. Run `gh attestation verify <file> --repo RVYNP/hold-my-brief` (needs the
+   [GitHub CLI](https://cli.github.com)). It confirms which workflow built the file. v0.1.0 was
+   published before attestations existed and has none.
+2. Compare the file with `SHA256SUMS.txt` on the same page.
+
+The checksum only proves the download is complete; the attestation proves which workflow built it.
 
 **The first time you open it.** Hold My Brief isn't signed with a paid Apple or Microsoft developer
 certificate yet, so your computer asks you to confirm once:
@@ -217,7 +226,7 @@ certificate yet, so your computer asks you to confirm once:
     scroll down, click **Open Anyway**, then confirm with your password or Touch ID.
   - On macOS 14 or earlier, Control-click (or right-click) the app, choose **Open**, then **Open**
     again.
-  - Prefer Terminal? Check the download against `SHA256SUMS.txt` first, then run
+  - Prefer Terminal? Once the attestation and the checksum check out (above), run
     `xattr -dr com.apple.quarantine "/Applications/Hold My Brief.app"` once.
 
 **Let an AI assistant do it.** If you use an AI coding assistant, give it the
