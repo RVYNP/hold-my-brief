@@ -15,11 +15,12 @@ import { excerpt, findMatches, type DocumentSearch, type SearchHit, type SearchO
 const RESOURCE_LIMIT = 64 * 1024 * 1024;
 const ARCHIVE_LIMIT = 512 * 1024 * 1024;
 const XHTML = 'http://www.w3.org/1999/xhtml';
+const SVG = 'http://www.w3.org/2000/svg';
 const CONTENT_CSP = "default-src 'none'; script-src 'none'; connect-src 'none'; img-src blob: data:; font-src blob: data:; style-src 'unsafe-inline' blob:; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'";
 const clamp = (n: number) => Math.max(0, Math.min(1, Number.isFinite(n) ? n : 0));
 
 type Section = { id: string; size: number; linear?: string; pageSpread?: string; createDocument: () => Promise<Document>; unload: () => void };
-type FoliateBook = { sections: Section[]; dir?: string; rendition: { layout?: string; spread?: string }; toc?: TocNode[]; pageList?: PageNode[]; metadata?: { title?: string | Record<string, string> }; splitTOCHref?: (href: string) => string[]; getTOCFragment?: (doc: Document, id: string) => Element | null; transformTarget: EventTarget; destroy: () => void };
+type FoliateBook = { sections: Section[]; dir?: string; rendition: { layout?: string; spread?: string }; resources?: { manifest: { href: string; mediaType: string }[] }; toc?: TocNode[]; pageList?: PageNode[]; metadata?: { title?: string | Record<string, string> }; splitTOCHref?: (href: string) => string[]; getTOCFragment?: (doc: Document, id: string) => Element | null; transformTarget: EventTarget; destroy: () => void };
 type TocNode = { label: string; href: string; subitems?: TocNode[] };
 type PageNode = { label?: string; href?: string };
 /** Where a contents entry or page-list item starts: its section, and how far through the section's text. */
@@ -44,6 +45,53 @@ export function validArchivePath(path: string): boolean {
   return !!path && !path.startsWith('/') && !path.includes('\\') && !path.includes('\0') && !path.includes(':') && !path.split('/').includes('..');
 }
 
+const INERT_TYPES = [
+  'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'text/css',
+  'font/woff', 'font/woff2', 'font/ttf', 'font/otf', 'font/sfnt', 'application/font-woff', 'application/font-woff2', 'application/font-sfnt', 'application/x-font-ttf', 'application/x-font-otf', 'application/x-font-opentype', 'application/x-font-truetype', 'application/vnd.ms-opentype',
+];
+const normalizeType = (type: unknown) => typeof type === 'string' ? type.split(';')[0].trim().toLowerCase() : '';
+/** The type the frame is given for markup: HTML and SVG as they are, any other XML as XHTML. Undefined for anything that is not markup. */
+export function markupType(type: unknown): 'application/xhtml+xml' | 'text/html' | 'image/svg+xml' | undefined {
+  const t = normalizeType(type);
+  if (t === 'text/html' || t === 'image/svg+xml') return t;
+  return t === 'application/xhtml+xml' || t.endsWith('/xml') || t.endsWith('+xml') ? 'application/xhtml+xml' : undefined;
+}
+
+/**
+ * Runs on every resource Foliate has read, before it becomes a blob URL: markup is sanitized and given its standard type, a short list
+ * of images, fonts and stylesheets passes, and anything else is delivered as inert bytes.
+ */
+export function guardResource(detail: { data: unknown; type: unknown }) {
+  const markup = markupType(detail.type);
+  if (markup) {
+    detail.type = markup;
+    detail.data = Promise.resolve(detail.data).then(async data => sanitizeEpubMarkup(data instanceof Blob ? await data.text() : String(data), markup, true));
+  } else if (!INERT_TYPES.includes(normalizeType(detail.type))) detail.type = 'application/octet-stream';
+}
+
+/** A resource reference the frame may keep: an archive-relative path (before Foliate rewrites it), a blob, a raster image or a fragment. */
+const resourceUrlOk = (value: string, rewritten: boolean) => rewritten
+  ? /^(blob:|data:image\/(?:png|jpeg|gif|webp|avif);|#)/i.test(value)
+  : !/^[a-z][\w+.-]*:|^\/\//i.test(value) || /^data:image\/(?:png|jpeg|gif|webp|avif);/i.test(value);
+/** Attributes whose value is a CSS value that can fetch: `style`, and the SVG presentation attributes that take `url()`. */
+const CSS_ATTRIBUTES = ['style', 'fill', 'stroke', 'filter', 'mask', 'clip-path', 'marker-start', 'marker-mid', 'marker-end', 'cursor'];
+const CSS_URL = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*?))\s*\)/gi;
+const cssUrlOk = (target: string, rewritten: boolean) => target === '' || /^data:/i.test(target) || resourceUrlOk(target, rewritten);
+/** The text of a stylesheet with comments dropped and escapes read, which is what hides a function name (`u\72l(` is `url(`). */
+const plainCss = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\\(?:([0-9a-f]{1,6})\s?|([^\n]))/gi, (_, hex: string | undefined, char: string | undefined) => {
+  const code = hex ? parseInt(hex, 16) : 0;
+  return hex ? String.fromCodePoint(code === 0 || code > 0x10ffff ? 0xfffd : code) : char!;
+});
+/** Removes what a stylesheet could fetch from outside the book: `url()` to a remote or unknown scheme, `@import`, `image-set()`, `src()`. */
+function scrubCss(css: string, rewritten: boolean): string {
+  if (!/url\s*\(|@import|image-set|src\s*\(|\\/i.test(css)) return css;
+  const kept = css.replace(CSS_URL, (whole, a?: string, b?: string, c?: string) => cssUrlOk((a ?? b ?? c ?? '').trim(), rewritten) ? whole : 'url("")').replace(/@import\b[^;]*(?:;|$)/gi, '');
+  const plain = plainCss(kept);
+  if (/@import|image-set\s*\(|(?<![\w-])src\s*\(/i.test(plain)) return '';
+  for (const match of plain.matchAll(CSS_URL)) if (!cssUrlOk((match[1] ?? match[2] ?? match[3] ?? '').trim(), rewritten)) return '';
+  return kept;
+}
+
 /** Runs on detached markup before any document can enter an iframe. */
 export function sanitizeEpubMarkup(markup: string, mime = 'application/xhtml+xml', rewritten = false): string {
   const doc = new DOMParser().parseFromString(markup, mime as DOMParserSupportedType);
@@ -55,7 +103,13 @@ export function sanitizeEpubMarkup(markup: string, mime = 'application/xhtml+xml
     if (['audio', 'video'].includes(tag)) {
       const placeholder = doc.createElementNS(XHTML, 'p'); placeholder.textContent = 'Embedded audio/video is unavailable in this reader.'; element.replaceWith(placeholder); continue;
     }
-    if (tag === 'meta' && element.getAttribute('name')?.toLowerCase() !== 'viewport') { element.remove(); continue; }
+    if (tag === 'style') { const css = element.textContent ?? '', clean = scrubCss(css, rewritten); if (clean !== css) element.textContent = clean; }
+    if (tag === 'meta') {
+      // Only a viewport hint with a value survives, and it carries nothing else: no `http-equiv`, no `charset`, no `url`.
+      if (element.getAttribute('name')?.toLowerCase() !== 'viewport' || !element.hasAttribute('content')) { element.remove(); continue; }
+      for (const attr of Array.from(element.attributes)) if (attr.name !== 'name' && attr.name !== 'content') element.removeAttributeNode(attr);
+      continue;
+    }
     if (tag === 'link' && element.getAttribute('rel')?.toLowerCase() !== 'stylesheet') { element.remove(); continue; }
     for (const attr of Array.from(element.attributes)) {
       const name = attr.localName.toLowerCase(), value = attr.value.trim();
@@ -64,15 +118,26 @@ export function sanitizeEpubMarkup(markup: string, mime = 'application/xhtml+xml
         const anchor = tag === 'a' && name === 'href';
         const safe = anchor
           ? /^(https?:\/\/|#)/i.test(value) || (!/^[a-z][\w+.-]*:|^\/\//i.test(value) && !value.includes('\\'))
-          : rewritten ? /^(blob:|data:image\/(?:png|jpeg|gif|webp|avif);|#)/i.test(value)
-            : !/^[a-z][\w+.-]*:|^\/\//i.test(value) || /^data:image\/(?:png|jpeg|gif|webp|avif);/i.test(value);
+          : resourceUrlOk(value, rewritten);
         if (!safe) { element.removeAttributeNode(attr); if (tag === 'img') element.setAttribute('alt', 'Unavailable image (external or unsupported resource)'); }
+      } else if (CSS_ATTRIBUTES.includes(name)) {
+        const clean = scrubCss(attr.value, rewritten); if (clean !== attr.value) attr.value = clean;
       }
     }
   }
-  if (doc.documentElement.localName === 'html') {
-    const head = doc.querySelector('head') ?? doc.documentElement.insertBefore(doc.createElementNS(XHTML, 'head'), doc.documentElement.firstChild);
-    const csp = doc.createElementNS(XHTML, 'meta'); csp.setAttribute('http-equiv', 'Content-Security-Policy'); csp.setAttribute('content', CONTENT_CSP); head.prepend(csp);
+  const root = doc.documentElement;
+  // An SVG document has no element that carries a policy (a `<meta>` in a `foreignObject` is not read, and `foreignObject` is removed anyway).
+  if (root.localName !== 'svg' || root.namespaceURI !== SVG) {
+    let html = root;
+    if (root.localName !== 'html' && mime !== 'image/svg+xml') {
+      // Any other XML root becomes the body of an XHTML page, so the policy has a head to sit in.
+      html = doc.createElementNS(XHTML, 'html');
+      const body = doc.createElementNS(XHTML, 'body'); body.append(root); html.append(body); doc.append(html);
+    }
+    if (html.localName === 'html') {
+      const head = html.querySelector('head') ?? html.insertBefore(doc.createElementNS(XHTML, 'head'), html.firstChild);
+      const csp = doc.createElementNS(XHTML, 'meta'); csp.setAttribute('http-equiv', 'Content-Security-Policy'); csp.setAttribute('content', CONTENT_CSP); head.prepend(csp);
+    }
   }
   return new XMLSerializer().serializeToString(doc);
 }
@@ -202,11 +267,14 @@ export class EpubAdapter implements ReaderAdapter {
       } }), { signal: this.abort.signal, checkSignature: true });
       return new Blob(chunks, { type });
     };
+    // What the package declares for each archive path. Empty while the container and package documents themselves are read, which go by extension.
+    const types = new Map<string, string>();
     const loadText = async (name: string): Promise<string | null> => {
       const blob = await read(name); if (!blob) return null;
       const text = await blob.text();
-      if (/\.(xhtml|html|htm|svg)$/i.test(name)) return sanitizeEpubMarkup(text, /\.svg$/i.test(name) ? 'image/svg+xml' : /\.(html|htm)$/i.test(name) ? 'text/html' : 'application/xhtml+xml');
-      return text;
+      const declared = types.get(name);
+      const mime = declared !== undefined ? markupType(declared) : /\.(xhtml|html|htm|svg)$/i.test(name) ? (/\.svg$/i.test(name) ? 'image/svg+xml' : /\.(html|htm)$/i.test(name) ? 'text/html' : 'application/xhtml+xml') : undefined;
+      return mime ? sanitizeEpubMarkup(text, mime) : text;
     };
     const encryption = await loadText('META-INF/encryption.xml');
     if (encryption) {
@@ -216,6 +284,7 @@ export class EpubAdapter implements ReaderAdapter {
         throw new Error('DRM-protected EPUB files are not supported. Open a DRM-free copy.');
     }
     this.book = await new EPUB({ loadText, loadBlob: read, getSize: (name: string) => map.get(name)?.uncompressedSize ?? 0 }).init() as FoliateBook;
+    for (const item of this.book.resources?.manifest ?? []) types.set(item.href, item.mediaType);
     if (!this.book.sections.length) throw new Error('The EPUB has no readable spine sections.');
     this.mode = this.book.rendition?.layout === 'pre-paginated' ? 'fixed' : 'paginated';
     this.book.rendition ??= {}; this.book.rendition.spread = 'none';
@@ -227,11 +296,7 @@ export class EpubAdapter implements ReaderAdapter {
     this.flowNow = stored ?? 'paginated';
     this.layoutSpread = this.spreadState() === 'active'; this.layoutCover = this.options.cover !== false;
     this.pairSections();
-    this.book.transformTarget.addEventListener('data', event => {
-      const detail = (event as CustomEvent).detail;
-      if (['application/xhtml+xml', 'text/html', 'image/svg+xml'].includes(detail.type))
-        detail.data = Promise.resolve(detail.data).then(data => sanitizeEpubMarkup(String(data), detail.type, true));
-    });
+    this.book.transformTarget.addEventListener('data', event => guardResource((event as CustomEvent).detail));
     this.numberChapters();
     const targets = this.outlineTargets(), mixes: SectionMix[] = [];
     // The map is based on content, never displayed page counts or equal chapter weights.

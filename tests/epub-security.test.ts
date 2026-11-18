@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { sanitizeEpubMarkup, validArchivePath } from '../src/adapters/epub';
+import { guardResource, sanitizeEpubMarkup, validArchivePath } from '../src/adapters/epub';
 
 const chapter = (body: string, head = '') => `<html xmlns="http://www.w3.org/1999/xhtml"><head>${head}</head><body>${body}</body></html>`;
 const parse = (markup: string) => new DOMParser().parseFromString(markup, 'application/xhtml+xml');
@@ -42,5 +42,71 @@ describe('EPUB content boundary', () => {
   it('accepts normal package resources and Unicode paths', () => {
     expect(validArchivePath('OPS/chapters/étude.xhtml')).toBe(true);
     expect(validArchivePath('META-INF/container.xml')).toBe(true);
+  });
+
+  describe('every markup type, whatever the manifest calls it', () => {
+    const hostile = chapter('<p style="background:url(https://example.invalid/a.png)">Chapter text</p><iframe src="https://example.invalid/f"/><form action="https://example.invalid/post"><input/></form><img src="https://example.invalid/x.png"/>', '<style>p { background: url(https://example.invalid/y.png); } @import "https://example.invalid/z.css";</style><meta http-equiv="refresh" content="0;url=https://example.invalid/"/>');
+    const handled = async (type: string, data = hostile) => {
+      const detail: { data: unknown; type: unknown } = { data, type };
+      guardResource(detail);
+      return { type: detail.type, markup: String(await detail.data) };
+    };
+    it.each(['application/xml', 'text/xml; charset=utf-8', 'TEXT/XML', 'application/x-dtbncx+xml'])('sanitizes %s as XHTML and carries the per-chapter policy', async declared => {
+      const { type, markup } = await handled(declared);
+      expect(type).toBe('application/xhtml+xml');
+      expect(markup).not.toContain('example.invalid');
+      const doc = parse(markup);
+      expect(doc.querySelector('iframe,form,input,img[src],meta[http-equiv=refresh]')).toBeNull();
+      expect(doc.querySelector('body')?.textContent).toContain('Chapter text');
+      expect(doc.querySelector('meta[http-equiv="Content-Security-Policy"]')?.getAttribute('content')).toContain("frame-src 'none'");
+    });
+    it('puts a document with another root into an XHTML page that carries the policy', async () => {
+      const { type, markup } = await handled('application/xml', '<chapter><title>Opening</title><iframe src="https://example.invalid/f"/><p>Words</p></chapter>');
+      const doc = parse(markup);
+      expect(type).toBe('application/xhtml+xml');
+      expect(doc.documentElement.namespaceURI).toBe('http://www.w3.org/1999/xhtml');
+      expect(doc.querySelector('head > meta[http-equiv="Content-Security-Policy"]')).not.toBeNull();
+      expect(doc.querySelector('body')?.textContent).toContain('Words');
+      expect(doc.querySelector('iframe')).toBeNull();
+    });
+    it('keeps the type of HTML and SVG, and sanitizes SVG, which has no element to carry a policy', async () => {
+      expect((await handled('text/html')).type).toBe('text/html');
+      const svg = await handled('image/svg+xml', '<svg xmlns="http://www.w3.org/2000/svg"><style>@import url(https://example.invalid/s.css); rect { fill: red }</style><foreignObject><iframe xmlns="http://www.w3.org/1999/xhtml"/></foreignObject><rect fill="url(https://example.invalid/g)" width="1" height="1"/><script>1</script></svg>');
+      expect(svg.type).toBe('image/svg+xml');
+      expect(svg.markup).not.toContain('example.invalid');
+      expect(svg.markup).not.toMatch(/iframe|script|foreignObject|Content-Security-Policy/i);
+    });
+    it.each(['application/javascript', 'text/plain', 'audio/mpeg', 'application/pdf'])('delivers %s as inert bytes', declared => {
+      const detail = { data: 'x', type: declared };
+      guardResource(detail);
+      expect(detail.type).toBe('application/octet-stream');
+    });
+    it.each(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'font/woff2', 'application/vnd.ms-opentype', 'text/css; charset=utf-8'])('leaves %s alone', declared => {
+      const data = Promise.resolve('x'), detail = { data, type: declared };
+      guardResource(detail);
+      expect(detail.type).toBe(declared); expect(detail.data).toBe(data);
+    });
+    it('treats a stylesheet url that hides behind an escape or a comment as the url it is', () => {
+      const out = parse(sanitizeEpubMarkup(chapter('<p>x</p>', '<style>a { background: u\\72l(https://example.invalid/e.png) } b { background: URL( "https://example.invalid/f.png" ) } i { background: url(data:image/png;base64,AAAA) } u { content: "\\201C" }</style>'), 'application/xhtml+xml', true)).querySelector('style')!.textContent!;
+      expect(out).not.toContain('example.invalid');
+    });
+    it('keeps a stylesheet without fetches exactly as it was', () => {
+      const css = 'p { content: "\\201C"; background: url(blob:https://app.test/1) } q { fill: url(#a) }';
+      expect(parse(sanitizeEpubMarkup(chapter('<p>x</p>', `<style>${css}</style>`), 'application/xhtml+xml', true)).querySelector('style')?.textContent).toBe(css);
+    });
+  });
+  describe('meta', () => {
+    it('drops http-equiv and every other attribute from a viewport meta', () => {
+      const doc = parse(sanitizeEpubMarkup(chapter('<p>x</p>', '<meta name="viewport" http-equiv="refresh" content="0;url=x" charset="utf-8" data-x="1"/>')));
+      const metas = Array.from(doc.querySelectorAll('meta[name="viewport"]'));
+      expect(metas).toHaveLength(1);
+      expect(metas[0].getAttributeNames().sort()).toEqual(['content', 'name']);
+      expect(doc.querySelector('meta[http-equiv="refresh"]')).toBeNull();
+    });
+    it('removes a viewport meta with no content, a policy of the book, and any other meta', () => {
+      const doc = parse(sanitizeEpubMarkup(chapter('<p>x</p>', '<meta name="viewport"/><meta http-equiv="Content-Security-Policy" content="default-src *"/><meta charset="utf-8"/><meta name="author" content="a"/>')));
+      expect(Array.from(doc.querySelectorAll('meta')).map(meta => meta.getAttribute('http-equiv'))).toEqual(['Content-Security-Policy']);
+      expect(doc.querySelector('meta')?.getAttribute('content')).toContain("script-src 'none'");
+    });
   });
 });
