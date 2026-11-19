@@ -402,17 +402,20 @@
 .library-add-menu { position: fixed; z-index: 40; }
 .library-dialog-host { display: contents; }
 
-/* Icon rail: from 720 px up, a 36 px strip (no box: an edge wash implies it) with Library, Search and Add files, and at its foot Settings. It overlays the reading panel's
+/* Icon rail: from 720 px up, a 36 px strip (no box: an edge wash implies it) of five bare icons, Home, Add files, Library, Search and Settings, with a 1 px hairline on its inner edge. It overlays the reading panel's
    edge while the panel is closed (--workspace-clear keeps the page's furniture off it) and stands beside the docked panel when it is open;
    Library wears the accent-soft fill while the panel is open. */
 .icon-rail { display: none; }
 @media (min-width: 720px) {
-  #reader-layout > .icon-rail { position: absolute; z-index: 21; top: 0; bottom: 6px; left: 2px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; box-sizing: border-box; width: 36px; padding: 8px 0; }
+  #reader-layout > .icon-rail { position: absolute; z-index: 21; top: 0; bottom: 6px; left: 2px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; box-sizing: border-box; width: 36px; padding: 8px 0; }
   /* The rail has no box: a wash from the window's edge implies it (D3). It runs from the toolbar's bottom edge to the window's bottom, 44 px from
      the edge, and fades to nothing at its inner edge; the buttons stand on it (the rail is a stacking context, the wash is its lowest layer). */
   #reader-layout > .icon-rail::before { content: ''; position: absolute; z-index: -1; top: 0; bottom: -6px; left: -2px; width: 44px; background: linear-gradient(to right, var(--rail-wash), transparent); pointer-events: none; }
   #reader-layout.library-right > .icon-rail { left: auto; right: 2px; }
   #reader-layout.library-right > .icon-rail::before { left: auto; right: -2px; background: linear-gradient(to left, var(--rail-wash), transparent); }
+  /* The hairline runs the window's height below the toolbar along the rail's inner edge (the side facing the content). */
+  #reader-layout > .icon-rail::after { content: ''; position: absolute; top: 0; bottom: -6px; left: 42px; width: 1px; background: var(--hairline); pointer-events: none; }
+  #reader-layout.library-right > .icon-rail::after { left: auto; right: 42px; }
   #reader-layout:not(.library-right):not(.library-open) #empty.is-home { padding-left: 52px; }
   #reader-layout.library-right:not(.library-open) #empty.is-home { padding-right: 52px; }
   /* The toolbar's library button is the compact window's door; here the icon rail is. */

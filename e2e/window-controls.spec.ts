@@ -17,10 +17,10 @@ test('the macOS controls are three 12 px circles, 8 px apart, centred on the tab
   for (const box of boxes) { expect(box.width).toBe(12); expect(box.height).toBe(12); }
   expect(boxes[1].x - (boxes[0].x + 12)).toBe(8);
   expect(boxes[2].x - (boxes[1].x + 12)).toBe(8);
-  const home = (await page.locator('#home-tab').boundingBox())!;
-  expect(Math.abs(home.x - (boxes[2].x + 12) - 12)).toBeLessThanOrEqual(1);
+  const strip = (await page.locator('#tab-strip').boundingBox())!;
+  expect(Math.abs(strip.x - (boxes[2].x + 12) - 12)).toBeLessThanOrEqual(1);
   // The tab row's centre is the toolbar's centre, 20 px down.
-  for (const box of [...boxes, home]) expect(box.y + box.height / 2).toBe(20);
+  for (const box of [...boxes, strip]) expect(box.y + box.height / 2).toBe(20);
   expect(await page.locator('.mac-control').evaluateAll(buttons => buttons.map(button => getComputedStyle(button).borderRadius))).toEqual(['50%', '50%', '50%']);
 });
 
@@ -71,10 +71,10 @@ test('Tab reaches the controls, draws a focus ring and Option turns the green on
 
 test('on macOS the controls go in full screen, and their room with them', async ({ page }) => {
   await open(page, 'mac');
-  const before = (await page.locator('#home-tab').boundingBox())!.x;
+  const before = (await page.locator('#tab-strip').boundingBox())!.x;
   await page.evaluate(() => document.documentElement.classList.add('window-fullscreen'));
   await expect(page.locator('.mac-controls')).toBeHidden();
-  expect((await page.locator('#home-tab').boundingBox())!.x).toBeLessThan(before - 50);
+  expect((await page.locator('#tab-strip').boundingBox())!.x).toBeLessThan(before - 50);
 });
 
 test('the controls are not drawn outside macOS', async ({ page }) => {

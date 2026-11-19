@@ -1,6 +1,7 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { bigLibrary, seedLibrary, type FixtureCollection, type FixtureDocument } from './home-fixture';
 import { libraryToggle } from './library-controls';
+import { railHome } from './toolbar-tabs';
 
 const PAGED = { fraction: 39 / 145, page: 40, pages: 146 };
 const mixed: FixtureDocument[] = [
@@ -125,7 +126,7 @@ test('a Recently opened card opens its document in a tab', async ({ page }) => {
   await expect(page.locator('#tab-list .tab.is-active .tab-title')).toHaveText('Notes.md');
   await expect(page.locator('#empty')).toBeHidden();
   // The Home tab shows Home again, and a card for an open document focuses its tab instead of opening a second.
-  await page.locator('#home-tab').click();
+  await railHome(page).click();
   await expect(page.locator('#empty')).toBeVisible();
   await page.getByRole('button', { name: 'Open Notes.md', exact: true }).first().click();
   await expect(page.locator('#tab-list .tab')).toHaveCount(1);
@@ -170,18 +171,18 @@ test('Open in library and a collection card open the Library tab on that scope, 
   await expect(page.locator('#library-page')).toBeVisible();
   await expect(docs).toHaveCount(3);
   await expect(docs.filter({ hasText: 'Done.pdf' })).toHaveCount(0);
-  await page.locator('#home-tab').click(); // Back to Home.
+  await railHome(page).click(); // Back to Home.
   await expect(page.locator('#library-page')).toBeHidden();
   await region(page, 'Favorites').getByRole('button', { name: 'Open in library: Favorites' }).click();
   await expect(tabs).toHaveCount(1);
   await expect(tabs).toHaveText(/Favorites/);
   await expect(scope).toHaveText('Favorites');
   await expect(docs).toHaveCount(2);
-  await page.locator('#home-tab').click();
+  await railHome(page).click();
   await region(page, 'Collections').getByRole('button', { name: 'Open in library: Collections' }).click();
   await expect(tabs).toHaveText(/All documents/);
   await expect(scope).toHaveText('All documents');
-  await page.locator('#home-tab').click();
+  await railHome(page).click();
   await region(page, 'Collections').getByRole('button', { name: /Collection Alpha shelf/ }).click();
   await expect(tabs).toHaveCount(1);
   await expect(tabs).toHaveText(/Alpha shelf/);
