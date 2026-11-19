@@ -1,10 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { libraryToggle } from './library-controls';
+import { openSettings } from './settings-controls';
 
 /**
- * The command palette is the keyboard route to the actions the ··· menu lists, so these tests
+ * The command palette is the keyboard route to the actions the interface lists (Settings › More, the view controls' More menu), so these tests
  * check the three things that would break it: opening it without a document, filtering and
- * choosing, and the fact that a chosen command really runs the same code path as the menu.
+ * choosing, and the fact that a chosen command really runs the same code path as the menus.
  */
 
 const textDocument = { name: 'palette.txt', mimeType: 'text/plain', buffer: Buffer.from(Array.from({ length: 200 }, (_, i) => `Line ${i + 1}: Reading beside the work.`).join('\n')) };
@@ -59,13 +60,14 @@ test('the palette filters as you type and runs the chosen command', async ({ pag
   await expect(page.locator('#position')).toContainText('120');
 });
 
-test('the menu opens the palette, a typed number goes there and free text finds it', async ({ page }) => {
+test('Settings › More opens the palette, a typed number goes there and free text finds it', async ({ page }) => {
   await page.goto('/');
   await page.locator('#file-input').setInputFiles(textDocument);
   await expect(page.locator('#filename')).toHaveText('palette.txt');
 
-  await page.getByRole('button', { name: 'Reader menu' }).click();
-  await page.locator('#menu-palette').click();
+  const sheet = await openSettings(page);
+  await sheet.getByRole('button', { name: /^All commands…/ }).click();
+  await expect(sheet).toBeHidden();
   await expect(page.locator('#palette-input')).toBeFocused();
   await page.locator('#palette-input').fill('page 150');
   await expect(page.locator('.palette-row').first()).toHaveText('Go to 150');

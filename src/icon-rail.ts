@@ -12,7 +12,7 @@ export type IconRailHost = {
   view: (view: RailView) => void;
   /** Add files was pressed; `anchor` is the button, for the menu it opens. */
   add: (anchor: HTMLElement) => void;
-  /** Settings was pressed: it opens Appearance. */
+  /** Settings was pressed: it opens the Settings sheet. */
   settings: () => void;
   /** The rail's context menu asked for the library on its other side. */
   moveSide: () => void;

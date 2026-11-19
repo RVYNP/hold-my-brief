@@ -2,7 +2,6 @@ import { FONT_MAX, FONT_MIN } from './text-size';
 import { appearance, applyAppearance, backgroundStrengthMax, backgroundStrengthMin, glows, glowSchemes, isGlow, palettes, readingColors, rgbToHex, saveAppearance, schemeOf, type Appearance, type AppearanceMode, type Banner, type PageTone, type Palette } from './theme';
 
 const icon = (size: number, body: string) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
-export const paletteIcon = icon(14, '<circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.93 0 1.65-.75 1.65-1.69 0-.44-.18-.84-.44-1.13-.29-.29-.44-.65-.44-1.13a1.64 1.64 0 0 1 1.67-1.67h2c3.05 0 5.55-2.5 5.55-5.55C21.97 6.01 17.46 2 12 2z"/>');
 const names: Record<Palette, string> = { brief: 'Brief', lilac: 'Lilac', birch: 'Birch', graphite: 'Graphite', arctic: 'Arctic', blossom: 'Blossom', peony: 'Peony', aurora: 'Aurora', dusk: 'Dusk', nebula: 'Nebula', solar: 'Solar', ember: 'Ember', orchid: 'Orchid', glacier: 'Glacier', peach: 'Peach', lagoon: 'Lagoon', moss: 'Moss' };
 const modes: [AppearanceMode, string, string][] = [
   ['system', 'System', icon(13, '<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8m-4-4v4"/>')],
@@ -36,7 +35,7 @@ export function appearanceSummary() {
 const card = (palette: Palette) => `<button class="theme-card" role="radio" data-choice="${palette}" aria-label="${names[palette]}" title="${names[palette]}"><span class="theme-disc" data-palette="${palette}"></span></button>`;
 
 /** Radio group with a roving tab stop: arrows move focus, and `selectOnFocus` groups also choose. */
-function radioGroup(group: HTMLElement, selectOnFocus: boolean) {
+export function radioGroup(group: HTMLElement, selectOnFocus: boolean) {
   group.addEventListener('keydown', event => {
     const items = Array.from(group.querySelectorAll<HTMLButtonElement>('[role=radio]'));
     const index = items.indexOf(event.target as HTMLButtonElement), step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
@@ -46,21 +45,21 @@ function radioGroup(group: HTMLElement, selectOnFocus: boolean) {
     next.focus(); if (selectOnFocus) next.click();
   });
 }
-function check(group: HTMLElement, chosen: (item: HTMLElement) => boolean) {
+export function check(group: HTMLElement, chosen: (item: HTMLElement) => boolean) {
   const items = Array.from(group.querySelectorAll<HTMLElement>('[role=radio]'));
   const selected = items.find(chosen);
   for (const item of items) { item.setAttribute('aria-checked', String(item === selected)); item.tabIndex = item === (selected ?? items[0]) ? 0 : -1; }
 }
 
 /**
- * Fills the Appearance bottom sheet: colour and text on one page. Hovering or focusing a theme previews it on the whole
+ * Fills the Appearance section of the Settings sheet: colour and text on one page. Hovering or focusing a theme previews it on the whole
  * window; click or Enter keeps it; leaving the swatches, blur or Escape restores the kept theme. Below the colours, a live preview and the
  * text settings (size, spacing, margins, wrapping) edit the open text document, so the change is judged both there and on the page above the sheet.
+ * `sheet` is the dialog that holds `section`: the preview ends with it.
  */
-export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextControls) {
-  dialog.setAttribute('aria-labelledby', 'appearance-title');
-  dialog.innerHTML = `
-    <div class="sheet-head"><h2 id="appearance-title">Appearance</h2><div class="choices appearance-modes" role="radiogroup" aria-label="Mode">${modes.map(([mode, label, glyph]) => `<button role="radio" data-mode="${mode}">${glyph}${label}</button>`).join('')}</div><button class="sheet-close" data-close aria-label="Close appearance">${icon(15, '<path d="M18 6 6 18M6 6l12 12"/>')}</button></div>
+export function createAppearanceSection(sheet: HTMLDialogElement, section: HTMLElement, text: TextControls) {
+  section.innerHTML = `
+    <div class="settings-heading"><h3 id="appearance-title">Appearance</h3><div class="choices appearance-modes" role="radiogroup" aria-label="Mode">${modes.map(([mode, label, glyph]) => `<button role="radio" data-mode="${mode}">${glyph}${label}</button>`).join('')}</div></div>
     <div class="appearance-themes">
       <div class="appearance-row"><span class="sheet-label" id="appearance-theme-label">THEME</span>
         <div class="theme-row" role="radiogroup" aria-labelledby="appearance-theme-label">${palettes.map(card).join('')}</div></div>
@@ -94,18 +93,18 @@ export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextContr
         <div class="choices" role="radiogroup" aria-labelledby="appearance-wrap-label"><button role="radio" data-wrap="true">Wrap</button><button role="radio" data-wrap="false">Keep as written</button></div></div>
     </div>
     <p class="appearance-note">Page tone and text settings apply to Markdown, plain text and reflowable books. PDF pages, fixed-layout books and images keep their colors and zoom instead (Ctrl + and Ctrl −).</p>`;
-  const hint = dialog.querySelector<HTMLElement>('.appearance-hint')!;
-  const modeGroup = dialog.querySelector<HTMLElement>('.appearance-modes')!;
-  const themeRows = Array.from(dialog.querySelectorAll<HTMLElement>('.theme-row'));
-  const swatches = dialog.querySelector<HTMLElement>('.swatches')!, themeSwatch = dialog.querySelector<HTMLElement>('.swatch-theme')!;
-  const custom = dialog.querySelector<HTMLButtonElement>('.swatch-custom')!, picker = dialog.querySelector<HTMLInputElement>('.swatch-input')!;
-  const toneGroup = dialog.querySelector<HTMLElement>('[aria-labelledby=appearance-page-label]')!;
-  const bannerGroup = dialog.querySelector<HTMLElement>('[aria-labelledby=appearance-background-label]')!;
-  const strengthInput = dialog.querySelector<HTMLInputElement>('.strength-input')!, strengthValue = dialog.querySelector<HTMLOutputElement>('.strength-value')!;
-  const textSection = dialog.querySelector<HTMLElement>('.appearance-text')!, textNote = dialog.querySelector<HTMLElement>('.appearance-note')!, previewBox = dialog.querySelector<HTMLElement>('.appearance-preview')!;
-  const sizeValue = dialog.querySelector<HTMLOutputElement>('.stepper-value')!;
-  const spacingGroup = dialog.querySelector<HTMLElement>('[aria-labelledby=appearance-spacing-label]')!, marginGroup = dialog.querySelector<HTMLElement>('[aria-labelledby=appearance-margin-label]')!;
-  const wrapRow = dialog.querySelector<HTMLElement>('.appearance-wrap')!, wrapGroup = wrapRow.querySelector<HTMLElement>('.choices')!;
+  const hint = section.querySelector<HTMLElement>('.appearance-hint')!;
+  const modeGroup = section.querySelector<HTMLElement>('.appearance-modes')!;
+  const themeRows = Array.from(section.querySelectorAll<HTMLElement>('.theme-row'));
+  const swatches = section.querySelector<HTMLElement>('.swatches')!, themeSwatch = section.querySelector<HTMLElement>('.swatch-theme')!;
+  const custom = section.querySelector<HTMLButtonElement>('.swatch-custom')!, picker = section.querySelector<HTMLInputElement>('.swatch-input')!;
+  const toneGroup = section.querySelector<HTMLElement>('[aria-labelledby=appearance-page-label]')!;
+  const bannerGroup = section.querySelector<HTMLElement>('[aria-labelledby=appearance-background-label]')!;
+  const strengthInput = section.querySelector<HTMLInputElement>('.strength-input')!, strengthValue = section.querySelector<HTMLOutputElement>('.strength-value')!;
+  const textSection = section.querySelector<HTMLElement>('.appearance-text')!, textNote = section.querySelector<HTMLElement>('.appearance-note')!, previewBox = section.querySelector<HTMLElement>('.appearance-preview')!;
+  const sizeValue = section.querySelector<HTMLOutputElement>('.stepper-value')!;
+  const spacingGroup = section.querySelector<HTMLElement>('[aria-labelledby=appearance-spacing-label]')!, marginGroup = section.querySelector<HTMLElement>('[aria-labelledby=appearance-margin-label]')!;
+  const wrapRow = section.querySelector<HTMLElement>('.appearance-wrap')!, wrapGroup = wrapRow.querySelector<HTMLElement>('.choices')!;
   let kept: Appearance = appearance();
 
   function render() {
@@ -114,7 +113,7 @@ export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextContr
     check(modeGroup, item => item.dataset.mode === (fixed ? schemeOf(shown) : kept.mode));
     for (const item of modeGroup.querySelectorAll<HTMLButtonElement>('[data-mode]')) item.disabled = fixed;
     for (const row of themeRows) check(row, item => item.dataset.choice === kept.palette);
-    for (const card of dialog.querySelectorAll<HTMLElement>('.theme-card')) card.toggleAttribute('data-previewing', previewing && card.dataset.choice === shown.palette);
+    for (const card of section.querySelectorAll<HTMLElement>('.theme-card')) card.toggleAttribute('data-previewing', previewing && card.dataset.choice === shown.palette);
     const preset = kept.accent === null || presets.some(([, color]) => color === kept.accent);
     check(swatches, item => item === custom ? !preset : item.dataset.accent === (kept.accent ?? ''));
     themeSwatch.dataset.palette = shown.palette;
@@ -194,23 +193,19 @@ export function createAppearanceSheet(dialog: HTMLDialogElement, text: TextContr
     try { picker.showPicker(); } catch { picker.click(); }
   });
   picker.addEventListener('change', () => keep({ accent: picker.value.toLowerCase() }));
-  dialog.addEventListener('keydown', event => {
+  sheet.addEventListener('keydown', event => {
     // The first Escape only ends a preview; the next one closes the sheet.
     if (event.key === 'Escape' && appearance() !== kept) { event.preventDefault(); event.stopPropagation(); restore(); }
   });
-  dialog.addEventListener('click', event => {
-    if (event.target !== dialog) return;
-    const box = dialog.getBoundingClientRect();
-    if (event.clientY < box.top || event.clientX < box.left || event.clientX > box.right) dialog.close();
-  });
-  dialog.addEventListener('close', restore);
+  sheet.addEventListener('close', restore);
 
   return {
-    /** Opens the sheet on the kept mode, or (the palette's "Text size & spacing") on the size stepper when the open document has one. */
-    open(focus: 'mode' | 'size' = 'mode') {
-      kept = appearance(); render(); dialog.showModal();
+    /** Reads the kept appearance again and draws it; the sheet calls this as it opens. */
+    refresh() { kept = appearance(); render(); },
+    /** The control the sheet puts focus on: the size stepper when asked for it and the open document has one, otherwise the kept mode (or theme). */
+    focusTarget(focus: 'mode' | 'size' = 'mode') {
       const size = focus === 'size' && !textSection.hidden && textSection.querySelector<HTMLElement>('[data-step]:not(:disabled)');
-      (size || dialog.querySelector<HTMLElement>('.appearance-modes [aria-checked=true]:not(:disabled), .theme-row [aria-checked=true]'))?.focus();
+      return size || section.querySelector<HTMLElement>('.appearance-modes [aria-checked=true]:not(:disabled), .theme-row [aria-checked=true]');
     },
   };
 }

@@ -84,7 +84,7 @@ test('the controls are not drawn outside macOS', async ({ page }) => {
 
 test('on Windows the caption buttons start 12 px after the last toolbar item, quiet at rest and full strength on hover', async ({ page }) => {
   await open(page, 'windows');
-  const last = (await page.locator('#menu-toggle').boundingBox())!;
+  const last = (await page.locator('#tab-strip').boundingBox())!;
   const caption = (await page.locator('.caption').boundingBox())!;
   expect(caption.x - (last.x + last.width)).toBeGreaterThanOrEqual(12);
   await page.mouse.move(700, 500);

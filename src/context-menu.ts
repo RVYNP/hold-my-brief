@@ -6,7 +6,7 @@
 import { shortcutFor } from './commands';
 
 /** One command, or (with `submenu`) a list of them that opens beside it. `unavailable` is why it cannot run now; with it the entry is shown disabled. */
-export type MenuEntry = { label: string; run?: () => void; unavailable?: string; submenu?: readonly MenuEntry[]; /** A small picture drawn before the label (hidden from assistive technology: the label says it all). */ icon?: () => Element };
+export type MenuEntry = { label: string; run?: () => void; unavailable?: string; submenu?: readonly MenuEntry[]; /** A small picture drawn before the label (hidden from assistive technology: the label says it all). */ icon?: () => Element; /** The command's keys, quiet at the entry's end. */ keys?: string; /** Makes the entry a checkable one and says whether it is checked. */ checked?: boolean };
 
 export type ContextMenu = {
   /** Shows `entries` at `at` (a window point), or under `anchor` when there is none; asking again for the same anchor from the keyboard closes it. */
@@ -51,7 +51,11 @@ export function createContextMenu(options: { className?: string; label?: string;
     options.closed?.(was);
     if (refocus && was.isConnected) was.focus();
   }
-  const fill = (item: HTMLElement, entry: MenuEntry) => { if (entry.icon) item.append(entry.icon(), entry.label); else item.textContent = entry.label; };
+  const fill = (item: HTMLElement, entry: MenuEntry) => {
+    if (entry.icon) item.append(entry.icon(), entry.label); else item.textContent = entry.label;
+    if (entry.keys) item.append(Object.assign(document.createElement('kbd'), { textContent: entry.keys }));
+    if (entry.checked !== undefined) { item.setAttribute('role', 'menuitemcheckbox'); item.setAttribute('aria-checked', String(entry.checked)); }
+  };
   /** The submenu of the entry that has one: a menu of its own, laid beside that entry inside this one. */
   let sub: HTMLElement | undefined, subOwner: HTMLElement | undefined;
   const items = (scope: ParentNode) => [...scope.querySelectorAll<HTMLElement>(':scope > button:not(:disabled)')];

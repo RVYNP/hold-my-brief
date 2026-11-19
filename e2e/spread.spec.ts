@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { ZipWriter, Uint8ArrayWriter, TextReader } from '@zip.js/zip.js';
+import { openMore } from './settings-controls';
 
 /** A PDF whose pages carry "Page N" and the given MediaBox sizes. */
 function spreadPdf(sizes: [number, number][]) {
@@ -40,8 +41,7 @@ const pageBoxes = (page: Page) => page.locator('.pdf-spread .pdf-page').evaluate
   const box = element.getBoundingClientRect(); return { x: box.x, y: box.y, width: box.width, height: box.height };
 }));
 const menu = async (page: Page, name: RegExp) => {
-  await page.getByRole('button', { name: 'Reader menu' }).click();
-  await page.getByRole('button', { name }).click();
+  await (await openMore(page)).getByRole('menuitemcheckbox', { name }).click();
 };
 
 test('PDF two-page spread pairs, navigates, snaps, waits for width and resumes', async ({ page }) => {

@@ -44,7 +44,7 @@ where you stopped. PDF, EPUB, Markdown, text and images. Your files never leave 
   <tr>
     <td width="50%" valign="top">
       <h3>Stays where you put it</h3>
-      <b>Pin</b> keeps it above other apps. <b>Lock</b> fixes its size.
+      <b>Keep on top</b> (in Settings) keeps it above other apps. <b>Lock size</b> fixes its size.
     </td>
     <td width="50%" valign="top">
       <h3>Remembers your place</h3>

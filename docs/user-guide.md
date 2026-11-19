@@ -168,27 +168,37 @@ document at the place you left it (the other tabs open when selected). A session
 The toolbar is one row, and the window has no separate title bar. On macOS the close, minimize and
 zoom buttons are three quiet grey circles at the toolbar's left end that take their usual colours when you point at them (the green one enters full screen, and zooms when you hold Option); on Windows, minimize, maximize and close sit at its right
 end. Drag any empty part of the toolbar to move the window, and double-click it to maximize. The
-tabs start at its left end (after the window buttons on a Mac) and run up to the pin (see Tabs above). In windows
+tabs start at its left end (after the window buttons on a Mac) and run up to its right end (see Tabs above). In windows
 720 pixels wide and up the toolbar has no library button, because the icon rail's **Library** is the way in (see Document
 library); in compact windows the library button stands first, before the tabs. Ctrl+K opens the command
 palette, where you can open a file, jump, find or change any setting.
 
-The pin button keeps the reader above ordinary windows. The lock button captures its outer
-dimensions while allowing movement. Each is highlighted while on. Ctrl+Shift+T toggles pin;
-Ctrl+Shift+L toggles lock. The ··· menu opens just under its button and holds what has no other
-home: **All commands…** (the palette), Go to, Contents, Back, page rotation and spreads when the
-document has pages, **Appearance and text…**, the AI assistant, the window presets (Compact
-420 × 620, Reading 760 × 900), **Library on the right** (a checkable item), the shortcut reference and the data commands. Everything else, such as
-fit and zoom, is on the page's floating controls, on its keys, and in the palette.
+The toolbar holds the document tabs and nothing else on its right: pin, lock and the window sizes are in **Settings** (below), and
+the open document's own actions are the **More** button of the view controls (see Zoom and the hand tool). Everything else,
+such as fit and zoom, is on the page's floating controls, on its keys, and in the palette, which reaches every command.
 
 While another app has focus, the reader's buttons and progress line fade so a pinned window stays
 quiet beside your work; the tabs, the document's position and the page keep full strength. Click the
 reader and everything returns.
 
+## Settings
+
+**Settings** is a sheet at the bottom of the window: the icon rail's last icon opens it, and a compact window (no icon rail) has a
+Settings button at the toolbar's right end. It has four sections, top to bottom, and scrolls inside itself, so it fits a 420 × 620
+window. Escape closes it.
+
+- **Window** (desktop app only): **Keep on top** (Ctrl+Shift+T) keeps the reader above ordinary windows, and **Lock size**
+  (Ctrl+Shift+L) captures its outer dimensions while allowing movement. Each is a switch that stays in step with its shortcut
+  and with the palette while the sheet is open. **Compact** (420 × 620) and **Reading** (760 × 900) resize the window.
+- **Appearance:** colour and text, below.
+- **Library:** the side the library docks on, **Left** or **Right** (see Document library).
+- **More:** **All commands…** (Ctrl+K), **AI assistant…** (desktop app), **Keyboard shortcuts**, **Clear recent files** and
+  **Delete saved reading data…**.
+
 ## Appearance
 
-Open the menu and choose **Appearance and text…** to open the Appearance panel at the bottom of the
-window. Colour and text are on one page, top to bottom: **Mode** is at the top, beside the title; every other
+Open **Settings** (or choose **Appearance and text…** in the palette) and look at its Appearance section. Colour and text are on
+one page, top to bottom: **Mode** is at the top, beside the section's title; every other
 setting is a labelled row below it. Themes, glows and accents are plain color discs with no names under them.
 Hover over or focus a theme or glow disc and its name is on the line beneath the glows; it is also that disc's
 tooltip and accessible name. One ring marks the kept choice in all three rows.
@@ -295,6 +305,12 @@ selection pauses while the hand is on, and a click without movement still follow
 drag pans or slides in any mode. The hand turns off when a new document opens (and, in a fixed-layout EPUB, when switching between one and two pages rebuilds the view). Markdown and TXT
 reflow instead of zooming, so they have no pill and no panning; a reflowable EPUB has a pill of its own (next).
 
+**More.** Every pill ends with a **More** (⋯) button. It opens a menu of the document's own actions: **Go to…** (Ctrl+G),
+**Contents** (when the document has an outline; a reflowable EPUB's pill has its own **Contents**, so the menu leaves it out),
+**Back after jump** (Alt+←), **Rotate page 90°** (page-based documents), **Two-page spread** (Ctrl+3) and **Cover page alone**
+(PDF and fixed-layout EPUB; it applies while two pages show). Escape, a choice or a press elsewhere closes the menu. A document with no pill
+(Markdown, TXT) reaches the same commands from the palette (Ctrl+K), the footer's position button (Go to) and Alt+←.
+
 **Reflowable EPUB: Contents, Pages or Scroll, text size.** Its pill reads **Contents** · **Pages | Scroll** · **A− 18 A+**.
 **Contents** opens the contents list above the pill (Ctrl+K → Contents opens the same list). A chapter entry reads "Chapter 3:
 Working with Pointers": the number, then the title; text before the chapter number is dropped, and an entry with no chapter
@@ -306,7 +322,7 @@ and a wheel or trackpad gesture that starts at the end of a chapter goes on into
 is remembered per document (and is also in the palette as **Pages view** and **Scroll view**). The first time a book is opened with
 no choice saved, it starts in Scroll if it looks like a reference book, that is, if `<pre>` blocks appear in at least 3 of its
 first 10 spine items, or `<pre>` and `<table>` hold at least a fifth of their text; otherwise in Pages. Your choice always wins afterwards.
-**A−** and **A+** step the text size by 2 px between 12 and 40 px, the same setting as the size stepper in **Appearance and text…**.
+**A−** and **A+** step the text size by 2 px between 12 and 40 px, the same setting as the size stepper in **Settings › Appearance**.
 Code blocks in a reflowable EPUB wrap instead of scrolling sideways, with wrapped lines indented under the line they continue, and are set
 at a tighter line height than the text. Each is framed like a Markdown block, a rounded box with a hairline border, and a block the book gave no
 background is tinted like one; the book's own fonts, colours and background are kept. When the book names the language of a block (a `language-…`
@@ -377,9 +393,9 @@ return it to the default spot. Moving it never resizes or refits the page.
 
 ### Two-page spread
 
-**Two-page spread** (the ··· menu, the pill's book button, or Ctrl+3) shows PDF and
+**Two-page spread** (the pill's **More** menu, the pill's book button, or Ctrl+3) shows PDF and
 fixed-layout EPUB pages side by side, edge to edge, like an open book. By default page 1 is a cover
-shown alone on the right and pairs follow as 2–3, 4–5…; turn off **Cover page alone** in the menu for
+shown alone on the right and pairs follow as 2–3, 4–5…; turn off **Cover page alone** in the More menu for
 documents that should pair 1–2. Fixed-layout EPUBs keep their publisher's page sides and
 right-to-left page progression. Pages of different sizes are scaled to a common height; fit page fits
 the whole spread and fit width its width. Page turns, Go to, Back and the scrubber move by spread, and
@@ -460,7 +476,7 @@ The desktop app can hand questions to an AI model, using your own API key from A
 OpenRouter or OpenAI. It is off until you turn it on, and without a key the app never makes a network
 request.
 
-**Turn it on:** choose **AI assistant…** in the ··· menu (or type `ai` in the palette), pick a
+**Turn it on:** choose **AI assistant…** in Settings › More (or type `ai` in the palette), pick a
 provider, paste an API key (**Get a key** opens the provider's key page) and choose **Turn on**.
 Only one provider's key is kept at a time: turning on another provider replaces the first key. The
 key is checked with the provider first, then kept in macOS Keychain or Windows Credential Manager.
@@ -494,7 +510,7 @@ the data. Use is billed to your API key.
 
 ### Keyboard shortcuts
 
-**Keyboard shortcuts** in the ··· menu (or the palette) shows the same list, grouped as in the
+**Keyboard shortcuts** in Settings › More (or the palette) shows the same list, grouped as in the
 palette and built from it, so it always matches the app; the browser preview leaves out pin and size
 lock.
 
@@ -526,8 +542,8 @@ lock.
 Saved reading data lives in the native per-user local application-data directory under
 `xyz.rpayton.holdmybrief` (on macOS, `~/Library/Application Support/xyz.rpayton.holdmybrief`),
 not beside the source documents. Identical file bytes share resume state even after a rename.
-Changed revisions keep the previous revision's state and show a best-effort restoration message. The
-menu separately clears recents and saved reading data; neither deletes documents. Each saved position also
+Changed revisions keep the previous revision's state and show a best-effort restoration message. In Settings › More,
+**Clear recent files** and **Delete saved reading data…** are separate; neither deletes documents. Each saved position also
 keeps how far into the document it was (a fraction, and the page and page count for paged documents) so the library
 can show it; positions saved before this version have none until you read the document again.
 
@@ -545,7 +561,7 @@ library **panel** opens beside it. Its icons stand at the top of the reading are
 **Settings**. That is all of it: there is one way to the library. **Home** shows Home and is marked as the current page while Home is showing; it has no keyboard shortcut. **Library** (**Ctrl+B**) opens the panel or collapses it (the
 icon rail stays) and is filled with the accent tone while the panel is open. **Search** (**Ctrl+Shift+F**) opens the panel
 if it is closed and puts the cursor in its filter field. **Add files** opens a menu with **Add files…** and **Sources…**
-(indexing folders), even when the panel is closed. **Settings** opens Appearance. Hover an icon for its name and
+(indexing folders), even when the panel is closed. **Settings** opens the Settings sheet (see Settings). Hover an icon for its name and
 shortcut; the names are shown only while the panel is closed, because an open panel already says where you are.
 
 The panel **docks**: when it opens, the reading panel (the page, Home, find, page previews, the view controls) gives it that
@@ -591,10 +607,10 @@ An image opened from a collection shows a small **previous / next** pill at the 
 above the footer's strip, so the footer never covers it when it opens. The view controls stand directly above it
 (and a view-controls pill you drag stays clear of it), beside the panel, at any window width.
 
-The library can be kept on either side. Check **Library on the right** in the ··· menu (next to the window presets),
+The library can be kept on either side. Choose **Left** or **Right** under **Library** in **Settings**,
 right-click the icon rail and choose **Move to the right side** (or **Move to the left side**), or use **Move library to
 other side** in the command palette (**Ctrl+K**). It is one setting: the icon rail and the panel always stand on the same
-side, and the side is remembered. Appearance no longer has a row for it.
+side, and the side is remembered.
 
 Drag the divider between the panel and the page to resize it (240–520 pixels, and never more
 than 55% of the window, which keeps at least 320 pixels of the reading panel clear beside it). The panel is docked, so a

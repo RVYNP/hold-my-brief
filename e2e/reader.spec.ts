@@ -1,5 +1,6 @@
 import { test, expect, type Locator } from '@playwright/test';
 import { pagedPdf } from './paged-pdf';
+import { openSettings, runFromPalette } from './settings-controls';
 test('compact text workflow, semantic resume, invalid replacement preserves document', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Hand it over.' })).toBeVisible();
@@ -32,23 +33,21 @@ test('Markdown uses safe content, an outline and compact accessible controls', a
   expect(await page.evaluate(() => (window as unknown as {pwned?: boolean}).pwned)).toBeUndefined();
   expect(remote).toEqual([]);
   await page.setViewportSize({ width: 360, height: 420 });
-  await page.getByRole('button', { name: 'Reader menu' }).click();
-  await page.getByRole('button', { name: 'Contents', exact: true }).click();
+  await runFromPalette(page, 'Contents');
   await page.locator('#outline-list').getByRole('button', { name: 'Next steps' }).click();
   await expect(page.locator('#position')).toContainText('Next steps');
-  await expect(page.getByRole('button', { name: 'Pin', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeVisible();
 });
 test('document headings never take over the reader\'s own elements', async ({ page }) => {
   await page.goto('/');
-  // Headings named like the reader's dialogs ("Contents", "Menu", "Appearance") used to become ids that
+  // Headings named like the reader's dialogs ("Contents", "Settings", "Jump") used to become ids that
   // shadowed them, so the Contents popover would not open on a document that has a Contents heading.
   const filler = Array.from({ length: 30 }, (_, i) => `Paragraph ${i + 1}, long enough that each heading sits screens apart from the next one.`).join('\n\n');
-  const markdown = ['# Contents', filler, '## Menu', filler, '## Appearance', filler, '## Jump', filler].join('\n\n');
+  const markdown = ['# Contents', filler, '## Settings', filler, '## Jump', filler].join('\n\n');
   await page.locator('#file-input').setInputFiles({ name: 'guide.md', mimeType: 'text/markdown', buffer: Buffer.from(markdown) });
   await expect(page.locator('#filename')).toHaveText('guide.md');
-  expect(await page.evaluate(() => ['contents', 'menu', 'appearance', 'jump'].filter(id => document.querySelectorAll(`[id="${id}"]`).length !== 1))).toEqual([]);
-  await page.getByRole('button', { name: 'Reader menu' }).click();
-  await page.getByRole('button', { name: 'Contents', exact: true }).click();
+  expect(await page.evaluate(() => ['contents', 'settings', 'jump'].filter(id => document.querySelectorAll(`[id="${id}"]`).length !== 1))).toEqual([]);
+  await runFromPalette(page, 'Contents');
   await page.locator('#outline-list').getByRole('button', { name: 'Jump' }).click();
   await expect(page.locator('#position')).toContainText('Jump');
 });
@@ -67,7 +66,7 @@ test('text settings live in the appearance sheet, apply to the open text and kee
   await page.keyboard.press('Control+k');
   await page.locator('#palette-input').fill('text size');
   await page.keyboard.press('Enter');
-  const sheet = page.locator('#appearance');
+  const sheet = page.locator('#settings');
   // One page: no tabs, and "Text size & spacing" only moves focus to the size stepper.
   await expect(sheet.getByRole('tab')).toHaveCount(0);
   await expect(sheet.getByRole('button', { name: 'Smaller text' })).toBeFocused();
@@ -91,8 +90,7 @@ test('text settings live in the appearance sheet, apply to the open text and kee
   for (const file of pageDocuments) {
     await page.locator('#file-input').setInputFiles(file);
     await expect(page.locator('#filename')).toHaveText(file.name);
-    await page.getByRole('button', { name: 'Reader menu' }).click();
-    await page.getByRole('button', { name: /Appearance and text/ }).click();
+    await openSettings(page);
     await expect(sheet.locator('.appearance-note')).toHaveText('Page tone and text settings apply to Markdown, plain text and reflowable books. PDF pages, fixed-layout books and images keep their colors and zoom instead (Ctrl + and Ctrl −).');
     await expect(sheet.locator('.appearance-preview')).toBeHidden();
     await expect(sheet.getByRole('button', { name: 'Larger text' })).toBeHidden();
@@ -108,9 +106,7 @@ test('appearance is one page: no tabs, seven themes and ten glows named by their
   // Plain text shows every row, LINES included: the tallest the sheet gets.
   await page.locator('#file-input').setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('A line of text.\n'.repeat(60)) });
   await expect(page.locator('#filename')).toHaveText('notes.txt');
-  await page.getByRole('button', { name: 'Reader menu' }).click();
-  await page.getByRole('button', { name: /Appearance and text/ }).click();
-  const sheet = page.locator('#appearance');
+  const sheet = await openSettings(page);
   await expect(sheet).toBeVisible();
   await expect(sheet.getByRole('tab')).toHaveCount(0);
   const families = sheet.locator('.theme-row:not(.theme-row-glow) .theme-card'), glows = sheet.locator('.theme-row-glow .theme-card');
@@ -159,9 +155,7 @@ test('a glow theme fixes the scheme, disables the mode control, and a normal fam
   await page.emulateMedia({ colorScheme: 'light' });
   await page.goto('/');
   const root = page.locator('html');
-  await page.getByRole('button', { name: 'Reader menu' }).click();
-  await page.getByRole('button', { name: /Appearance/ }).click();
-  const sheet = page.locator('#appearance');
+  const sheet = await openSettings(page);
   const modes = sheet.locator('.appearance-modes');
   await sheet.getByRole('radio', { name: 'Light' }).click();
   await expect(sheet.locator('.theme-row-glow .theme-card')).toHaveCount(10);
@@ -185,8 +179,7 @@ test('a glow theme fixes the scheme, disables the mode control, and a normal fam
   await expect(root).toHaveAttribute('data-palette', 'peach');
   await expect(root).toHaveAttribute('data-theme', 'light');
   // Back to a normal family: the earlier mode choice (Light) is restored and the control works again.
-  await page.getByRole('button', { name: 'Reader menu' }).click();
-  await page.getByRole('button', { name: /Appearance/ }).click();
+  await openSettings(page);
   await sheet.getByRole('radio', { name: 'Lilac' }).click();
   await expect(modes.getByRole('radio', { name: 'Light' })).toBeEnabled();
   await expect(modes.getByRole('radio', { name: 'Light' })).toHaveAttribute('aria-checked', 'true');
@@ -205,9 +198,7 @@ test('appearance previews on hover, keeps on click, restores on Escape and persi
   await expect(root).toHaveAttribute('data-theme', 'light');
   await page.emulateMedia({ colorScheme: 'dark' });
   await expect(root).toHaveAttribute('data-theme', 'dark');
-  await page.getByRole('button', { name: 'Reader menu' }).click();
-  await page.getByRole('button', { name: /Appearance/ }).click();
-  const sheet = page.locator('#appearance');
+  const sheet = await openSettings(page);
   await sheet.getByRole('radio', { name: 'Arctic' }).hover();
   await expect(root).toHaveAttribute('data-palette', 'arctic');
   await page.keyboard.press('Escape');

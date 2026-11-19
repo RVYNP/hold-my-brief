@@ -1,5 +1,6 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { chooseFromViewMenu, chooseLibrarySide, openLibraryTab, openSearch, preferGrid, libraryToggle } from './library-controls';
+import { openMore } from './settings-controls';
 import { ZipWriter, Uint8ArrayWriter, TextReader } from '@zip.js/zip.js';
 import { createHash } from 'node:crypto';
 import { deflateSync } from 'node:zlib';
@@ -612,8 +613,7 @@ test('PDF page-bitmap cache never reuses pixels across rotation', async ({ page 
     return count ? sum / count / height : -1;
   });
   const rotate = async () => {
-    await page.getByRole('button', { name: 'Reader menu' }).click();
-    await page.getByRole('button', { name: 'Rotate page 90°' }).click();
+    await (await openMore(page)).getByRole('menuitem', { name: 'Rotate page 90°' }).click();
     await expect(page.locator('.pdf-render-status')).toHaveCount(0);
     await expect(page.locator('.textLayer')).toContainText('First page');
   };
