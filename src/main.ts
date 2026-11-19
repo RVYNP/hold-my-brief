@@ -790,7 +790,10 @@ let paintedTabs = '';
 function paintTabs() {
   const all = [...(libraryTab ? [libraryTab] : []), ...sides.flatMap(side => side.tabs.tabs)];
   const hints = titleHints(all.filter(tab => tab.path !== LIBRARY_PATH).map(tab => ({ path: tab.path, title: tabTitle(tab) })));
-  const viewOf = (side: Side, tab: Tab, active: boolean): TabView => ({ path: tab.path, title: tabTitle(tab), hint: hints.get(tab.path) ?? '', format: tab.format, where: tabWhere(side, tab), progress: formatProgress(progressOf((tab === side.shown ? side.pane.position : tab.position) ?? { fraction: NaN, scrub: { current: 0, total: 0, unit: 'line' } })) ?? '', active, problem: Boolean(tab.problem), library: tab.path === LIBRARY_PATH, image: Object.hasOwn(imageFormats, tab.format) });
+  const viewOf = (side: Side, tab: Tab, active: boolean): TabView => {
+    const place = tab === side.shown ? side.pane.position : tab.position;
+    return { path: tab.path, title: tabTitle(tab), hint: hints.get(tab.path) ?? '', format: tab.format, where: tabWhere(side, tab), paged: /^Pages? /.test(place?.label ?? ''), progress: formatProgress(progressOf(place ?? { fraction: NaN, scrub: { current: 0, total: 0, unit: 'line' } })) ?? '', active, problem: Boolean(tab.problem), library: tab.path === LIBRARY_PATH, image: Object.hasOwn(imageFormats, tab.format) };
+  };
   const rows = sides.map(side => side.tabs.tabs.map(tab => viewOf(side, tab, tab === side.tabs.active)));
   const bar = isSplit() ? (libraryTab ? [viewOf(sides[0], libraryTab, cover === 'library')] : []) : rows[0], home = isSplit() ? cover === 'home' : !sides[0].tabs.active;
   const key = JSON.stringify([bar, home, isSplit() ? [rows, focused.view.id] : 0, all.length]);

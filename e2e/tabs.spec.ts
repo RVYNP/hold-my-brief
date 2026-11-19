@@ -28,8 +28,8 @@ test('every document opens in its own tab, and only three keep a live page', asy
   await expect(hosts(page)).toHaveCount(3);
   await expect(page.locator('.reader-host:not(.staging):not(.tab-hidden)')).toHaveCount(1);
   await expect(page.locator('#empty')).toBeHidden();
-  // Every tab that has been shown has a place, not only the one being read.
-  await expect(page.locator('#tab-list .tab-where')).toHaveText([/^P\. 1\/240$/, /^P\. 1\/240$/, /^P\. 1\/240$/, /^P\. 1\/240$/]);
+  // Every tab that has been shown has a place, not only the one being read. A text document has lines, not pages: no "P.".
+  await expect(page.locator('#tab-list .tab-where')).toHaveText([/^1 \/ 240$/, /^1 \/ 240$/, /^1 \/ 240$/, /^1 \/ 240$/]);
   // A document that is open already is shown, not opened again.
   await open(page, 'b.txt');
   await shown(page, 'b.txt');
@@ -46,11 +46,14 @@ for (const size of [{ width: 1440, height: 900 }, { width: 1080, height: 760 }])
     await goTo(page, '30');
     await open(page, 'b.txt'); await shown(page, 'b.txt');
     await goTo(page, '60');
+    await page.locator('#file-input').setInputFiles(pdf('plates.pdf')); await shown(page, 'plates.pdf');
+    await page.locator('.pdf-reader').focus();
+    await goTo(page, '3');
     await tab(page, 'a.txt').click(); await shown(page, 'a.txt');
-    // Both tabs show their place, the one not showing too.
-    await expect(page.locator('#tab-list .tab-where')).toHaveText([/^P\. 30\/240$/, /^P\. 60\/240$/]);
+    // Every tab shows its place, the ones not showing too: lines as "30 / 240", pages as "P. 3/5".
+    await expect(page.locator('#tab-list .tab-where')).toHaveText([/^30 \/ 240$/, /^60 \/ 240$/, /^P\. 3\/5$/]);
     await expect(page.locator('#tab-list .tab-format')).toHaveCount(0);
-    await expectFormats(page.locator('#tab-list .tab'), ['TXT', 'TXT']);
+    await expectFormats(page.locator('#tab-list .tab'), ['TXT', 'TXT', 'PDF']);
     for (const name of ['a.txt', 'b.txt']) expect((await tab(page, name).boundingBox())!.width).toBeGreaterThanOrEqual(240);
     // The title is on the left and the place on the right.
     const [title, where] = [await tab(page, 'b.txt').locator('.tab-title').boundingBox(), await tab(page, 'b.txt').locator('.tab-where').boundingBox()];

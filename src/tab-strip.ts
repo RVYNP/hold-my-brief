@@ -9,8 +9,8 @@
 import { slotAt } from './tabs';
 import { middleTruncate } from './tab-titles';
 
-/** What one tab shows. `image` tabs keep the end of a long title (cut in the middle); the others keep its start. `where` is the short place ("40 / 146"; the toolbar prints it "P. 40/146"), empty until the document has been read; `progress` is the library's wording for how far in it is ("p. 12 / 96", "37 %", "Finished"), for the tab menu. The Library tab (`library`) shows a glyph for the format and its title for the path. */
-export type TabView = { path: string; title: string; hint: string; format: string; where: string; progress: string; active: boolean; problem: boolean; library: boolean; image: boolean };
+/** What one tab shows. `image` tabs keep the end of a long title (cut in the middle); the others keep its start. `where` is the short place ("40 / 146"; the toolbar prints it "P. 40/146" when `paged`, and as it is for lines), empty until the document has been read; `progress` is the library's wording for how far in it is ("p. 12 / 96", "37 %", "Finished"), for the tab menu. The Library tab (`library`) shows a glyph for the format and its title for the path. */
+export type TabView = { path: string; title: string; hint: string; format: string; where: string; paged: boolean; progress: string; active: boolean; problem: boolean; library: boolean; image: boolean };
 
 export type TabHandlers = {
   /** A tab was chosen; `undefined` is Home (only the toolbar's open-tabs menu says so). */
@@ -82,7 +82,7 @@ export type TabStrip = {
   showDrop: (slot: number | undefined, label?: string) => void;
 };
 
-/** The toolbar's place for a tab: "40 / 146" is printed "P. 40/146"; anything else ("37 %") is kept. */
+/** The toolbar's place for a paged tab: "40 / 146" is printed "P. 40/146"; anything else ("37 %") is kept. */
 const placeOf = (where: string) => where.replace(/^([\d–-]+) \/ (\d+)$/, 'P. $1/$2');
 
 /**
@@ -117,7 +117,7 @@ export function createTabStrip(elements: { strip: HTMLElement; list: HTMLElement
     const mark = tab.querySelector('.tab-format');
     if (mark) { if (!view.library) setText(mark, view.format.toUpperCase()); else if (!mark.firstElementChild) mark.replaceChildren(icon(icons.library, 12)); }
     setText(tab.querySelector('.tab-hint')!, view.hint);
-    setText(tab.querySelector('.tab-where')!, toolbar ? placeOf(view.where) : view.active ? view.where : '');
+    setText(tab.querySelector('.tab-where')!, toolbar ? (view.paged ? placeOf(view.where) : view.where) : view.active ? view.where : '');
     tab.querySelector('.tab-close')!.setAttribute('aria-label', `Close ${view.title}`);
   }
   /**
