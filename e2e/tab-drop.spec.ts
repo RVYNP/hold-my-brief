@@ -184,7 +184,7 @@ test('a plain click on a library tree row or a Home tile still opens it in a new
   await tab(page, 'a.txt').hover(); await tab(page, 'a.txt').locator('.tab-close').click(); // The × of a tab that is not showing appears on hover.
   await tab(page, 'lib1.txt').locator('.tab-close').click();
   await expect(page.locator('#empty')).toBeVisible();
-  await page.locator('.home-open[aria-label="Open lib1.txt"]').click();
+  await page.locator('.home-card-open[aria-label="Open lib1.txt"]').click();
   await shown(page, 'lib1.txt');
   await expect(titles(page)).toHaveText(['lib1.txt']);
 });
@@ -215,7 +215,7 @@ test('a Home tile dragged to the reading area opens in a new tab, after the tab 
   await expect(page.locator('#library-root')).toBeHidden();
   // From Home a tile dropped on the page opens after the tab showing; with Home showing, that is the end.
   await railHome(page).click();
-  const tile = page.locator('.home-open[aria-label="Open lib2.txt"]');
+  const tile = page.locator('.home-card-open[aria-label="Open lib2.txt"]');
   await expect(tile).toBeVisible();
   const tileAt = await centre(tile);
   await page.mouse.move(tileAt.x, tileAt.y); await page.mouse.down();

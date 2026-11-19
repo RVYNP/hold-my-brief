@@ -76,10 +76,8 @@ test('the active tab has a 2 px sheen line on its top edge that takes no room', 
   expect((await paint(page, '#tab-list .tab:not(.is-active)', '::before')).image).toBe('none');
 });
 
-test('the Home progress fill and the sheets carry the sheen', async ({ page }) => {
+test('the sheets carry the sheen', async ({ page }) => {
   await seeded(page);
-  expect((await paint(page, '.home-progress > i')).image).toContain('linear-gradient');
-  expect((await paint(page, '.home-progress')).height).toBe(3);
   expect((await paint(page, '#appearance')).image).toContain('linear-gradient');
 });
 
@@ -99,10 +97,9 @@ test('the primary button, the pressed rail icon, the pressed view controls and t
 });
 
 for (const emulation of flatness) {
-  test(`${Object.keys(emulation)[0]} ${Object.values(emulation)[0]} shows the progress, tab, sheets and Home flat`, async ({ page }) => {
+  test(`${Object.keys(emulation)[0]} ${Object.values(emulation)[0]} shows the tab and sheets flat`, async ({ page }) => {
     await seeded(page);
     await page.emulateMedia({ forcedColors: 'none', contrast: 'no-preference', ...emulation });
-    expect((await paint(page, '.home-progress > i')).image).toBe('none');
     await page.locator('#file-input').setInputFiles({ name: 'a.txt', mimeType: 'text/plain', buffer: Buffer.from('a.txt\n\nBody of a.txt.\n') });
     await expect(page.locator('#tab-list .tab.is-active .tab-title')).toHaveText('a.txt');
     expect((await paint(page, '#tab-list .tab.is-active', '::before')).display).toBe('none');

@@ -54,18 +54,15 @@ const themes: [string, object][] = [
   ['Peach', { palette: 'peach' }],
 ];
 
-test('Home is a plain bar again: the title, Open files and Browse library; no band, sheen or plate', async ({ page }) => {
+test('Home is a heading over its sections: no header buttons, no band, sheen or plate', async ({ page }) => {
   await seedLibrary(page, documents, collections);
-  const bar = page.locator('.home-bar');
-  await expect(bar.getByRole('heading', { name: 'Home', level: 1 })).toBeVisible();
-  await expect(bar.getByRole('button', { name: 'Open files' })).toBeVisible();
-  await expect(bar.getByRole('button', { name: 'Browse library' })).toBeVisible();
-  await expect(bar.locator('h1, button')).toHaveCount(3);
+  const title = page.getByRole('heading', { name: 'Home', level: 1 });
+  await expect(title).toBeVisible();
+  await expect(page.locator('#empty').getByRole('button', { name: /Open files|Browse library/ })).toHaveCount(0);
+  await expect(page.locator('#empty-open, #home-browse')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Shuffle background' })).toHaveCount(0);
   await expect(page.locator('.home-banner, .home-banner-art, .home-banner-plate, .home-banner-sheen')).toHaveCount(0);
-  await expect(page.locator('#empty-open')).toHaveText('Open files');
-  await expect(page.locator('#home-browse')).toHaveText('Browse library');
-  const look = await bar.evaluate(node => ({ background: getComputedStyle(node).backgroundImage, height: node.getBoundingClientRect().height }));
+  const look = await title.evaluate(node => ({ background: getComputedStyle(node).backgroundImage, height: node.getBoundingClientRect().height }));
   expect(look.background).toBe('none');
   expect(look.height).toBeLessThan(48);
 });
@@ -148,7 +145,9 @@ test('the ground is hidden in a reader tab and in the Library tab, and back on H
   await expect(shown(page)).toBeHidden();
   await railHome(page).click();
   await expect(shown(page)).toBeVisible();
-  await page.locator('#home-browse').click();
+  await page.keyboard.press('Control+k');
+  await page.locator('#palette-input').fill('library tab');
+  await page.keyboard.press('Enter');
   await expect(page.locator('#library-page')).toBeVisible();
   await expect(page.locator('#empty')).toBeHidden();
   await expect(shown(page)).toBeHidden();
@@ -232,7 +231,7 @@ test('BACKGROUND None removes the ground, greys STRENGTH, and a pattern brings t
   await expect(sheet.locator('[data-banner=flow]')).toHaveAttribute('aria-checked', 'true');
   await sheet.locator('[data-banner=none]').click();
   await expect(canvases(page)).toHaveCount(0);
-  await expect(page.locator('.home-bar').getByRole('heading', { name: 'Home' })).toBeVisible();
+  await expect(page.locator('#empty').getByRole('heading', { name: 'Home' })).toBeVisible();
   const slider = sheet.locator('input[type=range]');
   await expect(slider).toBeDisabled();
   await expect(slider).toHaveAttribute('aria-disabled', 'true');
@@ -393,7 +392,7 @@ test('Home text drawn on the ground reads at 4.5:1 against the worst ground pixe
       await keepAppearance(page, { ...record, banner: 'flow', backgroundStrength: strength });
       await pixels(page);
       expect(await opacityOf(shown(page))).toBe(String(strength));
-      await expect(page.locator('.home-all').first()).toBeVisible();
+      await expect(page.locator('.home-card-meta').first()).toBeVisible();
       const lowest = await lowestTextContrast(page);
       worst[`${name} ${Math.round(strength * 100)} %`] = `${lowest.ratio.toFixed(2)} (${lowest.label}, ground tone ${lowest.tone})`;
       expect(lowest.texts, name).toBeGreaterThan(12);
@@ -426,8 +425,8 @@ test('Home\'s muted text is exactly --muted at 6 % and at T (8 %), its --fg text
     const texts = (selector: string) => [...document.querySelectorAll(selector)].filter(node => !node.closest('.home-recent-open') && node.textContent?.trim()).map(node => getComputedStyle(node).color);
     return {
       muted, fg, mutedLightness: lightness(muted), fgLightness: lightness(fg),
-      mutedTexts: ['.home-all', '.home-card-meta', '.home-file'].map(selector => ({ selector, colours: texts(selector), lightness: texts(selector).map(lightness) })),
-      fgTexts: ['#empty h1', '.home-section h2', '.home-card-title', '.home-chip:not([aria-pressed=true])'].map(selector => ({ selector, colours: texts(selector) })),
+      mutedTexts: ['.home-card-meta'].map(selector => ({ selector, colours: texts(selector), lightness: texts(selector).map(lightness) })),
+      fgTexts: ['#empty h1', '.home-section h2', '.home-card-title'].map(selector => ({ selector, colours: texts(selector) })),
     };
   });
   for (const [name, record] of themes) {
@@ -462,7 +461,7 @@ test('the ink deepens as the slider rises above T (8 %) and is whole at the maxi
   await seedLibrary(page, documents, collections);
   await keepAppearance(page, { mode: 'light', palette: 'brief', banner: 'flow', backgroundStrength: .06 });
   const sheet = await openSheet(page);
-  const slider = sheet.locator('input[type=range]'), file = page.locator('.home-file').first();
+  const slider = sheet.locator('input[type=range]'), file = page.locator('.home-card-meta').first();
   const colour = () => file.evaluate(node => {
     const swatch = document.createElement('canvas').getContext('2d', { willReadFrequently: true })!;
     swatch.canvas.width = swatch.canvas.height = 1; swatch.fillStyle = getComputedStyle(node).color; swatch.fillRect(0, 0, 1, 1);

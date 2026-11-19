@@ -101,10 +101,10 @@ where you stopped. PDF, EPUB, Markdown, text and images. Your files never leave 
   </tr>
 </table>
 
-**Home** is a tab, always first, laid out like a media player's front page: **Recently opened** (your eight
-latest documents), then shelves that scroll sideways: **Continue reading**, **Favorites** and
-**Collections**. **Open in library** opens the library on that selection. Chips filter PDFs, EPUBs, Markdown,
-text and images separately; opening a reference keeps its original format.
+**Home** is a heading over a few quiet sections: **Recently opened** (one card, the document you looked at last, with its
+type and how far you got), **Continue reading** (what you started and haven't finished), then one shelf for each type of
+file in your library: **PDFs**, **EPUBs**, **Markdown**, **Text** and **Images**. Shelves scroll sideways; opening a reference keeps
+its original format.
 
 <p align="center">
   <img src="docs/media/home.png" alt="The Home tab: Recently opened as two rows of cards with progress lines, then Continue reading with the half-tone manual, Pride and Prejudice and three generated covers, each showing its page or percentage" width="880">

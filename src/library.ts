@@ -49,8 +49,6 @@ type Callbacks = {
   /** What the Library tab shows changed (another scope, a collection renamed): its title and saved scope follow. */
   pageChanged?: (place: LibraryPlace) => void;
 };
-/** What Home's "Open in library" opens the library on. */
-export type LibraryScope = 'all' | 'favorites' | 'reading' | { collection: string };
 /** What the Library tab shows, as its tab saves and titles it: the scope's saved form and its name. */
 export type LibraryPlace = { scope: string; title: string };
 /** Documents rendered per step of the continuous scroll: the first screen's worth, then one more each time the end of what is shown comes near. */
@@ -117,8 +115,8 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   refresh: (activePath?: string) => Promise<void>; toggle: () => void;
   /** The side the library, drawer and rail, is kept on (one saved preference), and the way to change it. */
   side: () => LibrarySide; setSide: (side: LibrarySide) => void;
-  /** Opens the Library tab on all documents, on favorites, on the documents still being read, or on one collection (a tab that is open is retargeted). */
-  browse: (scope: LibraryScope) => void;
+  /** Opens the Library tab on all documents (a tab that is open is retargeted). */
+  browse: () => void;
   /** Sets the colour and/or search text of the library list (opening the drawer if needed) and reports what matches. `colour: null` clears it; omitted fields are left alone. */
   filter: (change: { colour?: string | null; query?: string }) => Promise<LibraryFilterResult>;
   colourNames: readonly string[];
@@ -1238,8 +1236,8 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
     showPage,
     restoreScope: key => { lastPlace = undefined; setScope(parseScope(key) ?? { kind: 'all' }); },
     forgetScope: () => setScope({ kind: 'all' }),
-    /** Home's "Open in library" and collection cards, and the library-board command: the Library tab on a scope of the library. */
-    browse: (scope: LibraryScope) => openScope(typeof scope === 'string' ? { kind: scope } : { kind: 'collection', id: scope.collection }),
+    /** The library-board command: the Library tab on all documents (a tab that is open is retargeted). */
+    browse: () => openScope({ kind: 'all' }),
     filter: filterBy,
     colourNames,
   };

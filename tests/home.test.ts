@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { homeIsEmpty, homeSections, homeTypes, recentLimit, openedAt, openedOrder, recentTiles, shelfLimit, shelfRatio, type HomeCollection, type HomeDocument, type HomeRecent } from '../src/home';
+import { homeSections, openedAt, openedOrder, recentTiles, shelfLimit, shelfRatio, type HomeDocument, type HomeRecent } from '../src/home';
 
 const recent = (path: string, name = path, format = 'pdf'): HomeRecent => ({ path, name, format, lastOpened: 1 });
 const doc = (path: string, lastOpened = 0, extra: Partial<HomeDocument> = {}): HomeDocument => ({ path, name: path, format: 'pdf', lastOpened, ...extra });
-const shelf = (id: string, name = id, parentId: string | null = null): HomeCollection => ({ id, name, parentId });
 const paths = (items: { path: string }[]) => items.map(item => item.path);
 
 describe('openedAt', () => {
@@ -24,11 +23,10 @@ describe('Recently opened', () => {
     expect(sections.recent).toEqual([]);
   });
 
-  it('keeps the recents in the store\'s order and stops at eight', () => {
-    const recents = Array.from({ length: recentLimit + 4 }, (_, index) => recent(`b${index}.pdf`, `Book ${index}.pdf`));
+  it('is the first recent only, whatever else was opened', () => {
+    const recents = Array.from({ length: 5 }, (_, index) => recent(`b${index}.pdf`, `Book ${index}.pdf`));
     const { recent: tiles } = homeSections({ recents, documents: [] });
-    expect(tiles).toHaveLength(8);
-    expect(paths(tiles)).toEqual(recents.slice(0, 8).map(item => item.path));
+    expect(paths(tiles)).toEqual(['b0.pdf']);
     expect(tiles[0].title).toBe('Book 0');
   });
 
@@ -49,9 +47,9 @@ describe('Recently opened', () => {
 
   it('carries progress onto the card, and none where there is none', () => {
     const progress = { 'a.pdf': { fraction: .25, page: 3, pages: 12 } };
-    const { recent: tiles } = homeSections({ recents: [recent('a.pdf'), recent('b.pdf')], documents: [], progress });
-    expect(tiles[0].progress).toEqual(progress['a.pdf']);
-    expect(tiles[1]).not.toHaveProperty('progress');
+    const [first] = homeSections({ recents: [recent('a.pdf')], documents: [], progress }).recent;
+    expect(first.progress).toEqual(progress['a.pdf']);
+    expect(homeSections({ recents: [recent('b.pdf')], documents: [], progress }).recent[0]).not.toHaveProperty('progress');
   });
 });
 
@@ -87,86 +85,60 @@ describe('Continue reading', () => {
   });
 });
 
-describe('Favorites', () => {
-  it('lists starred documents, most recently opened first, and may repeat a recent', () => {
-    const documents = [doc('r.pdf', 5, { favorite: true }), doc('f.pdf', 3, { favorite: true }), doc('other.pdf', 9), doc('g.pdf', 8, { favorite: true })];
-    const sections = homeSections({ recents: [recent('r.pdf')], documents });
-    expect(paths(sections.favorites)).toEqual(['g.pdf', 'r.pdf', 'f.pdf']);
-    expect(paths(sections.recent)).toEqual(['r.pdf']);
-  });
-});
-
-describe('Collections', () => {
-  const collections = [shelf('b', 'B shelf'), shelf('a', 'A shelf'), shelf('a-child', 'Child', 'a'), shelf('empty', 'Empty'), shelf('gone', 'Gone'), shelf('x', 'Orphan', 'unknown-parent')];
-  it('has one card per top-level collection with a document, sorted by name, counting sub-collections', () => {
-    const documents = [doc('1.pdf', 0, { collectionIds: ['a'] }), doc('2.pdf', 0, { collectionIds: ['a-child'] }), doc('3.pdf', 0, { collectionIds: ['b'] }), doc('4.pdf', 0, { collectionIds: ['x'] }), doc('5.pdf')];
-    const { collections: cards } = homeSections({ recents: [], documents, collections });
-    expect(cards.map(card => [card.id, card.name, card.count])).toEqual([['a', 'A shelf', 2], ['b', 'B shelf', 1], ['x', 'Orphan', 1]]);
-  });
-
-  it('mosaics the first four covers of the collection, fewer when it has fewer', () => {
-    const documents = Array.from({ length: 6 }, (_, index) => doc(`d${index}.pdf`, 0, { collectionIds: ['a'] }));
-    documents.push(doc('s.pdf', 0, { collectionIds: ['b'] }));
-    const cards = homeSections({ recents: [], documents, collections }).collections;
-    expect(paths(cards[0].covers)).toEqual(['d0.pdf', 'd1.pdf', 'd2.pdf', 'd3.pdf']);
-    expect(cards[0].count).toBe(6);
-    expect(paths(cards[1].covers)).toEqual(['s.pdf']);
-  });
-
-  it('leaves out a removed collection and a collection with no documents', () => {
-    const cards = homeSections({ recents: [], documents: [doc('1.pdf', 0, { collectionIds: ['gone'] })], collections: [{ ...shelf('gone'), removed: true }, shelf('empty')] }).collections;
-    expect(cards).toEqual([]);
-  });
-
-  it('counts only what the chip lets through', () => {
-    const documents = [doc('1.pdf', 0, { collectionIds: ['a'] }), doc('2.md', 0, { collectionIds: ['a'], format: 'md' }), doc('3.pdf', 0, { collectionIds: ['b'] })];
-    const cards = homeSections({ recents: [], documents, collections, format: 'md' }).collections;
-    expect(cards.map(card => [card.id, card.count, paths(card.covers)])).toEqual([['a', 1, ['2.md']]]);
-  });
-});
-
-describe('the file type chips', () => {
-  const files = [
-    doc('scan.pdf', 0, { format: 'PDF' }), doc('book.epub', 0, { format: 'epub' }),
-    doc('notes.md', 0, { format: 'md' }), doc('outline.markdown', 0, { format: 'markdown' }),
-    doc('plain.txt', 0, { format: 'txt' }), doc('photo.jpg', 0, { format: 'jpg' }), doc('sketch.png', 0, { format: 'PNG' }),
+describe('the file-type shelves', () => {
+  const library = [
+    doc('b.pdf', 0), doc('a.pdf', 0), doc('old.pdf', 5), doc('new.pdf', 9),
+    doc('book.epub', 3, { format: 'epub' }),
+    doc('notes.md', 0, { format: 'md' }), doc('outline.markdown', 4, { format: 'markdown' }),
   ];
-  it.each([
-    ['pdf', ['scan.pdf']], ['epub', ['book.epub']], ['md', ['notes.md', 'outline.markdown']],
-    ['txt', ['plain.txt']], ['image', ['photo.jpg', 'sketch.png']], ['missing', []],
-  ] as const)('selects only %s files, including aliases and case-insensitive formats, in every section', (selected, expected) => {
-    const starred = files.map(file => ({ ...file, favorite: true, collectionIds: ['all'] }));
-    const everything = Object.fromEntries(files.map(file => [file.path, { fraction: .5 }]));
-    const sections = homeSections({ recents: files, documents: starred, collections: [shelf('all')], format: selected, progress: everything });
-    expect(paths(sections.recent).sort()).toEqual([...expected].sort());
-    expect(paths(sections.reading).sort()).toEqual([...expected].sort());
-    expect(paths(sections.favorites).sort()).toEqual([...expected].sort());
-    expect(sections.collections.flatMap(card => paths(card.covers)).sort()).toEqual([...expected].sort());
+  const typesOf = (documents: HomeDocument[], recents: HomeRecent[] = []) => homeSections({ recents, documents }).types;
+
+  it('comes in the order PDFs, EPUBs, Markdown, Text, Images, leaving out a type the library does not have', () => {
+    const shelves = typesOf(library);
+    expect(shelves.map(({ type, title }) => [type, title])).toEqual([['pdf', 'PDFs'], ['epub', 'EPUBs'], ['md', 'Markdown']]);
+    const everything = typesOf([...library, doc('t.txt', 0, { format: 'txt' }), doc('p.PNG', 0, { format: 'PNG' }), doc('j.jpg', 0, { format: 'jpg' })]);
+    expect(everything.map(({ title }) => title)).toEqual(['PDFs', 'EPUBs', 'Markdown', 'Text', 'Images']);
+    expect(paths(everything[4].tiles).sort()).toEqual(['j.jpg', 'p.PNG']);
+    expect(typesOf([])).toEqual([]);
   });
 
-  it('filters recents before the cap', () => {
-    const texts = Array.from({ length: recentLimit + 1 }, (_, index) => recent(`notes-${index}.txt`, undefined, 'txt'));
-    const { recent: tiles } = homeSections({ recents: [...texts, recent('scan.pdf')], documents: [], format: 'pdf' });
-    expect(paths(tiles)).toEqual(['scan.pdf']);
+  it('lists the opened documents most recent first, then the never-opened ones by title', () => {
+    expect(paths(typesOf(library)[0].tiles)).toEqual(['new.pdf', 'old.pdf', 'a.pdf', 'b.pdf']);
+    expect(paths(typesOf(library)[2].tiles)).toEqual(['outline.markdown', 'notes.md']);
   });
 
-  it('offers All and each type the library has, in a fixed order, and nothing when there is no choice', () => {
-    expect(homeTypes([], files).map(([value]) => value)).toEqual(['', 'pdf', 'epub', 'md', 'txt', 'image']);
-    expect(homeTypes([], [doc('a.pdf', 0, { format: 'pdf' }), doc('b.epub', 0, { format: 'epub' })]).map(([, label]) => label)).toEqual(['All', 'PDF', 'EPUB']);
-    expect(homeTypes([], [doc('a.pdf'), doc('b.pdf')])).toEqual([]);
-    expect(homeTypes([recent('r.txt', undefined, 'txt')], [doc('a.pdf')]).map(([value]) => value)).toEqual(['', 'pdf', 'txt']);
+  it('orders by the title the card prints: an EPUB\'s own title, not its file name', () => {
+    const books = [doc('1.epub', 0, { format: 'epub' }), doc('2.epub', 0, { format: 'epub' })];
+    const { types } = homeSections({ recents: [], documents: books, titleOf: item => item.path === '1.epub' ? 'Zebra' : 'Aardvark' });
+    expect(paths(types[0].tiles)).toEqual(['2.epub', '1.epub']);
+  });
+
+  it('caps a shelf and carries each document\'s progress', () => {
+    const many = Array.from({ length: shelfLimit + 5 }, (_, index) => doc(`p${index}.pdf`, index + 1));
+    const progress = { 'p30.pdf': { fraction: .5, page: 5, pages: 10 } };
+    const [shelf] = homeSections({ recents: [], documents: many, progress }).types;
+    expect(shelf.tiles).toHaveLength(shelfLimit);
+    expect(paths(shelf.tiles)).not.toContain('p0.pdf');
+    expect(shelf.tiles.find(tile => tile.path === 'p30.pdf')!.progress).toEqual(progress['p30.pdf']);
+    expect(shelf.tiles[0]).not.toHaveProperty('progress');
   });
 });
 
 describe('Home as a whole', () => {
-  it('is empty when nothing is opened, starred, in progress or collected', () => {
-    expect(homeIsEmpty(homeSections({ recents: [], documents: [] }))).toBe(true);
-    expect(homeIsEmpty(homeSections({ recents: [], documents: [doc('a.pdf')] }))).toBe(true);
-    expect(homeIsEmpty(homeSections({ recents: [recent('a.pdf')], documents: [] }))).toBe(false);
+  it('has Recently opened (one card), Continue reading, then a shelf per type, in that order', () => {
+    const documents = [doc('a.pdf', 9), doc('b.pdf', 5), doc('book.epub', 7, { format: 'epub' }), doc('notes.md', 3, { format: 'md' })];
+    const progress = { 'a.pdf': { fraction: .5, page: 5, pages: 10 }, 'notes.md': { fraction: .4 } };
+    const sections = homeSections({ recents: [recent('a.pdf'), recent('book.epub', 'book.epub', 'epub')], documents, progress });
+    expect(Object.keys(sections)).toEqual(['recent', 'reading', 'types']);
+    expect(paths(sections.recent)).toEqual(['a.pdf']);
+    expect(paths(sections.reading)).toEqual(['a.pdf', 'notes.md']);
+    expect(sections.types.map(shelf => shelf.title)).toEqual(['PDFs', 'EPUBs', 'Markdown']);
   });
 
-  it('has no "Recently added" shelf: the catalog keeps no added time per document', () => {
-    expect(Object.keys(homeSections({ recents: [], documents: [] })).sort()).toEqual(['collections', 'favorites', 'reading', 'recent']);
+  it('has no Text or Images shelf when the library has none, and no Recently opened when nothing was opened', () => {
+    const sections = homeSections({ recents: [], documents: [doc('a.pdf')] });
+    expect(sections.recent).toEqual([]);
+    expect(sections.types.map(shelf => shelf.type)).toEqual(['pdf']);
   });
 });
 
@@ -178,8 +150,8 @@ describe('recentTiles', () => {
 });
 
 describe('shelfRatio', () => {
-  it('keeps a shelf cover between square and the 124 x 165 slot', () => {
-    expect(shelfRatio(.5)).toBeCloseTo(124 / 165);
+  it('keeps a shelf cover between square and the 125 x 170 slot', () => {
+    expect(shelfRatio(.5)).toBeCloseTo(125 / 170);
     expect(shelfRatio(3 / 4)).toBeCloseTo(.75);
     expect(shelfRatio(2)).toBe(1);
     expect(shelfRatio(Number.NaN)).toBeCloseTo(.75);

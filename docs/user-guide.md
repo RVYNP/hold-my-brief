@@ -61,31 +61,31 @@ browser's storage). Only the tab that was showing opens at once (while split, th
 **File not found** with **Locate…** and **Close tab**, rather than failing the launch. The Library tab comes back drawn from the library as it is then.
 
 With nothing saved, the window opens on **Hand it over.** Once documents have been opened, it opens
-on **Home**:
+on **Home**, a heading over these sections, in this order:
 
-- **Recently opened** is the eight documents you looked at last, most recent first: four across in a wide window, two
-  in a narrower one and in the compact window (2 × 4), one only below about 380 px of width. Each card has the cover, the title and, if you got part of the way
-  through, a thin line showing how far. Click one to open it (or switch to its tab).
-- **Continue reading** shelves what you have started and not finished, most recent first, with where you got to
-  (`PDF · p. 40 / 146`). **Favorites** shelves what you starred. **Collections** has one card per top-level
-  collection that holds something, a 2 × 2 mosaic of its first covers with the number of references.
+- **Recently opened** is one wide card for the document you looked at last: the cover at its left edge, the title beside it, the
+  file type at the bottom left and where you got to (`p. 48 / 146`, `37 %`, `Finished`) at the bottom right. Click it to open the
+  document (or switch to its tab). It is left out until something has been opened.
+- **Continue reading** shelves what you have started and not finished, most recent first. Under each cover are its title and one
+  line with the file type and where you got to (`PDF · p. 40 / 146`). Each of these covers has a fine 1 px outline.
+- One shelf for each type of file the library holds, in this order: **PDFs**, **EPUBs**, **Markdown**, **Text**, **Images**. A shelf
+  lists that type's documents, those you have opened first (latest first), then the rest by title, up to 30. Under each cover are its title and its type, with where you got to
+  once you have opened it. A type with no documents has no shelf.
 - A shelf scrolls sideways with the trackpad or a horizontal wheel, by dragging it sideways, with the **‹** and
   **›** buttons that appear at its ends when you point at it, or with the arrow keys (one Tab stop per shelf). It snaps to
-  cards. **Open in library** opens the Library tab on that selection (**Continue reading**, **Favorites**, or all documents for
-  Collections); a collection card opens it on that collection. A section with nothing in it is left out.
-- The chips under the title (**All**, **PDF**, **EPUB**, **Markdown**, **Text**, **Images**, only the types you have) filter every
-  section; **All** restores the mixed view. They stay on one row that scrolls sideways when the window is narrow.
+  cards. Right-click a card for its menu, or drag it onto the tab strip to open it in a new tab. The whole library is in the library
+  panel and the Library tab, with its favorites and collections.
 
 A faint **background** lies behind Home: a dithered picture of the theme's window glow that covers the whole window below the
 toolbar (the tab strip and the window buttons never show any of it), under the library rail and Home's content, at 6 %
-strength by default. The bar holds the title, **Open files** and **Browse library**.
+strength by default. Home itself is only the title and its shelves: no buttons and no filters.
 The picture changes once a day (by your local date) and stays the same until the day ends. It takes its colours
 from the theme and follows theme changes, and it is drawn only while Home is showing, once and still: nothing on it moves
 on its own, and a change fades from one picture to the next over 0.6 s (not at all with reduced motion). Reading
 surfaces (PDF, EPUB, Markdown, text and image tabs) and the Library tab stay plain. Choose its pattern, turn it off, or set
 its strength with **Background** and **Strength** in Appearance.
 
-**Browse library** and **Open files** are in the header. Edits made in the library refresh Home. A picture fills in when its
+Edits made in the library refresh Home. A picture fills in when its
 thumbnail is ready; a book without a picture keeps the generated cover it has on its shelf. An EPUB shows the title from its
 own metadata once it has been read, and its file name cleaned up until then. A cover looks the same here as in the library.
 In the desktop app, the × on a Recently opened card removes it from the recent list and leaves the library entry. A file whose
@@ -215,8 +215,8 @@ tooltip and accessible name. One ring marks the kept choice in all three rows.
   generated covers; **None** turns it off.
 - **Strength:** how strongly the background shows, from 2 % to 30 % (6 % by default); live, and greyed while Background is None.
   Up to 8 % Home's text keeps its usual colours: it is the most at which the muted text keeps 4.5:1 contrast on the strongest part of
-  the picture in every theme. Above 8 % the muted text (**Open files**, **Browse library**, **Open in library**, the small lines under
-  cards) deepens toward the main text colour as you go, reaching it at 30 %, so it keeps that contrast in every theme. 30 % is the top
+  the picture in every theme. Above 8 % the muted text (the small lines under
+  covers) deepens toward the main text colour as you go, reaching it at 30 %, so it keeps that contrast in every theme. 30 % is the top
   of the slider.
 
 Below a hairline, a **preview** of a page of text in the reading font shows the settings the open document uses, live,
@@ -720,7 +720,7 @@ picture), with the title, format and version.
 
 The Library tab shows a whole selection of the library at once, in the reading panel, as a tab beside your documents. The panel
 is its only navigation: click the panel's **Library** title for all documents, double-click a folder or a collection in the tree
-for that one, press **Open in library** on Home, or run **Open Library tab** from the command palette. If the tab is already open
+for that one, or run **Open Library tab** from the command palette. If the tab is already open
 it is shown and pointed at the new selection; it is never opened twice. The panel marks what the tab shows (the folder or collection
 row is highlighted), and the tab's name says it too. Nothing covers the page you were reading: switching back to a document is
 a click on its tab.

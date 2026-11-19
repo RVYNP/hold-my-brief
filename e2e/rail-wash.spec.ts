@@ -81,10 +81,10 @@ for (const side of ['left', 'right'] as const) {
   });
 }
 
-test('closed: the page strip, find bar, footer, view controls, image pager and Home\'s content clear the rail by 48 px, 52 px for Home', async ({ page }) => {
+test('closed: the page strip, find bar, footer, view controls and image pager clear the rail by 48 px, Home\'s content by 44 px and its gutter', async ({ page }) => {
   await openHome(page, 'left');
   const read = () => page.evaluate(() => { const style = getComputedStyle(document.querySelector('#reader-layout')!), home = getComputedStyle(document.querySelector('#empty')!); return { library: style.getPropertyValue('--library-clear').trim(), workspace: style.getPropertyValue('--workspace-clear').trim(), home: home.paddingLeft, footer: document.querySelector('footer')!.getBoundingClientRect().left, loading: getComputedStyle(document.querySelector('#loading')!).left }; });
-  expect(await read()).toMatchObject({ library: '48px', workspace: '48px', home: '52px', footer: 48, loading: '48px' });
+  expect(await read()).toMatchObject({ library: '48px', workspace: '48px', home: '76px', footer: 48, loading: '48px' }); // Home: the rail's 44 px and its own 32 px gutter at 1080.
 });
 
 const families = ['brief', 'lilac', 'birch', 'graphite', 'arctic', 'blossom', 'peony'];
