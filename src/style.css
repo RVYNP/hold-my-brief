@@ -937,7 +937,7 @@ select:hover { border-color: var(--accent-border); }
    be scrolled by code (a find match's scrollIntoView did, pushing the toolbar off the top). */
 #app { --footer-height: 30px; position: relative; height: 100dvh; min-width: 300px; display: flex; flex-direction: column; overflow: clip; }
 /* One 40 px row. Empty toolbar space drags the window (data-tauri-drag-region), so it never selects text. */
-.toolbar { display: flex; align-items: center; gap: 2px; height: 40px; padding: 0 6px; background: var(--glass-chrome); flex-shrink: 0; -webkit-user-select: none; user-select: none; }
+.toolbar { display: flex; align-items: center; gap: 2px; height: 40px; padding: 0 6px; background: var(--glass-chrome); box-shadow: inset 0 -1px 0 var(--hairline); flex-shrink: 0; -webkit-user-select: none; user-select: none; }
 /* macOS: the native traffic lights are hidden (windows::hide_native_buttons) and the reader draws its own at the toolbar's left end
    (src/window-controls.ts): 12 px circles, 8 px apart, 14 px from the window edge, 12 px before the first tab, centred on the 40 px row.
    At rest they are one quiet colour, outlined instead while the window is inactive; the standard colours and glyphs show on hover of the group,

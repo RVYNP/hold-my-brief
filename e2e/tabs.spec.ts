@@ -59,6 +59,14 @@ for (const size of [{ width: 1440, height: 900 }, { width: 1080, height: 760 }])
     const [title, where] = [await tab(page, 'b.txt').locator('.tab-title').boundingBox(), await tab(page, 'b.txt').locator('.tab-where').boundingBox()];
     expect(title!.x + title!.width).toBeLessThan(where!.x);
     expect(await tab(page, 'b.txt').locator('.tab-where').evaluate(node => { const style = getComputedStyle(node); return [style.textTransform, style.fontFamily.includes('mono') || /monospace/.test(style.fontFamily)]; })).toEqual(['uppercase', true]);
+    // A hairline runs along the toolbar's bottom edge, inside its 40 px.
+    const edge = await page.locator('.toolbar').evaluate(node => {
+      const probe = Object.assign(document.createElement('i'), { style: 'background: var(--hairline)' }); document.body.append(probe);
+      const hairline = getComputedStyle(probe).backgroundColor; probe.remove();
+      return { shadow: getComputedStyle(node).boxShadow, hairline, height: node.getBoundingClientRect().height };
+    });
+    expect(edge.height).toBe(40);
+    expect(edge.shadow.replace(edge.hairline, '').trim()).toBe('0px -1px 0px 0px inset');
     // The fill marks the active tab; no heavier box.
     const look = (name: string) => tab(page, name).evaluate(node => { const style = getComputedStyle(node); return { fill: style.backgroundColor, border: style.borderTopColor, shadow: style.boxShadow }; });
     const [active, idle] = [await look('a.txt'), await look('b.txt')];
