@@ -15,7 +15,7 @@ import { appearanceSummary, createAppearanceSheet, paletteIcon } from './appeara
 import { createAssistantPanel } from './assistant-panel';
 import { DRAG_SLOP, Panner } from './pan';
 import { MIN_SPREAD_WIDTH, pagesLabel, spreadPages } from './spread';
-import { assignShelfSlots, closeHome, fillHomePictures, homeSections, homeTypes, openedOrder, renderHome, repaintGround } from './home';
+import { assignShelfSlots, closeHome, fillHomePictures, homeSections, openedOrder, renderHome, repaintGround } from './home';
 import { displayTitle } from './shelf';
 import { repaintCovers } from './cards';
 import { canThumbnail, createThumbnailStore } from './thumbnails';
@@ -41,7 +41,7 @@ import { createContextMenu, type MenuEntry } from './context-menu';
 initAppearance();
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-  <header class="toolbar" data-tauri-drag-region><button id="library-toggle" class="icon-button" aria-label="Document library" aria-controls="library-root" aria-expanded="false" title="Document library (Ctrl+B)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16m-3-12v8"/></svg></button><nav id="tab-strip" class="tab-strip" aria-label="Open documents" data-tauri-drag-region><button id="home-tab" class="tab-home" role="tab" aria-label="Home" title="Home"></button><div id="tab-list" class="tab-list" role="tablist" aria-label="Documents"></div><button id="tab-add" class="tab-add" aria-label="New tab" title="New tab"></button><button id="tab-overflow" class="tab-overflow" aria-label="All tabs" title="All tabs" aria-haspopup="menu" aria-expanded="false" hidden></button></nav><button id="title" class="title" aria-haspopup="menu" aria-expanded="false" title="Open tabs"><strong id="filename">Hold My Brief</strong><span id="filekind">A reader that holds.</span><span id="tab-count" class="tab-count"></span></button><button id="pin" class="icon-button" aria-label="Pin" aria-pressed="false" title="Always on top (Ctrl+Shift+T)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg></button><button id="lock" class="icon-button" aria-label="Lock" aria-pressed="false" title="Lock dimensions (Ctrl+Shift+L)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></button><button id="menu-toggle" class="icon-button" aria-label="Reader menu" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button><div class="caption" role="group" aria-label="Window"><button id="caption-minimize" aria-label="Minimize" title="Minimize"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5.5h10" stroke="currentColor"/></svg></button><button id="caption-maximize" aria-label="Maximize" title="Maximize"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" aria-hidden="true"><rect class="caption-max" x=".5" y=".5" width="9" height="9"/><path class="caption-restore" d="M2.5 2.5V.5h7v7h-2M.5 2.5h7v7h-7z"/></svg></button><button id="caption-close" aria-label="Close" title="Close"><svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" aria-hidden="true"><path d="M.5.5l9 9m0-9l-9 9"/></svg></button></div></header>
+  <header class="toolbar" data-tauri-drag-region><button id="library-toggle" class="icon-button" aria-label="Document library" aria-controls="library-root" aria-expanded="false" title="Document library (Ctrl+B)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16m-3-12v8"/></svg></button><nav id="tab-strip" class="tab-strip" aria-label="Open documents" data-tauri-drag-region><div id="tab-list" class="tab-list" role="tablist" aria-label="Documents"></div><button id="tab-overflow" class="tab-overflow" aria-label="All tabs" title="All tabs" aria-haspopup="menu" aria-expanded="false" hidden></button></nav><button id="title" class="title" aria-haspopup="menu" aria-expanded="false" title="Open tabs"><strong id="filename">Hold My Brief</strong><span id="filekind">A reader that holds.</span><span id="tab-count" class="tab-count"></span></button><button id="pin" class="icon-button" aria-label="Pin" aria-pressed="false" title="Always on top (Ctrl+Shift+T)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg></button><button id="lock" class="icon-button" aria-label="Lock" aria-pressed="false" title="Lock dimensions (Ctrl+Shift+L)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></button><button id="menu-toggle" class="icon-button" aria-label="Reader menu" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button><div class="caption" role="group" aria-label="Window"><button id="caption-minimize" aria-label="Minimize" title="Minimize"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5.5h10" stroke="currentColor"/></svg></button><button id="caption-maximize" aria-label="Maximize" title="Maximize"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" aria-hidden="true"><rect class="caption-max" x=".5" y=".5" width="9" height="9"/><path class="caption-restore" d="M2.5 2.5V.5h7v7h-2M.5 2.5h7v7h-7z"/></svg></button><button id="caption-close" aria-label="Close" title="Close"><svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" aria-hidden="true"><path d="M.5.5l9 9m0-9l-9 9"/></svg></button></div></header>
   <aside id="notice" role="status" hidden><span></span><button id="retry-save" hidden>Retry save</button><button id="dismiss-notice" aria-label="Dismiss message">×</button></aside>
   <div id="reader-layout"><div id="loading" role="status" hidden><span></span><button id="cancel">Cancel</button></div><div id="library-root"></div><nav id="library-rail"></nav>
   <main id="workspace"><section id="empty"><div class="book-mark" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M9 3v18m4-13h3m-3 4h3"/></svg></div><p class="eyebrow">KEEP YOUR PLACE</p><h1>Hand it over.</h1><p>Drop a brief and it stays pinned<br>exactly where you leave it.</p><button id="empty-open" class="primary">Hold a brief <span>↗</span></button><p class="formats">PDF · EPUB · MARKDOWN · TEXT</p><div id="recents"></div><p id="preview-note" hidden>Browser preview · Pin and size lock are available in the desktop app.</p></section>
@@ -98,7 +98,6 @@ let windowState: WindowState = { width: 420, height: 620, pinned: false, locked:
 let homeRecents: Recent[] = [];
 let homeLibrary: Library = emptyLibrary();
 let homeProgress: Record<string, Progress> = {};
-let homeFormat = '';
 let splashHtml: string | undefined;
 let homePicture = 0;
 const homeThumbs = createThumbnailStore();
@@ -144,7 +143,7 @@ function makeSide(id: string): Side {
   let state: HTMLElement;
   if (id === 'a') { state = $('tab-state'); body.append(state, pill); } else { state = withoutIds(stateTemplate.cloneNode(true) as HTMLElement); state.hidden = true; body.append(state); }
   workspace.append(parts.row, body);
-  const tabsRow = createTabStrip({ strip: parts.row, list: parts.list, add: parts.add, overflow: parts.overflow }, { select: path => selectTab(path), close: closeTab, newTab: () => { activateSide(side); openFile(); }, move: (path, to) => { side.tabs.move(path, to); paintTabs(); saveSession(); }, menu: showTabMenu, carry }, platform === 'mac' ? '⌘T' : 'Ctrl T');
+  const tabsRow = createTabStrip({ strip: parts.row, list: parts.list, add: parts.add, overflow: parts.overflow }, { select: path => selectTab(path), close: closeTab, newTab: () => { activateSide(side); openFile(); }, move: (path, to) => { side.tabs.move(path, to); paintTabs(); saveSession(); }, menu: showTabMenu, carry }, platform === 'mac' ? '⌘T' : 'Ctrl T', false);
   parts.fold.onclick = () => showPaneMenu(parts.fold);
   const side: Side = { pane: new Pane<Tab>({ persist, notify }), tabs: new TabList<Tab>(), shown: undefined, scanNoticeShown: false, view: { id, body, state, ...parts }, strip: tabsRow };
   state.querySelector<HTMLElement>('.primary')!.onclick = () => stateAction(side);
@@ -468,6 +467,7 @@ document.querySelectorAll<HTMLDialogElement>('dialog.drop').forEach(dialog => di
 }));
 // The icon rail is the library's door at 720 px and up (the toolbar button is for compact windows).
 const rail = createIconRail($('library-rail'), {
+  home: () => selectTab(undefined),
   view: view => library.showView(view),
   add: anchor => library.openAddMenu(anchor),
   settings: () => appearanceSheet.open(),
@@ -789,13 +789,17 @@ let paintedTabs = '';
 function paintTabs() {
   const all = [...(libraryTab ? [libraryTab] : []), ...sides.flatMap(side => side.tabs.tabs)];
   const hints = titleHints(all.filter(tab => tab.path !== LIBRARY_PATH).map(tab => ({ path: tab.path, title: tabTitle(tab) })));
-  const viewOf = (side: Side, tab: Tab, active: boolean): TabView => ({ path: tab.path, title: tabTitle(tab), hint: hints.get(tab.path) ?? '', format: tab.format, where: tabWhere(side, tab), progress: formatProgress(progressOf((tab === side.shown ? side.pane.position : tab.position) ?? { fraction: NaN, scrub: { current: 0, total: 0, unit: 'line' } })) ?? '', active, problem: Boolean(tab.problem), library: tab.path === LIBRARY_PATH, image: Object.hasOwn(imageFormats, tab.format) });
+  const viewOf = (side: Side, tab: Tab, active: boolean): TabView => {
+    const place = tab === side.shown ? side.pane.position : tab.position;
+    return { path: tab.path, title: tabTitle(tab), hint: hints.get(tab.path) ?? '', format: tab.format, where: tabWhere(side, tab), paged: /^Pages? /.test(place?.label ?? ''), progress: formatProgress(progressOf(place ?? { fraction: NaN, scrub: { current: 0, total: 0, unit: 'line' } })) ?? '', active, problem: Boolean(tab.problem), library: tab.path === LIBRARY_PATH, image: Object.hasOwn(imageFormats, tab.format) };
+  };
   const rows = sides.map(side => side.tabs.tabs.map(tab => viewOf(side, tab, tab === side.tabs.active)));
   const bar = isSplit() ? (libraryTab ? [viewOf(sides[0], libraryTab, cover === 'library')] : []) : rows[0], home = isSplit() ? cover === 'home' : !sides[0].tabs.active;
   const key = JSON.stringify([bar, home, isSplit() ? [rows, focused.view.id] : 0, all.length]);
   if (key === paintedTabs) return;
   paintedTabs = key;
   strip.paint(bar, home);
+  rail.setHome(home);
   if (isSplit()) sides.forEach((side, index) => { side.strip.paint(rows[index], false); side.view.row.classList.toggle('is-inactive', side !== focused || Boolean(cover)); });
   paintFolds();
   const here = isSplit() ? (cover ? (cover === 'library' ? libraryTab : undefined) : focused.shown) : sides[0].tabs.active;
@@ -1240,9 +1244,10 @@ function restoreSplitView(session: TabSession, saved: SavedLayout): boolean {
 }
 
 const strip = createTabStrip(
-  { strip: $('tab-strip'), home: $('home-tab'), list: $('tab-list'), add: $('tab-add'), overflow: $('tab-overflow') },
+  { strip: $('tab-strip'), list: $('tab-list'), overflow: $('tab-overflow') },
   { select: selectTab, close: closeTab, newTab: () => openFile(), move: (path, to) => { if (isSplit()) return; sides[0].tabs.move(path, to); paintTabs(); saveSession(); }, menu: showTabMenu, carry },
   platform === 'mac' ? '⌘T' : 'Ctrl T',
+  true,
 );
 /** The one context menu of the window's tabs and Home's cards (the library's own is the same component). */
 const contextMenu = createContextMenu({ blocked: () => Boolean(document.querySelector('dialog[open]')) });
@@ -1361,12 +1366,12 @@ function showHomeMenu(item: { path: string; name: string; format: string }, anch
 $('title').onclick = () => { const menu = isSplit() ? focused.strip : strip; if (menu.isMenuOpen()) menu.closeMenu(); else menu.openMenu($('title')); };
 
 /**
- * The Library tab: at most one, at the front of the strip. Opening it names a scope (a double-click in the panel, Home's Open in library, the panel's
+ * The Library tab: at most one, at the front of the strip. Opening it names a scope (a double-click in the panel, the panel's
  * title); a tab that is already open is shown and retargeted rather than opened again. With no scope named, an open tab is only shown.
  */
 function openLibraryTab(place?: LibraryPlace) {
   const existing = known(LIBRARY_PATH);
-  if (!place) { if (existing) selectTab(LIBRARY_PATH); else library.browse('all'); return; }
+  if (!place) { if (existing) selectTab(LIBRARY_PATH); else library.browse(); return; }
   if (existing) { retargetLibraryTab(place); selectTab(LIBRARY_PATH); return; }
   cancelOpen();
   const tab: Tab = { path: LIBRARY_PATH, name: place.title, format: 'library', scope: place.scope, options: { ...defaultOptions }, hand: false, scanNoticeShown: false };
@@ -1663,21 +1668,13 @@ function paintHome() {
     if (empty.classList.contains('is-home')) { closeHome(); empty.classList.remove('is-home'); empty.innerHTML = splashHtml; $('empty-open').onclick = () => openFile(); }
     return;
   }
-  const types = homeTypes(recents, homeLibrary.documents);
-  if (!types.some(([value]) => value === homeFormat)) homeFormat = '';
-  const sections = homeSections({ recents, documents: homeLibrary.documents, collections: homeLibrary.collections, format: homeFormat, titleOf: knownTitle, progress: homeProgress });
+  const sections = homeSections({ recents, documents: homeLibrary.documents, titleOf: knownTitle, progress: homeProgress });
   const generation = ++homePicture;
   renderHome(empty, sections, {
     open: (path, name) => { void openPath(path, name); },
     menu: showHomeMenu,
-    openFile: () => openFile(),
-    viewAll: scope => library.browse(scope),
-    viewCollection: id => library.browse({ collection: id }),
     picture: { can: canThumbnail, ratio: path => homeThumbs.ratio(path), peek: path => homeThumbs.peek(path) },
-    types,
     banner: appearance().banner,
-    format: homeFormat,
-    selectFormat: value => { homeFormat = value; paintHome(); empty.querySelector<HTMLElement>(`.home-chip[data-type="${value}"]`)?.focus(); },
     ...(desktop ? { remove: (path: string) => { void native('remove_recent', { path }).then(() => { homeRecents = homeRecents.filter(item => item.path !== path); paintHome(); }).catch(fail); } } : {}),
   }, scheme());
   fillHomePictures(empty, {

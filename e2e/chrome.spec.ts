@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { addMenuItem, chooseFromViewMenu, libraryPage, openLibraryTab, viewMenuButton } from './library-controls';
+import { railHome } from './toolbar-tabs';
 
 // A 1 x 1 PNG: enough for a picture-type document.
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
@@ -59,7 +60,7 @@ test('the Library tab\'s file-type chips filter, one at a time, for the types th
   await page.goto('/');
   await openLibraryTab(page);
   await expect(page.locator('.library-type-chip')).toHaveCount(0);
-  await page.locator('#home-tab').click();
+  await railHome(page).click();
   await addFiles(page);
   await openLibraryTab(page);
   const chips = page.locator('.library-type-chip');

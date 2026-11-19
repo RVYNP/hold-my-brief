@@ -2,9 +2,10 @@ import { test, expect, type Page } from '@playwright/test';
 import { seedLibrary, treeLibrary } from './home-fixture';
 import { chooseFromViewMenu, libraryPage, libraryTab, openLibraryTab } from './library-controls';
 import { warmDevServer } from './warm';
+import { railHome } from './toolbar-tabs';
 
-// The library is an ordinary tab, the Library tab: at most one, opened by the panel's title, a double-click on a folder or collection, Home's
-// Open in library buttons and the palette; retargeted rather than duplicated; restored with the session. The docked panel is its only navigation.
+// The library is an ordinary tab, the Library tab: at most one, opened by the panel's title, a double-click on a folder or collection
+// and the palette; retargeted rather than duplicated; restored with the session. The docked panel is its only navigation.
 test.beforeAll(async ({ browser, baseURL }) => { await warmDevServer(browser, baseURL); });
 
 const folder = (name: string, path: string) => `f:root-${name}:${path}`;
@@ -91,22 +92,18 @@ test('the scope menu in the header offers what the tree has no row for, and reta
   await expect(libraryTab(page)).toHaveCount(1);
 });
 
-test('Home\'s Open in library buttons and the palette open the tab, and a second opener retargets it', async ({ page }) => {
+test('the palette opens the tab and shows it as it is, from Home as from another tab', async ({ page }) => {
   await seed(page);
-  await page.getByRole('button', { name: 'Open in library: Favorites' }).click();
-  await expect(libraryTab(page)).toHaveCount(1);
-  await expect(tabTitles(page)).toHaveText(['Favorites']);
-  await expect(page.locator('.library-scope-label')).toHaveText('Favorites');
-
-  await page.locator('#home-tab').click();
-  await expect(libraryPage(page)).toBeHidden();
-  await page.getByRole('button', { name: 'Open in library: Continue reading' }).click();
+  await openLibraryTab(page);
+  await page.locator('.library-scope-button').click();
+  await page.locator('.library-scope-menu').getByRole('menuitemradio', { name: 'Continue reading' }).click();
   await expect(libraryTab(page)).toHaveCount(1);
   await expect(tabTitles(page)).toHaveText(['Continue reading']);
   await expect(count(page)).toHaveText('2 references');
 
+  await railHome(page).click();
+  await expect(libraryPage(page)).toBeHidden();
   // The palette command shows the tab as it is (it names no scope), from another tab as from Home.
-  await page.locator('#home-tab').click();
   await page.keyboard.press('Control+k');
   await page.locator('#palette-input').fill('library tab');
   await page.keyboard.press('Enter');
@@ -137,7 +134,7 @@ test('the Library tab survives a reload, on the same scope, and closing it forge
   await libraryTab(page).locator('.tab-close').click();
   await expect(libraryTab(page)).toHaveCount(0);
   await expect(libraryPage(page)).toBeHidden();
-  await expect(page.locator('#home-tab')).toHaveClass(/is-active/);
+  await expect(railHome(page)).toHaveAttribute('aria-current', 'page');
   await expect(node(page, folder('refs', '03_vintage_magazine'))).not.toHaveClass(/is-scope/);
   await openLibraryTab(page);
   await expect(tabTitles(page)).toHaveText(['All documents']);
@@ -226,7 +223,7 @@ test('the Library tab is a tab like the rest: it is reached with the tab keys', 
   await page.locator('#library-root').getByRole('button', { name: 'Library', exact: true }).focus();
   await page.keyboard.press('Alt+1');
   await expect(libraryTab(page)).toHaveClass(/is-active/);
-  await page.locator('#home-tab').click();
+  await railHome(page).click();
   await page.keyboard.press('Control+Tab');
   await expect(libraryTab(page)).toHaveClass(/is-active/);
   await expect(libraryPage(page)).toBeVisible();

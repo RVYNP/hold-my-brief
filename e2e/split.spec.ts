@@ -1,6 +1,7 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { chapterBook } from './epub-book';
 import { pagedPdf } from './paged-pdf';
+import { expectFormats, railHome } from './toolbar-tabs';
 
 /** Split view: two documents side by side, a row of tabs per pane, a divider, and the side the commands act on. */
 
@@ -25,7 +26,7 @@ async function openThree(page: Page) {
   const epub = { name: 'pride.epub', mimeType: 'application/epub+zip', buffer: await chapterBook({ chapters: 4, paragraphs: 30 }) };
   for (const [file, format] of [[pdf, 'PDF'], [epub, 'EPUB'], [markdown, 'MD']] as const) {
     await page.locator('#file-input').setInputFiles(file);
-    await expect(page.locator('#tab-list .tab.is-active .tab-format')).toHaveText(format);
+    await expect(page.locator('#tab-list .tab.is-active')).toHaveAttribute('data-format', format);
   }
   await page.locator('#tab-list .tab[data-path]').nth(0).click();
   await expect(page.locator('#position')).toContainText('Page 1 of 5');
@@ -51,7 +52,7 @@ test('Split right moves the shown tab to a new right pane; the others stay on th
   await expect(row(page, 'b').locator('.tab-format')).toHaveText(['EPUB']);
   await expect(row(page, 'a').locator('.tab-format')).toHaveText(['PDF', 'MD']);
   await expect(barTabs(page)).toHaveCount(0);
-  await expect(page.locator('#home-tab')).toBeVisible();
+  await expect(railHome(page)).toBeVisible();
   // Each pane shows its own document, and the divider sits in the middle of the room they share.
   const left = await box(page.locator('.pane-body[data-pane=a]')), right = await box(page.locator('.pane-body[data-pane=b]')), line = await box(divider(page));
   expect(Math.abs(line.x + line.width / 2 - (left.x + (right.x + right.width - left.x) / 2))).toBeLessThanOrEqual(1);
@@ -125,8 +126,8 @@ test('moving a tab to the other side, then closing the split, returns every tab 
   await run(page, 'Close the split');
   await expect(page.locator('.pane-strip:visible')).toHaveCount(0);
   await expect(divider(page)).toBeHidden();
-  await expect(barTabs(page).locator('.tab-format')).toHaveText(['MD', 'EPUB', 'PDF']);
-  await expect(page.locator('#tab-list .tab.is-active .tab-format')).toHaveText('PDF');
+  await expectFormats(barTabs(page), ['MD', 'EPUB', 'PDF']);
+  await expect(page.locator('#tab-list .tab.is-active')).toHaveAttribute('data-format', 'PDF');
   await expect(page.locator('#position')).toContainText('Page 1 of 5');
   // Every pane's host is back in the one reading panel, at its full size.
   const work = await box(page.locator('#workspace')), host = await box(page.locator('.reader-host:not(.staging):not(.tab-hidden)'));
@@ -139,8 +140,8 @@ test('closing the last tab of a pane ends the split', async ({ page }) => {
   await row(page, 'b').first().hover();
   await row(page, 'b').first().locator('.tab-close').click();
   await expect(page.locator('.pane-strip:visible')).toHaveCount(0);
-  await expect(barTabs(page).locator('.tab-format')).toHaveText(['PDF', 'MD']);
-  await expect(page.locator('#tab-list .tab.is-active .tab-format')).toHaveText('PDF');
+  await expectFormats(barTabs(page), ['PDF', 'MD']);
+  await expect(page.locator('#tab-list .tab.is-active')).toHaveAttribute('data-format', 'PDF');
 });
 
 test('a divider moved just before the page goes away is stored by pagehide, without waiting for the drag to rest', async ({ page }) => {
@@ -213,11 +214,11 @@ test('the rail and the docked panel are the same boxes with and without a split'
 test('Home and the Library page take the whole reading area; a pane tab brings the split back as it was', async ({ page }) => {
   await split(page);
   const left = await box(page.locator('.pane-body[data-pane=a]'));
-  await page.locator('#home-tab').click();
+  await railHome(page).click();
   await expect(page.locator('#empty')).toBeVisible();
   await expect(page.locator('.reader-host[data-pane=a]:not(.tab-hidden)')).toBeHidden();
   await expect(divider(page)).toBeHidden();
-  await expect(page.locator('#home-tab')).toHaveClass(/is-active/);
+  await expect(railHome(page)).toHaveAttribute('aria-current', 'page');
   // A tab of either pane returns to the split as it was.
   await row(page, 'a').first().click();
   await expect(page.locator('#empty')).toBeHidden();

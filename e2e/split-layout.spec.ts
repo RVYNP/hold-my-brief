@@ -94,7 +94,7 @@ for (const [mode, label] of cases) {
     await page.goto('/');
     for (const [file, format] of [[pdf, 'PDF'], [markdown, 'MD']] as const) {
       await page.locator('#file-input').setInputFiles(file);
-      await expect(page.locator('#tab-list .tab.is-active .tab-format')).toHaveText(format);
+      await expect(page.locator('#tab-list .tab.is-active')).toHaveAttribute('data-format', format);
     }
     if (mode === 'collapsed') await page.keyboard.press('Control+b');
     await expect(page.locator('#reader-layout.library-open')).toHaveCount(mode === 'collapsed' ? 0 : 1);

@@ -24,7 +24,7 @@ export function withoutIds<T extends Element>(copy: T): T {
 
 const sideName = (id: string) => `pane ${id.toUpperCase()}`;
 
-/** A pane's row of tabs: the same parts the toolbar's strip is made of (a list, +, and an overflow button), without Home. */
+/** A pane's row of tabs: a list of tabs, a + button and an overflow button; the toolbar's strip has the list and the overflow button only. */
 export function createRow(id: string) {
   const row = make('nav', 'pane-strip', { 'data-pane': id, 'aria-label': `Documents in ${sideName(id)}` });
   const list = make('div', 'tab-list', { role: 'tablist', 'aria-label': `Documents, ${sideName(id)}` });

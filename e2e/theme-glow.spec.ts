@@ -104,7 +104,7 @@ for (const [palette, mode] of [['brief', 'light'], ['aurora', 'dark']] as const)
     const shot = await page.screenshot({ path: `test-results/gap-${palette}-${side}.png` });
     // The middle of the gap (the panel's own shadow, which stays, falls across its edge) and the strip between the rail and the panel (the rail's wash has faded out by then; the strip beside the panel is under the panel's own shadow too, on the right), against the panel's wash 4 px inside its edge.
     const railBox = (await page.locator('#library-rail').boundingBox())!;
-    const middle = Math.floor(gapStart + 6), margins = [side === 'left' ? (railBox.x + railBox.width + panelBox.x) / 2 : (panelBox.x + panelBox.width + railBox.x) / 2].map(Math.floor);
+    const middle = Math.floor(gapStart + 6), margins = [side === 'left' ? railBox.x + railBox.width + 8 : railBox.x - 4].map(Math.floor); // Clear of the rail's 1 px hairline (6 px beyond its edge) and, on the right, of the wash too (it has faded out 44 px from the window's edge).
     for (const y of rows) {
       const [reference, gap, ...rail] = await pixels(page, shot, [Math.round(edge), middle, ...margins].map(x => [x, y]));
       expect(deltaE(gap, reference), `the middle of the gap at y=${y}`).toBeLessThan(3);

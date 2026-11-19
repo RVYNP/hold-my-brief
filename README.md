@@ -55,11 +55,12 @@ where you stopped. PDF, EPUB, Markdown, text and images. Your files never leave 
     <td valign="top">
       <h3>One tab per document</h3>
       Everything opens in its own tab. Switch with ⌘1–9 on a Mac or Alt+1–9 on Windows (9 is the last
-      tab), close with ⌘W or Ctrl+W. Drop files on the window or the tab bar to open them as tabs.
+      tab), close with ⌘W or Ctrl+W. Drop files on the window or the tab bar to open them as tabs. The toolbar shows only the
+      open documents; Home is the first icon of the rail.
     </td>
     <td valign="top">
       <h3>Your folders, as a tree</h3>
-      A slim icon rail (Library, Search, Add files, Settings) and one docked library panel: favorites,
+      A slim icon rail (Home, Add files, Library, Search, Settings) and one docked library panel: favorites,
       collections, then watched folders, subfolders and documents, each with how far you got
       (<code>p. 62 / 88</code>, <code>37 %</code>, <code>Finished</code>). Type to filter.
       A scan called <code>source.pdf</code> goes by its folder's name.
@@ -100,10 +101,10 @@ where you stopped. PDF, EPUB, Markdown, text and images. Your files never leave 
   </tr>
 </table>
 
-**Home** is a tab, always first, laid out like a media player's front page: **Recently opened** (your eight
-latest documents), then shelves that scroll sideways: **Continue reading**, **Favorites** and
-**Collections**. **Open in library** opens the library on that selection. Chips filter PDFs, EPUBs, Markdown,
-text and images separately; opening a reference keeps its original format.
+**Home** is a heading over a few quiet sections: **Recently opened** (one card, the document you looked at last, with its
+type and how far you got), **Continue reading** (what you started and haven't finished), then one shelf for each type of
+file in your library: **PDFs**, **EPUBs**, **Markdown**, **Text** and **Images**. Shelves scroll sideways; opening a reference keeps
+its original format.
 
 <p align="center">
   <img src="docs/media/home.png" alt="The Home tab: Recently opened as two rows of cards with progress lines, then Continue reading with the half-tone manual, Pride and Prejudice and three generated covers, each showing its page or percentage" width="880">

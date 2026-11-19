@@ -937,7 +937,7 @@ select:hover { border-color: var(--accent-border); }
    be scrolled by code (a find match's scrollIntoView did, pushing the toolbar off the top). */
 #app { --footer-height: 30px; position: relative; height: 100dvh; min-width: 300px; display: flex; flex-direction: column; overflow: clip; }
 /* One 40 px row. Empty toolbar space drags the window (data-tauri-drag-region), so it never selects text. */
-.toolbar { display: flex; align-items: center; gap: 2px; height: 40px; padding: 0 6px; background: var(--glass-chrome); flex-shrink: 0; -webkit-user-select: none; user-select: none; }
+.toolbar { display: flex; align-items: center; gap: 2px; height: 40px; padding: 0 6px; background: var(--glass-chrome); box-shadow: inset 0 -1px 0 var(--hairline); flex-shrink: 0; -webkit-user-select: none; user-select: none; }
 /* macOS: the native traffic lights are hidden (windows::hide_native_buttons) and the reader draws its own at the toolbar's left end
    (src/window-controls.ts): 12 px circles, 8 px apart, 14 px from the window edge, 12 px before the first tab, centred on the 40 px row.
    At rest they are one quiet colour, outlined instead while the window is inactive; the standard colours and glyphs show on hover of the group,
@@ -992,8 +992,7 @@ select:hover { border-color: var(--accent-border); }
   .tab-strip { display: flex; }
   .title { display: none; }
 }
-.tab-home, .tab-add, .tab-overflow { flex: none; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border-radius: 6px; color: var(--muted); }
-.tab-home.is-active { background: var(--card); border-color: var(--border); color: var(--accent-ink); }
+.tab-add, .tab-overflow { flex: none; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border-radius: 6px; color: var(--muted); }
 .tab-overflow[hidden] { display: none; }
 .tab-list { position: relative; flex: 0 1 auto; min-width: 0; display: flex; gap: 2px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 .tab-list::-webkit-scrollbar { display: none; }
@@ -1001,9 +1000,9 @@ select:hover { border-color: var(--accent-border); }
 .tab:hover { background: var(--hover); }
 .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .tab.is-active { background: var(--card); border-color: var(--border); box-shadow: 0 1px 3px #1e1a2e12; color: var(--fg); }
-.tab, #home-tab { position: relative; }
+.tab { position: relative; }
 /* The active tab's sheen: a 2 px line on its top edge, inset 8 px, at most 120 px wide and centred. Drawn out of flow: no layout shift. */
-.tab.is-active::before, #home-tab.is-active::before { content: ''; position: absolute; top: -1px; left: 8px; right: 8px; max-width: 120px; height: 2px; margin-inline: auto; border-radius: 1px; background: var(--sheen); pointer-events: none; }
+.tab.is-active::before { content: ''; position: absolute; top: -1px; left: 8px; right: 8px; max-width: 120px; height: 2px; margin-inline: auto; border-radius: 1px; background: var(--sheen); pointer-events: none; }
 .tab.is-carried { opacity: .5; }
 .tab.is-dragging { z-index: 1; opacity: .92; box-shadow: 0 4px 12px #1e1a2e26; transition: none; }
 .tab-format { font: 600 11px/1 var(--font-mono); letter-spacing: .02em; color: var(--muted); }
@@ -1018,6 +1017,11 @@ select:hover { border-color: var(--accent-border); }
 .tab-menu-title .tab-hint { margin-left: 6px; font-size: 11px; }
 .tab-where { font: 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--muted); }
 .tab-where:empty { display: none; }
+/* The toolbar's tabs: wide flat chips, the title on the left and the place on the right in small monospace capitals; the active one has a light fill, not a box. No format badge (the pane rows keep theirs). */
+.toolbar .tab { flex: 0 1 290px; min-width: 240px; }
+.toolbar .tab.is-active { background: var(--hover); border-color: transparent; box-shadow: none; }
+.toolbar .tab-title, .toolbar .tab.is-active .tab-title { max-width: 150px; font: 600 13px/1.2 var(--font-ui); }
+.toolbar .tab-where { margin-left: auto; flex: none; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
 .tab-close { display: none; place-items: center; flex: none; width: 18px; height: 18px; padding: 0; border-radius: 5px; color: var(--muted); }
 .tab.is-active .tab-close, .tab:hover .tab-close, .tab:focus-within .tab-close { display: grid; }
 .tab-close:hover { background: var(--hover); color: var(--fg); }
@@ -1093,14 +1097,13 @@ h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 1px 0 
 .recent button:first-child { overflow: hidden; text-overflow: ellipsis; text-align: left; flex: 1; padding: 6px 8px; font-size: 12px; min-width: 0; }
 .recent button:last-child { flex: 0; padding: 4px 8px; color: var(--muted); opacity: 0; }
 .recent:hover button:last-child, .recent:focus-within button:last-child { opacity: 1; }
-/* Once there is something to return to, the opening page is a media-player home: file type chips, a "Recently opened" grid and
-   horizontal shelves. Its width, not the window's, decides the grid's columns (4 / 2 / 1), so the rail and the docked panel count. */
-#empty.is-home { max-width: none; width: 100%; align-items: stretch; padding: 18px 16px 28px; container-type: inline-size; --home-card: var(--hover); }
+/* Once there is something to return to, the opening page is one heading over "Recently opened" (a single card), "Continue reading" and a shelf per file
+   type, all small type behind a generous left gutter. */
+#empty.is-home { --home-gutter: clamp(16px, 3vw, 32px); max-width: none; width: 100%; align-items: stretch; padding: 18px 16px 28px var(--home-gutter); container-type: inline-size; --home-card: var(--hover); }
 /* Over a glow the cards are the opaque card colour: --hover is a translucent white there and would show the glow through. */
 :is([data-palette='aurora'], [data-palette='dusk'], [data-palette='nebula'], [data-palette='solar'], [data-palette='ember'], [data-palette='orchid'], [data-palette='glacier'], [data-palette='peach'], [data-palette='lagoon'], [data-palette='moss']) #empty.is-home { --home-card: var(--card); }
 #empty.is-home::before, #empty.is-home::after { display: none; }
-#empty.is-home h1 { font-size: 22px; margin: 0; }
-.home-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+#empty.is-home h1 { font-size: 22px; margin: 0 0 24px; }
 /* The ground: while Home shows, one canvas behind its content over the whole window below the toolbar (home.ts sets its left and top so
    it sits at the window's left edge and the toolbar's bottom edge, whatever the rail does; it lives in #workspace, whose overflow and
    container keep it off the toolbar and put it over the workspace's own surface). Its ground tone is transparent, so it works over any surface;
@@ -1115,67 +1118,44 @@ h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 1px 0 
 /* Home's muted ink: --muted up to 8 % STRENGTH (data-ground-deep is set by theme.ts above it), then mixed toward --fg in step with the strength, whole at the slider's maximum (30 %), so the text stays at 4.5:1 on a stronger ground. .08 is groundInkStrength and .22 is backgroundStrengthMax - groundInkStrength in theme.ts: change them together. */
 #empty.is-home { --home-muted: var(--muted); }
 :root[data-ground-deep] #empty.is-home { --home-muted: color-mix(in oklab, var(--muted), var(--fg) clamp(0%, calc((var(--ground-strength, .06) - .08) / .22 * 100%), 100%)); }
-.home-file { padding: 6px 10px; border-radius: 6px; color: var(--home-muted); font-size: 12px; }
-.home-file:hover { color: var(--fg); background: var(--hover-subtle); }
-/* #empty-open is also the splash's large button; in the header it is a peer of Browse library. */
-#empty.is-home #empty-open { margin-top: 0; display: block; padding: 6px 10px; }
-/* One line at every width: it scrolls sideways (no scrollbar) and fades at an edge while there is more. The padding keeps focus rings from being clipped. */
-.home-chips { --fade-start: 0px; --fade-end: 0px; display: flex; gap: 8px; margin: -3px -3px 17px; padding: 3px; overflow-x: auto; overflow-y: hidden; scroll-padding-inline: 31px; scrollbar-width: none; -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent 100%); mask-image: linear-gradient(to right, transparent 0, #000 var(--fade-start), #000 calc(100% - var(--fade-end)), transparent 100%); }
-.home-chips::-webkit-scrollbar { display: none; }
-.home-chip { flex: none; padding: 5px 13px; border-radius: 999px; background: var(--hover); color: var(--fg); font-size: 12px; font-weight: 600; line-height: 1.4; }
-.home-chip:hover { background: color-mix(in srgb, var(--hover) 82%, var(--fg)); }
-.home-chip[aria-pressed=true], .home-chip[aria-pressed=true]:hover { background: var(--fg); border-color: transparent; color: var(--surface); }
-.home-no-matches { color: var(--home-muted); font-size: 13px; line-height: 1.6; }
 .home-section { align-self: stretch; min-width: 0; margin: 0 0 26px; }
-.home-section h2 { margin: 0; font: 700 17px/1.3 var(--font-ui); letter-spacing: 0; color: var(--fg); }
-.home-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
-.home-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
-.home-all { padding: 2px 6px; border-radius: 4px; color: var(--home-muted); font-size: 12px; font-weight: 600; }
-.home-all:hover { color: var(--fg); background: var(--hover-subtle); }
+.home-section h2 { margin: 0 0 10px; font: 700 17px/1.3 var(--font-ui); letter-spacing: 0; color: var(--fg); }
+.home-recent-section h2 { margin-bottom: 8px; font-size: 13px; font-weight: 600; }
 .home-open { position: relative; border: 0; text-align: left; white-space: normal; }
 .home-open:hover { background: transparent; }
 .home-card-title { display: block; min-width: 0; font-size: 12px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
 .is-missing .home-open { opacity: .55; }
 /* The covers are the library's (src/cards.ts); at this size only the picture or the generated art shows. */
 .home-recent-open .library-tile-scrim, .home-recent-open .library-cover-text, .home-recent-open .library-tile-format, .home-recent-open .library-tile-note,
-.home-mosaic .library-tile-scrim, .home-mosaic .library-cover-text, .home-mosaic .library-tile-format, .home-mosaic .library-tile-note,
 .home-card-cover .library-tile-scrim { display: none; }
-.home-recent-open .library-cover-art, .home-mosaic .library-cover-art { height: 100%; }
-/* Recently opened: two columns from 380 px of content width (titles ellipsize), four from 860, one below 380. 52 px cards, the cover 39 x 52 flush left, the title and a 3 px progress line beside it. */
-.home-recent-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
-@container (min-width: 380px) { .home-recent-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@container (min-width: 860px) { .home-recent-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-.home-recent { position: relative; min-width: 0; }
-.home-recent-open { display: flex; align-items: center; gap: 10px; width: 100%; height: 52px; padding: 0 12px 0 0; border-radius: 6px; background: var(--home-card); overflow: hidden; }
+.home-recent-open .library-cover-art { height: 100%; }
+/* Recently opened: one 256 x 114 card (never wider than the page), the cover 86 x 114 flush left, the title in the middle of the rest, the file type and the progress along its foot. */
+.home-recent { position: relative; width: 256px; max-width: 100%; }
+.home-recent-open { display: flex; width: 100%; height: 114px; padding: 0; border-radius: 6px; background: var(--home-card); overflow: hidden; }
 .home-recent-open:hover { background: color-mix(in srgb, var(--home-card) 88%, var(--fg)); }
-.home-recent-open .library-tile-media { flex: none; width: 39px; height: 52px; aspect-ratio: auto; border-radius: 0; }
-.home-recent-text { display: flex; flex: 1 1 0; flex-direction: column; justify-content: center; gap: 5px; min-width: 0; }
-.home-recent-text .home-card-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* How far the reader got: --sheen on --hairline. */
-.home-progress { display: block; height: 3px; overflow: hidden; border-radius: 2px; background: var(--hairline); }
-.home-progress > i { display: block; height: 100%; background: var(--accent); background-image: var(--sheen); }
-.home-remove { position: absolute; top: 50%; right: 6px; width: 22px; height: 22px; padding: 0; border-radius: 999px; background: var(--card); color: var(--muted); opacity: 0; transform: translateY(-50%); }
+.home-recent-open .library-tile-media { flex: none; width: 86px; height: 114px; aspect-ratio: auto; border-radius: 0; }
+.home-recent-text { display: flex; flex: 1 1 0; flex-direction: column; min-width: 0; padding: 10px 12px; }
+.home-recent-text .home-card-title { display: -webkit-box; margin: auto 0; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.home-recent-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; color: var(--home-muted); font: 11px/1.4 var(--font-mono); letter-spacing: 0; text-transform: uppercase; white-space: nowrap; }
+.home-remove { position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; padding: 0; border-radius: 999px; background: var(--card); color: var(--muted); opacity: 0; }
 .home-recent:hover .home-remove, .home-recent:focus-within .home-remove { opacity: 1; }
 .home-remove:hover { color: var(--fg); }
-/* Shelves: one row of 124 px cards that scrolls sideways and snaps to cards, with no scrollbar; ‹ › show on hover where there is more. */
+/* Shelves: one row of 125 px covers, 5 px apart, that scrolls sideways and snaps to cards, with no scrollbar; ‹ › show on hover where there is more. */
 .home-shelf-frame { position: relative; min-width: 0; }
-.home-shelf-track { display: flex; gap: 14px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scrollbar-width: none; }
+.home-shelf-track { display: flex; gap: 5px; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scrollbar-width: none; }
 .home-shelf-track::-webkit-scrollbar { display: none; }
 .home-shelf-track.is-dragging { scroll-snap-type: none; cursor: grabbing; user-select: none; }
-.home-card { flex: none; width: 124px; scroll-snap-align: start; }
+.home-card { flex: none; width: 125px; scroll-snap-align: start; }
 .home-card-open { display: block; width: 100%; padding: 0; border-radius: 6px; }
 .home-card-open:focus-visible { outline: none; }
-.home-card-cover { display: flex; align-items: flex-end; height: 165px; }
-.home-card-cover .library-tile-media { flex: none; width: 124px; border-radius: 6px; }
-.home-card-open:focus-visible .library-tile-media::after, .home-card-open:focus-visible .home-mosaic::after { box-shadow: inset 0 0 0 2px var(--accent); }
+.home-card-cover { display: flex; align-items: flex-end; height: 170px; }
+.home-card-art { position: relative; isolation: isolate; display: block; flex: none; width: 125px; border-radius: 6px; }
+.home-card-art .library-tile-media { width: 125px; border-radius: 6px; }
+/* Continue reading: a 1 px hairline round the cover. It is blended (overlay), not an opaque or translucent border, so it reads on a light, a dark and a generated cover in every theme. The cover wrapper isolates, so the blend is with the cover alone and puts no group over the toolbar's glass. */
+.home-card-art.has-stroke::after { content: ''; position: absolute; inset: 0; border: 1px solid color-mix(in srgb, var(--fg) 35%, transparent); border-radius: inherit; mix-blend-mode: overlay; pointer-events: none; }
+.home-card-open:focus-visible .library-tile-media::after { box-shadow: inset 0 0 0 2px var(--accent); }
 .home-card .home-card-title { display: -webkit-box; margin-top: 8px; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .home-card-meta { display: block; margin-top: 2px; overflow: hidden; color: var(--home-muted); font: 11px/1.4 var(--font-mono); letter-spacing: 0; text-overflow: ellipsis; white-space: nowrap; }
-/* Collections: a 124 x 124 mosaic of the first four covers; an empty cell is the quiet fill. */
-.home-collection .home-card-cover { align-items: flex-start; height: 124px; }
-.home-mosaic { position: relative; display: grid; grid: 1fr 1fr / 1fr 1fr; gap: 2px; width: 124px; height: 124px; overflow: hidden; border-radius: 6px; background: var(--hairline); }
-.home-mosaic::after { content: ''; position: absolute; inset: 0; z-index: 1; border-radius: inherit; pointer-events: none; }
-.home-mosaic-cell { position: relative; min-width: 0; min-height: 0; background: var(--hover); }
-.home-mosaic .library-tile-media { position: absolute; inset: 0; width: 100%; height: 100%; aspect-ratio: auto; border-radius: 0; }
 .home-shelf-nav { position: absolute; z-index: 2; top: 66px; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1px solid var(--border); border-radius: 999px; background: var(--card); box-shadow: var(--shadow-popover); color: var(--fg); font-size: 20px; line-height: 1; opacity: 0; transition: opacity .12s; }
 .home-shelf-nav[hidden] { display: none; }
 .home-shelf-nav.is-previous { left: 4px; }
@@ -1668,7 +1648,7 @@ dialog, dialog.drop, #menu, #appearance, .tab-menu, .zoom-menu { background-imag
 @media (forced-colors: active), (prefers-contrast: more) {
   :root, [data-palette] { --sheen: none; --sheen-wash: none; --sheen-edge: none; --sheen-primary: none; --sheen-primary-hover: none; }
   footer::after { background: linear-gradient(to right, var(--accent) var(--scrub-fill), var(--track) var(--scrub-fill)); }
-  .tab.is-active::before, #home-tab.is-active::before { display: none; }
+  .tab.is-active::before { display: none; }
   .pane-edge { background: var(--accent); }
   .pane-dim { display: none; }
   @media (forced-colors: active) { .pane-edge { forced-color-adjust: none; background: Highlight; } }

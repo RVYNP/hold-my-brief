@@ -157,7 +157,7 @@ test('a compact window has no icon rail and its sheet still covers the whole lay
   expect(Math.round(sheet.y + sheet.height)).toBe(Math.round(layout.y + layout.height));
 });
 
-test('the rail has exactly four buttons; the library side is moved from the ⋯ menu or the rail\'s right-click menu, shared with the palette command, and a reload keeps it', async ({ page }) => {
+test('the rail has exactly five buttons; the library side is moved from the ⋯ menu or the rail\'s right-click menu, shared with the palette command, and a reload keeps it', async ({ page }) => {
   await page.setViewportSize({ width: 1080, height: 680 });
   await page.goto('/');
   const rail = page.locator('#library-rail'), key = 'hold-my-brief:library-side';
@@ -165,12 +165,12 @@ test('the rail has exactly four buttons; the library side is moved from the ⋯ 
   await expect(rail).toBeVisible();
   await expect(rail).toHaveAttribute('data-library-side', 'left');
 
-  // Library, Search, Add files, then a spacer, then Settings: no Home, Favorites, Collections and no side button.
+  // Home, Add files, Library, Search, Settings in one group, no spacer: no Favorites, Collections and no side button.
   const buttons = rail.getByRole('button');
-  expect(await buttons.evaluateAll(list => list.map(button => button.getAttribute('aria-label')))).toEqual(['Library', 'Search', 'Add files', 'Settings']);
+  expect(await buttons.evaluateAll(list => list.map(button => button.getAttribute('aria-label')))).toEqual(['Home', 'Add files', 'Library', 'Search', 'Settings']);
   const ys = await buttons.evaluateAll(list => list.map(button => { const box = button.getBoundingClientRect(); return [Math.round(box.y), Math.round(box.y + box.height)]; }));
   expect(ys.map(([top]) => top)).toEqual([...ys.map(([top]) => top)].sort((a, b) => a - b));
-  expect(ys[3]![0]! - ys[2]![1]!).toBeGreaterThan(100); // the spacer
+  expect(ys[4]![0]! - ys[3]![1]!).toBeLessThan(10); // Settings sits directly under Search
   expect(await page.getByRole('button', { name: /Move library/ }).count()).toBe(0);
 
   // Appearance has no LIBRARY row: the side is the ⋯ menu's and the rail's.
@@ -292,9 +292,9 @@ for (const width of [1440, 900]) for (const side of ['left', 'right'] as const) 
       const edge = await boxOf(panel), at = await boxOf(target);
       return side === 'left' ? at.x - (edge.x + edge.width) : edge.x - (at.x + at.width);
     };
-    const chip = page.locator('#empty .home-chip').first(), card = page.locator('#empty [data-home-path]').first();
-    await expect(chip).toBeVisible(); await expect(card).toBeVisible();
-    await expect.poll(() => beyond(chip)).toBeGreaterThanOrEqual(0);
+    const title = page.locator('#empty h1'), card = page.locator('#empty [data-home-path]').first();
+    await expect(title).toBeVisible(); await expect(card).toBeVisible();
+    await expect.poll(() => beyond(title)).toBeGreaterThanOrEqual(0);
     await expect.poll(() => beyond(card)).toBeGreaterThanOrEqual(0);
     // The reading panel itself is what is left of the window, and Home's content is laid out inside it.
     const work = await boxOf(page.locator('#workspace'));
@@ -356,4 +356,52 @@ test('in a compact window the page strip also ends above the footer, and the pil
   const [s, f, p] = [await boxOf(strip), await boxOf(footer), await boxOf(pill)];
   expect(apart(s, f) && apart(p, s) && apart(p, f)).toBe(true);
   expect(s.x).toBe(0); expect(s.width).toBe(600);
+});
+
+for (const side of ['left', 'right'] as const) {
+  test(`library on the ${side}: the rail has five bare buttons, Home first, and a 1 px hairline on its inner edge`, async ({ page }) => {
+    await page.setViewportSize({ width: 1080, height: 760 });
+    await page.goto('/');
+    await expect(page.locator('#home-tab, #tab-add')).toHaveCount(0);
+    if (side === 'right') await chooseLibrarySide(page, 'right');
+    const rail = page.locator('#library-rail'), buttons = rail.getByRole('button');
+    await expect(buttons).toHaveText(['', '', '', '', '']);
+    expect(await buttons.evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label')))).toEqual(['Home', 'Add files', 'Library', 'Search', 'Settings']);
+    // No box: the group and the rail are transparent and unbordered, and the buttons sit in one group with no spacer between Search and Settings.
+    const group = rail.locator('.icon-rail-group');
+    await expect(group).toHaveCount(1);
+    expect(await group.evaluate(node => { const style = getComputedStyle(node); return { fill: style.backgroundColor, border: style.borderTopWidth + style.borderRightWidth + style.borderBottomWidth + style.borderLeftWidth }; })).toEqual({ fill: 'rgba(0, 0, 0, 0)', border: '0px0px0px0px' });
+    const boxes = await buttons.evaluateAll(nodes => nodes.map(node => { const box = node.getBoundingClientRect(); return [box.top, box.bottom]; }));
+    for (let i = 1; i < boxes.length; i++) expect(boxes[i]![0] - boxes[i - 1]![1]).toBe(4);
+    // The hairline: 1 px wide, the theme's hairline colour, the window's height below the toolbar, on the edge that faces the content.
+    const line = await rail.evaluate(node => {
+      const style = getComputedStyle(node, '::after'), at = node.getBoundingClientRect();
+      const probe = Object.assign(document.createElement('i'), { style: 'background: var(--hairline)' }); document.body.append(probe);
+      const hairline = getComputedStyle(probe).backgroundColor; probe.remove();
+      return { width: style.width, height: parseFloat(style.height), colour: style.backgroundColor, hairline, top: at.top + parseFloat(style.top), x: at.left + parseFloat(style.left) };
+    });
+    expect(line.width).toBe('1px'); expect(line.colour).toBe(line.hairline);
+    const layout = (await page.locator('#reader-layout').boundingBox())!, toolbar = (await page.locator('.toolbar').boundingBox())!;
+    expect(layout.y).toBeCloseTo(toolbar.y + toolbar.height, 0);
+    expect(line.top).toBeCloseTo(layout.y, 0); expect(line.height).toBeCloseTo(layout.height, 0);
+    // Left: 44 px from the window's left edge; right: the mirror image.
+    expect(side === 'left' ? line.x : 1080 - line.x - 1).toBeCloseTo(44, 0);
+  });
+}
+
+test('Home on the rail shows Home from a document tab and is marked current; choosing a tab clears it', async ({ page }) => {
+  await page.setViewportSize({ width: 1080, height: 760 });
+  await page.goto('/');
+  const home = page.locator('#library-rail').getByRole('button', { name: 'Home', exact: true });
+  await expect(home).toHaveAttribute('aria-current', 'page');
+  await open(page, 'a.txt'); await shown(page, 'a.txt');
+  await expect(home).not.toHaveAttribute('aria-current', 'page');
+  await expect(page.locator('#empty')).toBeHidden();
+  await home.click();
+  await expect(home).toHaveAttribute('aria-current', 'page');
+  await expect(page.locator('#empty')).toBeVisible();
+  await expect(page.locator('#tab-list .tab.is-active')).toHaveCount(0);
+  await page.locator('#tab-list .tab', { hasText: 'a.txt' }).click();
+  await expect(home).not.toHaveAttribute('aria-current', 'page');
+  await shown(page, 'a.txt');
 });
