@@ -9,11 +9,11 @@
 import { slotAt } from './tabs';
 import { middleTruncate } from './tab-titles';
 
-/** What one tab shows. `image` tabs keep the end of a long title (cut in the middle); the others keep its start. `where` is the short place ("40 / 146"), empty until the document has been read; `progress` is the library's wording for how far in it is ("p. 12 / 96", "37 %", "Finished"), for the tab menu. The Library tab (`library`) shows a glyph for the format and its title for the path. */
-export type TabView = { path: string; title: string; hint: string; format: string; where: string; progress: string; active: boolean; problem: boolean; library: boolean; image: boolean };
+/** What one tab shows. `image` tabs keep the end of a long title (cut in the middle); the others keep its start. `where` is the short place ("40 / 146"; the toolbar prints it "P. 40/146" when `paged`, and as it is for lines), empty until the document has been read; `progress` is the library's wording for how far in it is ("p. 12 / 96", "37 %", "Finished"), for the tab menu. The Library tab (`library`) shows a glyph for the format and its title for the path. */
+export type TabView = { path: string; title: string; hint: string; format: string; where: string; paged: boolean; progress: string; active: boolean; problem: boolean; library: boolean; image: boolean };
 
 export type TabHandlers = {
-  /** A tab was chosen; `undefined` is Home (only a strip with a Home button says so). */
+  /** A tab was chosen; `undefined` is Home (only the toolbar's open-tabs menu says so). */
   select: (path: string | undefined) => void;
   close: (path: string) => void;
   newTab: () => void;
@@ -82,37 +82,42 @@ export type TabStrip = {
   showDrop: (slot: number | undefined, label?: string) => void;
 };
 
+/** The toolbar's place for a paged tab: "40 / 146" is printed "P. 40/146"; anything else ("37 %") is kept. */
+const placeOf = (where: string) => where.replace(/^([\d–-]+) \/ (\d+)$/, 'P. $1/$2');
+
 /**
- * `elements` are the static parts of the toolbar markup: the Home button, the scrolling list of tabs, the + button and the
- * overflow button. `newTabKeys` is how the New tab command's shortcut is written on this platform. A strip without a Home button is a
- * pane's own row of tabs (a split view): its menu has no Home row, and only the toolbar's menu carries the `tab-menu` id.
+ * `elements` are the static parts of the markup: the scrolling list of tabs, the optional + button and the overflow button.
+ * `newTabKeys` is how the New tab command's shortcut is written on this platform. `toolbar` says which strip this is. The toolbar's
+ * strip draws every tab with its title and place (no format badge), has no + button, and its open-tabs menu has a Home row and carries
+ * the `tab-menu` id. A pane's own row of tabs (a split view) keeps the format badge, the place of its active tab only, its + button,
+ * and a menu without a Home row.
  */
-export function createTabStrip(elements: { strip: HTMLElement; home?: HTMLElement; list: HTMLElement; add: HTMLElement; overflow: HTMLElement }, handlers: TabHandlers, newTabKeys: string): TabStrip {
-  const { strip, home, list, add, overflow } = elements;
+export function createTabStrip(elements: { strip: HTMLElement; list: HTMLElement; add?: HTMLElement; overflow: HTMLElement }, handlers: TabHandlers, newTabKeys: string, toolbar: boolean): TabStrip {
+  const { strip, list, add, overflow } = elements;
   const nodes = new Map<string, HTMLElement>();
   let views: readonly TabView[] = [], homeActive = true, dragging = false, repaint = false;
 
-  if (home) { home.replaceChildren(icon(icons.home, 16)); home.onclick = () => handlers.select(undefined); }
-  add.replaceChildren(icon(icons.plus, 14, 2));
-  add.onclick = () => handlers.newTab();
+  if (add) { add.replaceChildren(icon(icons.plus, 14, 2)); add.onclick = () => handlers.newTab(); }
   overflow.replaceChildren(icon(icons.chevron, 14, 2));
   overflow.onclick = () => (menu.hidden ? openMenu(overflow) : closeMenu());
 
   function build(view: TabView): HTMLElement {
     const tab = document.createElement('div');
     tab.className = 'tab'; tab.dataset.path = view.path; tab.setAttribute('role', 'tab'); tab.tabIndex = 0;
-    const format = text('span', 'tab-format', ''), title = text('span', 'tab-title', ''), hint = text('span', 'tab-hint', ''), where = text('span', 'tab-where', '');
-    tab.append(format, title, hint, where, closeButton(view.title));
+    const title = text('span', 'tab-title', ''), hint = text('span', 'tab-hint', ''), where = text('span', 'tab-where', '');
+    // The toolbar's tabs have no format badge; only the Library tab keeps its glyph there.
+    tab.append(...(toolbar && !view.library ? [] : [text('span', 'tab-format', '')]), title, hint, where, closeButton(view.title));
     return tab;
   }
   function fill(tab: HTMLElement, view: TabView) {
     tab.classList.toggle('is-active', view.active); tab.classList.toggle('has-problem', view.problem);
     tab.setAttribute('aria-selected', String(view.active)); tab.dataset.kind = view.library ? 'library' : 'document';
     tab.title = tooltip(view);
-    const mark = tab.querySelector('.tab-format')!;
-    if (!view.library) setText(mark, view.format.toUpperCase()); else if (!mark.firstElementChild) mark.replaceChildren(icon(icons.library, 12));
+    if (!view.library) tab.dataset.format = view.format.toUpperCase();
+    const mark = tab.querySelector('.tab-format');
+    if (mark) { if (!view.library) setText(mark, view.format.toUpperCase()); else if (!mark.firstElementChild) mark.replaceChildren(icon(icons.library, 12)); }
     setText(tab.querySelector('.tab-hint')!, view.hint);
-    setText(tab.querySelector('.tab-where')!, view.active ? view.where : '');
+    setText(tab.querySelector('.tab-where')!, toolbar ? (view.paged ? placeOf(view.where) : view.where) : view.active ? view.where : '');
     tab.querySelector('.tab-close')!.setAttribute('aria-label', `Close ${view.title}`);
   }
   /**
@@ -149,7 +154,6 @@ export function createTabStrip(elements: { strip: HTMLElement; home?: HTMLElemen
   function paint(next: readonly TabView[], atHome: boolean) {
     views = next; homeActive = atHome;
     if (dragging) { repaint = true; return; }
-    if (home) { home.classList.toggle('is-active', atHome); home.setAttribute('aria-selected', String(atHome)); }
     const wanted = new Set(next.map(view => view.path));
     for (const [path, node] of nodes) if (!wanted.has(path)) { node.remove(); nodes.delete(path); }
     next.forEach((view, index) => {
@@ -264,7 +268,7 @@ export function createTabStrip(elements: { strip: HTMLElement; home?: HTMLElemen
 
   // The menu of open tabs: Home, every document, then New tab. The compact title opens it, and so does the strip's overflow button.
   const menu = document.createElement('div');
-  if (home) menu.id = 'tab-menu';
+  if (toolbar) menu.id = 'tab-menu';
   menu.className = 'tab-menu'; menu.hidden = true; menu.setAttribute('role', 'menu'); menu.setAttribute('aria-label', 'Open tabs');
   document.body.append(menu);
   let anchor: HTMLElement | undefined;
@@ -280,7 +284,7 @@ export function createTabStrip(elements: { strip: HTMLElement; home?: HTMLElemen
     return item;
   }
   function fillMenu() {
-    const rows: HTMLElement[] = home ? [row('Home', undefined, homeActive, icons.home, () => handlers.select(undefined))] : [];
+    const rows: HTMLElement[] = toolbar ? [row('Home', undefined, homeActive, icons.home, () => handlers.select(undefined))] : [];
     for (const view of views) {
       const item = row(view.title, view.library ? undefined : [view.format.toUpperCase(), view.progress].filter(Boolean).join(' · '), view.active, view.library ? icons.library : icons.document, () => handlers.select(view.path), () => handlers.close(view.path), view.hint, view.library ? view.title : `${view.title}\n${view.path}`);
       item.dataset.path = view.path; rows.push(item);

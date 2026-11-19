@@ -3,6 +3,7 @@ import { seedLibrary, type FixtureCollection, type FixtureDocument } from './hom
 import { lowestTextContrast } from './home-contrast';
 import { pagedPdf } from './paged-pdf';
 import { warmDevServer } from './warm';
+import { railHome } from './toolbar-tabs';
 
 // Home's background: one canvas of dithered window glow behind Home's content, over the whole window below the toolbar,
 // faint by default (6 %), with BACKGROUND (a pattern, or None) and STRENGTH in the Appearance sheet.
@@ -145,13 +146,13 @@ test('the ground is hidden in a reader tab and in the Library tab, and back on H
   await expect(page.locator('#tab-list .tab')).toHaveCount(1);
   await expect(page.locator('#empty')).toBeHidden();
   await expect(shown(page)).toBeHidden();
-  await page.locator('#home-tab').click();
+  await railHome(page).click();
   await expect(shown(page)).toBeVisible();
   await page.locator('#home-browse').click();
   await expect(page.locator('#library-page')).toBeVisible();
   await expect(page.locator('#empty')).toBeHidden();
   await expect(shown(page)).toBeHidden();
-  await page.locator('#home-tab').click();
+  await railHome(page).click();
   await expect(shown(page)).toBeVisible();
 });
 

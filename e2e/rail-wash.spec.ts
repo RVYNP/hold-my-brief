@@ -39,14 +39,14 @@ const sample = (page: Page, png: Buffer, points: [number, number][]) => page.eva
 }, [png.toString('base64'), points] as const);
 
 for (const side of ['left', 'right'] as const) {
-  test(`library on the ${side}: the rail has no box, its icons share the centre line of ${side === 'left' ? 'Home' : '⋯'} at 20 px from the edge, and the panel docks at 46 px`, async ({ page }) => {
+  test(`library on the ${side}: the rail has no box, its icons share the centre line of ${side === 'left' ? 'the toolbar\'s left padding' : '⋯'} at 20 px from the edge, and the panel docks at 46 px`, async ({ page }) => {
     await openHome(page, side);
     const rail = page.locator('#library-rail');
     const look = await rail.evaluate(node => { const style = getComputedStyle(node); return { border: style.borderTopWidth + style.borderRightWidth + style.borderBottomWidth + style.borderLeftWidth, radius: style.borderTopLeftRadius + style.borderTopRightRadius + style.borderBottomLeftRadius + style.borderBottomRightRadius, shadow: style.boxShadow, image: style.backgroundImage, colour: style.backgroundColor }; });
     expect(look).toEqual({ border: '0px0px0px0px', radius: '0px0px0px0px', shadow: 'none', image: 'none', colour: 'rgba(0, 0, 0, 0)' });
 
-    const buttons = await centre(page, '.icon-rail-button'), target = (await centre(page, side === 'left' ? '#home-tab' : '#menu-toggle'))[0]!;
-    expect(buttons.length).toBe(4);
+    const buttons = await centre(page, '.icon-rail-button'), target = side === 'left' ? 20 : (await centre(page, '#menu-toggle'))[0]!;
+    expect(buttons.length).toBe(5);
     for (const x of buttons) expect(x).toBeCloseTo(target, 0);
     expect(side === 'left' ? target : 1080 - target).toBeCloseTo(20, 0);
     const box = (await rail.boundingBox())!;
@@ -189,7 +189,7 @@ const contrastOf = (page: Page, png: Buffer | string, icons: RailIcon[]) => page
 /** The lowest rail-icon contrast over Home's ground at each of its three tones, with the icons' own drawing hidden. */
 async function homeContrast(page: Page, name: string) {
   const icons = await railIcons(page);
-  expect(icons.length).toBe(4);
+  expect(icons.length).toBe(5);
   for (const icon of icons) expect(icon.pressed, 'at rest: the panel is closed').not.toBe('true');
   const tones = await page.evaluate(() => {
     const canvas = document.querySelector<HTMLCanvasElement>('canvas.home-ground:not(.is-leaving)')!, data = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data, seen = new Set<string>();
@@ -226,7 +226,7 @@ for (const side of ['left', 'right'] as const) for (const [name, record] of fami
   await openSurface(page, side, record, 'PDF');
   const sheet = await page.locator('.pdf-page canvas').first().evaluate(canvas => { const box = canvas.getBoundingClientRect(); return [box.left, box.right]; });
   const icons = await railIcons(page);
-  expect(icons.length).toBe(4);
+  expect(icons.length).toBe(5);
   const hide = await page.addStyleTag({ content: '.icon-rail-button svg { visibility: hidden !important; }' });
   const ratios = await contrastOf(page, await page.screenshot({ animations: 'disabled' }), icons);
   await hide.evaluate(node => (node as Element).remove());

@@ -937,7 +937,7 @@ select:hover { border-color: var(--accent-border); }
    be scrolled by code (a find match's scrollIntoView did, pushing the toolbar off the top). */
 #app { --footer-height: 30px; position: relative; height: 100dvh; min-width: 300px; display: flex; flex-direction: column; overflow: clip; }
 /* One 40 px row. Empty toolbar space drags the window (data-tauri-drag-region), so it never selects text. */
-.toolbar { display: flex; align-items: center; gap: 2px; height: 40px; padding: 0 6px; background: var(--glass-chrome); flex-shrink: 0; -webkit-user-select: none; user-select: none; }
+.toolbar { display: flex; align-items: center; gap: 2px; height: 40px; padding: 0 6px; background: var(--glass-chrome); box-shadow: inset 0 -1px 0 var(--hairline); flex-shrink: 0; -webkit-user-select: none; user-select: none; }
 /* macOS: the native traffic lights are hidden (windows::hide_native_buttons) and the reader draws its own at the toolbar's left end
    (src/window-controls.ts): 12 px circles, 8 px apart, 14 px from the window edge, 12 px before the first tab, centred on the 40 px row.
    At rest they are one quiet colour, outlined instead while the window is inactive; the standard colours and glyphs show on hover of the group,
@@ -992,8 +992,7 @@ select:hover { border-color: var(--accent-border); }
   .tab-strip { display: flex; }
   .title { display: none; }
 }
-.tab-home, .tab-add, .tab-overflow { flex: none; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border-radius: 6px; color: var(--muted); }
-.tab-home.is-active { background: var(--card); border-color: var(--border); color: var(--accent-ink); }
+.tab-add, .tab-overflow { flex: none; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border-radius: 6px; color: var(--muted); }
 .tab-overflow[hidden] { display: none; }
 .tab-list { position: relative; flex: 0 1 auto; min-width: 0; display: flex; gap: 2px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 .tab-list::-webkit-scrollbar { display: none; }
@@ -1001,9 +1000,9 @@ select:hover { border-color: var(--accent-border); }
 .tab:hover { background: var(--hover); }
 .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .tab.is-active { background: var(--card); border-color: var(--border); box-shadow: 0 1px 3px #1e1a2e12; color: var(--fg); }
-.tab, #home-tab { position: relative; }
+.tab { position: relative; }
 /* The active tab's sheen: a 2 px line on its top edge, inset 8 px, at most 120 px wide and centred. Drawn out of flow: no layout shift. */
-.tab.is-active::before, #home-tab.is-active::before { content: ''; position: absolute; top: -1px; left: 8px; right: 8px; max-width: 120px; height: 2px; margin-inline: auto; border-radius: 1px; background: var(--sheen); pointer-events: none; }
+.tab.is-active::before { content: ''; position: absolute; top: -1px; left: 8px; right: 8px; max-width: 120px; height: 2px; margin-inline: auto; border-radius: 1px; background: var(--sheen); pointer-events: none; }
 .tab.is-carried { opacity: .5; }
 .tab.is-dragging { z-index: 1; opacity: .92; box-shadow: 0 4px 12px #1e1a2e26; transition: none; }
 .tab-format { font: 600 11px/1 var(--font-mono); letter-spacing: .02em; color: var(--muted); }
@@ -1018,6 +1017,11 @@ select:hover { border-color: var(--accent-border); }
 .tab-menu-title .tab-hint { margin-left: 6px; font-size: 11px; }
 .tab-where { font: 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--muted); }
 .tab-where:empty { display: none; }
+/* The toolbar's tabs: wide flat chips, the title on the left and the place on the right in small monospace capitals; the active one has a light fill, not a box. No format badge (the pane rows keep theirs). */
+.toolbar .tab { flex: 0 1 290px; min-width: 240px; }
+.toolbar .tab.is-active { background: var(--hover); border-color: transparent; box-shadow: none; }
+.toolbar .tab-title, .toolbar .tab.is-active .tab-title { max-width: 150px; font: 600 13px/1.2 var(--font-ui); }
+.toolbar .tab-where { margin-left: auto; flex: none; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
 .tab-close { display: none; place-items: center; flex: none; width: 18px; height: 18px; padding: 0; border-radius: 5px; color: var(--muted); }
 .tab.is-active .tab-close, .tab:hover .tab-close, .tab:focus-within .tab-close { display: grid; }
 .tab-close:hover { background: var(--hover); color: var(--fg); }
@@ -1668,7 +1672,7 @@ dialog, dialog.drop, #menu, #appearance, .tab-menu, .zoom-menu { background-imag
 @media (forced-colors: active), (prefers-contrast: more) {
   :root, [data-palette] { --sheen: none; --sheen-wash: none; --sheen-edge: none; --sheen-primary: none; --sheen-primary-hover: none; }
   footer::after { background: linear-gradient(to right, var(--accent) var(--scrub-fill), var(--track) var(--scrub-fill)); }
-  .tab.is-active::before, #home-tab.is-active::before { display: none; }
+  .tab.is-active::before { display: none; }
   .pane-edge { background: var(--accent); }
   .pane-dim { display: none; }
   @media (forced-colors: active) { .pane-edge { forced-color-adjust: none; background: Highlight; } }
