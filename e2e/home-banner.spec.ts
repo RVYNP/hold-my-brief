@@ -4,6 +4,7 @@ import { lowestTextContrast } from './home-contrast';
 import { pagedPdf } from './paged-pdf';
 import { warmDevServer } from './warm';
 import { railHome } from './toolbar-tabs';
+import { openSettings } from './settings-controls';
 
 // Home's background: one canvas of dithered window glow behind Home's content, over the whole window below the toolbar,
 // faint by default (6 %), with BACKGROUND (a pattern, or None) and STRENGTH in the Appearance sheet.
@@ -39,13 +40,6 @@ async function keepAppearance(page: Page, record: object) {
   await page.evaluate(([key, value]) => localStorage.setItem(key as string, JSON.stringify(value)), [appearanceKey, record]);
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Home', level: 1 })).toBeVisible();
-}
-async function openSheet(page: Page) {
-  await page.getByRole('button', { name: 'Reader menu' }).click();
-  await page.getByRole('button', { name: /Appearance and text/ }).click();
-  const sheet = page.locator('#appearance');
-  await expect(sheet).toBeVisible();
-  return sheet;
 }
 const themes: [string, object][] = [
   ['Brief light', { mode: 'light', palette: 'brief' }],
@@ -196,7 +190,7 @@ test('STRENGTH sets the opacity live, from 2 to 30 %, and is kept', async ({ pag
   await seedLibrary(page, documents, collections);
   await pixels(page);
   expect(await opacityOf(shown(page))).toBe('0.06');
-  const sheet = await openSheet(page);
+  const sheet = await openSettings(page);
   const slider = sheet.locator('input[type=range]');
   await expect(sheet.locator('.sheet-label', { hasText: 'BACKGROUND' })).toBeVisible();
   await expect(sheet.locator('.sheet-label', { hasText: 'STRENGTH' })).toBeVisible();
@@ -218,7 +212,7 @@ test('STRENGTH sets the opacity live, from 2 to 30 %, and is kept', async ({ pag
   await page.reload();
   await pixels(page);
   expect(await opacityOf(shown(page))).toBe('0.3');
-  const again = await openSheet(page);
+  const again = await openSettings(page);
   await expect(again.locator('input[type=range]')).toHaveValue('30');
   await expect(again.locator('.strength-value')).toHaveText('30 %');
 });
@@ -226,7 +220,7 @@ test('STRENGTH sets the opacity live, from 2 to 30 %, and is kept', async ({ pag
 test('BACKGROUND None removes the ground, greys STRENGTH, and a pattern brings them back', async ({ page }) => {
   await seedLibrary(page, documents, collections);
   await pixels(page);
-  const sheet = await openSheet(page);
+  const sheet = await openSettings(page);
   await expect(sheet.locator('[data-banner]')).toHaveText(['Flow', 'Arcs', 'Stripes', 'Contours', 'Truchet', 'None']);
   await expect(sheet.locator('[data-banner=flow]')).toHaveAttribute('aria-checked', 'true');
   await sheet.locator('[data-banner=none]').click();
@@ -239,7 +233,7 @@ test('BACKGROUND None removes the ground, greys STRENGTH, and a pattern brings t
   expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).banner, appearanceKey)).toBe('none');
   await page.reload();
   await expect(canvases(page)).toHaveCount(0);
-  const again = await openSheet(page);
+  const again = await openSettings(page);
   await again.locator('[data-banner=truchet]').click();
   await expect(again.locator('input[type=range]')).toBeEnabled();
   await expect(again.locator('input[type=range]')).toHaveAttribute('aria-disabled', 'false');
@@ -250,7 +244,7 @@ test('a saved record with banner none and no strength shows no ground; STRENGTH 
   await seedLibrary(page, documents, collections);
   await keepAppearance(page, { mode: 'light', palette: 'brief', accent: null, page: 'theme', banner: 'none' });
   await expect(canvases(page)).toHaveCount(0);
-  const sheet = await openSheet(page);
+  const sheet = await openSettings(page);
   await expect(sheet.locator('[data-banner=none]')).toHaveAttribute('aria-checked', 'true');
   await expect(sheet.locator('input[type=range]')).toHaveValue('6');
   await expect(sheet.locator('.strength-value')).toHaveText('6 %');
@@ -293,7 +287,7 @@ test('the picture is the day\'s: a seed saved today stays on show after a reload
 test('a pattern choice repaints the ground in place, and so does a theme change', async ({ page }) => {
   await seedLibrary(page, documents, collections);
   const before = await pixels(page);
-  const sheet = await openSheet(page);
+  const sheet = await openSettings(page);
   await sheet.locator('[data-banner=stripes]').click();
   await expect(sheet.locator('[data-banner=stripes]')).toHaveAttribute('aria-checked', 'true');
   await expect.poll(async () => await pixels(page) !== before).toBe(true);
@@ -320,7 +314,7 @@ test('the ground has no tone of its own: its pixels are fully transparent or opa
 test('a changed picture cross-fades two canvases over 600 ms, and skips the fade under reduced motion', async ({ page }) => {
   await seedLibrary(page, documents, collections);
   await pixels(page);
-  const sheet = await openSheet(page);
+  const sheet = await openSettings(page);
   await sheet.locator('[data-banner=stripes]').click();
   await expect(canvases(page)).toHaveCount(2);
   expect(await canvases(page).first().evaluate(node => getComputedStyle(node).transitionDuration)).toBe('0.6s');
@@ -383,7 +377,7 @@ test('Home text drawn on the ground reads at 4.5:1 against the worst ground pixe
   await page.setViewportSize({ width: 1080, height: 1500 });
   await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
   await seedLibrary(page, documents, collections);
-  const sheet = await openSheet(page);
+  const sheet = await openSettings(page);
   const maximum = Number(await sheet.locator('input[type=range]').getAttribute('max')) / 100;
   expect(maximum).toBe(.3);
   const worst: Record<string, string> = {};
@@ -409,7 +403,7 @@ test('Home\'s muted text is exactly --muted at 6 % and at T (8 %), its --fg text
   await page.setViewportSize({ width: 1080, height: 1500 });
   await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
   await seedLibrary(page, documents, collections);
-  const sheet = await openSheet(page);
+  const sheet = await openSettings(page);
   const maximum = Number(await sheet.locator('input[type=range]').getAttribute('max')) / 100;
   /** The computed colour of each Home text (as the browser serialises it) next to the computed --muted and --fg, and the lightness of each. */
   const read = () => page.evaluate(() => {
@@ -460,7 +454,7 @@ test('the ink deepens as the slider rises above T (8 %) and is whole at the maxi
   await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
   await seedLibrary(page, documents, collections);
   await keepAppearance(page, { mode: 'light', palette: 'brief', banner: 'flow', backgroundStrength: .06 });
-  const sheet = await openSheet(page);
+  const sheet = await openSettings(page);
   const slider = sheet.locator('input[type=range]'), file = page.locator('.home-card-meta').first();
   const colour = () => file.evaluate(node => {
     const swatch = document.createElement('canvas').getContext('2d', { willReadFrequently: true })!;

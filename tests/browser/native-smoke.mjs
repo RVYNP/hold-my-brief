@@ -72,12 +72,15 @@ try {
   await page.locator('#filename').filter({ hasText: 'native-smoke.txt' }).waitFor();
   assert.equal(await page.locator('#notice').isVisible(), false, 'No startup or IPC errors');
   const initial = await page.evaluate(() => window.__TAURI_INTERNALS__.invoke('get_state'));
-  // The toggles round-trip through native IPC before the button reflects the new state, so
-  // wait for it rather than reading aria-pressed straight after the click.
-  await page.locator('#pin').click();
-  await expect(page.locator('#pin'), 'Pin must toggle').toHaveAttribute('aria-pressed', String(!initial.window.pinned));
-  await page.locator('#lock').click();
-  await expect(page.locator('#lock'), 'Lock must toggle').toHaveAttribute('aria-pressed', String(!initial.window.locked));
+  // The toggles round-trip through native IPC before the switch reflects the new state, so
+  // wait for it rather than reading aria-checked straight after the click. They live in Settings › Window.
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  const pin = page.getByRole('switch', { name: 'Keep on top' }), lock = page.getByRole('switch', { name: 'Lock size' });
+  await pin.click();
+  await expect(pin, 'Pin must toggle').toHaveAttribute('aria-checked', String(!initial.window.pinned));
+  await lock.click();
+  await expect(lock, 'Lock must toggle').toHaveAttribute('aria-checked', String(!initial.window.locked));
+  await page.keyboard.press('Escape');
   await page.keyboard.press('Control+g');
   await page.locator('#target').fill('50');
   await page.getByRole('button', { name: 'Go to location', exact: true }).click();

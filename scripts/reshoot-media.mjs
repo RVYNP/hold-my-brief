@@ -397,9 +397,7 @@ if (want('shelf', 'intake')) {
 if (want('appearance')) {
   const { ctx, page } = await open(browser);
   await loadFile(page, BOOK, 6000);
-  await page.click('#menu-toggle');
-  await page.waitForTimeout(500);
-  await page.getByRole('button', { name: /Appearance/ }).click();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.waitForTimeout(900);
   await shot(page, 'appearance.png');
   await ctx.close();
@@ -469,9 +467,9 @@ if (want('desktop')) {
     const { ctx, page } = await open(browser);
     await loadFile(page, PDF, 9000);
     await jumpTo(page, 48);
-    // The browser preview has no native frame and cannot pin: draw what the desktop app does on Windows
-    // (its own caption buttons in the toolbar, the pinned state as updateWindow() in src/main.ts sets it).
-    await page.evaluate(() => { document.documentElement.classList.add('windows-titlebar'); document.getElementById('pin').setAttribute('aria-pressed', 'true'); });
+    // The browser preview has no native frame: draw what the desktop app does on Windows
+    // (its own caption buttons in the toolbar; the toolbar no longer shows a pinned state).
+    await page.evaluate(() => { document.documentElement.classList.add('windows-titlebar'); });
     reader = await shot(page);
     await ctx.close();
   }

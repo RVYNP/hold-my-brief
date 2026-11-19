@@ -257,11 +257,11 @@ test('the icon rail: Home, Add files, Library, Search, then Settings, in one gro
   await page.keyboard.press('Control+Shift+F');
   await expect(page.getByRole('searchbox', { name: 'Filter the library' })).toBeFocused();
 
-  // Settings opens Appearance; Add files opens its menu beside the icon, with Sources, even with the panel closed.
+  // Settings opens the Settings sheet; Add files opens its menu beside the icon, with Sources, even with the panel closed.
   await icon(page, 'Library').click();
   await expect(page.locator('#library-root')).toBeHidden();
   await icon(page, 'Settings').click();
-  await expect(page.locator('#appearance')).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible();
   await page.keyboard.press('Escape');
   await icon(page, 'Add files').click();
   const menu = page.getByRole('menu').filter({ has: page.getByRole('menuitem', { name: 'Index folders and manage source locations' }) });

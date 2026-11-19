@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import { openSettings } from './settings-controls';
 
 /** The Sort and filter button: the one menu for sort and availability. */
 export const viewMenuButton = (page: Page) => page.getByRole('button', { name: /Sort and filter options/ });
@@ -44,11 +45,11 @@ export const preferGrid = (page: Page) => page.addInitScript(() => localStorage.
 /** The library's door at the window's width: the icon rail's Library button from 720 px up, the toolbar's button below it. */
 export const libraryToggle = (page: Page) => page.viewportSize()!.width >= 720 ? page.locator('#library-rail').getByRole('button', { name: 'Library', exact: true }) : page.locator('#library-toggle');
 
-/** Puts the library on `side` with the ⋯ menu's checkable "Library on the right" item (a no-op when it is already there). */
+/** Puts the library on `side` with Settings › Library (a no-op when it is already there). */
 export async function chooseLibrarySide(page: Page, side: 'left' | 'right') {
-  await page.getByRole('button', { name: 'Reader menu' }).click();
-  const item = page.getByRole('menuitemcheckbox', { name: 'Library on the right' });
-  if ((await item.getAttribute('aria-checked')) === String(side === 'left')) await item.click(); else await page.keyboard.press('Escape');
-  await expect(page.locator('#menu')).toBeHidden();
+  const sheet = await openSettings(page);
+  await sheet.getByRole('radiogroup', { name: 'SIDE' }).getByRole('radio', { name: side === 'right' ? 'Right' : 'Left', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await expect(sheet).toBeHidden();
   await expect(page.locator('#library-rail')).toHaveAttribute('data-library-side', side);
 }

@@ -5,13 +5,14 @@ import { desktop, native, state, browserFile, persist, openExternal, confirmDocu
 import { emptyLibrary, type Library } from './catalog-types';
 import { createLibrary, type LibraryPlace } from './library';
 import { formatProgress, progressOf, type Progress } from './progress';
-import { createIconRail } from './icon-rail';
+import { createIconRail, railIcons } from './icon-rail';
 import { ImageAdapter } from './adapters/image';
 import { createPalette } from './palette';
 import { createFindBar } from './find-bar';
 import { COMMANDS, FOCUS_PANE_DIRECTIONS, shortcutFor, shortcutReference, splitReason as paneSplitReason, tabDigit, unavailableReason, type SplitContext } from './commands';
 import { appearance, initAppearance, onAppearanceChange, allPalettes, pageTones, saveAppearance, scheme, type AppearanceMode } from './theme';
-import { appearanceSummary, createAppearanceSheet, paletteIcon } from './appearance';
+import { appearanceSummary } from './appearance';
+import { createSettingsSheet, type MoreItem } from './settings';
 import { createAssistantPanel } from './assistant-panel';
 import { DRAG_SLOP, Panner } from './pan';
 import { MIN_SPREAD_WIDTH, pagesLabel, spreadPages } from './spread';
@@ -41,26 +42,20 @@ import { createContextMenu, type MenuEntry } from './context-menu';
 initAppearance();
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-  <header class="toolbar" data-tauri-drag-region><button id="library-toggle" class="icon-button" aria-label="Document library" aria-controls="library-root" aria-expanded="false" title="Document library (Ctrl+B)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16m-3-12v8"/></svg></button><nav id="tab-strip" class="tab-strip" aria-label="Open documents" data-tauri-drag-region><div id="tab-list" class="tab-list" role="tablist" aria-label="Documents"></div><button id="tab-overflow" class="tab-overflow" aria-label="All tabs" title="All tabs" aria-haspopup="menu" aria-expanded="false" hidden></button></nav><button id="title" class="title" aria-haspopup="menu" aria-expanded="false" title="Open tabs"><strong id="filename">Hold My Brief</strong><span id="filekind">A reader that holds.</span><span id="tab-count" class="tab-count"></span></button><button id="pin" class="icon-button" aria-label="Pin" aria-pressed="false" title="Always on top (Ctrl+Shift+T)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg></button><button id="lock" class="icon-button" aria-label="Lock" aria-pressed="false" title="Lock dimensions (Ctrl+Shift+L)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></button><button id="menu-toggle" class="icon-button" aria-label="Reader menu" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button><div class="caption" role="group" aria-label="Window"><button id="caption-minimize" aria-label="Minimize" title="Minimize"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5.5h10" stroke="currentColor"/></svg></button><button id="caption-maximize" aria-label="Maximize" title="Maximize"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" aria-hidden="true"><rect class="caption-max" x=".5" y=".5" width="9" height="9"/><path class="caption-restore" d="M2.5 2.5V.5h7v7h-2M.5 2.5h7v7h-7z"/></svg></button><button id="caption-close" aria-label="Close" title="Close"><svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" aria-hidden="true"><path d="M.5.5l9 9m0-9l-9 9"/></svg></button></div></header>
+  <header class="toolbar" data-tauri-drag-region><button id="library-toggle" class="icon-button" aria-label="Document library" aria-controls="library-root" aria-expanded="false" title="Document library (Ctrl+B)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16m-3-12v8"/></svg></button><nav id="tab-strip" class="tab-strip" aria-label="Open documents" data-tauri-drag-region><div id="tab-list" class="tab-list" role="tablist" aria-label="Documents"></div><button id="tab-overflow" class="tab-overflow" aria-label="All tabs" title="All tabs" aria-haspopup="menu" aria-expanded="false" hidden></button></nav><button id="title" class="title" aria-haspopup="menu" aria-expanded="false" title="Open tabs"><strong id="filename">Hold My Brief</strong><span id="filekind">A reader that holds.</span><span id="tab-count" class="tab-count"></span></button><button id="settings-toggle" class="icon-button" aria-label="Settings" title="Settings">${railIcons.settings}</button><div class="caption" role="group" aria-label="Window"><button id="caption-minimize" aria-label="Minimize" title="Minimize"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5.5h10" stroke="currentColor"/></svg></button><button id="caption-maximize" aria-label="Maximize" title="Maximize"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" aria-hidden="true"><rect class="caption-max" x=".5" y=".5" width="9" height="9"/><path class="caption-restore" d="M2.5 2.5V.5h7v7h-2M.5 2.5h7v7h-7z"/></svg></button><button id="caption-close" aria-label="Close" title="Close"><svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" aria-hidden="true"><path d="M.5.5l9 9m0-9l-9 9"/></svg></button></div></header>
   <aside id="notice" role="status" hidden><span></span><button id="retry-save" hidden>Retry save</button><button id="dismiss-notice" aria-label="Dismiss message">×</button></aside>
   <div id="reader-layout"><div id="loading" role="status" hidden><span></span><button id="cancel">Cancel</button></div><div id="library-root"></div><nav id="library-rail"></nav>
   <main id="workspace"><section id="empty"><div class="book-mark" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M9 3v18m4-13h3m-3 4h3"/></svg></div><p class="eyebrow">KEEP YOUR PLACE</p><h1>Hand it over.</h1><p>Drop a brief and it stays pinned<br>exactly where you leave it.</p><button id="empty-open" class="primary">Hold a brief <span>↗</span></button><p class="formats">PDF · EPUB · MARKDOWN · TEXT</p><div id="recents"></div><p id="preview-note" hidden>Browser preview · Pin and size lock are available in the desktop app.</p></section>
   <section id="tab-state" hidden><h2 id="tab-state-title"></h2><p id="tab-state-detail"></p><div class="tab-state-actions"><button id="tab-state-primary" class="primary"></button><button id="tab-state-close">Close tab</button></div></section>
   <div id="drop-overlay" hidden aria-hidden="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 18v-6M9 15h6"/></svg><strong>Drop to open in a new tab</strong><span id="drop-names"></span></div>
-  <div id="view-controls" role="group" aria-label="View controls" hidden><button id="view-grip" type="button" aria-label="Move view controls" title="Drag to move · double-click to reset"><svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" aria-hidden="true"><circle cx="2" cy="3" r="1"/><circle cx="6" cy="3" r="1"/><circle cx="2" cy="7" r="1"/><circle cx="6" cy="7" r="1"/><circle cx="2" cy="11" r="1"/><circle cx="6" cy="11" r="1"/></svg></button><button id="zoom-out" aria-label="Zoom out" title="Zoom out (Ctrl −)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button><button id="zoom-level" type="button"><span>Fit</span><svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 3l2.5 2.5L6.5 3"/></svg></button><button id="zoom-in" aria-label="Zoom in" title="Zoom in (Ctrl +)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button><span class="view-sep" aria-hidden="true"></span><button id="hand-tool" aria-label="Hand tool" aria-pressed="false" aria-disabled="false" title="Hand tool: drag to pan (H)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg></button><span id="view-layout" class="view-group" role="group" aria-label="Page layout" hidden><span class="view-sep" aria-hidden="true"></span><button id="view-single" aria-label="Single page" aria-pressed="true" title="Single page"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg></button><button id="view-spread" aria-label="Two pages" aria-pressed="false" title="Two-page spread (Ctrl 3)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></button></span><span id="view-previews" class="view-group" hidden><span class="view-sep" aria-hidden="true"></span><button id="page-strip-toggle" aria-label="Page previews" aria-pressed="false" title="Page previews (Ctrl 4)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="10" rx="2"/><rect x="3" y="17" width="4.5" height="4" rx="1"/><rect x="9.75" y="17" width="4.5" height="4" rx="1"/><rect x="16.5" y="17" width="4.5" height="4" rx="1"/></svg></button></span></div></main>
+  <div id="view-controls" role="group" aria-label="View controls" hidden><button id="view-grip" type="button" aria-label="Move view controls" title="Drag to move · double-click to reset"><svg width="8" height="14" viewBox="0 0 8 14" fill="currentColor" aria-hidden="true"><circle cx="2" cy="3" r="1"/><circle cx="6" cy="3" r="1"/><circle cx="2" cy="7" r="1"/><circle cx="6" cy="7" r="1"/><circle cx="2" cy="11" r="1"/><circle cx="6" cy="11" r="1"/></svg></button><button id="zoom-out" aria-label="Zoom out" title="Zoom out (Ctrl −)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg></button><button id="zoom-level" type="button"><span>Fit</span><svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 3l2.5 2.5L6.5 3"/></svg></button><button id="zoom-in" aria-label="Zoom in" title="Zoom in (Ctrl +)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg></button><span class="view-sep" aria-hidden="true"></span><button id="hand-tool" aria-label="Hand tool" aria-pressed="false" aria-disabled="false" title="Hand tool: drag to pan (H)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg></button><span id="view-layout" class="view-group" role="group" aria-label="Page layout" hidden><span class="view-sep" aria-hidden="true"></span><button id="view-single" aria-label="Single page" aria-pressed="true" title="Single page"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg></button><button id="view-spread" aria-label="Two pages" aria-pressed="false" title="Two-page spread (Ctrl 3)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></svg></button></span><span id="view-previews" class="view-group" hidden><span class="view-sep" aria-hidden="true"></span><button id="page-strip-toggle" aria-label="Page previews" aria-pressed="false" title="Page previews (Ctrl 4)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="10" rx="2"/><rect x="3" y="17" width="4.5" height="4" rx="1"/><rect x="9.75" y="17" width="4.5" height="4" rx="1"/><rect x="16.5" y="17" width="4.5" height="4" rx="1"/></svg></button></span>
+<span id="view-more-group" class="view-group"><span class="view-sep" aria-hidden="true"></span><button id="view-more" type="button" aria-label="More" aria-haspopup="menu" aria-expanded="false" title="More"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></button></span></div></main>
   <footer><button id="previous" aria-label="Previous page" title="Previous page (PgUp)" disabled>←</button><button id="position" title="Go to location (Ctrl+G)" disabled>Ready when you are</button><button id="next" aria-label="Next page" title="Next page (PgDn)" disabled>→</button><input id="progress" type="range" aria-label="Document position" title="Click or drag to jump through the document" min="0" max="100" step="1" value="0" disabled></footer>
   </div>
-  <dialog id="menu" aria-label="Reader menu"><div class="menu-grid">
-    <div class="menu-group"><button id="menu-palette"><span class="menu-label">All commands…</span><kbd>Ctrl K</kbd></button></div>
-    <div class="menu-group"><button data-action="goto">Go to… <kbd>Ctrl G</kbd></button><button data-action="outline">Contents</button><button data-action="back">Back after jump <kbd>Alt ←</kbd></button></div>
-    <div class="menu-group" id="menu-page"><button id="rotate-toggle" data-action="rotate" hidden>Rotate page 90°</button><button id="spread-toggle" data-action="spread" aria-pressed="false" disabled hidden>Two-page spread <kbd>Ctrl 3</kbd></button><button id="cover-toggle" data-action="cover" aria-pressed="true" disabled hidden>Cover page alone</button></div>
-    <div class="menu-group"><button data-action="appearance"><span class="menu-label">${paletteIcon}Appearance and text…</span><span class="menu-value" id="appearance-summary"></span></button><button data-action="assistant" data-desktop hidden>AI assistant…</button><button data-action="compact" data-desktop hidden>Compact window <span class="menu-value">420 × 620</span></button><button data-action="reading" data-desktop hidden>Reading window <span class="menu-value">760 × 900</span></button><button id="library-side-item" data-action="library-side" role="menuitemcheckbox" aria-checked="false">Library on the right</button></div>
-    <div class="menu-group"><button data-action="shortcuts">Keyboard shortcuts</button><button data-action="clear-recents">Clear recent files</button><button data-action="clear-data">Delete saved reading data…</button></div>
-  </div></dialog>
   <dialog id="jump" class="drop" aria-labelledby="jump-label"><form><label id="jump-label" for="target">Location</label><div class="jump-row"><input id="target" required autocomplete="off"><button class="primary" type="submit" aria-label="Go to location">Go</button></div><p id="jump-error" role="alert"></p></form></dialog>
   <dialog id="password"><form><h2>Password required</h2><label for="secret">Document password</label><input id="secret" type="password" autocomplete="off"><div class="dialog-actions"><button type="button" data-close>Cancel</button><button type="submit" class="primary">Open document</button></div></form></dialog>
   <dialog id="contents" class="drop" aria-label="Contents"><div id="outline-list"></div></dialog>
-  <dialog id="appearance"></dialog>
+  <dialog id="settings"></dialog>
   <dialog id="shortcuts" aria-labelledby="shortcuts-title" tabindex="-1" autofocus><div class="dialog-head"><h2 id="shortcuts-title">Keyboard shortcuts</h2><button data-close aria-label="Close shortcuts">×</button></div><div id="shortcut-list"></div></dialog>
   <dialog id="delete-data"><h2>Delete saved reading data?</h2><p>This removes saved positions and reading settings. Your documents and recent-file list remain. The current position will be saved again when you navigate.</p><div class="dialog-actions"><button data-close>Cancel</button><button id="confirm-delete" class="danger">Delete reading data</button></div></dialog>
   <input id="file-input" type="file" accept=".pdf,.epub,.md,.markdown,.txt,.png,.jpg,.jpeg,.webp,.gif,.avif,.bmp" hidden>`;
@@ -88,10 +83,18 @@ $('shortcut-list').replaceChildren(...shortcutReference({ desktop }).map(section
   return group;
 }));
 // Text settings apply to reflowable documents only; PDF pages, fixed-layout books and images zoom instead.
-const appearanceSheet = createAppearanceSheet($<HTMLDialogElement>('appearance'), {
+const settingsSheet = createSettingsSheet($<HTMLDialogElement>('settings'), {
   current: () => { const { reader, active, options } = activePane(); return reader && active && reader.mode !== 'fixed' ? { fontSize: options.fontSize, lineHeight: options.lineHeight, margin: options.margin, wrap: options.wrap, wraps: active.format === 'txt' } : undefined; },
   change: next => changeOptions(next),
+}, {
+  desktop,
+  toggle: which => void toggle(which),
+  preset: preset => void command(preset).catch(fail),
+  setSide: side => library.setSide(side),
+  more: item => { if (item === 'palette') openPalette(); else void command(item).catch(fail); },
 });
+// A modal dialog holds back the reader's shortcuts; the two window ones still work in the sheet, so its switches follow them.
+$('settings').addEventListener('keydown', event => { const shortcut = shortcutFor(event); if (shortcut === 'pin' || shortcut === 'lock') { event.preventDefault(); void command(shortcut).catch(fail); } });
 const scrubber = $<HTMLInputElement>('progress'), footer = scrubber.parentElement!; // The footer carries --scrub-fill: its line is drawn by the footer, not the slider's track.
 let scrubbing = false, scrubRequest = 0;
 let windowState: WindowState = { width: 420, height: 620, pinned: false, locked: false };
@@ -185,7 +188,7 @@ document.addEventListener('pointerdown', down => {
   window.addEventListener('pointermove', move, true); window.addEventListener('pointerup', end, true); window.addEventListener('pointercancel', end, true);
 }, true);
 function fail(error: unknown) { notify(error instanceof Error ? error.message : String(error)); }
-function updateWindow(next: WindowState) { windowState = next; $('pin').setAttribute('aria-pressed', String(next.pinned)); $('pin').title = next.pinned ? 'Pinned on top (Ctrl+Shift+T)' : 'Always on top (Ctrl+Shift+T)'; $('lock').setAttribute('aria-pressed', String(next.locked)); $('lock').title = next.locked ? 'Size locked (Ctrl+Shift+L)' : 'Lock dimensions (Ctrl+Shift+L)'; $<HTMLButtonElement>('caption-maximize').disabled = next.locked; }
+function updateWindow(next: WindowState) { windowState = next; settingsSheet.showWindow(next); $<HTMLButtonElement>('caption-maximize').disabled = next.locked; }
 function showPosition(p: Position, save = true) {
   const pane = activePane();
   pane.position = p;
@@ -260,22 +263,11 @@ function updateViewControls() {
   paintTabs();
   $('filekind').title = [where, `${active.format.toUpperCase()} · ${kind}${pan.hand ? ' · Hand' : ''}`, imageOnly, waiting].filter(Boolean).join('\n');
   const spreads = !!reader.spreads, spread = spreads && options.spread;
-  const toggles = [$<HTMLButtonElement>('spread-toggle'), $<HTMLButtonElement>('view-spread')];
-  for (const button of toggles) {
-    button.setAttribute('aria-pressed', String(spread));
-    if (waiting) button.setAttribute('aria-description', waiting); else button.removeAttribute('aria-description');
-  }
-  $<HTMLButtonElement>('spread-toggle').disabled = !spreads;
-  $<HTMLButtonElement>('spread-toggle').title = waiting;
-  $('view-spread').title = waiting ? `Two-page spread (Ctrl 3) · ${waiting}` : 'Two-page spread (Ctrl 3)';
+  const viewSpread = $<HTMLButtonElement>('view-spread');
+  viewSpread.setAttribute('aria-pressed', String(spread));
+  if (waiting) viewSpread.setAttribute('aria-description', waiting); else viewSpread.removeAttribute('aria-description');
+  viewSpread.title = waiting ? `Two-page spread (Ctrl 3) · ${waiting}` : 'Two-page spread (Ctrl 3)';
   $('view-single').setAttribute('aria-pressed', String(!spread));
-  const cover = $<HTMLButtonElement>('cover-toggle');
-  cover.disabled = !spread || reader.mode !== 'fixed'; cover.setAttribute('aria-pressed', String(options.cover));
-  // The menu offers page commands only where they do something: rotation for page-based documents,
-  // spreads where the adapter has them, cover pairing for page spreads.
-  $('rotate-toggle').hidden = reader.mode !== 'fixed';
-  $('spread-toggle').hidden = !spreads;
-  cover.hidden = !spreads || reader.mode !== 'fixed';
   $('view-layout').hidden = !spreads;
   // Page previews are a PDF feature: the toggle is offered only where the adapter has them, and says why when a short panel hides the strip.
   const previewable = Boolean(reader.setPreviews), hidden = previewable && stripWanted && focused.view.body.clientHeight < MIN_PANEL_HEIGHT ? `Hidden while the reading area is shorter than ${MIN_PANEL_HEIGHT} px` : '';
@@ -288,6 +280,7 @@ function updateViewControls() {
   $('view-controls').classList.toggle('is-reading', reflowable);
   $('view-controls').hidden = !pan.pannable && !reflowable;
   if (reflowable) readingControls.update({ flow: reader.flow?.() ?? 'paginated', fontSize: options.fontSize });
+  if (pill.hidden) moreMenu.close(false);
   if (!pan.pannable) { zoomMenu.close(); return; }
   const { limits, canZoomIn, canZoomOut } = paintZoom(pane, pill);
   zoomMenu.update({ level: current, fit: fitted ? options.fit : undefined, limits, canZoomIn, canZoomOut });
@@ -312,6 +305,32 @@ $('view-grip').after(readingControls.element);
 $('view-single').onclick = () => void changeOptions({ spread: false });
 $('view-spread').onclick = () => void changeOptions({ spread: true });
 $('page-strip-toggle').onclick = () => void command('page-strip').catch(fail);
+// The More button holds the open document's own actions: Go to, Contents, Back after jump and, where the document has pages, the page commands. A choice puts
+// focus back where the press came from (the page after a pointer press, as the zoom menu does, the button after a key); Escape and an outside press close it.
+const moreMenu = createContextMenu({ className: 'pill-menu', label: 'More' }), moreButton = $('view-more');
+const closePillMenus = () => { zoomMenu.close(); moreMenu.close(false); };
+let moreByPointer = false;
+function documentActions(): MenuEntry[] {
+  const { reader, active, options } = activePane();
+  if (!reader || !active) return [];
+  const fixed = reader.mode === 'fixed', spreads = !!reader.spreads, spread = spreads && options.spread;
+  const entry = (label: string, id: string, extra: Partial<MenuEntry> = {}): MenuEntry => ({ label, run: () => { (moreByPointer ? activePane().host : moreButton)?.focus(); void command(id).catch(fail); }, ...extra });
+  return [
+    entry('Go to…', 'goto', { keys: 'Ctrl G' }),
+    // A reflowable book's pill has its own Contents button.
+    ...(reader.outline().length && !(active.format === 'epub' && !fixed) ? [entry('Contents', 'outline')] : []),
+    entry('Back after jump', 'back', { keys: 'Alt ←' }),
+    ...(fixed ? [entry('Rotate page 90°', 'rotate')] : []),
+    ...(spreads ? [entry('Two-page spread', 'spread', { keys: 'Ctrl 3', checked: spread })] : []),
+    ...(spreads && fixed ? [entry('Cover page alone', 'cover', { checked: options.cover, unavailable: spread ? undefined : 'Turn on Two-page spread first' })] : []),
+  ];
+}
+moreButton.onclick = event => { moreByPointer = event.detail > 0; moreMenu.show(documentActions(), moreButton); };
+// A press anywhere else closes the menu; focus stays where the press put it, unless that is nowhere: then it goes to the button.
+document.addEventListener('pointerdown', event => {
+  if (!moreMenu.isOpen() || !(event.target instanceof Node) || moreMenu.element.contains(event.target) || moreButton.contains(event.target)) return;
+  setTimeout(() => { if (!document.activeElement || document.activeElement === document.body) moreButton.focus(); });
+}, true);
 // Movable pill: the grip drags it anywhere in the reading panel. Without a stored position the CSS
 // placement stands untouched; with one, inline left/top (kept as centre fractions of the panel so a
 // resize keeps it proportional) win, clamped inside the panel and clear of an open library drawer.
@@ -458,8 +477,8 @@ function showDialog(id: string, anchor?: DOMRect) {
   // ringing its close button; not every engine honours the attribute on <dialog>.
   if (dialog.hasAttribute('autofocus')) dialog.focus();
 }
-function closeDialog(dialog: HTMLDialogElement) { dialog.close(); activePane().host?.focus(); $('menu-toggle').setAttribute('aria-expanded', 'false'); }
-document.querySelectorAll<HTMLDialogElement>('dialog').forEach(dialog => { dialog.addEventListener('close', () => { activePane().host?.focus(); if (dialog.id === 'menu') $('menu-toggle').setAttribute('aria-expanded', 'false'); }); });
+function closeDialog(dialog: HTMLDialogElement) { dialog.close(); activePane().host?.focus(); }
+document.querySelectorAll<HTMLDialogElement>('dialog').forEach(dialog => { dialog.addEventListener('close', () => { activePane().host?.focus(); }); });
 document.querySelectorAll<HTMLElement>('[data-close]').forEach(button => button.onclick = () => closeDialog(button.closest('dialog')!));
 document.querySelectorAll<HTMLDialogElement>('dialog.drop').forEach(dialog => dialog.addEventListener('click', event => {
   const box = dialog.getBoundingClientRect();
@@ -470,7 +489,7 @@ const rail = createIconRail($('library-rail'), {
   home: () => selectTab(undefined),
   view: view => library.showView(view),
   add: anchor => library.openAddMenu(anchor),
-  settings: () => appearanceSheet.open(),
+  settings: () => settingsSheet.open(),
   moveSide: () => library.setSide(library.side() === 'left' ? 'right' : 'left'),
 });
 const library = createLibrary($('library-root'), {
@@ -491,8 +510,8 @@ const library = createLibrary($('library-root'), {
 });
 $('library-toggle').onclick = () => library.toggle();
 showSide(library.side());
-/** The side is one preference: the rail's tooltips and context menu, and the ⋯ menu's checkable item, follow it. */
-function showSide(side: 'left' | 'right') { rail.setSide(side); $('library-side-item').setAttribute('aria-checked', String(side === 'right')); }
+/** The side is one preference: the rail's tooltips and context menu, and Settings › Library, follow it. */
+function showSide(side: 'left' | 'right') { rail.setSide(side); settingsSheet.showSide(side); }
 const knownTitle = (item: { path: string; format: string }) => item.format.toLowerCase() === 'epub' ? homeThumbs.epub(item.path)?.title?.trim() || undefined : undefined;
 
 /**
@@ -770,7 +789,7 @@ function syncFooter() {
 function paintNoDocument() {
   $('position').textContent = 'Ready when you are'; $('position').title = 'Go to location (Ctrl+G)';
   scrubber.value = '0'; scrubber.disabled = true; footer.style.setProperty('--scrub-fill', '0%');
-  $('view-controls').hidden = true; zoomMenu.close();
+  $('view-controls').hidden = true; closePillMenus();
   $('filekind').textContent = 'A reader that holds.'; $('filekind').title = '';
 }
 
@@ -1027,7 +1046,7 @@ function refreshGhost(side: Side) { if (side.view.ghost) paintZoom(side.pane, si
 /** The focused side stops being it: its find bar, page strip and view controls are put away, and its tab keeps what they held. */
 function parkSide(side: Side) {
   syncBack(side);
-  findBar.close(); zoomGesture.cancel(); zoomMenu.close();
+  findBar.close(); zoomGesture.cancel(); closePillMenus();
   const pane = side.pane;
   pane.stripReader?.setPreviews?.(undefined); pane.stripReader = undefined; pageStrip.clear();
   side.view.body.classList.remove('has-page-strip'); pageStrip.element.hidden = true;
@@ -1062,7 +1081,7 @@ function showCover(kind: 'home' | 'library') {
   if (cover === kind || (kind === 'library' && !libraryTab)) return;
   if (focused.pane.cancelPending) cancelOpen();
   cover = kind;
-  findBar.close(); zoomMenu.close();
+  findBar.close(); closePillMenus();
   workspace.classList.add('is-covered'); $('empty').hidden = kind !== 'home';
   library.setActive(undefined); library.showPage(kind === 'library');
   syncFooter(); paintTabs(); saveSession();
@@ -1497,19 +1516,7 @@ function jump() { const { reader, active } = activePane(); if (!reader) return; 
 $('position').onclick = jump;
 $('jump').querySelector('form')!.onsubmit = event => { event.preventDefault(); void activePane().reader?.goTo($<HTMLInputElement>('target').value.trim()).then(() => closeDialog($<HTMLDialogElement>('jump'))).catch(error => { $('jump-error').textContent = String(error instanceof Error ? error.message : error); }); };
 async function toggle(which: 'pin' | 'lock') { if (!desktop) { notify('Pin and size lock are available in the desktop app.'); return; } try { updateWindow(await native(`set_${which}`, { enabled: !(which === 'pin' ? windowState.pinned : windowState.locked) })); } catch (error) { fail(error); } }
-$('pin').onclick = () => void toggle('pin'); $('lock').onclick = () => void toggle('lock');
-// The menu is a popover under its button, not a centred dialog: it opens where the pointer already is
-// and leaves the page undimmed. It stays a modal <dialog> for the focus trap and Escape.
-$('menu-toggle').onclick = () => {
-  const menu = $<HTMLDialogElement>('menu'), anchor = $('menu-toggle').getBoundingClientRect();
-  $('appearance-summary').textContent = appearanceSummary();
-  menu.style.top = `${Math.round(anchor.bottom + 4)}px`;
-  menu.style.right = `${Math.max(6, Math.round(innerWidth - anchor.right))}px`;
-  $('menu-toggle').setAttribute('aria-expanded', 'true'); showDialog('menu');
-};
-$('menu').addEventListener('click', event => { const box = $('menu').getBoundingClientRect(); if (event.target === $('menu') && (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom)) closeDialog($<HTMLDialogElement>('menu')); });
-$('menu-palette').onclick = () => { closeDialog($<HTMLDialogElement>('menu')); openPalette(); };
-if (desktop) document.querySelectorAll<HTMLElement>('#menu [data-desktop]').forEach(item => { item.hidden = false; });
+$('settings-toggle').onclick = () => settingsSheet.open();
 /**
  * What a zoom or fit change holds still (see zoom-anchor.ts): a zoom, the centre of the view; fit width, the line at its top, so the reading
  * position survives; fit page shows the whole page and centres it. A wheel or pinch gesture passes the point under the pointer itself.
@@ -1532,7 +1539,7 @@ function openContents() {
 async function action(name: string) {
   const { reader, options } = activePane();
   if (name === 'goto') jump();
-  else if (name === 'appearance') appearanceSheet.open();
+  else if (name === 'appearance') settingsSheet.open('appearance');
   else if (name === 'pin' || name === 'lock') await toggle(name);
   else if (name === 'compact' || name === 'reading') { if (!desktop) return notify('Window presets are available in the desktop app.'); updateWindow(await native('set_preset', { preset: name })); }
   else if (name === 'fit-page' || name === 'fit-width') await changeOptions({ fit: name === 'fit-page' ? 'page' : 'width', fitted: true });
@@ -1550,14 +1557,13 @@ async function action(name: string) {
     if (!reader?.flow?.()) return notify('Pages and Scroll views are for reflowable books.');
     await changeOptions({ flow: name === 'pages-view' ? 'paginated' : 'scrolled' });
   }
-  else if (name === 'type') appearanceSheet.open('size');
+  else if (name === 'type') settingsSheet.open('size');
   else if (name === 'outline') openContents();
   else if (name === 'shortcuts') showDialog('shortcuts');
   else if (name === 'clear-data') showDialog('delete-data');
   else if (name === 'clear-recents') { if (desktop) await native('clear_recents'); homeRecents = []; paintHome(); notify('Recent-file list cleared. Documents and saved positions are unchanged.'); }
   else if (['back', 'start', 'end', 'screen-next', 'screen-previous'].includes(name)) await navigate(name as Parameters<ReaderAdapter['navigate']>[0]);
 }
-document.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(button => button.onclick = () => { closeDialog($<HTMLDialogElement>('menu')); void command(button.dataset.action!).catch(fail); });
 $('confirm-delete').onclick = () => { void (async () => { await Promise.all(sides.map(side => side.pane.flush())); if (desktop) await native('clear_reading_data'); else for (const key of Object.keys(localStorage)) if (key.startsWith('hold-my-brief:')) localStorage.removeItem(key); for (const side of sides) side.pane.dirty = false; closeDialog($<HTMLDialogElement>('delete-data')); notify('Saved reading data deleted. Your documents are unchanged.'); })().catch(fail); };
 
 // Tab marks keyboard navigation (the page's focus ring returns); a pointer press clears it.

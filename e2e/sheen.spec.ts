@@ -78,7 +78,7 @@ test('the active tab has a 2 px sheen line on its top edge that takes no room', 
 
 test('the sheets carry the sheen', async ({ page }) => {
   await seeded(page);
-  expect((await paint(page, '#appearance')).image).toContain('linear-gradient');
+  expect((await paint(page, '#settings')).image).toContain('linear-gradient');
 });
 
 test('the reading progress shows the sheen across the whole bar, and the fill reveals its left part', async ({ page }) => {
@@ -103,7 +103,7 @@ for (const emulation of flatness) {
     await page.locator('#file-input').setInputFiles({ name: 'a.txt', mimeType: 'text/plain', buffer: Buffer.from('a.txt\n\nBody of a.txt.\n') });
     await expect(page.locator('#tab-list .tab.is-active .tab-title')).toHaveText('a.txt');
     expect((await paint(page, '#tab-list .tab.is-active', '::before')).display).toBe('none');
-    expect((await paint(page, '#appearance')).image).toBe('none');
+    expect((await paint(page, '#settings')).image).toBe('none');
   });
 
   test(`${Object.keys(emulation)[0]} ${Object.values(emulation)[0]} shows the reading progress in one flat accent`, async ({ page }) => {

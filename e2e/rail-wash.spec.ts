@@ -39,13 +39,13 @@ const sample = (page: Page, png: Buffer, points: [number, number][]) => page.eva
 }, [png.toString('base64'), points] as const);
 
 for (const side of ['left', 'right'] as const) {
-  test(`library on the ${side}: the rail has no box, its icons share the centre line of ${side === 'left' ? 'the toolbar\'s left padding' : '⋯'} at 20 px from the edge, and the panel docks at 46 px`, async ({ page }) => {
+  test(`library on the ${side}: the rail has no box, its icons share one centre line at 20 px from the edge, and the panel docks at 46 px`, async ({ page }) => {
     await openHome(page, side);
     const rail = page.locator('#library-rail');
     const look = await rail.evaluate(node => { const style = getComputedStyle(node); return { border: style.borderTopWidth + style.borderRightWidth + style.borderBottomWidth + style.borderLeftWidth, radius: style.borderTopLeftRadius + style.borderTopRightRadius + style.borderBottomLeftRadius + style.borderBottomRightRadius, shadow: style.boxShadow, image: style.backgroundImage, colour: style.backgroundColor }; });
     expect(look).toEqual({ border: '0px0px0px0px', radius: '0px0px0px0px', shadow: 'none', image: 'none', colour: 'rgba(0, 0, 0, 0)' });
 
-    const buttons = await centre(page, '.icon-rail-button'), target = side === 'left' ? 20 : (await centre(page, '#menu-toggle'))[0]!;
+    const buttons = await centre(page, '.icon-rail-button'), target = side === 'left' ? 20 : 1080 - 20;
     expect(buttons.length).toBe(5);
     for (const x of buttons) expect(x).toBeCloseTo(target, 0);
     expect(side === 'left' ? target : 1080 - target).toBeCloseTo(20, 0);

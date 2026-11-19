@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { ZipWriter, Uint8ArrayWriter, TextReader } from '@zip.js/zip.js';
 import { chapterBook } from './epub-book';
+import { openMore, openSettings } from './settings-controls';
 
 type Book = Parameters<typeof chapterBook>[0];
 const novel: Book = { chapters: 4, paragraphs: 40, nested: true };
@@ -236,9 +237,8 @@ test('A+ and A− step the text size within the Appearance bounds, in both flows
   await page.locator('#text-smaller').click();
   await expect.poll(() => renderedFont(page)).toBe(18);
   // The same option the Appearance text settings edit.
-  await page.getByRole('button', { name: 'Reader menu' }).click();
-  await page.getByRole('button', { name: /Appearance and text/ }).click();
-  await expect(page.locator('#appearance .stepper-value')).toHaveText('18');
+  await openSettings(page);
+  await expect(page.locator('#settings .stepper-value')).toHaveText('18');
   await page.keyboard.press('Escape');
   for (let n = 0; n < 12; n++) { if (await page.locator('#text-smaller').isDisabled()) break; await page.locator('#text-smaller').click(); }
   await expect(page.locator('#text-size')).toHaveText('12');
@@ -250,9 +250,7 @@ test('A+ and A− step the text size within the Appearance bounds, in both flows
 
 test('the Appearance preview follows the size stepper: A+ in the sheet sets the book and the preview to the same size', async ({ page }) => {
   await openBook(page, { chapters: 4, paragraphs: 40 });
-  await page.getByRole('button', { name: 'Reader menu' }).click();
-  await page.getByRole('button', { name: /Appearance and text/ }).click();
-  const sheet = page.locator('#appearance'), preview = sheet.locator('.appearance-preview'), value = sheet.locator('.stepper-value');
+  const sheet = await openSettings(page), preview = sheet.locator('.appearance-preview'), value = sheet.locator('.stepper-value');
   await expect(value).toHaveText('18');
   await expect(preview).toHaveCSS('font-size', '18px');
   await sheet.getByRole('button', { name: 'Larger text' }).click();
@@ -282,8 +280,7 @@ test('Contents of a fixed-layout EPUB shows the spine page each entry starts on,
   await page.goto('/');
   await page.locator('#file-input').setInputFiles({ name: 'fixed.epub', mimeType: 'application/epub+zip', buffer: await fixedBook(4) });
   await expect(page.locator('#position')).toContainText('Page 1 of 4');
-  await page.getByRole('button', { name: 'Reader menu' }).click();
-  await page.getByRole('button', { name: /^Contents/ }).click();
+  await (await openMore(page)).getByRole('menuitem', { name: 'Contents' }).click();
   const entries = contents(page).locator('.outline-entry');
   await expect(entries.locator('.outline-label')).toHaveText(['Plate 1', 'Plate 2', 'Plate 3', 'Plate 4']);
   await expect(entries.locator('.outline-page')).toHaveText(['p. 1', 'p. 2', 'p. 3', 'p. 4']);
