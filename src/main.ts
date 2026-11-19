@@ -15,7 +15,7 @@ import { appearanceSummary, createAppearanceSheet, paletteIcon } from './appeara
 import { createAssistantPanel } from './assistant-panel';
 import { DRAG_SLOP, Panner } from './pan';
 import { MIN_SPREAD_WIDTH, pagesLabel, spreadPages } from './spread';
-import { assignShelfSlots, closeHome, fillHomePictures, homeSections, homeTypes, openedOrder, renderHome, repaintGround } from './home';
+import { assignShelfSlots, closeHome, fillHomePictures, homeSections, openedOrder, renderHome, repaintGround } from './home';
 import { displayTitle } from './shelf';
 import { repaintCovers } from './cards';
 import { canThumbnail, createThumbnailStore } from './thumbnails';
@@ -98,7 +98,6 @@ let windowState: WindowState = { width: 420, height: 620, pinned: false, locked:
 let homeRecents: Recent[] = [];
 let homeLibrary: Library = emptyLibrary();
 let homeProgress: Record<string, Progress> = {};
-let homeFormat = '';
 let splashHtml: string | undefined;
 let homePicture = 0;
 const homeThumbs = createThumbnailStore();
@@ -1367,12 +1366,12 @@ function showHomeMenu(item: { path: string; name: string; format: string }, anch
 $('title').onclick = () => { const menu = isSplit() ? focused.strip : strip; if (menu.isMenuOpen()) menu.closeMenu(); else menu.openMenu($('title')); };
 
 /**
- * The Library tab: at most one, at the front of the strip. Opening it names a scope (a double-click in the panel, Home's Open in library, the panel's
+ * The Library tab: at most one, at the front of the strip. Opening it names a scope (a double-click in the panel, the panel's
  * title); a tab that is already open is shown and retargeted rather than opened again. With no scope named, an open tab is only shown.
  */
 function openLibraryTab(place?: LibraryPlace) {
   const existing = known(LIBRARY_PATH);
-  if (!place) { if (existing) selectTab(LIBRARY_PATH); else library.browse('all'); return; }
+  if (!place) { if (existing) selectTab(LIBRARY_PATH); else library.browse(); return; }
   if (existing) { retargetLibraryTab(place); selectTab(LIBRARY_PATH); return; }
   cancelOpen();
   const tab: Tab = { path: LIBRARY_PATH, name: place.title, format: 'library', scope: place.scope, options: { ...defaultOptions }, hand: false, scanNoticeShown: false };
@@ -1669,21 +1668,13 @@ function paintHome() {
     if (empty.classList.contains('is-home')) { closeHome(); empty.classList.remove('is-home'); empty.innerHTML = splashHtml; $('empty-open').onclick = () => openFile(); }
     return;
   }
-  const types = homeTypes(recents, homeLibrary.documents);
-  if (!types.some(([value]) => value === homeFormat)) homeFormat = '';
-  const sections = homeSections({ recents, documents: homeLibrary.documents, collections: homeLibrary.collections, format: homeFormat, titleOf: knownTitle, progress: homeProgress });
+  const sections = homeSections({ recents, documents: homeLibrary.documents, titleOf: knownTitle, progress: homeProgress });
   const generation = ++homePicture;
   renderHome(empty, sections, {
     open: (path, name) => { void openPath(path, name); },
     menu: showHomeMenu,
-    openFile: () => openFile(),
-    viewAll: scope => library.browse(scope),
-    viewCollection: id => library.browse({ collection: id }),
     picture: { can: canThumbnail, ratio: path => homeThumbs.ratio(path), peek: path => homeThumbs.peek(path) },
-    types,
     banner: appearance().banner,
-    format: homeFormat,
-    selectFormat: value => { homeFormat = value; paintHome(); empty.querySelector<HTMLElement>(`.home-chip[data-type="${value}"]`)?.focus(); },
     ...(desktop ? { remove: (path: string) => { void native('remove_recent', { path }).then(() => { homeRecents = homeRecents.filter(item => item.path !== path); paintHome(); }).catch(fail); } } : {}),
   }, scheme());
   fillHomePictures(empty, {

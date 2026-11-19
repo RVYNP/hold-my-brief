@@ -1,8 +1,8 @@
 // The page the reader opens on, once there is anything to return to. A first launch with nothing saved keeps
-// the splash in main.ts. After that this is a main area in the manner of a media player's home: file type
-// chips, a "Recently opened" grid of what was opened last, then horizontal shelves (Continue reading, Favorites,
-// Collections). Empty sections are left out. `homeSections` derives them; `renderHome` paints them.
-import { coverRatio, coverSeedOf, displayTitle, assignCoverSlots, compareCollections, collectionDisplayName } from './shelf';
+// the splash in main.ts. After that this is a main area of one heading and, below it: "Recently opened" (one card,
+// the document opened last), the horizontal shelf "Continue reading", and one shelf per file type the library has.
+// Empty sections are left out. `homeSections` derives them; `renderHome` paints them.
+import { coverRatio, coverSeedOf, displayTitle, assignCoverSlots, compareCollections } from './shelf';
 import { libraryGrid } from './library-layout';
 import { matchesFileType } from './library-query';
 import { markUnavailable, showPicture, tileMedia, type Appearance } from './cards';
@@ -14,13 +14,11 @@ import type { Cover } from './procedural-cover';
 import { rememberRecent } from './covers';
 import type { Banner } from './theme';
 
-/** Most cards in "Recently opened" (4 columns by 2 rows on a wide window). */
-export const recentLimit = 8;
-/** Most cards on one shelf; "Open in library" opens the rest in the library. */
+/** Most cards on one shelf. */
 export const shelfLimit = 30;
 
 export type HomeRecent = { path: string; name: string; format: string; lastOpened?: number | string };
-export type HomeDocument = HomeRecent & { coverSeed?: number; collectionIds?: string[]; availability?: string; favorite?: boolean };
+export type HomeDocument = HomeRecent & { coverSeed?: number; collectionIds?: string[]; availability?: string };
 export type HomeCollection = { id: string; name: string; parentId: string | null; removed?: boolean };
 
 export type HomeTile = {
@@ -37,26 +35,18 @@ export type HomeTile = {
   /** How far into it the reader got, when it has been opened. */
   progress?: Progress;
 };
-/** A top-level collection: how many references it holds (sub-collections included) and the first four covers. */
-export type HomeCollectionCard = { id: string; name: string; count: number; covers: HomeTile[] };
+/** One file-type shelf: a value for `matchesFileType`, its title, and the library's documents of that type. */
+export type HomeTypeShelf = { type: string; title: string; tiles: HomeTile[] };
 export type HomeSections = {
+  /** The one document opened last (empty when nothing has been opened). */
   recent: HomeTile[];
   reading: HomeTile[];
-  favorites: HomeTile[];
-  collections: HomeCollectionCard[];
+  /** One shelf per file type that has documents, in a fixed order. */
+  types: HomeTypeShelf[];
 };
 
-/** The chips: a value for `matchesFileType` and its label. The empty value is "All". */
-const typeChoices = [['', 'All'], ['pdf', 'PDF'], ['epub', 'EPUB'], ['md', 'Markdown'], ['txt', 'Text'], ['image', 'Images']] as const;
-
-/**
- * The chips to offer: All and each type that some file in the library (or the recents) has, in a fixed order. A library
- * of one type has nothing to choose between, so there are no chips.
- */
-export function homeTypes(recents: readonly HomeRecent[], documents: readonly HomeDocument[]): (readonly [string, string])[] {
-  const present = typeChoices.filter(([value]) => value && (documents.some(doc => matchesFileType(doc, value)) || recents.some(recent => matchesFileType(recent, value))));
-  return present.length > 1 ? [typeChoices[0], ...present] : [];
-}
+/** The file-type shelves, in the order Home shows them. */
+const typeShelves = [['pdf', 'PDFs'], ['epub', 'EPUBs'], ['md', 'Markdown'], ['txt', 'Text'], ['image', 'Images']] as const;
 
 /** `lastOpened` is a unix millis number from the native store, sometimes a numeric string after a round trip. */
 export function openedAt(value: number | string | undefined): number {
@@ -79,9 +69,6 @@ type Titles = (item: HomeDocument) => string | undefined;
 export type HomeInput = {
   recents: readonly HomeRecent[];
   documents: readonly HomeDocument[];
-  collections?: readonly HomeCollection[];
-  /** The chip: a `matchesFileType` value; empty for every type. */
-  format?: string;
   /** The book's own title where one has been read (an EPUB's metadata); the file name stands in until then. */
   titleOf?: Titles;
   progress?: Readonly<Record<string, Progress>>;
@@ -108,61 +95,43 @@ function recentItems(recents: readonly HomeRecent[], byPath: ReadonlyMap<string,
   return recents.map(recent => byPath.get(recent.path) ?? recent);
 }
 
-/**
- * What was opened last: the recents, most recent first, each borrowing the library entry's cover when the path matches.
- * Used by "Recently opened".
- */
-export function recentTiles(recents: readonly HomeRecent[], documents: readonly HomeDocument[], options: { format?: string; titleOf?: Titles; progress?: Readonly<Record<string, Progress>>; limit?: number } = {}): HomeTile[] {
-  const { format = '', titleOf = noTitle, progress = {}, limit = recentLimit } = options;
+/** The recents as tiles, in the store's order, each borrowing the library entry's cover when the path matches. */
+export function recentTiles(recents: readonly HomeRecent[], documents: readonly HomeDocument[], options: { titleOf?: Titles; progress?: Readonly<Record<string, Progress>>; limit?: number } = {}): HomeTile[] {
+  const { titleOf = noTitle, progress = {}, limit = recents.length } = options;
   const byPath = new Map(documents.map(doc => [doc.path, doc]));
-  return recentItems(recents, byPath).filter(item => matchesFileType(item, format)).slice(0, limit).map(item => tileOf(item, titleOf(item), progress[item.path]));
+  return recentItems(recents, byPath).slice(0, limit).map(item => tileOf(item, titleOf(item), progress[item.path]));
 }
 
 const byRecency = (a: { opened: number; doc: HomeDocument }, b: { opened: number; doc: HomeDocument }) => b.opened - a.opened || a.doc.name.localeCompare(b.doc.name);
 
-/** Top-level collections (a collection whose parent is unknown counts as one, so nothing is hidden) with their sub-collections' documents. */
-function collectionCards(collections: readonly HomeCollection[], documents: readonly HomeDocument[], tile: (item: HomeDocument) => HomeTile): HomeCollectionCard[] {
-  const live = collections.filter(collection => !collection.removed);
-  const known = new Set(live.map(collection => collection.id));
-  const children = new Map<string, string[]>();
-  for (const collection of live) if (collection.parentId && known.has(collection.parentId)) children.set(collection.parentId, [...(children.get(collection.parentId) ?? []), collection.id]);
-  const tops = live.filter(collection => !collection.parentId || !known.has(collection.parentId)).sort(compareCollections);
-  const cards: HomeCollectionCard[] = [];
-  for (const top of tops) {
-    const ids = new Set<string>(), stack = [top.id];
-    for (let id = stack.pop(); id !== undefined; id = stack.pop()) { if (ids.has(id)) continue; ids.add(id); stack.push(...(children.get(id) ?? [])); }
-    const inside = documents.filter(doc => doc.collectionIds?.some(id => ids.has(id)));
-    if (inside.length) cards.push({ id: top.id, name: collectionDisplayName(top.name), count: inside.length, covers: inside.slice(0, 4).map(tile) });
-  }
-  return cards;
-}
-
 /**
- * Sections of the opening page, every one filtered by the chip.
- * - Recently opened: the first `recentLimit` recents, in the store's order.
+ * Sections of the opening page.
+ * - Recently opened: the first recent, in the store's order.
  * - Continue reading: opened documents whose progress is past the start and short of Finished, most recently opened first
  *   (the recents' order, then the library's `lastOpened`).
- * - Favorites: starred documents, most recently opened first.
- * - Collections: top-level collections with at least one document, each with the first four covers of its documents.
+ * - One shelf per file type (PDFs, EPUBs, Markdown, Text, Images) with documents: the opened ones, most recently opened
+ *   first, then the never-opened ones by title.
  */
 export function homeSections(input: HomeInput): HomeSections {
-  const { recents, documents, collections = [], format = '', titleOf = noTitle, progress = {} } = input;
+  const { recents, documents, titleOf = noTitle, progress = {} } = input;
   const byPath = new Map(documents.map(doc => [doc.path, doc]));
   const tile = (item: HomeDocument) => tileOf(item, titleOf(item), progress[item.path]);
-  const matching = documents.filter(doc => matchesFileType(doc, format));
-  const library = matching.map(doc => ({ doc, opened: openedAt(doc.lastOpened) })).sort(byRecency).map(({ doc }) => doc);
-  const recent = recentItems(recents, byPath).filter(item => matchesFileType(item, format));
+  const library = documents.map(doc => ({ doc, opened: openedAt(doc.lastOpened) })).sort(byRecency).map(({ doc }) => doc);
+  const recent = recentItems(recents, byPath);
   const seen = new Set<string>();
   const opened = [...recent, ...library].filter(item => !seen.has(item.path) && seen.add(item.path));
+  const types = typeShelves.map(([type, title]) => ({
+    type, title,
+    tiles: documents.filter(doc => matchesFileType(doc, type)).map(item => ({ item, opened: openedAt(item.lastOpened), title: displayTitle(item, titleOf(item), true) }))
+      .sort((a, b) => b.opened - a.opened || a.title.localeCompare(b.title) || a.item.name.localeCompare(b.item.name))
+      .slice(0, shelfLimit).map(({ item }) => tile(item)),
+  })).filter(shelf => shelf.tiles.length);
   return {
-    recent: recent.slice(0, recentLimit).map(tile),
+    recent: recent.slice(0, 1).map(tile),
     reading: opened.filter(item => inProgress(progress[item.path])).slice(0, shelfLimit).map(tile),
-    favorites: library.filter(doc => doc.favorite).slice(0, shelfLimit).map(tile),
-    collections: collectionCards(collections, matching, tile).slice(0, shelfLimit),
+    types,
   };
 }
-
-export const homeIsEmpty = (sections: HomeSections) => !sections.recent.length && !sections.reading.length && !sections.favorites.length && !sections.collections.length;
 
 /** Same sibling grouping the library uses, so a cover on this page is the cover on its shelf. */
 export function assignShelfSlots(collections: readonly HomeCollection[]): void {
@@ -171,23 +140,14 @@ export function assignShelfSlots(collections: readonly HomeCollection[]): void {
   assignCoverSlots([...siblings.values()].map(group => [...group].sort(compareCollections).map(collection => collection.id)));
 }
 
-/** A shelf cover is 124 wide and 124 to 165 tall: a real proportion, kept between square and the cover's 3:4. */
-export const shelfCover = { width: 124, height: 165 } as const;
+/** A shelf cover is 125 wide and 125 to 170 tall: a real proportion, kept between square and the cover's 3:4. */
+export const shelfCover = { width: 125, height: 170 } as const;
 export const shelfRatio = (ratio: number) => Math.min(1, Math.max(shelfCover.width / shelfCover.height, Number.isFinite(ratio) && ratio > 0 ? ratio : coverRatio));
 
 export type HomeActions = {
   open: (path: string, name: string) => void;
   /** The context menu of a document card or row was asked for (right-click, the menu key, Shift+F10), at `at` or, from the keyboard, beside `anchor`. */
   menu: (item: { path: string; name: string; format: string }, anchor: HTMLElement, at: { x: number; y: number } | undefined) => void;
-  openFile: () => void;
-  /** Opens the full library: on all references, its favorites, or the documents still being read. */
-  viewAll: (scope: 'all' | 'favorites' | 'reading') => void;
-  /** Opens the library on one collection. */
-  viewCollection: (id: string) => void;
-  /** The chips on offer (empty: nothing to choose between), and the one pressed. */
-  types: readonly (readonly [string, string])[];
-  format: string;
-  selectFormat: (value: string) => void;
   /** Whether a picture can be made for a format, and what is already known about it (proportions, a finished picture). */
   picture: { can: (format: string) => boolean; ratio: (path: string) => number | undefined; peek: (path: string) => Thumbnail | undefined };
   /** The Appearance's BACKGROUND choice: a cover family draws the dithered ground, `none` leaves Home without one. */
@@ -212,7 +172,7 @@ function control(className: string, label?: string, text?: string): HTMLButtonEl
 type Shelf = { track: HTMLElement; previous: HTMLButtonElement; next: HTMLButtonElement };
 /** The ground on show: Home's root and the element it sits in, the family drawn, the canvas shown (and its key), the pending idle job. */
 type GroundView = { root: HTMLElement; host: HTMLElement; family: string; canvas?: HTMLCanvasElement; key: string; cancel?: () => void; resize: ResizeObserver };
-let current: { shelves: Shelf[]; chips?: HTMLElement; resize: ResizeObserver; lazy?: IntersectionObserver; frame: number; reduced: MediaQueryList; ground?: GroundView } | undefined;
+let current: { shelves: Shelf[]; resize: ResizeObserver; lazy?: IntersectionObserver; frame: number; reduced: MediaQueryList; ground?: GroundView } | undefined;
 
 function disposeHome() {
   if (!current) return;
@@ -371,17 +331,12 @@ function syncShelf({ track, previous, next }: Shelf) {
   previous.hidden = track.scrollLeft <= 1;
   next.hidden = track.scrollLeft + track.clientWidth >= track.scrollWidth - 1;
 }
-/** The chip row is one line that scrolls sideways; a fade shows at an edge while there is more beyond it. */
-function fadeChips(row: HTMLElement) {
-  row.style.setProperty('--fade-start', row.scrollLeft > 1 ? '28px' : '0px');
-  row.style.setProperty('--fade-end', row.scrollLeft + row.clientWidth < row.scrollWidth - 1 ? '28px' : '0px');
-}
 function scheduleSync(view: NonNullable<typeof current>) {
-  if (!view.frame) view.frame = requestAnimationFrame(() => { view.frame = 0; if (current !== view) return; for (const shelf of view.shelves) syncShelf(shelf); if (view.chips) fadeChips(view.chips); });
+  if (!view.frame) view.frame = requestAnimationFrame(() => { view.frame = 0; if (current !== view) return; for (const shelf of view.shelves) syncShelf(shelf); });
 }
 
-/** One tab stop per list, arrows between its cards (and up and down by row in the grid). */
-function roving(container: HTMLElement, vertical: boolean) {
+/** One tab stop per shelf, arrows between its cards. */
+function roving(container: HTMLElement) {
   const items = () => [...container.querySelectorAll<HTMLElement>('.home-open')];
   const settle = (active?: HTMLElement) => { const all = items(); const stop = active ?? all[0]; for (const item of all) item.tabIndex = item === stop ? 0 : -1; };
   settle();
@@ -389,9 +344,7 @@ function roving(container: HTMLElement, vertical: boolean) {
   container.addEventListener('keydown', event => {
     const all = items(), at = all.indexOf((event.target as HTMLElement).closest<HTMLElement>('.home-open') as HTMLElement);
     if (at < 0 || event.altKey || event.ctrlKey || event.metaKey) return;
-    const row = vertical ? all.filter(item => item.offsetTop === all[0].offsetTop).length : 1;
-    const to = event.key === 'ArrowRight' ? at + 1 : event.key === 'ArrowLeft' ? at - 1 : event.key === 'Home' ? 0 : event.key === 'End' ? all.length - 1
-      : vertical && event.key === 'ArrowDown' ? at + row : vertical && event.key === 'ArrowUp' ? at - row : undefined;
+    const to = event.key === 'ArrowRight' ? at + 1 : event.key === 'ArrowLeft' ? at - 1 : event.key === 'Home' ? 0 : event.key === 'End' ? all.length - 1 : undefined;
     if (to === undefined) return;
     event.preventDefault();
     if (to < 0 || to >= all.length || to === at) return;
@@ -437,7 +390,7 @@ function dragScroll(track: HTMLElement) {
 type Painter = { actions: HomeActions; appearance: Appearance; view: { shelves: Shelf[] } };
 
 /** The picture box of a document: a generated cover until the picture arrives, sized by `kind`. */
-function mediaOf(item: HomeTile, painter: Painter, kind: 'recent' | 'shelf' | 'mosaic'): HTMLElement {
+function mediaOf(item: HomeTile, painter: Painter, kind: 'recent' | 'shelf'): HTMLElement {
   const { actions, appearance } = painter;
   const thumbnailable = actions.picture.can(item.format);
   const generated = !item.missing && (!thumbnailable || item.format.toLowerCase() === 'epub');
@@ -461,21 +414,19 @@ function opener(item: HomeTile, className: string, actions: HomeActions): HTMLBu
   return open;
 }
 
+/** The file type as the cards print it: the extension in capitals, Markdown as `MD`. */
+const typeLabel = (format: string) => format.toLowerCase() === 'markdown' ? 'MD' : format.toUpperCase();
+
+/** "Recently opened": one wide card, the cover at its left edge, the title beside it, the file type and the progress along its foot. */
 function recentCard(item: HomeTile, painter: Painter): HTMLElement {
   const cell = element('div', 'home-recent');
-  cell.setAttribute('role', 'listitem');
   cell.dataset.homePath = item.path;
   cell.classList.toggle('is-missing', item.missing);
   const open = opener(item, 'home-recent-open', painter.actions);
+  const foot = element('span', 'home-recent-foot');
+  foot.append(element('span', 'home-recent-type', typeLabel(item.format)), element('span', 'home-recent-progress', formatProgress(item.progress)));
   const text = element('span', 'home-recent-text');
-  text.append(element('span', 'home-card-title', item.title));
-  // A thin line under the title shows how far the reader got; a document with no progress has none.
-  if (item.progress && item.progress.fraction > 0) {
-    const line = element('span', 'home-progress'), fill = element('i');
-    fill.style.width = `${Math.round(Math.min(1, item.progress.fraction) * 1000) / 10}%`;
-    line.append(fill); line.dataset.progress = formatProgress(item.progress) ?? '';
-    text.append(line);
-  }
+  text.append(element('span', 'home-card-title', item.title), foot);
   open.append(mediaOf(item, painter, 'recent'), text);
   cell.append(open);
   if (painter.actions.remove) {
@@ -486,60 +437,36 @@ function recentCard(item: HomeTile, painter: Painter): HTMLElement {
   return cell;
 }
 
-function documentCard(item: HomeTile, painter: Painter, meta: string): HTMLElement {
+/** A cover card: the picture, the title, and one caption line, the file type and the progress when there is any. `stroke` draws the hairline on the cover. */
+function documentCard(item: HomeTile, painter: Painter, stroke: boolean): HTMLElement {
   const cell = element('div', 'home-card');
   cell.setAttribute('role', 'listitem');
   cell.dataset.homePath = item.path;
   cell.classList.toggle('is-missing', item.missing);
   const open = opener(item, 'home-card-open', painter.actions);
+  const art = element('span', stroke ? 'home-card-art has-stroke' : 'home-card-art');
+  art.append(mediaOf(item, painter, 'shelf'));
   const cover = element('span', 'home-card-cover');
-  cover.append(mediaOf(item, painter, 'shelf'));
+  cover.append(art);
+  const meta = [typeLabel(item.format), formatProgress(item.progress)].filter(Boolean).join(' · ');
   open.append(cover, element('span', 'home-card-title', item.title), element('span', 'home-card-meta', meta));
   cell.append(open);
   return cell;
 }
 
-function collectionCard(card: HomeCollectionCard, painter: Painter): HTMLElement {
-  const cell = element('div', 'home-card home-collection');
-  cell.setAttribute('role', 'listitem');
-  cell.dataset.homeCollection = card.id;
-  const count = `${card.count} ${card.count === 1 ? 'reference' : 'references'}`;
-  const open = control('home-open home-card-open', `Collection ${card.name}, ${count}`);
-  open.title = card.name;
-  open.onclick = () => painter.actions.viewCollection(card.id);
-  const mosaic = element('span', 'home-mosaic');
-  for (let slot = 0; slot < 4; slot++) {
-    const cellNode = element('span', 'home-mosaic-cell'), cover = card.covers[slot];
-    if (cover) cellNode.append(mediaOf(cover, painter, 'mosaic'));
-    mosaic.append(cellNode);
-  }
-  const cover = element('span', 'home-card-cover');
-  cover.append(mosaic);
-  open.append(cover, element('span', 'home-card-title', card.name), element('span', 'home-card-meta', count));
-  cell.append(open);
-  return cell;
-}
-
-/** A labelled region with a heading and, optionally, "Open in library". */
-function section(id: string, title: string, showAll?: { label: string; run: () => void }): { region: HTMLElement; heading: HTMLElement } {
+/** A labelled region with a heading. */
+function section(id: string, title: string): { region: HTMLElement; heading: HTMLElement } {
   const region = element('section', 'home-section');
-  const head = element('div', 'home-section-head');
   const heading = element('h2', '', title);
   heading.id = `home-${id}`;
   region.setAttribute('aria-labelledby', heading.id);
-  head.append(heading);
-  if (showAll) {
-    const all = control('home-all', showAll.label, 'Open in library');
-    all.onclick = showAll.run;
-    head.append(all);
-  }
-  region.append(head);
+  region.append(heading);
   return { region, heading };
 }
 
 /** A shelf: one row of cards that scrolls sideways, with ‹ › buttons at its ends. */
-function shelf(id: string, title: string, cards: HTMLElement[], showAll: { label: string; run: () => void }, painter: Painter): HTMLElement {
-  const { region, heading } = section(id, title, showAll);
+function shelf(id: string, title: string, cards: HTMLElement[], painter: Painter): HTMLElement {
+  const { region, heading } = section(id, title);
   region.classList.add('home-shelf');
   const frame = element('div', 'home-shelf-frame');
   const track = element('div', 'home-shelf-track');
@@ -553,7 +480,7 @@ function shelf(id: string, title: string, cards: HTMLElement[], showAll: { label
   previous.onclick = () => page(-1); next.onclick = () => page(1);
   frame.append(previous, track, next);
   region.append(frame);
-  roving(track, false); dragScroll(track);
+  roving(track); dragScroll(track);
   painter.view.shelves.push({ track, previous, next });
   return region;
 }
@@ -563,58 +490,20 @@ export function renderHome(root: HTMLElement, sections: HomeSections, actions: H
   disposeHome();
   root.classList.add('is-home');
   root.replaceChildren();
-  const openFile = control('home-file', undefined, 'Open files');
-  openFile.id = 'empty-open';
-  openFile.onclick = () => actions.openFile();
-  const browse = control('home-file', undefined, 'Browse library');
-  browse.id = 'home-browse';
-  browse.onclick = () => actions.viewAll('all');
-  const buttons = element('div', 'home-actions');
-  buttons.append(openFile, browse);
   const ground = actions.banner === 'none' ? undefined : groundView(root, actions.banner);
-  const bar = element('div', 'home-bar');
-  bar.append(element('h1', '', 'Home'), buttons);
-  root.append(bar);
-  let chipRow: HTMLElement | undefined;
-  if (actions.types.length) {
-    const chips = chipRow = element('div', 'home-chips');
-    chips.setAttribute('role', 'group');
-    chips.setAttribute('aria-label', 'File type');
-    for (const [value, label] of actions.types) {
-      const chip = control('home-chip', undefined, label);
-      chip.dataset.type = value;
-      chip.setAttribute('aria-pressed', String(value === actions.format));
-      chip.onclick = () => actions.selectFormat(value);
-      chips.append(chip);
-    }
-    // A chip reached by Tab is brought fully into the row (the browser leaves one that is partly visible where it is).
-    chips.addEventListener('focusin', event => (event.target as HTMLElement).scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }));
-    root.append(chips);
-  }
-  if (homeIsEmpty(sections)) {
-    const empty = element('p', 'home-no-matches', actions.format ? 'No files of this type. Choose another file type or open a file.' : 'Nothing opened yet. Open a file, or browse the library.');
-    empty.setAttribute('role', 'status');
-    root.append(empty);
-  }
+  root.append(element('h1', '', 'Home'));
   const view = { shelves: [] as Shelf[], frame: 0, reduced: matchMedia('(prefers-reduced-motion: reduce)'), resize: new ResizeObserver(() => scheduleSync(view)), ground } as NonNullable<typeof current>;
   const painter: Painter = { actions, appearance, view };
   if (sections.recent.length) {
     const { region } = section('recent', 'Recently opened');
     region.classList.add('home-recent-section');
-    const grid = element('div', 'home-recent-grid');
-    grid.setAttribute('role', 'list');
-    grid.setAttribute('aria-labelledby', 'home-recent');
-    grid.append(...sections.recent.map(item => recentCard(item, painter)));
-    region.append(grid);
+    region.append(...sections.recent.map(item => recentCard(item, painter)));
     root.append(region);
-    roving(grid, true);
   }
-  if (sections.reading.length) root.append(shelf('reading', 'Continue reading', sections.reading.map(item => documentCard(item, painter, [item.format.toUpperCase(), formatProgress(item.progress)].filter(Boolean).join(' · '))), { label: 'Open in library: Continue reading', run: () => actions.viewAll('reading') }, painter));
-  if (sections.favorites.length) root.append(shelf('favorites', 'Favorites', sections.favorites.map(item => documentCard(item, painter, item.format.toUpperCase())), { label: 'Open in library: Favorites', run: () => actions.viewAll('favorites') }, painter));
-  if (sections.collections.length) root.append(shelf('collections', 'Collections', sections.collections.map(card => collectionCard(card, painter)), { label: 'Open in library: Collections', run: () => actions.viewAll('all') }, painter));
+  if (sections.reading.length) root.append(shelf('reading', 'Continue reading', sections.reading.map(item => documentCard(item, painter, true)), painter));
+  for (const { type, title, tiles } of sections.types) root.append(shelf(`type-${type}`, title, tiles.map(item => documentCard(item, painter, false)), painter));
   current = view;
   if (ground) { ground.resize.observe(root); ground.resize.observe(document.body); }
-  if (chipRow) { view.chips = chipRow; view.resize.observe(chipRow); chipRow.addEventListener('scroll', () => scheduleSync(view), { passive: true }); }
   for (const { track } of view.shelves) { view.resize.observe(track); track.addEventListener('scroll', () => scheduleSync(view), { passive: true }); }
   scheduleSync(view);
 }
@@ -642,7 +531,7 @@ export function fillHomePictures(root: ParentNode, loaders: HomeLoaders, alive: 
     for (const text of cell.querySelectorAll<HTMLElement>('.library-cover-title, .library-tile-name, .home-card-title')) text.textContent = known;
     cell.querySelector('.home-open')?.setAttribute('aria-label', `Open ${known}`);
   };
-  // A shelf cover keeps its slot (165 tall), so a picture of another proportion moves nothing but itself; the grid and the mosaic crop.
+  // A shelf cover keeps its slot (170 tall), so a picture of another proportion moves nothing but itself; the recent card's cover crops.
   const proportion = (media: HTMLElement, ratio: number) => { media.style.setProperty('--ratio', String(media.closest('.home-card-cover') ? shelfRatio(ratio) : ratio)); };
   const lazy = new IntersectionObserver(entries => {
     for (const entry of entries) {

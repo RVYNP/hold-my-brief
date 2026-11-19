@@ -292,9 +292,9 @@ for (const width of [1440, 900]) for (const side of ['left', 'right'] as const) 
       const edge = await boxOf(panel), at = await boxOf(target);
       return side === 'left' ? at.x - (edge.x + edge.width) : edge.x - (at.x + at.width);
     };
-    const chip = page.locator('#empty .home-chip').first(), card = page.locator('#empty [data-home-path]').first();
-    await expect(chip).toBeVisible(); await expect(card).toBeVisible();
-    await expect.poll(() => beyond(chip)).toBeGreaterThanOrEqual(0);
+    const title = page.locator('#empty h1'), card = page.locator('#empty [data-home-path]').first();
+    await expect(title).toBeVisible(); await expect(card).toBeVisible();
+    await expect.poll(() => beyond(title)).toBeGreaterThanOrEqual(0);
     await expect.poll(() => beyond(card)).toBeGreaterThanOrEqual(0);
     // The reading panel itself is what is left of the window, and Home's content is laid out inside it.
     const work = await boxOf(page.locator('#workspace'));

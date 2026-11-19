@@ -416,7 +416,7 @@
   /* The hairline runs the window's height below the toolbar along the rail's inner edge (the side facing the content). */
   #reader-layout > .icon-rail::after { content: ''; position: absolute; top: 0; bottom: -6px; left: 42px; width: 1px; background: var(--hairline); pointer-events: none; }
   #reader-layout.library-right > .icon-rail::after { left: auto; right: 42px; }
-  #reader-layout:not(.library-right):not(.library-open) #empty.is-home { padding-left: 52px; }
+  #reader-layout:not(.library-right):not(.library-open) #empty.is-home { padding-left: calc(44px + var(--home-gutter)); }
   #reader-layout.library-right:not(.library-open) #empty.is-home { padding-right: 52px; }
   /* The toolbar's library button is the compact window's door; here the icon rail is. */
   #library-toggle { display: none; }
