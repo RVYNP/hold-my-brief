@@ -1,5 +1,6 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { libraryToggle } from './library-controls';
+import { railHome } from './toolbar-tabs';
 
 const body = (name: string) => `${name}\n${Array.from({ length: 80 }, (_, i) => `${name} line ${i + 1}`).join('\n')}`;
 const file = (name: string) => ({ name, mimeType: 'text/plain', buffer: Buffer.from(body(name)) });
@@ -213,7 +214,7 @@ test('a Home tile dragged to the reading area opens in a new tab, after the tab 
   await libraryToggle(page).click();
   await expect(page.locator('#library-root')).toBeHidden();
   // From Home a tile dropped on the page opens after the tab showing; with Home showing, that is the end.
-  await page.locator('#home-tab').click();
+  await railHome(page).click();
   const tile = page.locator('.home-open[aria-label="Open lib2.txt"]');
   await expect(tile).toBeVisible();
   const tileAt = await centre(tile);

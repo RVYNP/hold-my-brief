@@ -1,6 +1,7 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { chapterBook } from './epub-book';
 import { pagedPdf } from './paged-pdf';
+import { expectFormats } from './toolbar-tabs';
 
 /** Split view, third part: drag a tab onto the other pane's row, onto a pane's page, or onto the reading area's outer quarters to split (the drop zones of every pane are in split-zones.spec.ts). */
 
@@ -19,7 +20,7 @@ const setLibrary = async (page: Page, open: boolean) => {
 };
 /** The library panel at 340 px (the default is 280): 1080 less the panel and its margin is then under the 728 px two panes need. */
 const widePanel = (page: Page) => page.addInitScript(() => localStorage.setItem('hold-my-brief:library-width', '340'));
-const tabOf = (page: Page, format: string) => page.locator('.tab', { has: page.locator('.tab-format', { hasText: format }) });
+const tabOf = (page: Page, format: string) => page.locator(`.tab[data-format="${format}"]`);
 
 /** The PDF, an EPUB and a Markdown file open, the PDF shown, so the reading area is not split and the EPUB is a tab that is not showing. */
 async function openThree(page: Page) {
@@ -27,7 +28,7 @@ async function openThree(page: Page) {
   const epub = { name: 'pride.epub', mimeType: 'application/epub+zip', buffer: await chapterBook({ chapters: 4, paragraphs: 30 }) };
   for (const [file, format] of [[pdf, 'PDF'], [epub, 'EPUB'], [markdown, 'MD']] as const) {
     await page.locator('#file-input').setInputFiles(file);
-    await expect(page.locator('#tab-list .tab.is-active .tab-format')).toHaveText(format);
+    await expect(page.locator('#tab-list .tab.is-active')).toHaveAttribute('data-format', format);
   }
   await page.locator('#tab-list .tab[data-path]').nth(0).click();
   await expect(page.locator('#position')).toContainText('Page 1 of 5');
@@ -105,7 +106,7 @@ test.describe('1440 × 900', () => {
     await expect(preview(page)).toBeHidden();
     await page.mouse.up();
     await expect(workspace(page)).not.toHaveClass(/is-split/);
-    await expect(barTabs(page).locator('.tab-format')).toHaveText(['PDF', 'EPUB', 'MD']);
+    await expectFormats(barTabs(page), ['PDF', 'EPUB', 'MD']);
     await expect(tabOf(page, 'PDF')).toHaveClass(/is-active/);
   });
 
@@ -121,10 +122,10 @@ test.describe('1440 × 900', () => {
     await expect(preview(page)).toBeHidden();
     await page.mouse.up();
     await expect(workspace(page)).not.toHaveClass(/is-split/);
-    await expect(barTabs(page).locator('.tab-format')).toHaveText(['PDF', 'EPUB', 'MD']);
+    await expectFormats(barTabs(page), ['PDF', 'EPUB', 'MD']);
     await expect(tabOf(page, 'PDF')).toHaveClass(/is-active/);
     // The tab was not selected by the release either.
-    await expect(page.locator('#tab-list .tab.is-active .tab-format')).toHaveText('PDF');
+    await expect(page.locator('#tab-list .tab.is-active')).toHaveAttribute('data-format', 'PDF');
   });
 
   test('releasing a dragged tab over no target does nothing: the tab is where it was', async ({ page }) => {
@@ -133,7 +134,7 @@ test.describe('1440 × 900', () => {
     await pick(page, tabOf(page, 'MD'), point(await box(workspace(page)), .5)); // The middle of the page: the top quarter is a drop zone now.
     await expect(preview(page)).toBeHidden();
     await page.mouse.up();
-    await expect(barTabs(page).locator('.tab-format')).toHaveText(['PDF', 'EPUB', 'MD']);
+    await expectFormats(barTabs(page), ['PDF', 'EPUB', 'MD']);
     await expect(workspace(page)).not.toHaveClass(/is-split/);
   });
 
@@ -143,7 +144,7 @@ test.describe('1440 × 900', () => {
     await pick(page, barTabs(page).last(), { x: first.x + 2, y: last.y + last.height / 2 });
     await expect(preview(page)).toBeHidden();
     await page.mouse.up();
-    await expect(barTabs(page).locator('.tab-format')).toHaveText(['MD', 'PDF', 'EPUB']);
+    await expectFormats(barTabs(page), ['MD', 'PDF', 'EPUB']);
   });
 
   test('a drag between two rows: the MD tab goes from the left row to the right row at the slot, and is shown', async ({ page }) => {
@@ -237,7 +238,7 @@ test.describe('1440 × 900', () => {
   test('with one document open there is nothing to split off, so no preview shows', async ({ page }) => {
     await page.goto('/');
     await page.locator('#file-input').setInputFiles(markdown);
-    await expect(page.locator('#tab-list .tab.is-active .tab-format')).toHaveText('MD');
+    await expect(page.locator('#tab-list .tab.is-active')).toHaveAttribute('data-format', 'MD');
     await setLibrary(page, false);
     await pick(page, barTabs(page).first(), point(await box(workspace(page)), .9));
     await expect(preview(page)).toBeHidden();
@@ -277,7 +278,7 @@ test('where two 360 px panes do not fit (the library docked in a 1080 px window)
   await expect(preview(page)).toBeHidden();
   await page.mouse.up();
   await expect(workspace(page)).not.toHaveClass(/is-split/);
-  await expect(barTabs(page).locator('.tab-format')).toHaveText(['PDF', 'EPUB', 'MD']);
+  await expectFormats(barTabs(page), ['PDF', 'EPUB', 'MD']);
 });
 
 test('the folded split\'s pane map draws a cell per pane in an SVG, the active one filled, with "n panes" beside it', async ({ page }) => {

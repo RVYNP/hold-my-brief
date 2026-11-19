@@ -31,7 +31,7 @@ test('stepping with the pager replaces the image in the tab; an image already op
   await expect(pager(page)).toContainText('3 / 3');
   await expect(tabs(page)).toHaveCount(1);
   await expect(tabs(page).first().locator('.tab-title')).toHaveText('plate-3.png');
-  await expect(tabs(page).first().locator('.tab-format')).toHaveText('PNG');
+  await expect(tabs(page).first()).toHaveAttribute('data-format', 'PNG');
   await expect(forward).toBeDisabled();
 
   // Back to the first, then open the second from the tree: a second tab. Stepping onto it from the first switches to it.

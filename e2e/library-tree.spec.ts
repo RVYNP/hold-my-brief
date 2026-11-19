@@ -1,6 +1,7 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { pathOfItem, seedLibrary, treeLibrary } from './home-fixture';
 import { warmDevServer } from './warm';
+import { railHome } from './toolbar-tabs';
 
 // The library panel's tree (src/library-tree*.ts) and the icon rail beside it (src/icon-rail.ts), on a library shaped like a real catalog:
 // source roots (`refs`, `reference-docs`, `Design materials`) with numbered subfolders, many documents called `source.pdf`, user
@@ -106,7 +107,7 @@ test('a document opens from its row, ⌘/Ctrl-click opens it in a background tab
   await layers.click({ modifiers: [process.platform === 'darwin' ? 'Meta' : 'Control'] });
   await expect(page.locator('#tab-count')).toHaveText('1');
   await expect(page.locator('#tab-list [role=tab]')).toHaveCount(1);
-  await expect(page.locator('#home-tab')).toHaveAttribute('aria-selected', 'true');
+  await expect(railHome(page)).toHaveAttribute('aria-current', 'page');
   await expect(layers).not.toHaveClass(/is-active/);
 
   // A plain click opens it and shows it; the row is marked (accent-soft, 600) and not the background one.
@@ -173,7 +174,7 @@ test('the tree has an ARIA tree\'s keyboard: arrows, Home/End, Enter, left to th
   await document_(page, 'reference-docs', '2-creative-apps/Brush-Notes.md').focus();
   await page.keyboard.press('Control+Enter');
   await expect(page.locator('#tab-count')).toHaveText('1');
-  await expect(page.locator('#home-tab')).toHaveAttribute('aria-selected', 'true');
+  await expect(railHome(page)).toHaveAttribute('aria-current', 'page');
   await page.keyboard.press('Enter');
   await expect(page.locator('#filename')).toHaveText('Brush-Notes.md');
   await expect(page.locator('.reader-host:not(.staging):not(.tab-hidden)')).toBeFocused(); // the document is read: the page takes focus
@@ -229,17 +230,17 @@ test('the filter is always under the header, narrows the tree as you type, highl
   expect(await focused(page)).toMatch(/^s:/);
 });
 
-test('the icon rail: Library, Search, Add files, a spacer, then Settings; each does one thing, and Library wears the fill while the panel is open', async ({ page }) => {
+test('the icon rail: Home, Add files, Library, Search, then Settings, in one group; each does one thing, and Library wears the fill while the panel is open', async ({ page }) => {
   await seed(page);
-  const names = ['Library', 'Search', 'Add files', 'Settings'];
+  const names = ['Home', 'Add files', 'Library', 'Search', 'Settings'];
   const buttons = iconRail(page).getByRole('button');
   await expect(buttons).toHaveText(names.map(() => ''));
   expect(await buttons.evaluateAll(list => list.map(button => button.getAttribute('aria-label')))).toEqual(names);
-  expect(await buttons.evaluateAll(list => list.map(button => button.getAttribute('data-tip')))).toEqual(['Library  Ctrl+B', 'Search  Ctrl+Shift+F', 'Add files', 'Settings']);
-  // Top to bottom, Settings below the rest with room between.
+  expect(await buttons.evaluateAll(list => list.map(button => button.getAttribute('data-tip')))).toEqual(['Home', 'Add files', 'Library  Ctrl+B', 'Search  Ctrl+Shift+F', 'Settings']);
+  // Top to bottom, evenly stacked: Settings is directly under Search.
   const ys = await buttons.evaluateAll(list => list.map(button => Math.round(button.getBoundingClientRect().y)));
   expect([...ys].sort((a, b) => a - b)).toEqual(ys);
-  expect(ys[3]! - ys[2]!).toBeGreaterThan(100);
+  expect(new Set(ys.slice(1).map((y, i) => y - ys[i]!)).size).toBe(1);
 
   // Library is the pressed icon while the panel is open, and collapses it; the filled tone is the accent-soft one.
   const fill = (name: string) => icon(page, name).evaluate(button => getComputedStyle(button).backgroundColor);
@@ -378,7 +379,7 @@ test('a generic file name is shown by its folder on Home, in the library rows an
   await document_(page, 'refs', '03_vintage_magazine/source.pdf').click();
   await expect(page.locator('#filename')).toHaveText('03_vintage_magazine');
   await expect(page.locator('#tab-list [role=tab]').first()).toContainText('03_vintage_magazine');
-  await page.locator('#home-tab').click();
+  await railHome(page).click();
   const card = page.locator('#empty .jump-card, #empty [data-path]').filter({ hasText: '03_vintage_magazine' });
   await expect(card.first()).toBeVisible();
 });

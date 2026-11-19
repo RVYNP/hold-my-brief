@@ -2,6 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { seedLibrary } from './home-fixture';
 import { chapterBook } from './epub-book';
 import { pagedPdf } from './paged-pdf';
+import { railHome } from './toolbar-tabs';
 
 /**
  * The sheen: each theme's accent gradient, drawn in six places only (src/style.css, src/library.css). Forced colours and more
@@ -57,13 +58,9 @@ async function openViewControls(page: Page) {
   await expect(page.locator(pressedViewControls[1])).toHaveCount(1);
 }
 
-test('the active tab, Home included, has a 2 px sheen line on its top edge that takes no room', async ({ page }) => {
+test('the active tab has a 2 px sheen line on its top edge that takes no room', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('#home-tab')).toHaveClass(/is-active/);
-  // Home is 28 px wide with a 1 px border: the line is inset 8 px on each side of the 26 px inside it.
-  const home = await paint(page, '#home-tab', '::before');
-  expect(home.image).toContain('linear-gradient');
-  expect([home.position, home.height, home.width, home.radius]).toEqual(['absolute', 2, 10, '1px']);
+  await expect(railHome(page)).toHaveAttribute('aria-current', 'page');
 
   for (const name of ['a.txt', 'b.txt']) {
     await page.locator('#file-input').setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from(`${name}\n\nBody of ${name}.\n`) });
@@ -77,7 +74,6 @@ test('the active tab, Home included, has a 2 px sheen line on its top edge that 
   expect(box.height).toBeCloseTo(28, 0);
   // Only the tab being read has it.
   expect((await paint(page, '#tab-list .tab:not(.is-active)', '::before')).image).toBe('none');
-  expect((await paint(page, '#home-tab', '::before')).content).toBe('none');
 });
 
 test('the Home progress fill and the sheets carry the sheen', async ({ page }) => {
@@ -107,7 +103,9 @@ for (const emulation of flatness) {
     await seeded(page);
     await page.emulateMedia({ forcedColors: 'none', contrast: 'no-preference', ...emulation });
     expect((await paint(page, '.home-progress > i')).image).toBe('none');
-    expect((await paint(page, '#home-tab', '::before')).display).toBe('none');
+    await page.locator('#file-input').setInputFiles({ name: 'a.txt', mimeType: 'text/plain', buffer: Buffer.from('a.txt\n\nBody of a.txt.\n') });
+    await expect(page.locator('#tab-list .tab.is-active .tab-title')).toHaveText('a.txt');
+    expect((await paint(page, '#tab-list .tab.is-active', '::before')).display).toBe('none');
     expect((await paint(page, '#appearance')).image).toBe('none');
   });
 

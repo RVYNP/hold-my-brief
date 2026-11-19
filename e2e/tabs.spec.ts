@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { pagedPdf } from './paged-pdf';
+import { expectFormats, railHome } from './toolbar-tabs';
 
 const text = (name: string) => ({ name, mimeType: 'text/plain', buffer: Buffer.from(Array.from({ length: 240 }, (_, i) => `${name} line ${i + 1}: a quiet place to read.`).join('\n')) });
 const open = (page: Page, name: string) => page.locator('#file-input').setInputFiles(text(name));
@@ -20,20 +21,53 @@ test.beforeEach(async ({ page }) => { await page.setViewportSize({ width: 1080, 
 
 test('every document opens in its own tab, and only three keep a live page', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('#home-tab')).toHaveClass(/is-active/);
+  await expect(railHome(page)).toHaveAttribute('aria-current', 'page');
   await openAll(page, 'a.txt', 'b.txt', 'c.txt', 'd.txt');
   await expect(titles(page)).toHaveText(['a.txt', 'b.txt', 'c.txt', 'd.txt']);
-  await expect(page.locator('#home-tab')).not.toHaveClass(/is-active/);
+  await expect(railHome(page)).not.toHaveAttribute('aria-current', 'page');
   await expect(hosts(page)).toHaveCount(3);
   await expect(page.locator('.reader-host:not(.staging):not(.tab-hidden)')).toHaveCount(1);
   await expect(page.locator('#empty')).toBeHidden();
-  // The page indicator is on the tab being read only.
-  await expect(page.locator('#tab-list .tab-where')).toHaveText(['', '', '', /^\d+ \/ \d+$/]);
+  // Every tab that has been shown has a place, not only the one being read.
+  await expect(page.locator('#tab-list .tab-where')).toHaveText([/^P\. 1\/240$/, /^P\. 1\/240$/, /^P\. 1\/240$/, /^P\. 1\/240$/]);
   // A document that is open already is shown, not opened again.
   await open(page, 'b.txt');
   await shown(page, 'b.txt');
   await expect(titles(page)).toHaveCount(4);
 });
+
+for (const size of [{ width: 1440, height: 900 }, { width: 1080, height: 760 }]) {
+  test(`${size.width} × ${size.height}: the toolbar holds only document tabs, each with its title and its place and no format badge`, async ({ page }) => {
+    await page.setViewportSize(size);
+    await page.goto('/');
+    await expect(page.locator('#home-tab, #tab-add, .toolbar .tab-home, .toolbar .tab-add')).toHaveCount(0);
+    await expect(page.locator('#tab-list .tab')).toHaveCount(0);
+    await open(page, 'a.txt'); await shown(page, 'a.txt');
+    await goTo(page, '30');
+    await open(page, 'b.txt'); await shown(page, 'b.txt');
+    await goTo(page, '60');
+    await tab(page, 'a.txt').click(); await shown(page, 'a.txt');
+    // Both tabs show their place, the one not showing too.
+    await expect(page.locator('#tab-list .tab-where')).toHaveText([/^P\. 30\/240$/, /^P\. 60\/240$/]);
+    await expect(page.locator('#tab-list .tab-format')).toHaveCount(0);
+    await expectFormats(page.locator('#tab-list .tab'), ['TXT', 'TXT']);
+    for (const name of ['a.txt', 'b.txt']) expect((await tab(page, name).boundingBox())!.width).toBeGreaterThanOrEqual(240);
+    // The title is on the left and the place on the right.
+    const [title, where] = [await tab(page, 'b.txt').locator('.tab-title').boundingBox(), await tab(page, 'b.txt').locator('.tab-where').boundingBox()];
+    expect(title!.x + title!.width).toBeLessThan(where!.x);
+    expect(await tab(page, 'b.txt').locator('.tab-where').evaluate(node => { const style = getComputedStyle(node); return [style.textTransform, style.fontFamily.includes('mono') || /monospace/.test(style.fontFamily)]; })).toEqual(['uppercase', true]);
+    // The fill marks the active tab; no heavier box.
+    const look = (name: string) => tab(page, name).evaluate(node => { const style = getComputedStyle(node); return { fill: style.backgroundColor, border: style.borderTopColor, shadow: style.boxShadow }; });
+    const [active, idle] = [await look('a.txt'), await look('b.txt')];
+    expect(active.fill).not.toBe(idle.fill);
+    expect([active.shadow, active.border]).toEqual(['none', 'rgba(0, 0, 0, 0)']);
+    // Home is reached from the rail, and no tab is current then.
+    await expect(page.locator('#tab-list .tab.is-active')).toHaveCount(1);
+    await railHome(page).click();
+    await expect(page.locator('#tab-list .tab.is-active')).toHaveCount(0);
+    await expect(page.locator('#empty')).toBeVisible();
+  });
+}
 
 test('switching tabs keeps each tab\'s place, zoom, hand tool and find text; a hibernated tab reopens where it was', async ({ page }) => {
   await page.goto('/');
@@ -92,7 +126,7 @@ test('a tab closes by its ×, by Ctrl+W and by middle-click, and the neighbour t
   await page.locator('.reader-host:not(.staging):not(.tab-hidden)').focus();
   await page.keyboard.press('Control+w');
   await expect(titles(page)).toHaveCount(0);
-  await expect(page.locator('#home-tab')).toHaveClass(/is-active/);
+  await expect(railHome(page)).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('#empty')).toBeVisible();
   await expect(page.locator('#position')).toBeDisabled();
   await expect(hosts(page)).toHaveCount(0);
@@ -112,7 +146,7 @@ test('Ctrl+Tab, Ctrl+Alt+arrows, Alt+1…9 and ⌘+1…9 move between tabs', asy
   await page.keyboard.press('Meta+Digit9'); await shown(page, 'c.txt');
   await page.keyboard.press('Alt+Digit7'); await shown(page, 'c.txt'); // No seventh tab: nothing happens.
   // Home takes part: forward from it is the first tab.
-  await page.locator('#home-tab').click();
+  await railHome(page).click();
   await expect(page.locator('#empty')).toBeVisible();
   await page.keyboard.press('Control+Tab'); await shown(page, 'a.txt');
   // Ctrl+T asks for a file in a new tab.
@@ -216,7 +250,6 @@ test('too many tabs scroll the strip, and the ⌄ at its end lists them all', as
   // The toolbar's empty space still drags the window; the tabs and the buttons do not.
   expect(await page.locator('#tab-strip').getAttribute('data-tauri-drag-region')).not.toBeNull();
   expect(await tab(page, names[0]).getAttribute('data-tauri-drag-region')).toBeNull();
-  await expect(page.locator('#tab-add')).toBeVisible();
 });
 
 test('the tabs, their order and the active one come back after a reload; only the active one opens, the rest when selected', async ({ page }) => {
@@ -237,10 +270,10 @@ test('the tabs, their order and the active one come back after a reload; only th
   await expect(page.locator('#position')).toContainText('77');
   await expect(hosts(page)).toHaveCount(2);
   // Home showing is remembered as well.
-  await page.locator('#home-tab').click();
+  await railHome(page).click();
   await page.waitForTimeout(100);
   await page.reload();
-  await expect(page.locator('#home-tab')).toHaveClass(/is-active/);
+  await expect(railHome(page)).toHaveAttribute('aria-current', 'page');
   await expect(titles(page)).toHaveCount(3);
   await expect(hosts(page)).toHaveCount(0);
 });

@@ -1,6 +1,7 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { chapterBook } from './epub-book';
 import { pagedPdf } from './paged-pdf';
+import { expectFormats, railHome } from './toolbar-tabs';
 
 /** Split view, second half: the right-click menus (tabs, the library tree, Home), folding when the reading area is too narrow for two panes, and the split coming back after a restart. */
 
@@ -31,7 +32,7 @@ async function openThree(page: Page) {
   const epub = { name: 'pride.epub', mimeType: 'application/epub+zip', buffer: await chapterBook({ chapters: 4, paragraphs: 30 }) };
   for (const [file, format] of [[pdf, 'PDF'], [epub, 'EPUB'], [markdown, 'MD']] as const) {
     await page.locator('#file-input').setInputFiles(file);
-    await expect(page.locator('#tab-list .tab.is-active .tab-format')).toHaveText(format);
+    await expect(page.locator('#tab-list .tab.is-active')).toHaveAttribute('data-format', format);
   }
   await page.locator('#tab-list .tab[data-path]').nth(0).click();
   await expect(page.locator('#position')).toContainText('Page 1 of 5');
@@ -52,7 +53,7 @@ for (const size of [{ width: 1440, height: 900 }, { width: 1080, height: 760 }])
     test('right-click a tab ▸ Split right gives what the palette\'s Split right gives', async ({ page }) => {
       await openThree(page);
       await setLibrary(page, false);
-      await barTabs(page).filter({ has: page.locator('.tab-format', { hasText: 'EPUB' }) }).click({ button: 'right' });
+      await page.locator('#tab-list .tab[data-format="EPUB"]').click({ button: 'right' });
       await expect(page.getByRole('menuitem')).toHaveText(['Split right', 'Split down', 'Close']);
       await menuItem(page, 'Split right').click();
       await expect(row(page, 'b').locator('.tab-format')).toHaveText(['EPUB']);
@@ -67,7 +68,7 @@ for (const size of [{ width: 1440, height: 900 }, { width: 1080, height: 760 }])
     test('right-clicking a tab that is not the one showing splits that tab off, and Close closes it', async ({ page }) => {
       await openThree(page);
       await setLibrary(page, false);
-      await barTabs(page).filter({ has: page.locator('.tab-format', { hasText: 'MD' }) }).click({ button: 'right' });
+      await page.locator('#tab-list .tab[data-format="MD"]').click({ button: 'right' });
       await menuItem(page, 'Split right').click();
       await expect(row(page, 'b').locator('.tab-format')).toHaveText(['MD']);
       await expect(row(page, 'a').locator('.tab-format')).toHaveText(['PDF', 'EPUB']);
@@ -83,7 +84,7 @@ for (const size of [{ width: 1440, height: 900 }, { width: 1080, height: 760 }])
       await row(page, 'a').first().click({ button: 'right' });
       await menuItem(page, 'Close the split').click();
       await expect(page.locator('.pane-strip:visible')).toHaveCount(0);
-      await expect(barTabs(page).locator('.tab-format')).toHaveText(['EPUB', 'PDF']);
+      await expectFormats(barTabs(page), ['EPUB', 'PDF']);
     });
 
     test('Split right is disabled in a tab\'s menu with one document, and says why', async ({ page }) => {
@@ -129,11 +130,11 @@ for (const size of [{ width: 1440, height: 900 }, { width: 1080, height: 760 }])
     test('right-click a Home card ▸ Open in split right puts that document on the right, the others on the left', async ({ page }) => {
       await openThree(page);
       await page.locator('#file-input').setInputFiles(extra);
-      await expect(page.locator('#tab-list .tab.is-active .tab-format')).toHaveText('TXT');
+      await expect(page.locator('#tab-list .tab.is-active')).toHaveAttribute('data-format', 'TXT');
       await setLibrary(page, false);
       await barTabs(page).last().hover();
       await barTabs(page).last().locator('.tab-close').click();
-      await page.locator('#home-tab').click();
+      await railHome(page).click();
       const card = page.locator('.home-open', { hasText: 'extra' }).first();
       await card.click({ button: 'right' });
       await expect(page.getByRole('menuitem')).toHaveText(['Open', 'Open in split right', 'Open in split down']);
@@ -173,7 +174,7 @@ test.describe('1440 × 900', () => {
   test('right-click a library tree row ▸ Open in split right puts that document in the right pane', async ({ page }) => {
     await openThree(page);
     await page.locator('#file-input').setInputFiles(extra);
-    await expect(page.locator('#tab-list .tab.is-active .tab-format')).toHaveText('TXT');
+    await expect(page.locator('#tab-list .tab.is-active')).toHaveAttribute('data-format', 'TXT');
     await barTabs(page).last().hover();
     await barTabs(page).last().locator('.tab-close').click();
     await setLibrary(page, true);
@@ -396,7 +397,7 @@ test.describe('the split after a restart', () => {
     await expect(page.locator('#position')).toContainText('%');
     // The split can still be closed after a restart.
     await run(page, 'Close the split');
-    await expect(barTabs(page).locator('.tab-format')).toHaveText(['PDF', 'MD', 'EPUB']);
+    await expectFormats(barTabs(page), ['PDF', 'MD', 'EPUB']);
   });
 
   test('a restored split keeps the right pane active, and the Library tab stays in the top bar', async ({ page }) => {
@@ -433,7 +434,7 @@ test.describe('the split after a restart', () => {
   test('a document opened while the split is still being restored stays shown, with Home not put back over it', async ({ page }) => {
     await openSplit(page);
     await setLibrary(page, false);
-    await page.locator('#home-tab').click();
+    await railHome(page).click();
     await expect(page.locator('#empty')).toBeVisible();
     await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('hold-my-brief-tabs')!).active)).toBeNull();
     await page.reload();

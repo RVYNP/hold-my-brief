@@ -2,6 +2,7 @@ import { test, expect, type Locator, type Page } from '@playwright/test';
 import { chapterBook } from './epub-book';
 import { pagedPdf } from './paged-pdf';
 import { lowestRowContrast } from './pane-row-contrast';
+import { railHome } from './toolbar-tabs';
 
 /** Which pane of a split is the active one: a 2 px line along its top edge, the other panes dimmed (hillclimb 2C). */
 
@@ -23,7 +24,7 @@ async function splitPdfEpub(page: Page) {
   const epub = { name: 'pride.epub', mimeType: 'application/epub+zip', buffer: await chapterBook({ chapters: 4, paragraphs: 30 }) };
   for (const [file, format] of [[pdf, 'PDF'], [epub, 'EPUB']] as const) {
     await page.locator('#file-input').setInputFiles(file);
-    await expect(page.locator('#tab-list .tab.is-active .tab-format')).toHaveText(format);
+    await expect(page.locator('#tab-list .tab.is-active')).toHaveAttribute('data-format', format);
   }
   await page.keyboard.press('Control+k'); await page.locator('#palette-input').fill('Split right'); await page.keyboard.press('Enter');
   await expect(page.locator('.pane-strip[data-pane=b] .tab')).toHaveCount(1);
@@ -70,7 +71,7 @@ test('the marks fade over 120 ms, and show nothing while Home covers the split o
   expect(await page.locator('.pane-strip[data-pane=b] .tab-title').evaluate(title => getComputedStyle(title).transitionDuration)).toBe('0.12s, 0.12s, 0.12s, 0.12s');
   expect(await dim(page, 'b').evaluate(shade => getComputedStyle(shade).transitionDuration)).toContain('0.12s');
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.locator('#home-tab').click();
+  await railHome(page).click();
   await expect(page.locator('#workspace')).toHaveClass(/is-covered/);
   for (const side of ['a', 'b'] as const) { await expect(edge(page, side)).toBeHidden(); await expect(dim(page, side)).toBeHidden(); }
   await expect.poll(() => quiet(page, 'b')).toBe(false);

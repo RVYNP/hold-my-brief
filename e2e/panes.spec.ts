@@ -1,6 +1,7 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { chapterBook } from './epub-book';
 import { pagedPdf } from './paged-pdf';
+import { expectFormats } from './toolbar-tabs';
 
 /** Tiling: any pane splits right or down, up to four panes, with keys, a Move to pane submenu, Close pane, a divider for every split, a reader budget shared by the window, and a restart that brings the tree back. */
 
@@ -36,7 +37,7 @@ async function openFour(page: Page) {
   const epub = { name: 'pride.epub', mimeType: 'application/epub+zip', buffer: await chapterBook({ chapters: 4, paragraphs: 30 }) };
   for (const [file, format] of [[pdf, 'PDF'], [second, 'PDF'], [epub, 'EPUB'], [markdown, 'MD']] as const) {
     await page.locator('#file-input').setInputFiles(file);
-    await expect(page.locator('#tab-list .tab.is-active .tab-format')).toHaveText(format);
+    await expect(page.locator('#tab-list .tab.is-active')).toHaveAttribute('data-format', format);
     if (file.name === 'second.pdf') { await expect(page.locator('#position')).toContainText('Page 1 of 8'); await goTo(page, '4'); await expect(page.locator('#position')).toContainText('Page 4 of 8'); await page.keyboard.press('Control+='); }
   }
   if (await page.locator('#reader-layout.library-open').count()) await page.keyboard.press('Control+b');
@@ -46,7 +47,7 @@ async function openFour(page: Page) {
 /** The EPUB split off to the right, the Markdown file moved over to it and split down: three panes in the 1B layout (the PDFs on the left, the EPUB above the Markdown file), the Markdown pane active. */
 async function openThreePanes(page: Page) {
   await openFour(page);
-  await page.locator('#tab-list .tab', { has: page.locator('.tab-format', { hasText: 'EPUB' }) }).click({ button: 'right' });
+  await page.locator('#tab-list .tab[data-format="EPUB"]').click({ button: 'right' });
   await menuItem(page, 'Split right').click();
   await expect(row(page, 'b').locator('.tab-format')).toHaveText(['EPUB']);
   await row(page, 'a').filter({ has: page.locator('.tab-format', { hasText: 'MD' }) }).click({ button: 'right' });
@@ -269,8 +270,8 @@ test('Close the split merges every pane\'s tabs into one row in reading order, t
   await menuItem(page, 'Close the split').click();
   await expect(page.locator('.pane-strip:visible')).toHaveCount(0);
   await expect(workspace(page)).not.toHaveClass(/is-split/);
-  await expect(page.locator('#tab-list .tab .tab-format')).toHaveText(['PDF', 'PDF', 'EPUB', 'MD']);
-  await expect(page.locator('#tab-list .tab.is-active .tab-format')).toHaveText('MD');
+  await expectFormats(page.locator('#tab-list .tab'), ['PDF', 'PDF', 'EPUB', 'MD']);
+  await expect(page.locator('#tab-list .tab.is-active')).toHaveAttribute('data-format', 'MD');
   await expect(page.locator('.pane-divider:visible')).toHaveCount(0);
 });
 
@@ -405,6 +406,8 @@ test('live readers: with four panes and eight tabs at most four readers are live
   // doc5 to the right, doc6 to 8 over to it; then doc4 down from the left pane and doc8 down from the right one.
   await page.locator('#tab-list .tab', { hasText: 'doc5.txt' }).click({ button: 'right' });
   await menuItem(page, 'Split right').click();
+  // Pressing in a pane that is not the active one makes it so, and its row scrolls to its shown tab: the pane is made active first, or the right-clicks below land on the neighbour that the scroll moves under the pointer.
+  await pick(page, 'a');
   for (const name of ['doc6.txt', 'doc7.txt', 'doc8.txt']) {
     await tab(page, 'a', name).click({ button: 'right' });
     await menuItem(page, 'Move to the other side').click();

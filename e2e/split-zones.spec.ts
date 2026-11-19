@@ -71,10 +71,10 @@ async function openSplit(page: Page) {
   const epub = { name: 'pride.epub', mimeType: 'application/epub+zip', buffer: await chapterBook({ chapters: 4, paragraphs: 30 }) };
   for (const [file, format] of [[pdf, 'PDF'], [epub, 'EPUB'], [markdown, 'MD'], [text, 'TXT']] as const) {
     await page.locator('#file-input').setInputFiles(file);
-    await expect(page.locator('#tab-list .tab.is-active .tab-format')).toHaveText(format);
+    await expect(page.locator('#tab-list .tab.is-active')).toHaveAttribute('data-format', format);
   }
   await setLibrary(page, false);
-  await page.locator('#tab-list .tab', { has: page.locator('.tab-format', { hasText: 'EPUB' }) }).click({ button: 'right' });
+  await page.locator('#tab-list .tab[data-format="EPUB"]').click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Split right', exact: true }).click();
   await expect(formatsIn(page, 'EPUB')).toHaveText(['EPUB']);
   await expect(formatsIn(page, 'PDF')).toHaveText(['PDF', 'MD', 'TXT']);
@@ -131,11 +131,11 @@ test.describe('1440 × 900', () => {
     await page.goto('/');
     for (const [file, format] of [[pdf, 'PDF'], [markdown, 'MD']] as const) {
       await page.locator('#file-input').setInputFiles(file);
-      await expect(page.locator('#tab-list .tab.is-active .tab-format')).toHaveText(format);
+      await expect(page.locator('#tab-list .tab.is-active')).toHaveAttribute('data-format', format);
     }
     await setLibrary(page, false);
     const reading = await box(workspace(page));
-    const tab = page.locator('#tab-list .tab', { has: page.locator('.tab-format', { hasText: 'MD' }) }), start = await box(tab);
+    const tab = page.locator('#tab-list .tab[data-format="MD"]'), start = await box(tab);
     await pickStraight(page, tab, { x: start.x + start.width / 2, y: reading.y + reading.height * .92 });
     await expect(tab).toHaveClass(/is-carried/);
     await expect(preview(page)).toBeVisible();
@@ -294,11 +294,11 @@ test.describe('1440 × 900', () => {
     await page.goto('/');
     for (const [file, format] of [[pdf, 'PDF'], [markdown, 'MD']] as const) {
       await page.locator('#file-input').setInputFiles(file);
-      await expect(page.locator('#tab-list .tab.is-active .tab-format')).toHaveText(format);
+      await expect(page.locator('#tab-list .tab.is-active')).toHaveAttribute('data-format', format);
     }
     await setLibrary(page, false);
     const reading = await box(workspace(page));
-    const tab = page.locator('#tab-list .tab', { has: page.locator('.tab-format', { hasText: 'MD' }) });
+    const tab = page.locator('#tab-list .tab[data-format="MD"]');
     await pick(page, tab, point(reading, .5));
     await expect(preview(page)).toBeHidden();
     await page.mouse.up();
@@ -314,7 +314,7 @@ test.describe('1440 × 900', () => {
     // Back to one pane, then the top quarter: the dragged tab is above.
     await page.keyboard.press('Control+k'); await page.locator('#palette-input').fill('Close the split'); await page.keyboard.press('Enter');
     await expect(workspace(page)).not.toHaveClass(/is-split/);
-    await drag(page, page.locator('#tab-list .tab', { has: page.locator('.tab-format', { hasText: 'MD' }) }), point(reading, .5, .08));
+    await drag(page, page.locator('#tab-list .tab[data-format="MD"]'), point(reading, .5, .08));
     await expect(workspace(page)).toHaveClass(/is-split/);
     expect((await box(rowOf(page, 'MD'))).y).toBeLessThan((await box(rowOf(page, 'PDF'))).y);
   });

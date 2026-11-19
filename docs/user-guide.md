@@ -17,14 +17,17 @@ Every document opens in its own tab, from every way of opening one: the file dia
 recents, the assistant, a command-line argument or a second instance, and a drop. A document that is already open is not opened
 twice; its tab is shown instead. Closing the last document tab shows **Home**.
 
-In a window at least 720 px wide the toolbar carries a strip of tabs: a **Home** tab (icon only, always first), then one tab per
-document with its format, its title (an EPUB's own title once it is known), and a close ×. The tab you are reading also shows
-where you are ("40 / 146"). **+** after the last tab opens the file dialog into a new tab. When there are more tabs than fit, the strip
-scrolls and a **⌄** at its end lists them all. Drag a tab to reorder; middle-click a tab to close it. Empty strip space still drags the window.
+In a window at least 720 px wide the toolbar carries only the open documents, one wide flat tab each: its title on the left (an EPUB's
+own title once it is known) and, on the right, where you are in small capitals (`P. 40/146`, or `37 %` for a document without page
+numbers; a document you have not read yet shows none), and a close ×. The tab you are reading has a light fill. Hover a tab for its
+full title and path. There is no Home tab and no **+**: **Home** is the first icon of the icon rail (see Document library), and
+**Add files** on the rail, **Ctrl+T** (**⌘T** on macOS), the command palette or a drop opens documents. When there are more tabs than
+fit, the strip scrolls and a **⌄** at its end lists them all, with each one's format and place. Drag a tab to reorder; middle-click a
+tab to close it. Empty strip space still drags the window.
 
 The **Library** tab (see *Library tab* under Document library) is a tab like the others, with the library glyph and the name of what it
 shows: `All documents`, `Favorites`, a collection's name, or a folder as `refs › 03_wwe_mag`. There is at most one: opening the library
-again from anywhere shows it and points it at the new selection instead of opening another. It starts after Home, can be dragged, closed
+again from anywhere shows it and points it at the new selection instead of opening another. It starts at the front of the strip, can be dragged, closed
 with its × or middle-click, and is restored with the other tabs at the next launch, on the same selection.
 
 **Dropping files.** Drop one or several files anywhere on the window and each opens in its own tab, in the order dropped (a file that
@@ -36,6 +39,7 @@ the same way, with a small copy of its cover following the pointer; a plain clic
 
 In a compact window (under 720 px) there is no strip. The title shows the open document's name, how many tabs are open and a ⌄; it
 opens a menu with Home, the Library tab when it is open, every document (with its format and place, and a close ×), and **New tab…**.
+That **Home** row is how a compact window reaches Home, since it has no icon rail.
 
 | Action | Shortcut |
 | --- | --- |
@@ -143,7 +147,7 @@ Folded, the other panes are out of sight, so a drag has nowhere to land on them:
 
 **Closing a pane.** **Close pane** in a tab's menu (and in the palette) closes that pane: its tabs join the pane that takes its room (its sibling in the layout, or the first pane of the sibling's
 group, in reading order), and that pane becomes the active one. Closing or moving a pane's last tab closes the pane the same way. **Close the split** (a tab's menu, the palette) merges every
-pane's tabs into one row, in reading order, after the Library tab. Home and the Library tab belong to the window: they stay in the toolbar and cover all the panes, and a pane's tab brings the panes back as they were.
+pane's tabs into one row, in reading order, after the Library tab. Home (the rail's first icon) and the Library tab belong to the window: they cover all the panes, and a pane's tab brings the panes back as they were.
 
 **Dividers.** Every split has its own **divider**. Drag it to resize the two groups of panes it separates; it snaps to 40, 50 and 60 % when you let go near them, never takes a pane under 360 px
 wide or 240 px high, goes back to 50 % on a double-click and moves 2 % with the arrow keys along its direction when it has focus (Home and End go to the limits).
@@ -536,9 +540,9 @@ can show it; positions saved before this version have none until you read the do
 
 ## Document library
 
-In windows 720 pixels wide and up, a slim **icon rail** (no box, only a soft wash from the window's edge) stands on the side the library is kept on, and the
-library **panel** opens beside it. Its icons line up under the toolbar's first control (Home), or under **⋯** with the library on the right, and an open document is fitted beside the rail, never under its icons. The icon rail has, from the top: **Library**, **Search** and **Add files**; at its foot,
-**Settings**. That is all of it: there is one way to the library. **Library** (**Ctrl+B**) opens the panel or collapses it (the
+In windows 720 pixels wide and up, a slim **icon rail** (no box, only a soft wash from the window's edge and a 1 px hairline along its inner edge) stands on the side the library is kept on, and the
+library **panel** opens beside it. Its icons stand at the top of the reading area, and an open document is fitted beside the rail, never under its icons. The icon rail has five bare icons in one group, from the top: **Home**, **Add files**, **Library**, **Search** and
+**Settings**. That is all of it: there is one way to the library. **Home** shows Home and is marked as the current page while Home is showing; it has no keyboard shortcut. **Library** (**Ctrl+B**) opens the panel or collapses it (the
 icon rail stays) and is filled with the accent tone while the panel is open. **Search** (**Ctrl+Shift+F**) opens the panel
 if it is closed and puts the cursor in its filter field. **Add files** opens a menu with **Add files…** and **Sources…**
 (indexing folders), even when the panel is closed. **Settings** opens Appearance. Hover an icon for its name and

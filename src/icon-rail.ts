@@ -1,11 +1,14 @@
-// The window's icon rail: a 48 px strip with the library's door (Library, Search), Add files, and, at its foot, Settings. It is the
-// library's only door at 720 px and up; the panel it opens (library.ts) docks beside it. It overlays the page's edge while the panel is
-// closed, so it never changes the page's box.
+// The window's icon rail: a 48 px strip of five bare icons in one group, top to bottom Home, Add files, Library, Search and Settings, with a
+// hairline along its inner edge. Home is where the toolbar's Home tab used to be (a compact window reaches Home through the open-tabs menu);
+// Library and Search are the library's only door at 720 px and up, and the panel they open (library.ts) docks beside the rail. The rail
+// overlays the page's edge while the panel is closed, so it never changes the page's box.
 
 /** What an icon asks of the library: Library toggles the panel, Search opens it and focuses its filter field. */
 export type RailView = 'library' | 'search';
 
 export type IconRailHost = {
+  /** Home was pressed: it shows Home, as the Home tab did. */
+  home: () => void;
   view: (view: RailView) => void;
   /** Add files was pressed; `anchor` is the button, for the menu it opens. */
   add: (anchor: HTMLElement) => void;
@@ -17,6 +20,7 @@ export type IconRailHost = {
 
 const icon = (paths: string) => `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
 export const railIcons = {
+  home: icon('<path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h13V10"/><path d="M10 19.5v-5h4v5"/>'),
   library: icon('<path d="M20 10a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-2.5a1 1 0 0 1-.8-.4l-.9-1.2A1 1 0 0 0 15 3h-2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M20 21a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1h-2.9a1 1 0 0 1-.88-.55l-.42-.85a1 1 0 0 0-.92-.6H13a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1Z"/><path d="M3 5a2 2 0 0 0 2 2h3"/><path d="M3 3v13a2 2 0 0 0 2 2h3"/>'),
   search: icon('<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>'),
   add: icon('<path d="M5 12h14"/><path d="M12 5v14"/>'),
@@ -24,10 +28,12 @@ export const railIcons = {
 };
 
 type Entry = { id: string; label: string; shortcut?: string; icon: string; view?: RailView };
-const top: readonly Entry[] = [
+const entries: readonly Entry[] = [
+  { id: 'home', label: 'Home', icon: railIcons.home },
+  { id: 'add', label: 'Add files', icon: railIcons.add },
   { id: 'library', label: 'Library', shortcut: 'Ctrl+B', icon: railIcons.library, view: 'library' },
   { id: 'search', label: 'Search', shortcut: 'Ctrl+Shift+F', icon: railIcons.search, view: 'search' },
-  { id: 'add', label: 'Add files', icon: railIcons.add },
+  { id: 'settings', label: 'Settings', icon: railIcons.settings },
 ];
 
 export function createIconRail(root: HTMLElement, host: IconRailHost) {
@@ -42,18 +48,14 @@ export function createIconRail(root: HTMLElement, host: IconRailHost) {
   };
   const buttons = new Map<string, HTMLButtonElement>();
   const group = document.createElement('div'); group.className = 'icon-rail-group';
-  for (const entry of top) {
+  for (const entry of entries) {
     const node = button(entry); buttons.set(entry.id, node); group.append(node);
     const view = entry.view;
     if (view) node.setAttribute('aria-controls', 'library-root');
-    node.onclick = () => { if (view) host.view(view); else host.add(node); };
+    node.onclick = () => { if (view) host.view(view); else if (entry.id === 'home') host.home(); else if (entry.id === 'add') host.add(node); else host.settings(); };
   }
-  // Library says whether the panel is open; Search is an action, not a state.
+  // Library says whether the panel is open; Search is an action, not a state. Home carries `aria-current` while Home is showing.
   buttons.get('library')!.setAttribute('aria-pressed', 'false');
-  const foot = document.createElement('div'); foot.className = 'icon-rail-group icon-rail-foot';
-  const settings = button({ id: 'settings', label: 'Settings', icon: railIcons.settings });
-  settings.onclick = () => host.settings();
-  foot.append(settings); buttons.set('settings', settings);
   // The rail is one tab stop: arrows (and Home/End) move between its buttons, as a toolbar's do.
   root.addEventListener('keydown', event => {
     if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
@@ -84,12 +86,14 @@ export function createIconRail(root: HTMLElement, host: IconRailHost) {
     document.addEventListener('pointerdown', dismiss, true); window.addEventListener('blur', away); window.addEventListener('resize', away);
     item.focus();
   });
-  root.replaceChildren(group, foot);
+  root.replaceChildren(group);
   return {
     /** Which side the library is kept on: the tooltips are drawn on the other one. */
     setSide: (side: 'left' | 'right') => { root.dataset.librarySide = side; },
     /** The panel is open or closed. */
     setOpen: (open: boolean) => { buttons.get('library')!.setAttribute('aria-pressed', String(open)); },
+    /** Home is showing (or a document is). */
+    setHome: (showing: boolean) => { const home = buttons.get('home')!; if (showing) home.setAttribute('aria-current', 'page'); else home.removeAttribute('aria-current'); },
     button: (id: string) => buttons.get(id)!,
   };
 }
