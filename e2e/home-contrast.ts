@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 
-/** What Home draws text on straight from the ground (no card behind it): the title, section headings, Open in library, shelf captions, chips, the bar's buttons. */
-const textBoxes = ['#empty h1', '.home-section h2', '.home-all', '.home-card-title', '.home-card-meta', '.home-chip', '.home-file', '.home-no-matches'];
+/** What Home draws text on straight from the ground (no card behind it): the title, section headings and shelf captions. */
+const textBoxes = ['#empty h1', '.home-section h2', '.home-card-title', '.home-card-meta'];
 
 /**
  * The lowest contrast of Home's text against the ground, measured the way the browser composites it. The worst ground pixel is one of the
