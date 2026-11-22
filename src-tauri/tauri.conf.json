@@ -38,7 +38,7 @@
       "description": "Open this document in Hold My Brief",
       "role": "Viewer"
     }, {
-      "ext": ["png", "jpg", "jpeg", "webp", "gif", "avif", "bmp"],
+      "ext": ["png", "jpg", "jpeg", "webp", "gif", "avif", "bmp", "svg"],
       "name": "Hold My Brief image",
       "description": "Open this image in Hold My Brief",
       "role": "Viewer"

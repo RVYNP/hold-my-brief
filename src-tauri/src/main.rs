@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod assistant;
+mod control;
 mod state;
 mod windows;
 mod catalog;
@@ -65,6 +66,7 @@ fn document_format(path: &Path) -> Result<&'static str, String> {
         "gif" => Ok("gif"),
         "avif" => Ok("avif"),
         "bmp" => Ok("bmp"),
+        "svg" => Ok("svg"),
         _ => Err("Unsupported file type. Choose a PDF, EPUB, Markdown, text, or supported image file.".into()),
     }
 }
@@ -99,7 +101,7 @@ async fn open_file(app: AppHandle, path: Option<String>) -> Result<Option<Opened
             let store = shared.lock().map_err(|_| "Reading state is unavailable")?;
             store.authorized_file(&path)?
         } else {
-            let mut dialog = rfd::FileDialog::new().set_title("Open a document or image").add_filter("Documents and images", &["pdf", "epub", "md", "markdown", "txt", "png", "jpg", "jpeg", "webp", "gif", "avif", "bmp"]);
+            let mut dialog = rfd::FileDialog::new().set_title("Open a document or image").add_filter("Documents and images", &["pdf", "epub", "md", "markdown", "txt", "png", "jpg", "jpeg", "webp", "gif", "avif", "bmp", "svg"]);
             if let Some(window) = app.get_webview_window("main") { dialog = dialog.set_parent(&window); }
             let Some(chosen) = dialog.pick_file() else { return Ok(None); };
             let canonical = crate::catalog::canonical_file(&chosen)?;
@@ -221,7 +223,7 @@ async fn locate_library_document(path: String, app: AppHandle) -> Result<Library
     tauri::async_runtime::spawn_blocking(move || {
         let mut dialog = rfd::FileDialog::new()
             .set_title("Locate the original file")
-            .add_filter("Original file", &["pdf", "epub", "md", "markdown", "txt", "png", "jpg", "jpeg", "webp", "gif", "avif", "bmp"]);
+            .add_filter("Original file", &["pdf", "epub", "md", "markdown", "txt", "png", "jpg", "jpeg", "webp", "gif", "avif", "bmp", "svg"]);
         if let Some(window) = app.get_webview_window("main") {
             dialog = dialog.set_parent(&window);
         }
@@ -322,7 +324,7 @@ async fn add_documents(app: AppHandle, collection_id: Option<String>) -> Result<
             .saved.library.validate_local_collection(collection_id.as_deref())?;
         let mut dialog = rfd::FileDialog::new()
             .set_title("Add documents to library")
-            .add_filter("Documents and images", &["pdf", "epub", "md", "markdown", "txt", "png", "jpg", "jpeg", "webp", "gif", "avif", "bmp"]);
+            .add_filter("Documents and images", &["pdf", "epub", "md", "markdown", "txt", "png", "jpg", "jpeg", "webp", "gif", "avif", "bmp", "svg"]);
         if let Some(window) = app.get_webview_window("main") {
             dialog = dialog.set_parent(&window);
         }
@@ -475,22 +477,26 @@ async fn read_relative_image(
     app: AppHandle,
 ) -> Result<ImageData, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let shared = app.state::<Shared>();
-        let document;
-        let store = shared.lock().map_err(|_| "Reading state is unavailable")?;
-        if !store
-            .opened_aliases
-            .values()
-            .any(|r| r.path == path && r.format == "md")
-        {
-            return Err("Image access requires an open Markdown document.".into());
-        }
-        document = if store.saved.library.documents.iter().any(|d| d.path == path) {
-            store.catalog.as_ref().ok_or("Library database is unavailable")?.resolve(&store.saved.library, &path)?
+        let document = if path.starts_with(control::BRIEF_PREFIX) {
+            let bridge = app.state::<Arc<control::ControlBridge>>();
+            control::brief_image_base(&bridge, &path)
+                .ok_or("This brief has no local image folder configured.")?
         } else {
-            store.authorized_file(&path).map_err(|_| "Document is not authorized.".to_string())?
+            let shared = app.state::<Shared>();
+            let store = shared.lock().map_err(|_| "Reading state is unavailable")?;
+            if !store
+                .opened_aliases
+                .values()
+                .any(|r| r.path == path && r.format == "md")
+            {
+                return Err("Image access requires an open Markdown document.".into());
+            }
+            if store.saved.library.documents.iter().any(|d| d.path == path) {
+                store.catalog.as_ref().ok_or("Library database is unavailable")?.resolve(&store.saved.library, &path)?
+            } else {
+                store.authorized_file(&path).map_err(|_| "Document is not authorized.".to_string())?
+            }
         };
-        drop(store);
         let candidate = image_path(&document, &relative)?;
         let mime = match candidate
             .extension()
@@ -505,9 +511,10 @@ async fn read_relative_image(
             "webp" => "image/webp",
             "avif" => "image/avif",
             "bmp" => "image/bmp",
+            "svg" => "image/svg+xml",
             _ => {
                 return Err(
-                    "Unsupported image type. Use PNG, JPEG, GIF, WebP, AVIF, or BMP.".into(),
+                    "Unsupported image type. Use PNG, JPEG, GIF, WebP, AVIF, BMP, or SVG.".into(),
                 )
             }
         };
@@ -684,6 +691,13 @@ fn main() {
             assistant::assistant_forget_key,
             assistant::assistant_models,
             assistant::assistant_send,
+            control::control_ready,
+            control::control_reply,
+            control::control_status,
+            control::set_control_enabled,
+            control::read_brief,
+            control::save_brief_as,
+            control::unwatch_file,
             windows::set_pin,
             windows::set_lock,
             windows::set_preset,
@@ -691,8 +705,17 @@ fn main() {
         ])
         .setup(|app| {
             let directory = app.path().app_local_data_dir()?;
-            let shared = Arc::new(Mutex::new(Store::load(directory.join("state.json"))));
+            let store = Store::load(directory.join("state.json"));
+            let control_enabled = store.saved.control_enabled;
+            let shared = Arc::new(Mutex::new(store));
             app.manage(shared.clone());
+            let bridge = control::ControlBridge::new(app.handle(), &directory);
+            app.manage(bridge.clone());
+            if control_enabled {
+                if let Err(error) = bridge.start(app.handle().clone()) {
+                    eprintln!("Hold My Brief control bridge could not start: {error}");
+                }
+            }
             // Files the OS named before this point.
             let early = std::mem::take(&mut *app.state::<EarlyOpens>().0.lock().map_err(|_| "Early open queue is unavailable")?);
             if !early.is_empty() {
@@ -764,6 +787,10 @@ fn main() {
                 route_open(app, paths_from_urls(urls));
             }
             if matches!(event, tauri::RunEvent::Exit) {
+                if let Some(bridge) = app.try_state::<Arc<control::ControlBridge>>() {
+                    bridge.stop();
+                    bridge.watcher.stop();
+                }
                 if let Some(shared) = app.try_state::<Shared>() {
                     if let Ok(mut store) = shared.lock() {
                         if store.dirty {

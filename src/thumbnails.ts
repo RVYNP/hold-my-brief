@@ -39,7 +39,7 @@ const concurrency = { pdf: 4, image: 3 } as const;
 /** Formats that can have a thumbnail: every raster image, PDF (its first page) and EPUB (its cover, when it has one). */
 export function canThumbnail(format: string): boolean {
   const lower = format.toLowerCase();
-  return lower === 'pdf' || lower === 'epub' || Object.hasOwn(imageFormats, lower);
+  return lower === 'pdf' || lower === 'epub' || (Object.hasOwn(imageFormats, lower) && lower !== 'svg');
 }
 
 /** Title and authors of an EPUB, and the state of the file they were read from. */

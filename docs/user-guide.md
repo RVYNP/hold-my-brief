@@ -184,12 +184,15 @@ reader and everything returns.
 ## Settings
 
 **Settings** is a sheet at the bottom of the window: the icon rail's last icon opens it, and a compact window (no icon rail) has a
-Settings button at the toolbar's right end. It has four sections, top to bottom, and scrolls inside itself, so it fits a 420 × 620
+Settings button at the toolbar's right end. It has five sections, top to bottom, and scrolls inside itself, so it fits a 420 × 620
 window. Escape closes it.
 
 - **Window** (desktop app only): **Keep on top** (Ctrl+Shift+T) keeps the reader above ordinary windows, and **Lock size**
   (Ctrl+Shift+L) captures its outer dimensions while allowing movement. Each is a switch that stays in step with its shortcut
   and with the palette while the sheet is open. **Compact** (420 × 620) and **Reading** (760 × 900) resize the window.
+- **Agent control** (desktop app only): **Local CLI & agents** lets the `hmb` command and AI agents on this computer show
+  documents and live briefs in the reader (see [Agent control](agent-control.md)). It is on by default; turning it off closes the
+  private socket at once.
 - **Appearance:** colour and text, below.
 - **Library:** the side the library docks on, **Left** or **Right** (see Document library).
 - **More:** **All commands…** (Ctrl+K), **AI assistant…** (desktop app), **Keyboard shortcuts**, **Clear recent files** and
