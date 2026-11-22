@@ -4,6 +4,7 @@ import { copyBlock, flash, iconMarkup, icons, openCodeSheet, type Sheet } from '
 import { highlightCode } from '../code-highlight';
 import { markLines } from '../epub-code';
 import { excerpt, findMatches, searchUnits, type DocumentSearch, type SearchHit, type SearchOptions, type UnitText } from '../search';
+import { parseCalloutMarker, renderChartBlock, renderFlowBlock, renderSvgBlock } from '../visual-blocks';
 
 /** What ends a run of inline text: a match never crosses one of these. */
 const blockSelector = 'p, h1, h2, h3, h4, h5, h6, li, td, th, pre, blockquote, figure, div, span[data-source-line]';
@@ -85,6 +86,28 @@ export function renderMarkdown(source: string): { html: string; outline: Outline
           token.children.unshift(checkbox);
         }
       }
+      if (token.type === 'blockquote_open') {
+        const nextParagraph = state.tokens[index + 1];
+        const nextInline = state.tokens[index + 2];
+        const firstChild = nextParagraph?.type === 'paragraph_open' && nextInline?.type === 'inline' ? nextInline.children?.[0] : undefined;
+        if (firstChild?.type === 'text') {
+          const callout = parseCalloutMarker(firstChild.content);
+          if (callout) {
+            token.attrSet('class', `hmb-callout hmb-callout-${callout.kind}`);
+            token.attrSet('data-callout', callout.kind);
+            firstChild.content = callout.rest;
+            const head = new state.Token('html_inline', '', 0);
+            head.content = `<strong class="hmb-callout-title">${escape(callout.title)}</strong>`;
+            nextInline.children!.unshift(head);
+            // Strip a leading softbreak immediately after the [!KIND] line so the body starts cleanly.
+            const after = nextInline.children![1];
+            if (after?.type === 'text' && !after.content) {
+              nextInline.children!.splice(1, 1);
+              if (nextInline.children![1]?.type === 'softbreak') nextInline.children!.splice(1, 1);
+            }
+          }
+        }
+      }
       if (token.map && ['paragraph_open', 'heading_open', 'table_open'].includes(token.type)) {
         token.attrSet('data-source-line', String(token.map[0] + 1));
         token.attrSet('data-source-end', String(token.map[1] + 1));
@@ -97,6 +120,16 @@ export function renderMarkdown(source: string): { html: string; outline: Outline
   // The header sits outside the `pre`, so the block's text, its source-line marker and every offset into it are the code alone.
   md.renderer.rules.fence = (tokens, index) => {
     const language = tokens[index].info.trim().split(/\s+/)[0].toLowerCase();
+    if (language === 'chart') {
+      const rendered = renderChartBlock(tokens[index].content);
+      if (rendered) return `<div${marker(tokens[index])}>${rendered}</div>`;
+    } else if (language === 'flow') {
+      const rendered = renderFlowBlock(tokens[index].content);
+      if (rendered) return `<div${marker(tokens[index])}>${rendered}</div>`;
+    } else if (language === 'svg') {
+      const rendered = renderSvgBlock(tokens[index].content);
+      if (rendered) return `<div${marker(tokens[index])}>${rendered}</div>`;
+    }
     const named = language ? `, ${escape(language)}` : '';
     const action = (name: 'copy' | 'open', label: string, paths: string) => `<button type="button" tabindex="0" class="code-action" data-code-action="${name}" aria-label="${label} code${named}" title="${label} code${named}">${iconMarkup(paths)}<span>${label}</span></button>`;
     return `<figure class="code-block"${language ? ` data-language="${escape(language)}"` : ''}><div class="code-head">${language ? `<span class="code-lang">${escape(language)}</span>` : ''}<span class="code-actions">${action('copy', 'Copy', icons.copy)}${action('open', 'Open', icons.open)}</span></div>`
@@ -161,6 +194,25 @@ const styles = `
 /* The current search result: a soft highlight that stays legible in light and dark themes. */
 .reader-text-content mark.search-hit{background:var(--search-hit, #ffe08a);color:inherit;border-radius:2px;padding:0 .5px}
 .reader-text-content pre mark.search-hit{color:var(--ink)}
+/* Safe declarative visuals (charts, flows, inline SVG) and GitHub-style callouts. */
+.reader-text-content .hmb-visual{margin:0 0 1.15em;padding:12px 14px;border:1px solid var(--hairline);border-radius:10px;background:var(--card)}
+.reader-text-content .hmb-visual-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin:0 0 10px;font-family:var(--font-ui)}
+.reader-text-content .hmb-visual-head strong{font-size:13px;font-weight:600;color:var(--fg)}
+.reader-text-content .hmb-visual-head span{font-size:12px;color:var(--muted)}
+.reader-text-content .hmb-visual-body{overflow-x:auto}
+.reader-text-content .hmb-visual-body svg{display:block;max-width:100%;height:auto;margin-inline:auto}
+.reader-text-content .hmb-metrics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.reader-text-content .hmb-metric-card{display:flex;flex-direction:column;gap:3px;padding:10px 12px;border:1px solid var(--hairline);border-radius:8px;background:var(--bg);font-family:var(--font-ui)}
+.reader-text-content .hmb-metric-label{font-size:11px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.reader-text-content .hmb-metric-value{font-size:20px;line-height:1.2;font-weight:600;color:var(--fg);font-variant-numeric:tabular-nums}
+.reader-text-content .hmb-metric-note{font-size:11px;color:var(--muted)}
+.reader-text-content blockquote.hmb-callout{margin:0 0 1em;padding:.65em .95em;border-left:3px solid var(--accent-ink);border-radius:0 8px 8px 0;background:color-mix(in srgb,var(--accent-soft) 42%,transparent)}
+.reader-text-content blockquote.hmb-callout-warning,.reader-text-content blockquote.hmb-callout-caution{border-left-color:var(--code-keyword);background:color-mix(in srgb,var(--code-keyword) 10%,transparent)}
+.reader-text-content blockquote.hmb-callout-tip{border-left-color:var(--code-string);background:color-mix(in srgb,var(--code-string) 10%,transparent)}
+.reader-text-content .hmb-callout-title{display:block;margin-bottom:.25em;font:600 11.5px/1.2 var(--font-ui);letter-spacing:.04em;text-transform:uppercase;color:var(--accent-ink)}
+.reader-text-content blockquote.hmb-callout-warning .hmb-callout-title,.reader-text-content blockquote.hmb-callout-caution .hmb-callout-title{color:var(--code-keyword)}
+.reader-text-content blockquote.hmb-callout-tip .hmb-callout-title{color:var(--code-string)}
+.reader-text-content blockquote.hmb-callout>:last-child{margin-bottom:0}
 `;
 
 export class TextAdapter implements ReaderAdapter {
@@ -283,7 +335,7 @@ export class TextAdapter implements ReaderAdapter {
         const placeholder = placeholders[next++];
         try {
           const url = await this.context.resolveImage!(placeholder.dataset.relativeImage!);
-          if (!/^(blob:|data:image\/(?:png|jpeg|gif|webp|avif|bmp);)/i.test(url)) throw new Error('Unsafe image resource');
+          if (!/^(blob:|data:image\/(?:png|jpeg|gif|webp|avif|bmp|svg\+xml);)/i.test(url)) throw new Error('Unsafe image resource');
           if (this.disposed) { if (url.startsWith('blob:')) URL.revokeObjectURL(url); return; }
           if (url.startsWith('blob:')) this.imageUrls.push(url);
           const img = document.createElement('img');

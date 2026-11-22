@@ -349,6 +349,10 @@ impl TabSession {
     }
 }
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SavedState {
@@ -359,6 +363,8 @@ pub struct SavedState {
     pub tabs: TabSession,
     pub documents: HashMap<String, ReadingState>,
     pub path_ids: HashMap<String, String>,
+    /// Whether the local per-user agent control socket (`hmb` CLI) is enabled. Defaults to true.
+    pub control_enabled: bool,
     #[serde(skip_serializing)]
     pub library: Library,
 }
@@ -372,6 +378,7 @@ impl Default for SavedState {
             tabs: TabSession::default(),
             documents: HashMap::new(),
             path_ids: HashMap::new(),
+            control_enabled: true,
             library: Library::default(),
         }
     }
@@ -393,6 +400,8 @@ impl<'de> Deserialize<'de> for SavedState {
             tabs: TabSession,
             documents: HashMap<String, ReadingState>,
             path_ids: HashMap<String, String>,
+            #[serde(default = "default_true")]
+            control_enabled: bool,
             #[serde(default, deserialize_with = "present_library")]
             library: Option<Library>,
         }
@@ -413,6 +422,7 @@ impl<'de> Deserialize<'de> for SavedState {
             tabs: input.tabs.sanitized(),
             documents: input.documents,
             path_ids: input.path_ids,
+            control_enabled: input.control_enabled,
             library,
         })
     }

@@ -39,6 +39,7 @@ import { Pane } from './pane';
 import { DEFAULT_PERCENT, MIN_SPLIT_WINDOW, PANE_IDS, boxes, evenRatio, fits, freeId, neighbour, panes as panesOf, receiver, removePane, renamePanes, setRatio, splitAt, splitPane, type Axis, type Direction, type Layout, type Path, type Rect } from './layout';
 import { createBody, createDivider, createRow, paintDivider, paintFold, paneMap, withoutIds, type SideView } from './split-view';
 import { createContextMenu, type MenuEntry } from './context-menu';
+import { BRIEF_PREFIX, briefIdOf, handleControlRequest, isBriefPath, type ControlHost } from './control';
 initAppearance();
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
@@ -58,7 +59,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <dialog id="settings"></dialog>
   <dialog id="shortcuts" aria-labelledby="shortcuts-title" tabindex="-1" autofocus><div class="dialog-head"><h2 id="shortcuts-title">Keyboard shortcuts</h2><button data-close aria-label="Close shortcuts">×</button></div><div id="shortcut-list"></div></dialog>
   <dialog id="delete-data"><h2>Delete saved reading data?</h2><p>This removes saved positions and reading settings. Your documents and recent-file list remain. The current position will be saved again when you navigate.</p><div class="dialog-actions"><button data-close>Cancel</button><button id="confirm-delete" class="danger">Delete reading data</button></div></dialog>
-  <input id="file-input" type="file" accept=".pdf,.epub,.md,.markdown,.txt,.png,.jpg,.jpeg,.webp,.gif,.avif,.bmp" hidden>`;
+  <input id="file-input" type="file" accept=".pdf,.epub,.md,.markdown,.txt,.png,.jpg,.jpeg,.webp,.gif,.avif,.bmp,.svg" hidden>`;
 const windowControls = createWindowControls();
 document.querySelector('.toolbar')!.prepend(windowControls);
 // The window frame is drawn by the reader on both desktop systems. macOS hides its own traffic lights and the reader
@@ -91,6 +92,12 @@ const settingsSheet = createSettingsSheet($<HTMLDialogElement>('settings'), {
   toggle: which => void toggle(which),
   preset: preset => void command(preset).catch(fail),
   setSide: side => library.setSide(side),
+  setControl: enabled => {
+    if (!desktop) return;
+    void native<{ enabled: boolean; running: boolean; transport: string }>('set_control_enabled', { enabled })
+      .then(status => settingsSheet.showControl(status))
+      .catch(fail);
+  },
   more: item => { if (item === 'palette') openPalette(); else void command(item).catch(fail); },
 });
 // A modal dialog holds back the reader's shortcuts; the two window ones still work in the sheet, so its switches follow them.
@@ -141,6 +148,10 @@ const sideUnder = (event: PointerEvent) => event.target === workspace && !worksp
 const carry = { over: (path: string, x: number, y: number) => carryOver(path, x, y), drop: (path: string, x: number, y: number) => carryDrop(path, x, y), clear: () => carryClear() };
 /** What a pane's placeholder for a tab with no page is made from (the first pane's own is the page's element, which leaves the page with it). */
 const stateTemplate = $('tab-state').cloneNode(true) as HTMLElement;
+const persistTab: typeof persist = async (doc, locator, options, progress) => {
+  if (isBriefPath(doc.path) || known(doc.path)?.ephemeral) return;
+  return persist(doc, locator, options, progress);
+};
 function makeSide(id: string): Side {
   const parts = createRow(id), body = createBody(id);
   let state: HTMLElement;
@@ -148,7 +159,7 @@ function makeSide(id: string): Side {
   workspace.append(parts.row, body);
   const tabsRow = createTabStrip({ strip: parts.row, list: parts.list, add: parts.add, overflow: parts.overflow }, { select: path => selectTab(path), close: closeTab, newTab: () => { activateSide(side); openFile(); }, move: (path, to) => { side.tabs.move(path, to); paintTabs(); saveSession(); }, menu: showTabMenu, carry }, platform === 'mac' ? '⌘T' : 'Ctrl T', false);
   parts.fold.onclick = () => showPaneMenu(parts.fold);
-  const side: Side = { pane: new Pane<Tab>({ persist, notify }), tabs: new TabList<Tab>(), shown: undefined, scanNoticeShown: false, view: { id, body, state, ...parts }, strip: tabsRow };
+  const side: Side = { pane: new Pane<Tab>({ persist: persistTab, notify }), tabs: new TabList<Tab>(), shown: undefined, scanNoticeShown: false, view: { id, body, state, ...parts }, strip: tabsRow };
   state.querySelector<HTMLElement>('.primary')!.onclick = () => stateAction(side);
   state.querySelector<HTMLElement>('.tab-state-actions button:not(.primary)')!.onclick = () => { if (side.shown) closeTab(side.shown.path); };
   return side;
@@ -169,6 +180,10 @@ type Tab = {
   problem?: { kind: 'missing' | 'failed'; message: string };
   /** The Library tab (`path` is `LIBRARY_PATH`, `format` `library`) holds no reader: its `name` is the scope's title and `scope` what it shows, in the form library-scope.ts saves. */
   scope?: string;
+  /** True for agent-pushed ephemeral briefs (`hold-my-brief:brief/<id>`) that update in place and stay out of Library/Recents. */
+  brief?: boolean;
+  /** True when the tab should not be recorded in Library, Recents, or saved sessions. */
+  ephemeral?: boolean;
 };
 
 function notify(message: string, retry = false) { $('notice').hidden = false; $('notice').querySelector('span')!.textContent = message; $('retry-save').hidden = !retry; }
@@ -639,10 +654,10 @@ async function adapter(format: string): Promise<ReaderAdapter> {
  * With `replace`, the document takes the place of that showing tab, in the same slot, and the tab it replaces is closed the way closing it would
  * (its place and view are saved first); when that tab is no longer showing by then, the document opens as a new tab at `at`.
  */
-async function load(open: () => Promise<Opened | null>, label = 'document', { target, at, replace }: { target?: Tab; at?: number; replace?: Tab } = {}): Promise<boolean> {
+async function load(open: () => Promise<Opened | null>, label = 'document', { target, at, replace, ephemeral, brief, reload }: { target?: Tab; at?: number; replace?: Tab; ephemeral?: boolean; brief?: boolean; reload?: boolean } = {}): Promise<boolean> {
   const side = focused, pane = side.pane, token = pane.beginLoad(target);
   paintTabState();
-  $('loading').hidden = false; $('loading').querySelector('span')!.textContent = `Opening ${label}…`;
+  if (!reload) { $('loading').hidden = false; $('loading').querySelector('span')!.textContent = `Opening ${label}…`; }
   let candidate: ReaderAdapter | undefined, staging: HTMLElement | undefined, opening = true;
   const urls: string[] = [];
   pane.cancelPending = () => { candidate?.destroy(); staging?.remove(); for (const url of urls) URL.revokeObjectURL(url); };
@@ -650,13 +665,20 @@ async function load(open: () => Promise<Opened | null>, label = 'document', { ta
     await pane.flush(); const doc = await open(); if (!doc || !pane.isCurrent(token)) return false;
     opening = false;
     // A dialog or a CLI request only now says which document it is: if it is already open, that tab is the one to fill or show.
-    const tab = target ?? known(doc.path) ?? { path: doc.path, name: doc.name, format: doc.format, options: { ...defaultOptions }, hand: false, scanNoticeShown: false };
-    if (tab.reader || (holder(tab.path) && holder(tab.path) !== side)) { doc.bytes = new Uint8Array(); selectTab(tab.path); void touch(tab); return true; }
-    if (tab.resume) doc.previousState = { locator: tab.resume.locator, options: tab.resume.options };
-    $('loading').querySelector('span')!.textContent = `Opening ${doc.name}…`;
+    const existing = target ?? known(doc.path);
+    const tab: Tab = existing ?? { path: doc.path, name: doc.name, format: doc.format, options: { ...defaultOptions }, hand: false, scanNoticeShown: false, ...(brief ? { brief: true } : {}), ...(ephemeral || brief ? { ephemeral: true } : {}) };
+    if (brief) { tab.brief = true; tab.ephemeral = true; }
+    else if (ephemeral) tab.ephemeral = true;
+    if (!reload && (tab.reader || (holder(tab.path) && holder(tab.path) !== side))) { doc.bytes = new Uint8Array(); selectTab(tab.path); if (!tab.ephemeral) void touch(tab); return true; }
+    const reloadSide = reload ? holder(tab.path) ?? side : side;
+    const prevLocator = reload && tab.reader ? (() => { try { return tab.reader!.getPosition().locator; } catch { return tab.position?.locator; } })() : undefined;
+    const prevOptions = reload && tab.reader ? { ...tab.options } : undefined;
+    if (prevLocator && prevOptions) doc.previousState = { locator: prevLocator, options: prevOptions };
+    else if (tab.resume) doc.previousState = { locator: tab.resume.locator, options: tab.resume.options };
+    if (!reload) $('loading').querySelector('span')!.textContent = `Opening ${doc.name}…`;
     candidate = await adapter(doc.format); if (!pane.isCurrent(token)) return false;
     stripSpace(candidate); // A page-preview strip's room is there before the document is fitted, so opening never refits it.
-    staging = document.createElement('section'); staging.className = 'reader-host staging'; staging.tabIndex = 0; staging.setAttribute('aria-label', 'Reading surface'); staging.dataset.pane = side.view.id; workspace.insertBefore(staging, sides[0].view.row); if (isSplit()) applyLayout();
+    staging = document.createElement('section'); staging.className = 'reader-host staging'; staging.tabIndex = 0; staging.setAttribute('aria-label', 'Reading surface'); staging.dataset.pane = reloadSide.view.id; workspace.insertBefore(staging, sides[0].view.row); if (isSplit()) applyLayout();
     // Options saved before zoom was a true scale hold a multiplier of the fit. They open fitted and are converted below, once the document is drawn, so the page keeps its size; saving then writes the new form.
     const saved = doc.previousState?.options, legacy = Boolean(saved) && saved!.zoomModel !== ZOOM_MODEL, legacyZoom = Number(saved?.zoom);
     const prefs: ReaderOptions = { ...defaultOptions, ...saved, zoomModel: ZOOM_MODEL, ...(legacy ? { fitted: true, zoom: 1 } : {}) };
@@ -665,7 +687,7 @@ async function load(open: () => Promise<Opened | null>, label = 'document', { ta
       // The tab showing hears its reader fully; a live tab out of sight only keeps the place.
       // The tab may have crossed to the other side since it opened: the side that holds it now is the one that hears its reader.
       onPosition: p => {
-        const owner = holder(tab.path) ?? side;
+        const owner = holder(tab.path) ?? reloadSide;
         if (owner.pane.reader === current) { if (owner === focused) showPosition(p); else { owner.pane.position = p; owner.pane.markDirty(); paintTabs(); refreshGhost(owner); } }
         else if (tab.reader === current) tab.position = p;
       }, onError: fail, openExternal, requestPassword: password, onFrame: doc => { pan.watchFrame(doc); watchFrameZoom(doc); doc.addEventListener('pointerdown', () => { const owner = holder(tab.path); if (owner && isSplit()) { pick(owner); activateSide(owner); } }, true); },
@@ -674,40 +696,48 @@ async function load(open: () => Promise<Opened | null>, label = 'document', { ta
     // A reflowable book opens in the flow the reader last chose; with none saved the adapter picked one from the book, and it is kept from here on.
     const flow = candidate.flow?.();
     if (flow) prefs.flow = flow;
-    if (doc.previousState?.locator) await candidate.restore(doc.previousState.locator);
+    if (doc.previousState?.locator) await candidate.restore(doc.previousState.locator).catch(() => undefined);
     if (legacy && candidate.mode === 'fixed') {
       const converted = migrateLegacyZoom({ fit: prefs.fit, zoom: legacyZoom }, candidate.legacyZoomBase?.(prefs.fit), candidate.zoomLimits?.());
       if (!converted.fitted) { Object.assign(prefs, converted); await candidate.setOptions(prefs); }
     }
     if (!pane.isCurrent(token)) return false;
-    await confirmDocument(doc).catch(error => notify(`Your library could not be saved. Reading is still available. ${error instanceof Error ? error.message : String(error)}`));
+    if (!tab.ephemeral) {
+      await confirmDocument(doc).catch(error => notify(`Your library could not be saved. Reading is still available. ${error instanceof Error ? error.message : String(error)}`));
+    }
     await pane.flush();
     if (!pane.isCurrent(token)) return false;
     doc.bytes = new Uint8Array();
+    if (reload && tab.reader) {
+      tab.reader.destroy(); tab.host?.remove();
+    }
     // A split being restored does not let a document that finishes opening take the focus from the pane the user pressed meanwhile, and nor does a tab reopening in its own pane
     // (a split, a move or a closed pane left it showing a tab that had gone to sleep) while the focus has gone to another pane.
-    const away = target && focused !== side ? focused : undefined;
+    const away = target && focused !== reloadSide ? focused : undefined;
     const held = (restoring?.tabs.includes(target) ? restoring.picked : undefined) ?? away, keep = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : undefined;
-    if (focused !== side) activateSide(side); // The reader asked for another side while this one opened: the document goes where it was asked for.
-    const swapping = replace && !side.tabs.find(tab.path) && side.shown === replace && side.tabs.find(replace.path) === replace ? replace : undefined;
-    Object.assign(tab, { name: doc.name, format: doc.format, doc, reader: candidate, host: staging, options: prefs, position: candidate.getPosition(), hand: false, stripScroll: undefined, find: undefined, scanNoticeShown: false, resume: undefined, problem: undefined });
+    if (focused !== reloadSide) activateSide(reloadSide); // The reader asked for another side while this one opened: the document goes where it was asked for.
+    const swapping = replace && !reloadSide.tabs.find(tab.path) && reloadSide.shown === replace && reloadSide.tabs.find(replace.path) === replace ? replace : undefined;
+    Object.assign(tab, { name: doc.name, format: doc.format, doc, reader: candidate, host: staging, options: prefs, position: candidate.getPosition(), hand: reload ? tab.hand : false, stripScroll: undefined, find: undefined, scanNoticeShown: false, resume: undefined, problem: undefined });
     staging.classList.remove('staging'); staging.classList.add('tab-hidden'); // `enter` shows it
     if (swapping) {
       // The tab being replaced goes the way a closed one does: its place and view are saved, its reader lets go, and it is gone from the strip.
       void pane.flush(); swapping.find = undefined; findBar.close(); zoomGesture.cancel();
       pane.reader = undefined; syncPageStrip();
       swapping.reader?.destroy(); swapping.host?.remove(); swapping.reader = swapping.host = undefined;
-      side.tabs.replace(swapping.path, tab); side.shown = undefined;
-    } else if (!side.tabs.find(tab.path)) side.tabs.open(tab, at);
-    side.tabs.markLive(tab.path);
+      reloadSide.tabs.replace(swapping.path, tab); reloadSide.shown = undefined;
+    } else if (!reloadSide.tabs.find(tab.path)) reloadSide.tabs.open(tab, at);
+    reloadSide.tabs.markLive(tab.path);
     show(tab, true);
-    showPosition(candidate.getPosition()); // A reopened or converted document saves its place and options again.
-    staging.focus(); candidate = undefined; staging = undefined; pane.cancelPending = undefined;
+    showPosition(candidate.getPosition(), !tab.ephemeral); // A reopened or converted document saves its place and options again.
+    if (!reload) staging.focus();
+    candidate = undefined; staging = undefined; pane.cancelPending = undefined;
     if (held && focused !== held) { activateSide(held); (keep?.isConnected ? keep : held.pane.host)?.focus(); }
     if (doc.warning) notify(doc.warning);
-    if (tab.format === 'epub') void homeThumbs.loadEpub(tab.path, () => Boolean(known(tab.path))).then(() => paintTabs());
-    if (desktop) homeRecents = (await state()).recents; // The store moves the opened document to the front.
-    await library.refresh(doc.path).catch(fail);
+    if (!tab.ephemeral) {
+      if (tab.format === 'epub') void homeThumbs.loadEpub(tab.path, () => Boolean(known(tab.path))).then(() => paintTabs());
+      if (desktop) homeRecents = (await state()).recents; // The store moves the opened document to the front.
+      await library.refresh(doc.path).catch(fail);
+    }
     return true;
   } catch (error) {
     if (pane.isCurrent(token)) {
@@ -794,9 +824,194 @@ function paintNoDocument() {
 }
 
 /** Reopens a tab that holds nothing: its place was saved when it hibernated (or by the last session), and the page comes back there. */
-function reopen(tab: Tab) { return load(() => openLibraryDocument(tab.path), tab.name, { target: tab }); }
+function reopen(tab: Tab) {
+  if (tab.brief && desktop) return load(() => readBriefDocument(tab.path), tab.name, { target: tab, brief: true, ephemeral: true });
+  return load(() => openLibraryDocument(tab.path), tab.name, { target: tab, ephemeral: tab.ephemeral });
+}
 
-const tabTitle = (tab: Tab) => tab.path === LIBRARY_PATH ? tab.name : displayTitle(tab, tab.format === 'epub' ? homeThumbs.epub(tab.path)?.title : undefined);
+type BriefRecord = { id: string; path: string; title: string; format: string; content: string; updatedAt: number };
+async function readBriefDocument(idOrPath: string): Promise<Opened> {
+  const entry = await native<BriefRecord>('read_brief', { id: idOrPath });
+  return { id: entry.path, path: entry.path, name: entry.title, format: entry.format as Opened['format'], bytes: new TextEncoder().encode(entry.content) };
+}
+
+/** Reads the user's current text selection inside `side`'s reading surface (including same-origin EPUB frames). */
+function paneSelection(side: Side): string {
+  const host = side.pane.host;
+  if (!host) return '';
+  const topSel = window.getSelection();
+  if (topSel && !topSel.isCollapsed && topSel.anchorNode && host.contains(topSel.anchorNode)) return topSel.toString().trim().slice(0, 8000);
+  for (const frame of host.querySelectorAll<HTMLIFrameElement>('iframe')) {
+    try {
+      const sel = frame.contentWindow?.getSelection()?.toString().trim();
+      if (sel) return sel.slice(0, 8000);
+    } catch { /* Cross-origin frame. */ }
+  }
+  return '';
+}
+
+const sideById = (paneId?: string) => (paneId ? sides.find(s => s.view.id === paneId) : undefined) ?? focused;
+
+/** Reloads an open file or brief in place after it changed on disk (`--watch`) or was pushed again, keeping its place. */
+async function reloadOpenFile(path: string) {
+  const tab = known(path);
+  if (!tab) return;
+  const owner = holder(path);
+  if (owner && owner !== focused) activateSide(owner);
+  if (tab.brief) await load(() => readBriefDocument(path), tab.name, { target: tab, brief: true, ephemeral: true, reload: true });
+  else await load(() => chooseDocument(path), tab.name, { target: tab, ephemeral: tab.ephemeral, reload: true });
+}
+
+const controlHost: ControlHost = {
+  status: () => {
+    const activeSide = focused;
+    const activeTab = cover ? undefined : activeSide.shown?.path === LIBRARY_PATH ? undefined : activeSide.shown;
+    const activePos = activeTab ? (activeSide.pane.position ?? activeTab.position) : undefined;
+    return {
+      window: {
+        width: windowState.width,
+        height: windowState.height,
+        pinned: windowState.pinned,
+        locked: windowState.locked,
+        focused: !document.documentElement.classList.contains('window-inactive'),
+      },
+      appearance: appearanceSummary(),
+      layout: isSplit() ? 'split' : 'single',
+      libraryOpen: $('library-toggle').getAttribute('aria-expanded') === 'true',
+      panes: sides.map(side => ({
+        id: side.view.id,
+        active: side === focused,
+        shown: side.shown?.path ?? null,
+        tabs: side.tabs.tabs.filter(tab => tab.path !== LIBRARY_PATH).map(tab => {
+          const place = tab === side.shown ? side.pane.position : tab.position;
+          return {
+            path: tab.path,
+            title: tabTitle(tab),
+            format: tab.format,
+            brief: Boolean(tab.brief),
+            active: tab === side.tabs.active,
+            ...(place ? { position: place.label, progress: Number(place.fraction.toFixed(4)) } : {}),
+          };
+        }),
+      })),
+      active: activeTab ? {
+        paneId: activeSide.view.id,
+        path: activeTab.path,
+        title: tabTitle(activeTab),
+        format: activeTab.format,
+        brief: Boolean(activeTab.brief),
+        position: activePos?.label ?? '',
+        ...(activePos ? { progress: Number(activePos.fraction.toFixed(4)) } : {}),
+        outlineCount: activeSide.pane.reader?.outline().length ?? 0,
+        selection: paneSelection(activeSide),
+      } : null,
+    };
+  },
+  openFile: async (path, options) => {
+    const existing = known(path);
+    // A split the window cannot make (too narrow or short, four panes already) opens the file as a tab instead, and the reply says why.
+    let splitRefused: string | undefined;
+    if (options.split && (!isSplit() || holder(path) === focused)) {
+      const other = isSplit() ? sides.find(s => s !== focused) : undefined;
+      splitRefused = other ? undefined : openSplitReason(path, options.split);
+      if (other) {
+        activateSide(other);
+      } else if (!splitRefused) {
+        const format = path.split('.').pop()?.toLowerCase() ?? 'txt';
+        openInSplit({ path, name: baseName(path), format: format === 'markdown' ? 'md' : format }, options.split);
+        const tab = known(path);
+        if (tab) {
+          if (options.ephemeral) tab.ephemeral = true;
+          const ok = await load(() => chooseDocument(path), tab.name, { target: tab, ephemeral: options.ephemeral, reload: Boolean(tab.reader) });
+          if (!ok) throw new Error(`Could not open ${path}`);
+          const owner = holder(path) ?? focused;
+          return { path: tab.path, title: tabTitle(tab), format: tab.format, paneId: owner.view.id, position: owner.pane.position?.label ?? '' };
+        }
+      }
+    }
+    const ok = await load(() => chooseDocument(path), baseName(path), { target: existing, ephemeral: options.ephemeral, reload: Boolean(existing?.reader) });
+    if (!ok) throw new Error(`Could not open ${path}`);
+    const tab = known(path) ?? focused.shown;
+    if (!tab) throw new Error(`Could not open ${path}`);
+    const owner = holder(tab.path) ?? focused;
+    return { path: tab.path, title: tabTitle(tab), format: tab.format, paneId: owner.view.id, position: owner.pane.position?.label ?? '', ...(splitRefused ? { splitRefused } : {}) };
+  },
+  openBrief: async spec => {
+    const existing = known(spec.path);
+    let splitRefused: string | undefined;
+    if (spec.split && !existing) {
+      const other = isSplit() ? sides.find(s => s !== focused) : undefined;
+      splitRefused = other ? undefined : openSplitReason(spec.path, spec.split);
+      if (other) activateSide(other);
+      else if (!splitRefused) openInSplit({ path: spec.path, name: spec.title, format: spec.format }, spec.split);
+    } else if (existing) {
+      const owner = holder(spec.path);
+      if (owner && owner !== focused) activateSide(owner);
+      existing.name = spec.title;
+      existing.format = spec.format;
+      existing.brief = true;
+      existing.ephemeral = true;
+    }
+    const target = known(spec.path);
+    const ok = await load(() => readBriefDocument(spec.path), spec.title, { target, brief: true, ephemeral: true, reload: Boolean(target?.reader) });
+    if (!ok) throw new Error(`Could not display brief "${spec.id}".`);
+    const tab = known(spec.path) ?? focused.shown;
+    if (!tab) throw new Error(`Could not display brief "${spec.id}".`);
+    const owner = holder(tab.path) ?? focused;
+    return { path: tab.path, title: tabTitle(tab), format: tab.format, paneId: owner.view.id, position: owner.pane.position?.label ?? '', ...(splitRefused ? { splitRefused } : {}) };
+  },
+  goTo: async (target, paneId) => {
+    const reader = sideById(paneId).pane.reader;
+    if (!reader) throw new Error('No document is open.');
+    await reader.goTo(target);
+    return reader.getPosition().label;
+  },
+  outline: paneId => sideById(paneId).pane.reader?.outline() ?? [],
+  search: async (query, options, paneId) => sideById(paneId).pane.reader?.search?.(query, options),
+  showMatch: async (hit, _query, paneId) => {
+    const reader = sideById(paneId).pane.reader;
+    if (!reader) throw new Error('No document is open.');
+    await reader.revealSearchMatch?.(hit);
+    return reader.getPosition().label;
+  },
+  readText: async (limit, paneId) => sideById(paneId).pane.reader?.readText?.(limit),
+  selection: paneId => paneSelection(sideById(paneId)),
+  closeTab: target => {
+    const closed: string[] = [];
+    if (target.allBriefs) {
+      const paths = sides.flatMap(side => side.tabs.tabs.filter(t => t.brief).map(t => t.path));
+      for (const path of paths) { closeTab(path); closed.push(path); }
+      return closed;
+    }
+    const wantPath = target.path ?? (target.id ? (target.id.startsWith(BRIEF_PREFIX) ? target.id : `${BRIEF_PREFIX}${target.id}`) : undefined);
+    const tab = wantPath ? known(wantPath) : sides.flatMap(s => s.tabs.tabs).find(t => briefIdOf(t.path) === target.id);
+    if (tab) { closeTab(tab.path); closed.push(tab.path); }
+    else if (!wantPath && focused.shown) { const p = focused.shown.path; closeTab(p); closed.push(p); }
+    return closed;
+  },
+  setAppearance: change => {
+    const kept = appearance();
+    saveAppearance({
+      ...kept,
+      mode: (['system', 'light', 'dark'] as const satisfies readonly AppearanceMode[]).find(mode => mode === change.mode) ?? kept.mode,
+      palette: allPalettes.find(palette => palette === change.theme) ?? kept.palette,
+      page: pageTones.find(tone => tone === change.page) ?? kept.page,
+    });
+    return appearanceSummary();
+  },
+  runCommand: async id => {
+    const entry = COMMANDS.find(candidate => candidate.id === id);
+    if (!entry) throw new Error(`Unknown command: ${id}`);
+    const reason = unavailableReason(entry, { hasDocument: Boolean(activePane().reader), desktop, format: activePane().active?.format, split: splitContext() });
+    if (reason) throw new Error(reason);
+    await command(id);
+    return entry.label;
+  },
+  library: async () => (await getLibrary()).documents,
+  filterLibrary: change => library.filter(change),
+};
+
+const tabTitle = (tab: Tab) => tab.path === LIBRARY_PATH || tab.brief ? tab.name : displayTitle(tab, tab.format === 'epub' ? homeThumbs.epub(tab.path)?.title : undefined);
 /** Where a tab is, short: "40 / 146" for pages and lines, a percentage for the rest. */
 function tabWhere(side: Side, tab: Tab) {
   const place = tab === side.shown ? side.pane.position : tab.position;
@@ -810,7 +1025,7 @@ function paintTabs() {
   const hints = titleHints(all.filter(tab => tab.path !== LIBRARY_PATH).map(tab => ({ path: tab.path, title: tabTitle(tab) })));
   const viewOf = (side: Side, tab: Tab, active: boolean): TabView => {
     const place = tab === side.shown ? side.pane.position : tab.position;
-    return { path: tab.path, title: tabTitle(tab), hint: hints.get(tab.path) ?? '', format: tab.format, where: tabWhere(side, tab), paged: /^Pages? /.test(place?.label ?? ''), progress: formatProgress(progressOf(place ?? { fraction: NaN, scrub: { current: 0, total: 0, unit: 'line' } })) ?? '', active, problem: Boolean(tab.problem), library: tab.path === LIBRARY_PATH, image: Object.hasOwn(imageFormats, tab.format) };
+    return { path: tab.path, title: tabTitle(tab), hint: hints.get(tab.path) ?? '', format: tab.format, where: tabWhere(side, tab), paged: /^Pages? /.test(place?.label ?? ''), progress: formatProgress(progressOf(place ?? { fraction: NaN, scrub: { current: 0, total: 0, unit: 'line' } })) ?? '', active, problem: Boolean(tab.problem), library: tab.path === LIBRARY_PATH, image: Object.hasOwn(imageFormats, tab.format), brief: Boolean(tab.brief) };
   };
   const rows = sides.map(side => side.tabs.tabs.map(tab => viewOf(side, tab, tab === side.tabs.active)));
   const bar = isSplit() ? (libraryTab ? [viewOf(sides[0], libraryTab, cover === 'library')] : []) : rows[0], home = isSplit() ? cover === 'home' : !sides[0].tabs.active;
@@ -880,6 +1095,7 @@ function closeTab(path: string) {
     pane.reader = undefined; syncPageStrip(); // The strip lets go of the reader before it is destroyed.
   }
   tab.reader?.destroy(); tab.host?.remove(); tab.reader = tab.host = undefined;
+  if (desktop) void native('unwatch_file', { path }).catch(() => undefined);
   const next = side.tabs.close(path);
   if (isSplit() && !side.tabs.size) { side.shown = undefined; pane.show(undefined); closePane(side); }
   else if (wasShown) { side.shown = undefined; show(next, true); } else { paintTabs(); saveSession(); }
@@ -914,12 +1130,18 @@ const savedTab = (tab: Tab): SavedTab => ({ path: tab.path, name: tab.name, form
  * and, for two panes side by side, the same as an older build saved it (see `TabSession`).
  */
 function sessionOf(): TabSession {
-  if (!isSplit()) return focused.tabs.session(savedTab);
-  const ordered = [...(libraryTab ? [libraryTab] : []), ...sides.flatMap(side => side.tabs.tabs)];
+  // Briefs and other ephemeral tabs (agent-opened with `--ephemeral`) are never saved: they come back only when an agent pushes them again.
+  const kept = (side: Side) => side.tabs.tabs.filter(tab => !tab.ephemeral);
+  const active = focused.tabs.active;
+  if (!isSplit()) { const tabs = kept(focused); return { tabs: tabs.map(savedTab), active: active && tabs.includes(active) ? tabs.indexOf(active) : null }; }
+  const ordered = [...(libraryTab ? [libraryTab] : []), ...sides.flatMap(kept)];
   const showing = cover === 'library' ? libraryTab : cover ? undefined : focused.shown;
-  const pane = (side: Side) => ({ tabs: side.tabs.tabs.map(tab => tab.path), shown: side.shown?.path ?? side.tabs.tabs[0]?.path ?? '' });
+  const at = showing ? ordered.indexOf(showing) : -1;
+  // A pane that held only briefs has nothing to bring back: with fewer than two panes left, the session is a single pane's.
+  if (sides.filter(side => kept(side).length).length < 2) return { tabs: ordered.map(savedTab), active: at < 0 ? null : at };
+  const pane = (side: Side) => { const tabs = kept(side); return { tabs: tabs.map(tab => tab.path), shown: side.shown && tabs.includes(side.shown) ? side.shown.path : tabs[0]?.path ?? '' }; };
   const saved: SavedLayout = { tree: layout, panes: Object.fromEntries(sides.map(side => [side.view.id, pane(side)])), active: focused.view.id }, split = legacySplit(saved);
-  return { tabs: ordered.map(savedTab), active: showing ? ordered.indexOf(showing) : null, layout: saved, ...(split ? { split } : {}) };
+  return { tabs: ordered.map(savedTab), active: at < 0 ? null : at, layout: saved, ...(split ? { split } : {}) };
 }
 /** The tab Close tab (Ctrl W) closes: the one the reader sees, which is the Library tab while its page covers the split. */
 const closableTab = () => cover === 'library' ? libraryTab : cover ? undefined : focused.shown;
@@ -1099,7 +1321,7 @@ function clearCover() {
 /** Puts a side in the window with `id` and `tabs`: the one made for an earlier split is put back, else it is made. Nothing is shown in it yet; the layout and the order of `sides` are the caller's. */
 function createSide(id: string, tabs: TabList<Tab>, like: Side): Side {
   const spare = spares.get(id), side = spare ?? makeSide(id);
-  if (spare) { spares.delete(id); workspace.append(side.view.row, side.view.body); side.pane = new Pane<Tab>({ persist, notify }); side.shown = undefined; side.scanNoticeShown = false; } else watchSide(side);
+  if (spare) { spares.delete(id); workspace.append(side.view.row, side.view.body); side.pane = new Pane<Tab>({ persist: persistTab, notify }); side.shown = undefined; side.scanNoticeShown = false; } else watchSide(side);
   side.tabs = tabs; side.pane.pillPlacement = like.pane.pillPlacement;
   sides.push(side);
   return side;
@@ -1280,6 +1502,16 @@ function showTabMenu(path: string, anchor: HTMLElement, at: { x: number; y: numb
     const here = holder(path), others = sides.filter(side => side !== here);
     if (here && others.length === 1) entries.push({ label: 'Move to the other side', run: () => moveTab(path, others[0]) });
     else if (here && others.length > 1) entries.push({ label: 'Move to pane', submenu: others.map(side => ({ label: tabTitle(side.shown ?? side.tabs.tabs[0]), run: () => moveTab(path, side) })) });
+  }
+  if (tab.brief && desktop) {
+    entries.push({
+      label: 'Save brief…',
+      run: () => {
+        void native<string | null>('save_brief_as', { id: tab.path })
+          .then(saved => { if (saved) notify(`Saved brief to ${baseName(saved)}`); })
+          .catch(fail);
+      },
+    });
   }
   entries.push({ label: 'Close', run: () => closeTab(path) });
   if (isSplit() && path !== LIBRARY_PATH) entries.push({ label: 'Close pane', run: () => closePane(holder(path)) }, { label: 'Close the split', run: () => endSplit() });
@@ -1718,6 +1950,16 @@ async function initialize() {
     await listen<number>('select-tab-request', event => { if (!document.querySelector('dialog[open]')) selectTabNumber(event.payload); });
     await listen('close-tab-request', () => { const tab = closableTab(); if (tab) closeTab(tab.path); else void getCurrentWindow().close(); });
     await listen<string | null>('reader-warning', event => { if (event.payload) notify(event.payload); });
+    await listen<string>('file-changed', event => { void reloadOpenFile(event.payload).catch(fail); });
+    await listen<{ id: string; method: string; params: unknown }>('control-request', event => {
+      const { id, method, params } = event.payload;
+      void handleControlRequest(controlHost, method, params).then(
+        result => native('control_reply', { id, ok: true, result, error: null }),
+        error => native('control_reply', { id, ok: false, result: null, error: error instanceof Error ? error.message : String(error) }),
+      ).catch(() => undefined);
+    });
+    const controlState = await native<{ enabled: boolean; running: boolean } | null>('control_status').catch(() => null);
+    if (controlState) settingsSheet.showControl(controlState);
     const appWindow = getCurrentWindow();
     let closing = false; await appWindow.onCloseRequested(async event => { if (closing) return; event.preventDefault(); await Promise.all(sides.map(side => side.pane.flush())); await flushSession(); closing = true; await appWindow.close(); });
     if (platform === 'windows') {
@@ -1759,6 +2001,7 @@ async function initialize() {
       await syncFullscreen();
     }
     const pending = await native<string[]>('pending_open'); if (pending.length) openRequested(pending);
+    await native('control_ready').catch(() => undefined);
   }
 }
 void initialize().catch(fail);
