@@ -5,6 +5,15 @@ description = "A compact, pinnable desktop document reader"
 license = "MIT"
 edition = "2021"
 rust-version = "1.90"
+default-run = "hold-my-brief"
+
+[[bin]]
+name = "hold-my-brief"
+path = "src/main.rs"
+
+[[bin]]
+name = "hmb"
+path = "src/bin/hmb.rs"
 
 [features]
 default = []

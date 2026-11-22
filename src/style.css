@@ -1012,6 +1012,8 @@ select:hover { border-color: var(--accent-border); }
 .tab-title { max-width: 118px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px/1.2 var(--font-ui); }
 .tab.is-active .tab-title { max-width: 140px; font-weight: 600; }
 .tab.has-problem .tab-title { font-style: italic; }
+.tab.is-brief .tab-title::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--accent-ink); vertical-align: 1px; }
+.settings-note { margin: 2px 0 0; font: 11.5px/1.45 var(--font-ui); color: var(--muted); }
 .tab-hint { color: var(--muted); font: 12px/1.2 var(--font-ui); font-weight: 400; white-space: nowrap; max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
 .tab-hint:empty { display: none; }
 .tab-hint::before { content: '·'; display: inline-block; margin-right: 4px; }

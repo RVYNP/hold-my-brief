@@ -38,7 +38,7 @@ test('desktop: Settings starts with Window; Keep on top and Lock size follow the
   await expect(page.locator('#pin, #lock, #menu-toggle')).toHaveCount(0);
 
   const sheet = await openSettings(page);
-  expect(await headings(sheet)).toEqual(['Window', 'Appearance', 'Library', 'More']);
+  expect(await headings(sheet)).toEqual(['Window', 'Agent control', 'Appearance', 'Library', 'More']);
   const pin = sheet.getByRole('switch', { name: 'Keep on top' }), lock = sheet.getByRole('switch', { name: 'Lock size' });
   await expect(pin).toHaveAttribute('aria-checked', 'false');
   await expect(sheet.locator('#settings-window')).toContainText('Ctrl+Shift+T');
@@ -101,7 +101,7 @@ for (const desktop of [false, true]) {
     await page.locator('#settings-toggle').click();
     const sheet = page.getByRole('dialog', { name: 'Settings' });
     await expect(sheet).toBeVisible();
-    expect(await headings(sheet)).toEqual(desktop ? ['Window', 'Appearance', 'Library', 'More'] : ['Appearance', 'Library', 'More']);
+    expect(await headings(sheet)).toEqual(desktop ? ['Window', 'Agent control', 'Appearance', 'Library', 'More'] : ['Appearance', 'Library', 'More']);
 
     const inside = async (box: Promise<{ x: number; y: number; width: number; height: number } | null>) => {
       const at = (await box)!;
