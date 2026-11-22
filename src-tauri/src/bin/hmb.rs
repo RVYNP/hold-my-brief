@@ -81,56 +81,79 @@ fn load_discovery() -> Result<DiscoveryInfo, String> {
     serde_json::from_slice(&bytes).map_err(|e| format!("Invalid control file: {e}"))
 }
 
-fn send_once(info: &DiscoveryInfo, method: &str, params: Value) -> Result<Value, String> {
+/// Why a request did not succeed. Only `Unreachable` may lead to launching the app and sending
+/// again: once the app has the request it may already have applied it (`brief --append`), so an
+/// error it answers with goes back to the caller as is.
+#[derive(Debug)]
+enum SendError {
+    Unreachable(String),
+    Failed(String),
+}
+
+impl SendError {
+    fn into_message(self) -> String {
+        match self {
+            SendError::Unreachable(message) | SendError::Failed(message) => message,
+        }
+    }
+}
+
+fn send_once(info: &DiscoveryInfo, method: &str, params: Value) -> Result<Value, SendError> {
     let req = ControlRequest {
         id: "1",
         token: info.token.as_deref(),
         method,
         params,
     };
-    let mut payload = serde_json::to_vec(&req).map_err(|e| e.to_string())?;
+    let mut payload = serde_json::to_vec(&req).map_err(|e| SendError::Failed(e.to_string()))?;
     payload.push(b'\n');
 
     let raw_line = match info.transport.as_str() {
         #[cfg(unix)]
         "unix" => {
             use std::os::unix::net::UnixStream;
-            let sock = info.socket.as_deref().ok_or("Missing unix socket path in control.json")?;
+            let sock = info
+                .socket
+                .as_deref()
+                .ok_or_else(|| SendError::Unreachable("Missing unix socket path in control.json".into()))?;
             let mut stream = UnixStream::connect(sock)
-                .map_err(|e| format!("Could not connect to Hold My Brief ({sock}): {e}"))?;
+                .map_err(|e| SendError::Unreachable(format!("Could not connect to Hold My Brief ({sock}): {e}")))?;
             let _ = stream.set_read_timeout(Some(IO_TIMEOUT));
             let _ = stream.set_write_timeout(Some(IO_TIMEOUT));
-            stream.write_all(&payload).map_err(|e| e.to_string())?;
-            stream.flush().map_err(|e| e.to_string())?;
+            stream.write_all(&payload).map_err(|e| SendError::Unreachable(e.to_string()))?;
+            stream.flush().map_err(|e| SendError::Unreachable(e.to_string()))?;
             let mut line = String::new();
-            BufReader::new(stream).read_line(&mut line).map_err(|e| e.to_string())?;
+            BufReader::new(stream).read_line(&mut line).map_err(|e| SendError::Failed(e.to_string()))?;
             line
         }
         "tcp" => {
             use std::net::TcpStream;
-            let addr = info.addr.as_deref().ok_or("Missing addr in control.json")?;
+            let addr = info
+                .addr
+                .as_deref()
+                .ok_or_else(|| SendError::Unreachable("Missing addr in control.json".into()))?;
             let mut stream = TcpStream::connect(addr)
-                .map_err(|e| format!("Could not connect to Hold My Brief ({addr}): {e}"))?;
+                .map_err(|e| SendError::Unreachable(format!("Could not connect to Hold My Brief ({addr}): {e}")))?;
             let _ = stream.set_read_timeout(Some(IO_TIMEOUT));
             let _ = stream.set_write_timeout(Some(IO_TIMEOUT));
-            stream.write_all(&payload).map_err(|e| e.to_string())?;
-            stream.flush().map_err(|e| e.to_string())?;
+            stream.write_all(&payload).map_err(|e| SendError::Unreachable(e.to_string()))?;
+            stream.flush().map_err(|e| SendError::Unreachable(e.to_string()))?;
             let mut line = String::new();
-            BufReader::new(stream).read_line(&mut line).map_err(|e| e.to_string())?;
+            BufReader::new(stream).read_line(&mut line).map_err(|e| SendError::Failed(e.to_string()))?;
             line
         }
-        other => return Err(format!("Unsupported control transport: {other}")),
+        other => return Err(SendError::Unreachable(format!("Unsupported control transport: {other}"))),
     };
 
     if raw_line.trim().is_empty() {
-        return Err("Hold My Brief closed the connection without replying.".into());
+        return Err(SendError::Unreachable("Hold My Brief closed the connection without replying.".into()));
     }
     let resp: ControlResponse = serde_json::from_str(&raw_line)
-        .map_err(|e| format!("Invalid response from Hold My Brief: {e}"))?;
+        .map_err(|e| SendError::Failed(format!("Invalid response from Hold My Brief: {e}")))?;
     if resp.ok {
         Ok(resp.result.unwrap_or(Value::Null))
     } else {
-        Err(resp.error.unwrap_or_else(|| "Request failed.".into()))
+        Err(SendError::Failed(resp.error.unwrap_or_else(|| "Request failed.".into())))
     }
 }
 
@@ -176,24 +199,32 @@ fn try_launch_app() -> bool {
 }
 
 fn send_with_autolaunch(method: &str, params: Value, auto_launch: bool) -> Result<Value, String> {
-    if let Ok(info) = load_discovery() {
-        if let Ok(val) = send_once(&info, method, params.clone()) {
-            return Ok(val);
-        }
-    }
-    if !auto_launch {
-        let info = load_discovery()?;
-        return send_once(&info, method, params);
-    }
-    if !try_launch_app() {
-        let info = load_discovery()?;
-        return send_once(&info, method, params);
+    send_or_launch(load_discovery, try_launch_app, method, params, auto_launch)
+}
+
+/// Sends once; launches the app and sends again only when the app could not be reached.
+fn send_or_launch(
+    load: impl Fn() -> Result<DiscoveryInfo, String>,
+    launch: impl FnOnce() -> bool,
+    method: &str,
+    params: Value,
+    auto_launch: bool,
+) -> Result<Value, String> {
+    let unreachable = match load() {
+        Ok(info) => match send_once(&info, method, params.clone()) {
+            Err(SendError::Unreachable(message)) => message,
+            answered => return answered.map_err(SendError::into_message),
+        },
+        Err(message) => message,
+    };
+    if !auto_launch || !launch() {
+        return Err(unreachable);
     }
     let deadline = Instant::now() + LAUNCH_WAIT;
     while Instant::now() < deadline {
-        if let Ok(info) = load_discovery() {
+        if let Ok(info) = load() {
             if send_once(&info, "ping", json!({})).is_ok() {
-                return send_once(&info, method, params);
+                return send_once(&info, method, params).map_err(SendError::into_message);
             }
         }
         thread::sleep(Duration::from_millis(120));
@@ -697,15 +728,70 @@ mod tests {
         items.iter().map(|s| s.to_string()).collect()
     }
 
+    /// A stand-in for the app's Windows transport: answers each request line with `reply(method)`
+    /// and records the methods it was sent, in order.
+    fn stub_app(reply: fn(&str) -> Value) -> (DiscoveryInfo, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
+        use std::net::TcpListener;
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let log = seen.clone();
+        thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { continue };
+                let mut line = String::new();
+                BufReader::new(stream.try_clone().unwrap()).read_line(&mut line).unwrap();
+                let request: Value = serde_json::from_str(&line).unwrap();
+                let method = request["method"].as_str().unwrap().to_string();
+                log.lock().unwrap().push(method.clone());
+                let _ = writeln!(stream, "{}", reply(&method));
+            }
+        });
+        let info = DiscoveryInfo { transport: "tcp".into(), socket: None, addr: Some(addr), token: None };
+        (info, seen)
+    }
+
+    #[test]
+    fn an_error_answer_is_returned_once_and_never_launches_or_resends() {
+        let (info, seen) = stub_app(|_| json!({ "id": "1", "ok": false, "error": "Heading not found: Nope" }));
+        let launched = std::cell::Cell::new(false);
+        let result = send_or_launch(
+            || Ok(info.clone()),
+            || { launched.set(true); true }, // `open -g -a` succeeds when the app is already running.
+            "brief",
+            json!({ "id": "plan", "append": true, "content": "row", "heading": "Nope" }),
+            true,
+        );
+        assert_eq!(result.unwrap_err(), "Heading not found: Nope");
+        assert!(!launched.get());
+        assert_eq!(*seen.lock().unwrap(), ["brief"]);
+    }
+
+    #[test]
+    fn an_unreachable_app_is_launched_and_the_request_sent_once_it_answers() {
+        let (info, seen) = stub_app(|_| json!({ "id": "1", "ok": true, "result": { "id": "plan" } }));
+        let launched = std::cell::Cell::new(false);
+        let result = send_or_launch(
+            || if launched.get() { Ok(info.clone()) } else { Err("Hold My Brief is not running.".into()) },
+            || { launched.set(true); true },
+            "brief",
+            json!({ "id": "plan", "content": "row" }),
+            true,
+        );
+        assert_eq!(result.unwrap()["id"], "plan");
+        assert_eq!(*seen.lock().unwrap(), ["ping", "brief"]);
+    }
+
     #[test]
     fn parses_compound_show_command() {
+        let file = env::temp_dir().join("spec.pdf").to_string_lossy().into_owned();
         let parsed = parse_args(&vec_args(&[
-            "show", "/tmp/spec.pdf", "--page", "14", "--find", "refresh", "--watch", "--pin", "--json",
+            "show", &file, "--page", "14", "--find", "refresh", "--watch", "--pin", "--json",
         ]))
         .unwrap();
         assert_eq!(parsed.method, "show");
         assert!(parsed.json_out);
-        assert_eq!(parsed.params["path"], "/tmp/spec.pdf");
+        assert_eq!(parsed.params["path"], file.as_str());
         assert_eq!(parsed.params["target"], "14");
         assert_eq!(parsed.params["find"], "refresh");
         assert_eq!(parsed.params["watch"], true);

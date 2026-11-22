@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { mockDesktop } from './desktop-mock';
 import { openSettings } from './settings-controls';
 
@@ -117,34 +117,67 @@ test('desktop Settings shows the Agent control switch', async ({ page }) => {
   await expect(sheet.getByRole('switch', { name: 'Local CLI and agents' })).toBeVisible();
 });
 
-test('a brief asking for a split the window cannot make opens as a tab, and the reply says why', async ({ page }) => {
+/** Sends one control request as the native bridge does and returns the reader's reply, which must be ok. */
+async function control<T>(page: Page, request: string, method: string, params: Record<string, unknown>): Promise<T> {
+  await page.evaluate(([request, method, params]) => window.__mockEmit('control-request', { id: request, method, params }), [request, method, params] as const);
+  await expect.poll(() => page.evaluate(request => window.__mockReplies.some(reply => reply.id === request), request)).toBe(true);
+  const reply = await page.evaluate(request => window.__mockReplies.find(reply => reply.id === request)!, request);
+  expect(reply.ok, reply.error ?? '').toBe(true);
+  return reply.result as T;
+}
+
+const putBrief = (page: Page, id: string, content: string) => page.evaluate(([id, content]) => {
+  const path = `hold-my-brief:brief/${id}`;
+  window.__mockBriefs[path] = { id, path, title: id, format: 'md', content, updatedAt: Date.now() };
+}, [id, content] as const);
+
+const pushBrief = (page: Page, request: string, id: string, split?: 'right') =>
+  control<{ paneId: string; splitRefused?: string }>(page, request, 'brief', { id, path: `hold-my-brief:brief/${id}`, title: id, format: 'md', ...(split ? { split } : {}) });
+
+test('a brief split the window cannot make opens as a tab and the reply says why; briefs are never saved in the session', async ({ page }) => {
   await mockDesktop(page);
   await page.setViewportSize({ width: 640, height: 760 });
   await page.goto('/');
-  await page.evaluate(() => {
-    for (const id of ['plan', 'notes', 'diagram']) {
-      const path = `hold-my-brief:brief/${id}`;
-      window.__mockBriefs[path] = { id, path, title: id, format: 'md', content: `# ${id}\n\nBody.`, updatedAt: 0 };
-    }
-  });
-  const brief = async (id: string, split?: 'right') => {
-    const request = `r-${id}`;
-    await page.evaluate(([request, id, split]) => window.__mockEmit('control-request', { id: request, method: 'brief', params: { id, path: `hold-my-brief:brief/${id}`, title: id, format: 'md', ...(split ? { split } : {}) } }), [request, id, split] as const);
-    await expect.poll(() => page.evaluate(request => window.__mockReplies.some(reply => reply.id === request), request)).toBe(true);
-    const reply = await page.evaluate(request => window.__mockReplies.find(reply => reply.id === request)!, request);
-    expect(reply.ok, reply.error ?? '').toBe(true);
-    return reply.result as { paneId: string; splitRefused?: string };
-  };
+  for (const id of ['plan', 'notes', 'diagram']) await putBrief(page, id, `# ${id}\n\nBody.`);
 
-  await brief('plan');
-  const narrow = await brief('notes', 'right');
+  await pushBrief(page, 'r-plan', 'plan');
+  const narrow = await pushBrief(page, 'r-notes', 'notes', 'right');
   expect(narrow.splitRefused).toBe('The window is too narrow to split');
   expect(narrow.paneId).toBe('a');
   await expect(page.locator('#workspace')).not.toHaveClass(/is-split/);
 
   await page.setViewportSize({ width: 1080, height: 760 });
-  const wide = await brief('diagram', 'right');
+  const wide = await pushBrief(page, 'r-diagram', 'diagram', 'right');
   expect(wide.splitRefused).toBeUndefined();
   expect(wide.paneId).not.toBe('a');
   await expect(page.locator('#workspace')).toHaveClass(/is-split/);
+
+  // The split holds only briefs: no session names one, and the last carries no layout, so the next launch restores no empty pane.
+  await expect.poll(() => page.evaluate(() => window.__mockSessions.length)).toBeGreaterThan(0);
+  const sessions = await page.evaluate(() => window.__mockSessions);
+  expect(sessions.flatMap(session => session.tabs.map(tab => tab.path)).filter(path => path.startsWith('hold-my-brief:brief/'))).toEqual([]);
+  expect(sessions.at(-1)!.layout).toBeUndefined();
+});
+
+test('pushing a brief again updates its tab in place and keeps the reader\'s place', async ({ page }) => {
+  await mockDesktop(page);
+  await page.setViewportSize({ width: 1080, height: 760 });
+  await page.goto('/');
+  const sections = (word: string) => Array.from({ length: 40 }, (_, i) => `## Section ${i + 1}\n\n${i === 35 ? `${word} text in section 36.` : 'Filler paragraph. '.repeat(12)}`).join('\n\n');
+  await putBrief(page, 'plan', `# Plan\n\n${sections('Old')}`);
+  await pushBrief(page, 'r-1', 'plan');
+  await control(page, 'r-goto', 'goto', { heading: 'Section 36' });
+  await expect(page.getByText('Old text in section 36.')).toBeInViewport();
+  type Status = { panes: { tabs: { path: string }[] }[]; active: { path: string; position: string } | null };
+  const tabsOf = (status: Status) => status.panes.flatMap(pane => pane.tabs.map(tab => tab.path));
+  const before = await control<Status>(page, 'r-status-1', 'status', {});
+
+  await putBrief(page, 'plan', `# Plan\n\n${sections('New')}`);
+  await pushBrief(page, 'r-2', 'plan');
+  await expect(page.getByText('New text in section 36.')).toBeInViewport();
+  const after = await control<Status>(page, 'r-status-2', 'status', {});
+  expect(tabsOf(after).filter(path => path === 'hold-my-brief:brief/plan')).toHaveLength(1);
+  expect(tabsOf(after)).toEqual(tabsOf(before));
+  expect(after.active?.path).toBe('hold-my-brief:brief/plan');
+  expect(after.active?.position).toBe(before.active?.position);
 });

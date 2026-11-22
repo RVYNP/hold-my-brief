@@ -949,10 +949,10 @@ const controlHost: ControlHost = {
       if (owner && owner !== focused) activateSide(owner);
       existing.name = spec.title;
       existing.format = spec.format;
-      existing.brief = true;
-      existing.ephemeral = true;
     }
+    // Marked before this task ends: the split just made queued a session write, which must already see the brief as ephemeral.
     const target = known(spec.path);
+    if (target) { target.brief = true; target.ephemeral = true; }
     const ok = await load(() => readBriefDocument(spec.path), spec.title, { target, brief: true, ephemeral: true, reload: Boolean(target?.reader) });
     if (!ok) throw new Error(`Could not display brief "${spec.id}".`);
     const tab = known(spec.path) ?? focused.shown;

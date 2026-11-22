@@ -6,7 +6,7 @@
 //! - On Windows: a loopback-only (`127.0.0.1:0`) raw NDJSON TCP listener guarded by a per-session
 //!   256-bit random token written to `control.json`. Non-HTTP framing + secret token prevents
 //!   browser CSRF/DNS-rebinding.
-//! - Users can disable the server at any time in Settings → General; disabling tears down the
+//! - Users can disable the server at any time in Settings → Agent control; disabling tears down the
 //!   listener and deletes `control.json` immediately.
 
 use crate::{state::now, Shared};
