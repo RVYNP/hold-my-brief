@@ -190,7 +190,17 @@ Settings button at the toolbar's right end. Escape closes it.
 - **Window** (desktop app only): **Keep on top** (Ctrl+Shift+T) keeps the reader above ordinary windows, and **Lock size**
   (Ctrl+Shift+L) captures its outer dimensions while allowing movement. Each is a switch that stays in step with its shortcut
   and with the palette while the sheet is open; while active, a quiet indicator appears above Settings on the rail (or beside Settings in a compact toolbar) so you can see and clear it with one click. **Compact** (420 × 620) and **Reading** (760 × 900) resize the window.
-- **General:** the **Library** side (**Left** or **Right**) and **More** (**All commands…** Ctrl+K, **AI assistant…** in the desktop app, **Keyboard shortcuts**, **Clear recent files** and **Delete saved reading data…**).
+- **General:** the **Library** side (**Left** or **Right**), **Agent control** and **More** (**All commands…** Ctrl+K, **AI assistant…** in the desktop app, **Keyboard shortcuts**, **Clear recent files** and **Delete saved reading data…**).
+- **Agent control** (in General, desktop app only): **Local CLI & agents** lets the `hmb` command and AI agents on this computer show
+  documents and live briefs in the reader (see [Agent control](agent-control.md)). It is on by default; turning it off closes the
+  private socket at once.
+
+  While it is on, an agent can also wait for you with `hmb events`: the reader tells it which text you select (once the
+  selection has stopped changing), which page you stay on, which tab you show or close, and what you send. Only your selected
+  text is ever sent, never the rest of the document; the events live in memory, go nowhere but that local socket, and are
+  dropped when you turn Agent control off. To hand an agent something on purpose, select text and run **Send selection to
+  agent** from the palette (Ctrl+K) or with Ctrl+Shift+Enter (⌘⇧↩ on macOS); the notice says "Sent to agent". The command is
+  dimmed, with the reason, when nothing is selected or Agent control is off.
 
 ## Appearance
 
@@ -523,6 +533,7 @@ lock.
 | Document library | Ctrl+B |
 | Resize library (divider focused) | Left / Right (Shift: larger steps), Home / End, Enter resets |
 | Pin / size lock | Ctrl+Shift+T / Ctrl+Shift+L |
+| Send the selection to an agent (Agent control on) | Ctrl+Shift+Enter (⌘⇧↩ on macOS) |
 | Fit page / fit width / actual size (100%) | Ctrl+0 / Ctrl+2 / Shift+0 |
 | New tab / close tab | Ctrl+T / Ctrl+W (⌘T / ⌘W on macOS) |
 | Next / previous tab | Ctrl+Tab / Ctrl+Shift+Tab |

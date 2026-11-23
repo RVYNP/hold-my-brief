@@ -99,4 +99,10 @@ describe('control dispatcher', () => {
     expect(full.text).toBe('Refresh tokens rotate on use.');
     expect(full.selection).toBe('token refresh');
   });
+
+  it('lists window changes in a cmd reply alongside the theme and the command', async () => {
+    const { host } = makeHost();
+    const reply = await handleControlRequest(host, 'cmd', { pin: true, lock: false, preset: 'reading', appearance: { theme: 'graphite' }, command: 'split-down' }) as { done: string[] };
+    expect(reply.done).toEqual(['Keep on top on', 'Size unlocked', 'Reading size', 'Graphite (dark)', 'Ran split-down']);
+  });
 });

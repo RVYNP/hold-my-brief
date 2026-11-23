@@ -1025,6 +1025,18 @@ mod tests {
     }
 
     #[test]
+    fn state_files_from_before_agent_control_read_it_as_on_and_off_survives() {
+        let mut old = serde_json::to_value(SavedState::default()).unwrap();
+        assert!(old.as_object_mut().unwrap().remove("controlEnabled").is_some());
+        let saved: SavedState = serde_json::from_value(old).unwrap();
+        assert!(saved.control_enabled, "a state file from before Agent control must read it as on");
+
+        let off = SavedState { control_enabled: false, ..SavedState::default() };
+        let back: SavedState = serde_json::from_value(serde_json::to_value(&off).unwrap()).unwrap();
+        assert!(!back.control_enabled);
+    }
+
+    #[test]
     fn saved_tabs_are_cleaned_on_save_and_on_load() {
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("state.json");

@@ -178,7 +178,8 @@ export function renderChartBlock(raw: string): string | null {
   let parsed: unknown;
   try { parsed = JSON.parse(raw); } catch { return null; }
   if (!parsed || typeof parsed !== 'object') return null;
-  const spec = parsed as ChartSpec;
+  // Agents write JSON by hand: a numeric title must render, not throw out of the Markdown renderer.
+  const spec: ChartSpec = { ...(parsed as ChartSpec), title: str((parsed as ChartSpec).title), subtitle: str((parsed as ChartSpec).subtitle) };
   const type = spec.type ?? (Array.isArray(spec.items) ? 'metrics' : 'hbar');
 
   let body: string | null = null;

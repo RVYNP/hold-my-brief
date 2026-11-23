@@ -55,10 +55,13 @@ export type ControlStatusSnapshot = {
   } | null;
 };
 
+/** Where a `show` or `brief` request opened. `splitRefused` is why a requested split was not made (the document opened as a tab instead). */
+export type ControlOpened = { path: string; title: string; format: string; paneId: string; position: string; splitRefused?: string };
+
 export type ControlHost = {
   status: () => ControlStatusSnapshot;
-  openFile: (path: string, options: { ephemeral?: boolean; split?: 'right' | 'down' }) => Promise<{ path: string; title: string; format: string; paneId: string; position: string }>;
-  openBrief: (spec: { id: string; path: string; title: string; format: string; split?: 'right' | 'down' }) => Promise<{ path: string; title: string; format: string; paneId: string; position: string }>;
+  openFile: (path: string, options: { ephemeral?: boolean; split?: 'right' | 'down' }) => Promise<ControlOpened>;
+  openBrief: (spec: { id: string; path: string; title: string; format: string; split?: 'right' | 'down' }) => Promise<ControlOpened>;
   goTo: (target: string, paneId?: string) => Promise<string>;
   outline: (paneId?: string) => OutlineItem[];
   search: (query: string, options: SearchOptions, paneId?: string) => Promise<{ hits: SearchHit[]; truncated: boolean; unavailable?: string } | undefined>;
@@ -264,7 +267,12 @@ export async function handleControlRequest(host: ControlHost, method: string, ra
     }
 
     case 'cmd': {
+      // The window changes (pin, lock, size preset, focus) were applied natively before this call; the reply lists them with the rest.
       const done: string[] = [];
+      if (typeof params.pin === 'boolean') done.push(params.pin ? 'Keep on top on' : 'Keep on top off');
+      if (typeof params.lock === 'boolean') done.push(params.lock ? 'Size locked' : 'Size unlocked');
+      if (params.preset === 'compact' || params.preset === 'reading') done.push(params.preset === 'compact' ? 'Compact size' : 'Reading size');
+      if (params.focus === true) done.push('Focused');
       const appearance = asObj(params.appearance);
       if (appearance.mode || appearance.theme || appearance.page) {
         done.push(host.setAppearance({

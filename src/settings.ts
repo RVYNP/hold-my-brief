@@ -82,11 +82,11 @@ export function createSettingsSheet(dialog: HTMLDialogElement, text: TextControl
   const panels = Array.from(dialog.querySelectorAll<HTMLElement>('[data-panel]'));
   const body = dialog.querySelector<HTMLElement>('.settings-body')!;
   const switches = Array.from(dialog.querySelectorAll<HTMLButtonElement>('[data-window]'));
-  const controlSwitch = dialog.querySelector<HTMLButtonElement>('[data-control="enabled"]');
-  const controlNote = dialog.querySelector<HTMLElement>('#settings-control-note');
   const sideGroup = dialog.querySelector<HTMLElement>('[aria-labelledby=settings-side-label]')!;
   radioGroup(sideGroup, true);
   check(sideGroup, item => item.dataset.side === 'left');
+  const controlSwitch = dialog.querySelector<HTMLButtonElement>('[data-control="enabled"]')!;
+  const controlNote = dialog.querySelector<HTMLElement>('#settings-control-note')!;
 
   function selectTab(next: SettingsTab, focusButton = false) {
     const resolved: SettingsTab = next === 'window' && !host.desktop ? 'appearance' : next;
@@ -113,7 +113,7 @@ export function createSettingsSheet(dialog: HTMLDialogElement, text: TextControl
   });
 
   for (const toggle of switches) toggle.onclick = () => host.toggle(toggle.dataset.window as 'pin' | 'lock');
-  if (controlSwitch) controlSwitch.onclick = () => host.setControl?.(controlSwitch.getAttribute('aria-checked') !== 'true');
+  controlSwitch.onclick = () => host.setControl?.(controlSwitch.getAttribute('aria-checked') !== 'true');
   for (const button of dialog.querySelectorAll<HTMLButtonElement>('[data-preset]')) button.onclick = () => host.preset(button.dataset.preset as 'compact' | 'reading');
   sideGroup.addEventListener('click', event => { const side = (event.target as Element).closest<HTMLElement>('[data-side]')?.dataset.side as Side | undefined; if (side) host.setSide(side); });
   for (const button of dialog.querySelectorAll<HTMLButtonElement>('[data-more]')) button.onclick = () => { dialog.close(); host.more(button.dataset.more as MoreItem); };
@@ -139,16 +139,13 @@ export function createSettingsSheet(dialog: HTMLDialogElement, text: TextControl
     },
     /** The side the library is on. */
     showSide(side: Side) { check(sideGroup, item => item.dataset.side === side); },
-    /** Whether local CLI / agent control is active. */
-    showControl(state: { enabled: boolean; running: boolean; transport?: string }) {
-      if (controlSwitch) controlSwitch.setAttribute('aria-checked', String(state.enabled));
-      if (controlNote) {
-        controlNote.textContent = state.enabled && state.running
-          ? 'Ready for local CLI and agents via hmb (private per-user socket, no network access).'
-          : state.enabled
-            ? 'Enabled, waiting for local socket.'
-            : 'Off. Local CLI and agents cannot reach Hold My Brief.';
-      }
+    /** Whether local CLI / agent control is on, and whether its socket is listening. */
+    showControl(state: { enabled: boolean; running: boolean }) {
+      controlSwitch.setAttribute('aria-checked', String(state.enabled));
+      controlNote.textContent = state.enabled && state.running
+        ? 'Ready for local CLI and agents via hmb (private per-user socket, no network access).'
+        : state.enabled ? 'On, but the control socket could not start. Restart Hold My Brief to try again.'
+        : 'Off. Local CLI and agents cannot reach Hold My Brief.';
     },
   };
 }

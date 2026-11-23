@@ -33,6 +33,13 @@ describe('visual blocks', () => {
     expect(renderChartBlock('{}')).toBeNull();
   });
 
+  it('renders a chart whose title or subtitle is not a string instead of throwing', () => {
+    const html = renderChartBlock('{"title":2024,"subtitle":7,"data":[{"label":"a","value":1}]}');
+    expect(html).toContain('<strong>2024</strong>');
+    expect(html).toContain('<span>7</span>');
+    expect(html).toContain('aria-label="2024"');
+  });
+
   it('renders layered flow diagrams with labeled edges and accents', () => {
     const flow = renderFlowBlock([
       'title: Control Flow',

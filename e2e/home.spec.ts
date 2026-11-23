@@ -236,7 +236,9 @@ test.describe('shelf scrolling', () => {
     await page.mouse.move(box.x + 200, box.y + 60);
     await page.mouse.wheel(400, 0);
     await expect.poll(() => left(page)).toBeGreaterThan(100);
-    let settled = -1; await expect.poll(async () => { const now = await left(page); const done = now === settled; settled = now; return done; }).toBe(true);
+    // scroll-snap re-settles the strip on a card edge some time after the wheel stops: wait for that, not for two equal reads.
+    const pitch = await track(page).evaluate(node => (node.children[1] as HTMLElement).offsetLeft - (node.children[0] as HTMLElement).offsetLeft);
+    await expect.poll(async () => { const at = (await left(page)) / pitch; return Math.abs(at - Math.round(at)) * pitch < 1; }).toBe(true);
     const before = await left(page);
     const page0 = await page.locator('#empty').evaluate(node => node.scrollTop);
     await page.mouse.wheel(0, 120);

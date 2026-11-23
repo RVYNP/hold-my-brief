@@ -6,14 +6,14 @@
 //! - On Windows: a loopback-only (`127.0.0.1:0`) raw NDJSON TCP listener guarded by a per-session
 //!   256-bit random token written to `control.json`. Non-HTTP framing + secret token prevents
 //!   browser CSRF/DNS-rebinding.
-//! - Users can disable the server at any time in Settings → General; disabling tears down the
+//! - Users can disable the server at any time in Settings → Agent control; disabling tears down the
 //!   listener and deletes `control.json` immediately.
 
 use crate::{state::now, Shared};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     fs,
     io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
@@ -22,7 +22,7 @@ use std::{
         mpsc, Arc, Condvar, Mutex,
     },
     thread,
-    time::{Duration, SystemTime},
+    time::{Duration, Instant, SystemTime},
 };
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -33,6 +33,132 @@ const MAX_BRIEF_BYTES: usize = 4 * 1024 * 1024;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 const READY_TIMEOUT: Duration = Duration::from_secs(8);
 const WATCH_POLL: Duration = Duration::from_millis(350);
+
+// ---------------------------------------------------------------- event log
+
+/// Event types the reader may record through `control_event`.
+pub const EVENT_TYPES: [&str; 4] = ["selection", "page", "tab", "send"];
+const EVENT_RING: usize = 256;
+const EVENT_STRING_CHARS: usize = 2000;
+const EVENTS_DEFAULT_LIMIT: usize = 50;
+const EVENTS_MAX_WAIT_MS: u64 = 60_000;
+
+#[derive(Default)]
+struct EventState {
+    events: VecDeque<Value>,
+    /// Seq of the newest event ever recorded; survives `clear` so seq never repeats within a process.
+    last_seq: u64,
+}
+
+/// In-memory ring of what the user did in the reader. Never written to disk.
+#[derive(Default)]
+pub struct EventLog {
+    state: Mutex<EventState>,
+    arrived: Condvar,
+}
+
+fn truncate_strings(value: &mut Value) {
+    match value {
+        Value::String(s) => {
+            if let Some((idx, _)) = s.char_indices().nth(EVENT_STRING_CHARS) {
+                s.truncate(idx);
+            }
+        }
+        Value::Array(items) => items.iter_mut().for_each(truncate_strings),
+        Value::Object(map) => map.values_mut().for_each(truncate_strings),
+        _ => {}
+    }
+}
+
+impl EventLog {
+    /// Validates and appends one event; the native side owns `seq` and `at`. Returns the new seq.
+    pub fn push(&self, event: Value) -> Result<u64, String> {
+        let Value::Object(mut fields) = event else {
+            return Err("An event must be a JSON object.".into());
+        };
+        let kind = match fields.get("type").and_then(Value::as_str) {
+            Some(kind) if EVENT_TYPES.contains(&kind) => kind.to_string(),
+            _ => return Err(format!("An event needs a string 'type' of: {}.", EVENT_TYPES.join(", "))),
+        };
+        fields.values_mut().for_each(truncate_strings);
+        let mut state = self.state.lock().map_err(|_| "Event log is unavailable")?;
+        state.last_seq += 1;
+        let seq = state.last_seq;
+        fields.insert("seq".into(), json!(seq));
+        fields.insert("at".into(), json!(now()));
+        fields.insert("type".into(), Value::String(kind));
+        if state.events.len() == EVENT_RING {
+            state.events.pop_front();
+        }
+        state.events.push_back(Value::Object(fields));
+        self.arrived.notify_all();
+        Ok(seq)
+    }
+
+    /// Drops every kept event (the seq counter stays); a waiting `query` keeps waiting for new events until its wait ends.
+    pub fn clear(&self) {
+        if let Ok(mut state) = self.state.lock() {
+            state.events.clear();
+            self.arrived.notify_all();
+        }
+    }
+
+    /// Events with `seq > since` whose type is in `types` (all when `None`), at most `limit`. Waits up
+    /// to `wait` for the first match. `next` is the last returned seq, or the latest seq if none.
+    pub fn query(&self, since: u64, wait: Duration, types: Option<&[String]>, limit: usize) -> Value {
+        let deadline = Instant::now() + wait;
+        let Ok(mut state) = self.state.lock() else {
+            return json!({ "events": [], "next": since });
+        };
+        loop {
+            let matching: Vec<Value> = state
+                .events
+                .iter()
+                .filter(|e| e["seq"].as_u64().is_some_and(|s| s > since))
+                .filter(|e| types.map_or(true, |t| e["type"].as_str().is_some_and(|k| t.iter().any(|x| x == k))))
+                .take(limit)
+                .cloned()
+                .collect();
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if !matching.is_empty() || remaining.is_zero() {
+                let oldest_kept = state.events.front().and_then(|e| e["seq"].as_u64()).unwrap_or(state.last_seq + 1);
+                let next = matching.last().and_then(|e| e["seq"].as_u64()).unwrap_or(state.last_seq);
+                let mut reply = json!({ "events": matching, "next": next });
+                if oldest_kept > since.saturating_add(1) {
+                    reply["dropped"] = json!(true);
+                }
+                return reply;
+            }
+            state = match self.arrived.wait_timeout(state, remaining) {
+                Ok((guard, _)) => guard,
+                Err(_) => return json!({ "events": [], "next": since }),
+            };
+        }
+    }
+}
+
+/// Parsed `events` request parameters.
+struct EventsQuery {
+    since: u64,
+    wait: Duration,
+    types: Option<Vec<String>>,
+    limit: usize,
+}
+
+fn parse_events_params(params: &Value) -> EventsQuery {
+    let since = params.get("since").and_then(Value::as_u64).unwrap_or(0);
+    let wait_ms = params.get("wait").and_then(Value::as_u64).unwrap_or(0).min(EVENTS_MAX_WAIT_MS);
+    let limit = params
+        .get("limit")
+        .and_then(Value::as_u64)
+        .map_or(EVENTS_DEFAULT_LIMIT, |n| n as usize)
+        .clamp(1, EVENT_RING);
+    let types = params
+        .get("types")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect());
+    EventsQuery { since, wait: Duration::from_millis(wait_ms), types, limit }
+}
 
 // ---------------------------------------------------------------- protocol types
 
@@ -272,6 +398,15 @@ impl FileWatcher {
         watcher
     }
 
+    #[cfg(test)]
+    fn idle() -> Arc<Self> {
+        Arc::new(Self {
+            entries: Mutex::new(HashMap::new()),
+            wake: Condvar::new(),
+            shutdown: AtomicBool::new(false),
+        })
+    }
+
     pub fn watch(&self, key: String, resolved: PathBuf) {
         let stamp = file_stamp(&resolved);
         if let Ok(mut map) = self.entries.lock() {
@@ -338,6 +473,7 @@ pub struct ControlBridge {
     server: Mutex<Option<ServerHandle>>,
     pub briefs: BriefStore,
     pub watcher: Arc<FileWatcher>,
+    pub events: EventLog,
 }
 
 struct ServerHandle {
@@ -409,15 +545,20 @@ fn generate_token() -> String {
 
 impl ControlBridge {
     pub fn new(app: &AppHandle, app_data_dir: &Path) -> Arc<Self> {
+        Self::with_watcher(default_discovery_path(app_data_dir), FileWatcher::start(app.clone()))
+    }
+
+    fn with_watcher(discovery_path: PathBuf, watcher: Arc<FileWatcher>) -> Arc<Self> {
         Arc::new(Self {
-            discovery_path: default_discovery_path(app_data_dir),
+            discovery_path,
             ready: Mutex::new(false),
             ready_cv: Condvar::new(),
             next_id: AtomicU64::new(1),
             pending: Mutex::new(HashMap::new()),
             server: Mutex::new(None),
             briefs: BriefStore::default(),
-            watcher: FileWatcher::start(app.clone()),
+            watcher,
+            events: EventLog::default(),
         })
     }
 
@@ -614,12 +755,11 @@ impl ControlBridge {
     }
 
     fn dispatch(&self, app: &AppHandle, req: ControlRequest) -> ControlResponse {
+        if let Some(response) = self.dispatch_native(&req) {
+            return response;
+        }
         let id = req.id.clone();
         let method = req.method.as_str();
-        if method == "ping" {
-            let ready = self.ready.lock().map(|r| *r).unwrap_or(false);
-            return ControlResponse::ok(id, json!({ "version": 1, "pid": std::process::id(), "ready": ready }));
-        }
         if !self.wait_ready(READY_TIMEOUT) {
             return ControlResponse::err(id, "Hold My Brief is still starting up. Try again in a moment.");
         }
@@ -637,6 +777,23 @@ impl ControlBridge {
         match self.call_webview(app, method, params) {
             Ok(result) => ControlResponse::ok(id, result),
             Err(error) => ControlResponse::err(id, error),
+        }
+    }
+
+    /// Methods answered without the reader window (and without waiting for it to be ready). `events` may block for its `wait`
+    /// on the connection's own thread; the socket timeouts only cover reading the request line, so they never cut that wait short.
+    fn dispatch_native(&self, req: &ControlRequest) -> Option<ControlResponse> {
+        let id = req.id.clone();
+        match req.method.as_str() {
+            "ping" => {
+                let ready = self.ready.lock().map(|r| *r).unwrap_or(false);
+                Some(ControlResponse::ok(id, json!({ "version": 1, "pid": std::process::id(), "ready": ready })))
+            }
+            "events" => {
+                let q = parse_events_params(&req.params);
+                Some(ControlResponse::ok(id, self.events.query(q.since, q.wait, q.types.as_deref(), q.limit)))
+            }
+            _ => None,
         }
     }
 
@@ -810,6 +967,19 @@ pub fn control_reply(
 }
 
 #[tauri::command]
+pub fn control_event(
+    event: Value,
+    state: State<'_, Shared>,
+    bridge: State<'_, Arc<ControlBridge>>,
+) -> Result<(), String> {
+    let enabled = state.lock().map_err(|_| "Reading state is unavailable")?.saved.control_enabled;
+    if !enabled {
+        return Ok(());
+    }
+    bridge.events.push(event).map(|_| ())
+}
+
+#[tauri::command]
 pub fn control_status(
     state: State<'_, Shared>,
     bridge: State<'_, Arc<ControlBridge>>,
@@ -829,6 +999,7 @@ pub fn set_control_enabled(
         bridge.start(app)?;
     } else {
         bridge.stop();
+        bridge.events.clear();
     }
     let mut store = state.lock().map_err(|_| "Reading state is unavailable")?;
     store.saved.control_enabled = enabled;
@@ -961,5 +1132,148 @@ mod tests {
         let loaded: DiscoveryInfo = serde_json::from_slice(&fs::read(&file).unwrap()).unwrap();
         assert_eq!(loaded.pid, 42);
         assert_eq!(loaded.socket.as_deref(), Some("/tmp/test.sock"));
+    }
+
+    fn event(kind: &str, text: &str) -> Value {
+        json!({ "type": kind, "text": text })
+    }
+
+    fn seqs(reply: &Value) -> Vec<u64> {
+        reply["events"].as_array().unwrap().iter().map(|e| e["seq"].as_u64().unwrap()).collect()
+    }
+
+    #[test]
+    fn event_ring_keeps_newest_256_and_reports_dropped() {
+        let log = EventLog::default();
+        for i in 0..300 {
+            assert_eq!(log.push(event("page", &i.to_string())).unwrap(), i + 1);
+        }
+        let all = log.query(0, Duration::ZERO, None, 256);
+        let got = seqs(&all);
+        assert_eq!((got.len(), got[0], *got.last().unwrap()), (256, 45, 300));
+        assert_eq!(all["dropped"], json!(true));
+        assert_eq!(all["next"], json!(300));
+        // The client has seen everything up to 44: nothing it has not seen was lost.
+        assert!(log.query(44, Duration::ZERO, None, 256).get("dropped").is_none());
+        assert_eq!(log.query(299, Duration::ZERO, None, 256)["events"][0]["text"], json!("299"));
+    }
+
+    #[test]
+    fn event_queries_filter_by_since_types_and_limit() {
+        let log = EventLog::default();
+        for (kind, text) in [("selection", "a"), ("page", "b"), ("send", "c"), ("selection", "d")] {
+            log.push(event(kind, text)).unwrap();
+        }
+        assert_eq!(seqs(&log.query(0, Duration::ZERO, None, 50)), [1, 2, 3, 4]);
+        assert_eq!(seqs(&log.query(2, Duration::ZERO, None, 50)), [3, 4]);
+        let wanted = vec!["selection".to_string(), "send".to_string()];
+        assert_eq!(seqs(&log.query(0, Duration::ZERO, Some(&wanted), 50)), [1, 3, 4]);
+        let limited = log.query(0, Duration::ZERO, None, 2);
+        assert_eq!((seqs(&limited), limited["next"].clone()), (vec![1, 2], json!(2)));
+        let none = log.query(4, Duration::ZERO, None, 50);
+        assert_eq!((seqs(&none).len(), none["next"].clone()), (0, json!(4)));
+        // A type filter that matches nothing still reports the latest seq as `next`.
+        let page_only = vec!["page".to_string()];
+        assert_eq!(log.query(2, Duration::ZERO, Some(&page_only), 50)["next"], json!(4));
+    }
+
+    #[test]
+    fn waiting_query_returns_when_a_matching_event_is_pushed() {
+        let log = Arc::new(EventLog::default());
+        let producer = log.clone();
+        let started = Instant::now();
+        let handle = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(100));
+            producer.push(event("page", "ignored")).unwrap();
+            thread::sleep(Duration::from_millis(100));
+            producer.push(event("send", "wanted")).unwrap();
+        });
+        let wanted = vec!["send".to_string()];
+        let reply = log.query(0, Duration::from_secs(10), Some(&wanted), 50);
+        handle.join().unwrap();
+        assert!(started.elapsed() < Duration::from_secs(5));
+        assert_eq!(seqs(&reply), [2]);
+        assert_eq!(reply["events"][0]["text"], json!("wanted"));
+    }
+
+    #[test]
+    fn waiting_query_times_out_empty_with_latest_next() {
+        let log = EventLog::default();
+        log.push(event("tab", "x")).unwrap();
+        let started = Instant::now();
+        let reply = log.query(1, Duration::from_millis(150), None, 50);
+        assert!(started.elapsed() >= Duration::from_millis(150));
+        assert_eq!(reply["events"], json!([]));
+        assert_eq!(reply["next"], json!(1));
+    }
+
+    #[test]
+    fn clear_empties_the_log_but_keeps_counting() {
+        let log = EventLog::default();
+        log.push(event("page", "a")).unwrap();
+        log.push(event("page", "b")).unwrap();
+        log.clear();
+        let empty = log.query(0, Duration::ZERO, None, 50);
+        assert_eq!((seqs(&empty).len(), empty["next"].clone()), (0, json!(2)));
+        assert_eq!(empty["dropped"], json!(true));
+        assert_eq!(log.push(event("page", "c")).unwrap(), 3);
+    }
+
+    #[test]
+    fn push_rejects_bad_events_and_truncates_long_strings() {
+        let log = EventLog::default();
+        assert!(log.push(json!("selection")).is_err());
+        assert!(log.push(json!([{ "type": "selection" }])).is_err());
+        assert!(log.push(json!({ "text": "no type" })).is_err());
+        assert!(log.push(json!({ "type": 7 })).is_err());
+        assert!(log.push(json!({ "type": "keystroke" })).is_err());
+        assert_eq!(log.query(0, Duration::ZERO, None, 50)["next"], json!(0));
+
+        let long = "é".repeat(5000);
+        log.push(json!({ "type": "selection", "text": long, "seq": 99, "at": 1 })).unwrap();
+        let reply = log.query(0, Duration::ZERO, None, 50);
+        let stored = &reply["events"][0];
+        assert_eq!(stored["text"].as_str().unwrap().chars().count(), 2000);
+        assert_eq!(stored["seq"], json!(1));
+        assert!(stored["at"].as_u64().unwrap() > 1);
+    }
+
+    #[test]
+    fn events_params_are_clamped() {
+        let q = parse_events_params(&json!({}));
+        assert_eq!((q.since, q.wait, q.limit, q.types), (0, Duration::ZERO, 50, None));
+        let q = parse_events_params(&json!({ "since": 7, "wait": 999999, "limit": 9999, "types": ["send", 3] }));
+        assert_eq!((q.since, q.wait, q.limit), (7, Duration::from_secs(60), 256));
+        assert_eq!(q.types, Some(vec!["send".to_string()]));
+    }
+
+    #[test]
+    fn a_waiting_events_call_does_not_block_ping_or_status() {
+        let bridge = ControlBridge::with_watcher(PathBuf::from("unused-control.json"), FileWatcher::idle());
+        let waiter = bridge.clone();
+        let handle = thread::spawn(move || {
+            let req = ControlRequest {
+                id: "w".into(),
+                token: None,
+                method: "events".into(),
+                params: json!({ "wait": 10000, "types": ["send"] }),
+            };
+            waiter.dispatch_native(&req).unwrap()
+        });
+        thread::sleep(Duration::from_millis(150));
+
+        let started = Instant::now();
+        let ping = ControlRequest { id: "p".into(), token: None, method: "ping".into(), params: Value::Null };
+        let pong = bridge.dispatch_native(&ping).unwrap();
+        assert!(pong.ok);
+        let status = bridge.status(true);
+        assert!(!status.running);
+        assert!(started.elapsed() < Duration::from_secs(2));
+        assert!(!handle.is_finished());
+
+        bridge.events.push(event("send", "go")).unwrap();
+        let reply = handle.join().unwrap();
+        assert!(reply.ok);
+        assert_eq!(reply.result.unwrap()["events"][0]["text"], json!("go"));
     }
 }

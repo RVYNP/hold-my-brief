@@ -167,9 +167,11 @@ test('pill › More: Go to…, Back after jump and the page commands; Go to… o
   await expect(page.locator('#jump')).toBeVisible();
   await expect(page.locator('#target')).toBeFocused();
   await page.locator('#target').fill('4');
+  // The dialog hands focus to the page twice: when it closes, and again from its queued `close` event. Only after the second is the button ours to focus.
+  const closed = page.evaluate(() => new Promise<void>(resolve => document.getElementById('jump')!.addEventListener('close', () => setTimeout(resolve), { once: true })));
   await page.getByRole('button', { name: 'Go to location', exact: true }).click();
   await expect(page.locator('#position')).toContainText('Page 4 of 5');
-  // The closing dialog hands focus to the page; only then is the button ours to focus.
+  await closed;
   await expect(page.locator('#jump')).toBeHidden();
   await expect(page.locator('.reader-host:not(.staging):not(.tab-hidden)')).toBeFocused();
   // From the keyboard: Enter opens it on its first item, Escape closes it and focus is back on the button.

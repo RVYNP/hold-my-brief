@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { mockDesktop } from './desktop-mock';
 import { openSettings } from './settings-controls';
 
@@ -107,13 +107,157 @@ test('standalone .svg files open in the image viewer with scripts stripped', asy
   expect(await page.evaluate(() => (window as unknown as { __svgFilePwned?: boolean }).__svgFilePwned)).toBeUndefined();
 });
 
-test('desktop Settings › General shows the Agent control switch', async ({ page }) => {
+test('desktop Settings shows the Agent control switch', async ({ page }) => {
   await mockDesktop(page);
   await page.setViewportSize({ width: 1080, height: 760 });
   await page.goto('/');
 
   const sheet = await openSettings(page);
-  await sheet.getByRole('tab', { name: 'General' }).click();
   await expect(sheet.locator('#settings-control')).toBeVisible();
   await expect(sheet.getByRole('switch', { name: 'Local CLI and agents' })).toBeVisible();
+});
+
+/** Sends one control request as the native bridge does and returns the reader's reply, which must be ok. */
+async function control<T>(page: Page, request: string, method: string, params: Record<string, unknown>): Promise<T> {
+  await page.evaluate(([request, method, params]) => window.__mockEmit('control-request', { id: request, method, params }), [request, method, params] as const);
+  await expect.poll(() => page.evaluate(request => window.__mockReplies.some(reply => reply.id === request), request)).toBe(true);
+  const reply = await page.evaluate(request => window.__mockReplies.find(reply => reply.id === request)!, request);
+  expect(reply.ok, reply.error ?? '').toBe(true);
+  return reply.result as T;
+}
+
+const putBrief = (page: Page, id: string, content: string) => page.evaluate(([id, content]) => {
+  const path = `hold-my-brief:brief/${id}`;
+  window.__mockBriefs[path] = { id, path, title: id, format: 'md', content, updatedAt: Date.now() };
+}, [id, content] as const);
+
+const pushBrief = (page: Page, request: string, id: string, split?: 'right') =>
+  control<{ paneId: string; splitRefused?: string }>(page, request, 'brief', { id, path: `hold-my-brief:brief/${id}`, title: id, format: 'md', ...(split ? { split } : {}) });
+
+test('a brief split the window cannot make opens as a tab and the reply says why; briefs are never saved in the session', async ({ page }) => {
+  await mockDesktop(page);
+  await page.setViewportSize({ width: 640, height: 760 });
+  await page.goto('/');
+  for (const id of ['plan', 'notes', 'diagram']) await putBrief(page, id, `# ${id}\n\nBody.`);
+
+  await pushBrief(page, 'r-plan', 'plan');
+  const narrow = await pushBrief(page, 'r-notes', 'notes', 'right');
+  expect(narrow.splitRefused).toBe('The window is too narrow to split');
+  expect(narrow.paneId).toBe('a');
+  await expect(page.locator('#workspace')).not.toHaveClass(/is-split/);
+
+  await page.setViewportSize({ width: 1080, height: 760 });
+  const wide = await pushBrief(page, 'r-diagram', 'diagram', 'right');
+  expect(wide.splitRefused).toBeUndefined();
+  expect(wide.paneId).not.toBe('a');
+  await expect(page.locator('#workspace')).toHaveClass(/is-split/);
+
+  // The split holds only briefs: no session names one, and the last carries no layout, so the next launch restores no empty pane.
+  await expect.poll(() => page.evaluate(() => window.__mockSessions.length)).toBeGreaterThan(0);
+  const sessions = await page.evaluate(() => window.__mockSessions);
+  expect(sessions.flatMap(session => session.tabs.map(tab => tab.path)).filter(path => path.startsWith('hold-my-brief:brief/'))).toEqual([]);
+  expect(sessions.at(-1)!.layout).toBeUndefined();
+});
+
+test('pushing a brief again updates its tab in place and keeps the reader\'s place', async ({ page }) => {
+  await mockDesktop(page);
+  await page.setViewportSize({ width: 1080, height: 760 });
+  await page.goto('/');
+  const sections = (word: string) => Array.from({ length: 40 }, (_, i) => `## Section ${i + 1}\n\n${i === 35 ? `${word} text in section 36.` : 'Filler paragraph. '.repeat(12)}`).join('\n\n');
+  await putBrief(page, 'plan', `# Plan\n\n${sections('Old')}`);
+  await pushBrief(page, 'r-1', 'plan');
+  await control(page, 'r-goto', 'goto', { heading: 'Section 36' });
+  await expect(page.getByText('Old text in section 36.')).toBeInViewport();
+  type Status = { panes: { tabs: { path: string }[] }[]; active: { path: string; position: string } | null };
+  const tabsOf = (status: Status) => status.panes.flatMap(pane => pane.tabs.map(tab => tab.path));
+  const before = await control<Status>(page, 'r-status-1', 'status', {});
+
+  await putBrief(page, 'plan', `# Plan\n\n${sections('New')}`);
+  await pushBrief(page, 'r-2', 'plan');
+  await expect(page.getByText('New text in section 36.')).toBeInViewport();
+  const after = await control<Status>(page, 'r-status-2', 'status', {});
+  expect(tabsOf(after).filter(path => path === 'hold-my-brief:brief/plan')).toHaveLength(1);
+  expect(tabsOf(after)).toEqual(tabsOf(before));
+  expect(after.active?.path).toBe('hold-my-brief:brief/plan');
+  expect(after.active?.position).toBe(before.active?.position);
+});
+
+/** The reader has heard from `control_status`; events are recorded (or not) from here on. */
+const controlSeen = (page: Page, on: boolean) => expect(page.locator('#settings-control [role="switch"]')).toHaveAttribute('aria-checked', String(on));
+const recorded = (page: Page, type: string) => page.evaluate(type => window.__mockEvents.filter(event => event.type === type), type);
+const selectParagraph = (page: Page, text: string) => page.evaluate(text => {
+  const paragraph = [...document.querySelectorAll('.reader-text-content p')].find(element => element.textContent?.includes(text))!;
+  getSelection()!.selectAllChildren(paragraph);
+}, text);
+const SETTLE = 1500; // The reader waits 600 ms after the last selection change before it reports one.
+const agentBrief = '# Plan\n\nWhich option should the agent take first?\n\nSecond paragraph, also worth sending.';
+
+async function openAgentBrief(page: Page, control: { enabled: boolean; running: boolean }) {
+  await mockDesktop(page, { control });
+  await page.setViewportSize({ width: 1080, height: 760 });
+  await page.goto('/');
+  await controlSeen(page, control.enabled);
+  await putBrief(page, 'plan', agentBrief);
+  await pushBrief(page, 'r-plan', 'plan');
+  await expect(page.locator('.reader-text-content')).toContainText('Second paragraph');
+}
+
+test('selecting text in a brief records one selection event once it has settled, and the same selection is not sent again', async ({ page }) => {
+  await openAgentBrief(page, { enabled: true, running: true });
+  await selectParagraph(page, 'Which option');
+  await expect.poll(() => recorded(page, 'selection')).toHaveLength(1);
+  await page.waitForTimeout(SETTLE);
+  const [event] = await recorded(page, 'selection');
+  expect(await recorded(page, 'selection')).toHaveLength(1);
+  expect(event).toMatchObject({ type: 'selection', paneId: 'a', path: 'hold-my-brief:brief/plan', title: 'plan', text: 'Which option should the agent take first?' });
+  expect(typeof event!.where).toBe('string');
+
+  // Another selection is another event; clearing one says nothing.
+  await selectParagraph(page, 'Second paragraph');
+  await expect.poll(() => recorded(page, 'selection')).toHaveLength(2);
+  await page.evaluate(() => getSelection()!.removeAllRanges());
+  await page.waitForTimeout(SETTLE);
+  expect(await recorded(page, 'selection')).toHaveLength(2);
+});
+
+test('Send selection to agent records a send event from the palette and from its shortcut', async ({ page }) => {
+  await openAgentBrief(page, { enabled: true, running: true });
+  await selectParagraph(page, 'Which option');
+  await page.keyboard.press('Control+k');
+  await page.locator('#palette-input').fill('send selection');
+  const row = page.locator('#palette-list .palette-row', { hasText: 'Send selection to agent' });
+  await expect(row).toHaveAttribute('aria-disabled', 'false');
+  await page.keyboard.press('Enter');
+  await expect.poll(() => recorded(page, 'send')).toHaveLength(1);
+  await expect(page.locator('#notice')).toContainText('Sent to agent');
+  expect((await recorded(page, 'send'))[0]).toMatchObject({ type: 'send', paneId: 'a', path: 'hold-my-brief:brief/plan', text: 'Which option should the agent take first?' });
+
+  await page.locator('.reader-host:not(.staging)').focus();
+  await selectParagraph(page, 'Second paragraph');
+  await page.keyboard.press('Control+Shift+Enter');
+  await expect.poll(() => recorded(page, 'send')).toHaveLength(2);
+  expect((await recorded(page, 'send'))[1]).toMatchObject({ text: 'Second paragraph, also worth sending.' });
+});
+
+test('closing a brief records a tab event, and showing it recorded one before', async ({ page }) => {
+  await openAgentBrief(page, { enabled: true, running: true });
+  await control(page, 'r-close', 'close', { id: 'plan' });
+  await expect.poll(() => recorded(page, 'tab').then(events => events.map(event => event.action))).toEqual(['shown', 'closed']);
+  const [, closed] = await recorded(page, 'tab');
+  expect(closed).toMatchObject({ type: 'tab', action: 'closed', paneId: 'a', path: 'hold-my-brief:brief/plan', title: 'plan', format: 'md', brief: true });
+});
+
+test('with Agent control off nothing is recorded and Send selection to agent is unavailable', async ({ page }) => {
+  await openAgentBrief(page, { enabled: false, running: false });
+  await selectParagraph(page, 'Which option');
+  await page.waitForTimeout(SETTLE);
+  await page.keyboard.press('Control+k');
+  await page.locator('#palette-input').fill('send selection');
+  const row = page.locator('#palette-list .palette-row', { hasText: 'Send selection to agent' });
+  await expect(row).toHaveAttribute('aria-disabled', 'true');
+  await expect(row).toContainText('Agent control');
+  await page.keyboard.press('Escape');
+  await control(page, 'r-close', 'close', { id: 'plan' });
+  await page.waitForTimeout(SETTLE);
+  expect(await page.evaluate(() => window.__mockEvents)).toEqual([]);
 });
