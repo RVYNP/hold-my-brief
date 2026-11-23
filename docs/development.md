@@ -134,7 +134,7 @@ with its own data folder, WebKit storage, assistant keychain entries, control so
 that keeps running untouched:
 
 ```bash
-node scripts/dev-app.mjs build      # dist-dev/Hold My Brief Dev.app, with hmb inside it
+node scripts/dev-app.mjs build      # dist-dev/Hold My Brief Dev.app, with hmb inside it; its frontend builds into dist-dev/web
 npm run smoke:agent                 # reset, launch hidden, drive it through hmb, quit
 ```
 
@@ -149,6 +149,7 @@ permission and takes focus, so never run it unattended). `--keep` leaves the dev
 `node scripts/dev-app.mjs reset` to remove one's data. The loop runs the smoke on every new `main` (see
 `liveSmoke` in `.github/loop.json`). While the screen is locked, WebKit renders nothing and a PDF never finishes
 opening, so the PDF and page checks report **skipped** then; the loop waits for an unlocked screen before its run.
+The dev build never writes to `dist/`, where `npm run package:macos` puts the release `.app` and `.dmg`.
 
 Home and the library intentionally share card classes. Browser scenarios measuring the drawer must
 scope their tile selectors to `.library-documents`, rather than counting Home's tiles too.

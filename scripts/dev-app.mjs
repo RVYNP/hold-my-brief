@@ -63,7 +63,15 @@ function requireMac() {
 
 export function build() {
   requireMac();
-  const config = JSON.stringify({ identifier: DEV_ID, productName: DEV_NAME });
+  // The frontend goes to dist-dev/web: `vite build` empties its output folder, and dist/ also holds the release
+  // bundle that `npm run package:macos` assembles. The command is `npm run build` with `--outDir` added, so
+  // secure-foliate and `tsc --noEmit` still run first. Tauri runs it from the repository root.
+  const web = join(ROOT, 'dist-dev', 'web');
+  const config = JSON.stringify({
+    identifier: DEV_ID,
+    productName: DEV_NAME,
+    build: { frontendDist: web, beforeBuildCommand: 'npm run build -- --outDir dist-dev/web' },
+  });
   // Build output goes to stderr, so `hmb-smoke.mjs --build --json` keeps stdout to its JSON report.
   const r = spawnSync('npx', ['tauri', 'build', '--bundles', 'app', '--no-sign', '--config', config], { cwd: ROOT, stdio: ['ignore', 2, 2] });
   if (r.status !== 0) throw new Error(`tauri build failed (exit ${r.status}).`);
