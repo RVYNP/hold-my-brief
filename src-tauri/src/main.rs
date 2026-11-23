@@ -713,6 +713,7 @@ fn main() {
             control::control_reply,
             control::control_status,
             control::control_event,
+            control::control_area,
             control::set_control_enabled,
             control::read_brief,
             control::save_brief_as,

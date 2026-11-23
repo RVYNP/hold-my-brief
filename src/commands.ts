@@ -35,6 +35,8 @@ export type Command = {
   requiresDesktop?: boolean;
   /** True when the command hands the user's selection to an agent: Agent control must be on and some text selected. */
   needsAgent?: boolean;
+  /** What a `needsAgent` command hands over: the selected text (the default) or a box dragged over a page (`area`, which needs a reader that can capture one). */
+  agentTarget?: 'area';
   /** `right` and `down`: splits a pane (the window needs room, fewer than four panes and, once split, a pane with a second tab); `on`: the window must be split; `two`: it must have exactly two panes. */
   split?: 'right' | 'down' | 'on' | 'two';
 };
@@ -84,6 +86,7 @@ export const COMMANDS: readonly Command[] = [
   { id: 'type', label: 'Text size & spacing…', group: 'Reading', keywords: ['typography', 'font', 'size', 'line', 'margin', 'spacing', 'wrap'], requiresDocument: true },
   { id: 'assistant', label: 'AI assistant…', group: 'Reading', keywords: ['ai', 'ask', 'claude', 'chat', 'question', 'api key', 'anthropic'], requiresDesktop: true },
   { id: 'send-to-agent', label: 'Send selection to agent', group: 'Reading', keywords: ['hmb', 'events', 'terminal', 'cli', 'share', 'selected text', 'agent control'], shortcut: 'Ctrl Shift Enter', requiresDesktop: true, needsAgent: true },
+  { id: 'send-area-to-agent', label: 'Send area to agent', group: 'Reading', keywords: ['hmb', 'events', 'terminal', 'cli', 'share', 'screenshot', 'crop', 'box', 'drag', 'region', 'image', 'agent control'], shortcut: 'Ctrl Shift A', requiresDesktop: true, needsAgent: true, agentTarget: 'area' },
   { id: 'pin', label: 'Toggle pin (always on top)', group: 'Window', keywords: ['float', 'above', 'sticky'], shortcut: 'Ctrl Shift T', requiresDesktop: true },
   { id: 'lock', label: 'Toggle size lock', group: 'Window', keywords: ['resize', 'resizable', 'fixed size'], shortcut: 'Ctrl Shift L', requiresDesktop: true },
   { id: 'compact', label: 'Compact window', group: 'Window', keywords: ['small', 'shrink'], requiresDesktop: true },
@@ -145,6 +148,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: 'back', key: 'arrowleft', alt: true },
   ...orCommand({ id: 'new-tab', key: 't' }),
   ...orCommand({ id: 'send-to-agent', key: 'enter', shift: true }),
+  ...orCommand({ id: 'send-area-to-agent', key: 'a', shift: true }),
   ...orCommand({ id: 'close-tab', key: 'w' }),
   ...orCommand({ id: 'split-right', key: '\\' }),
   ...orCommand({ id: 'split-down', key: '\\', code: 'Backslash', shift: true }),
@@ -198,8 +202,8 @@ export function splitReason(axis: 'right' | 'down', context: SplitContext): stri
   return undefined;
 }
 
-/** What Agent control looks like to the commands that talk to an agent: whether it is on, and whether any text is selected to send. */
-export type AgentContext = { enabled: boolean; selection: boolean };
+/** What Agent control looks like to the commands that talk to an agent: whether it is on, whether any text is selected to send, and whether the document shown can give the pixels of an area. */
+export type AgentContext = { enabled: boolean; selection: boolean; area: boolean };
 
 /** Why a command cannot run right now, or undefined when it can. */
 export function unavailableReason(command: Command, context: { hasDocument: boolean; desktop: boolean; format?: string; split?: SplitContext; agent?: AgentContext }): string | undefined {
@@ -211,7 +215,8 @@ export function unavailableReason(command: Command, context: { hasDocument: bool
   if (command.requiresDesktop && !context.desktop) return 'Available in the desktop app';
   if (command.needsAgent) {
     if (!context.agent?.enabled) return 'Turn on Agent control in Settings first';
-    if (!context.agent.selection) return 'Select some text first';
+    if (command.agentTarget === 'area') { if (!context.agent.area) return 'Area capture works on PDF pages and images; select text instead.'; }
+    else if (!context.agent.selection) return 'Select some text first';
   }
   if (context.hasDocument && !appliesTo(command, context.format)) return `Available for ${command.formats!.map(format => format.toUpperCase()).join(' and ')} documents`;
   return undefined;

@@ -3,6 +3,7 @@ import { PREVIEW_CLASS } from '../zoom-gesture';
 import { restoreView, type Anchor } from '../zoom-anchor';
 import { clampZoom, DEFAULT_LIMITS, type ZoomLimits } from '../zoom';
 import { documentThemeVar, sanitizeSvg } from '../svg-sanitize';
+import { canvasPng, planArea, type AreaCapture, type Box } from '../area';
 
 /** The longest an image may be drawn along either side, in CSS px, short of the browsers' ~33 M px layout ceiling. */
 const MAX_EXTENT = 24_000;
@@ -127,6 +128,23 @@ export class ImageAdapter implements ReaderAdapter {
   }
   outline() { return []; }
   scroller() { return this.host; }
+
+  async captureArea(box: Box): Promise<AreaCapture> {
+    if (this.destroyed || !this.image.naturalWidth) throw new Error('The image is no longer shown.');
+    const origin = this.host.getBoundingClientRect(), rect = this.image.getBoundingClientRect(), bounds = this.bounds();
+    // The image as the user sees it: rotated, so its box is `bounds()` in image pixels.
+    const plan = planArea(box, [{ rect: { x: rect.left - origin.left, y: rect.top - origin.top, w: rect.width, h: rect.height }, pixelsWidth: bounds.width, pixelsHeight: bounds.height }]);
+    if (!plan) throw new Error('Drag the box over the image.');
+    const out = document.createElement('canvas'); out.width = plan.width; out.height = plan.height;
+    const context = out.getContext('2d');
+    if (!context) throw new Error('The area could not be read.');
+    const { source, dest } = plan.draws[0], k = dest.w / source.w;
+    context.imageSmoothingQuality = 'high';
+    context.setTransform(k, 0, 0, k, dest.x - source.x * k, dest.y - source.y * k);
+    context.translate(bounds.width / 2, bounds.height / 2); context.rotate((((this.options.rotation % 360) + 360) % 360) * Math.PI / 180);
+    context.drawImage(this.image, -this.image.naturalWidth / 2, -this.image.naturalHeight / 2, this.image.naturalWidth, this.image.naturalHeight);
+    return { png: await canvasPng(out), width: plan.width, height: plan.height, box: plan.box };
+  }
   destroy() {
     this.destroyed = true; this.observer?.disconnect();
     this.host?.removeEventListener('scroll', this.onScroll); this.host?.classList.remove('image-reader');

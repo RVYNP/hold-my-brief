@@ -10,6 +10,7 @@ import { ImageAdapter } from './adapters/image';
 import { createPalette } from './palette';
 import { createFindBar } from './find-bar';
 import { COMMANDS, FOCUS_PANE_DIRECTIONS, shortcutFor, shortcutReference, splitReason as paneSplitReason, tabDigit, unavailableReason, type SplitContext } from './commands';
+import { startAreaDrag, type AreaDrag } from './area-drag';
 import { createAgentEvents, progressFraction, selectionInfo, type SelectionInfo, type TabInfo } from './agent-events';
 import { appearance, initAppearance, onAppearanceChange, allPalettes, pageTones, saveAppearance, scheme, type AppearanceMode } from './theme';
 import { appearanceSummary } from './appearance';
@@ -142,7 +143,7 @@ const selectionOf = (side: Side): SelectionInfo | undefined => {
 const liveSelection = () => [focused, ...sides.filter(side => side !== focused)].map(selectionOf).find(info => info !== undefined);
 /** The selection Send selection to agent sends: the one on screen, or the last the user made when focus has moved to the palette. */
 const sendableSelection = () => liveSelection() ?? agentEvents.lastSelection();
-const agentContext = () => ({ enabled: agentControl, selection: Boolean(sendableSelection()) });
+const agentContext = () => ({ enabled: agentControl, selection: Boolean(sendableSelection()), area: Boolean(activePane().reader?.captureArea) });
 function observeSelection() {
   if (!agentControl || !focused) return;
   const info = liveSelection();
@@ -155,6 +156,29 @@ setInterval(observeSelection, 250); // Same-origin EPUB frames report selectionc
 function sendSelection() {
   const info = sendableSelection();
   if (info && agentEvents.send(info)) notify('Sent to agent');
+}
+/** The overlay the user is dragging a box on, while there is one. */
+let areaDrag: AreaDrag | undefined;
+/** The most a sent area's PNG may weigh; the native side refuses more. */
+const AREA_MAX_BYTES = 8 * 1024 * 1024;
+/** Send area to agent: the user drags a box over the shown page or image, and the picture of it and where it is goes to the agent. */
+function sendArea() {
+  const side = focused, { reader, host } = side.pane, tab = side.shown;
+  if (!reader?.captureArea || !host || !tab) return;
+  areaDrag?.cancel();
+  const drag = startAreaDrag(host, {
+    onEnd: () => { if (areaDrag === drag) areaDrag = undefined; },
+    onBox: box => void (async () => {
+      const capture = await reader.captureArea!(box);
+      if (side.shown !== tab || side.pane.reader !== reader) throw new Error('The page changed before the area was sent.');
+      if (!agentControl) throw new Error('Turn on Agent control in Settings first');
+      if (capture.png.size > AREA_MAX_BYTES) throw new Error('That area is too large to send (over 8 MB). Drag a smaller box.');
+      const png = Array.from(new Uint8Array(await capture.png.arrayBuffer()));
+      await native('control_area', { png, meta: { paneId: side.view.id, path: tab.path, title: tabTitle(tab), ...(capture.page === undefined ? {} : { page: capture.page }), box: capture.box } });
+      notify('Sent area to agent');
+    })().catch(fail),
+  });
+  areaDrag = drag;
 }
 const tabInfo = (side: Side, tab: Tab): Omit<TabInfo, 'action'> => ({ paneId: side.view.id, path: tab.path, title: tabTitle(tab), format: tab.format, brief: Boolean(tab.brief) });
 /** What takes the whole reading area while split: Home, or the Library page. */
@@ -632,7 +656,7 @@ const assistant = createAssistantPanel($('reader-layout'), {
     },
     runCommand: async id => {
       const entry = COMMANDS.find(candidate => candidate.id === id)!;
-      if (id === 'send-to-agent') throw new Error('Only the user can send a selection.');
+      if (id === 'send-to-agent' || id === 'send-area-to-agent') throw new Error(id === 'send-area-to-agent' ? 'Only the user can send an area.' : 'Only the user can send a selection.');
       const reason = unavailableReason(entry, { hasDocument: Boolean(activePane().reader), desktop, format: activePane().active?.format });
       if (reason) throw new Error(reason);
       const before = { pinned: windowState.pinned, locked: windowState.locked };
@@ -666,6 +690,7 @@ async function command(id: string) {
   else if (id === 'find') findBar.open();
   else if (id === 'assistant') assistant.openSettings();
   else if (id === 'send-to-agent') sendSelection();
+  else if (id === 'send-area-to-agent') sendArea();
   else await action(id);
 }
 
@@ -842,6 +867,7 @@ function show(next: Tab | undefined, refreshed = false) {
   clearCover();
   if (side.shown && side.shown !== next) leave(side.shown);
   const changed = side.shown !== next;
+  if (changed) areaDrag?.cancel();
   side.shown = next; side.tabs.activate(next?.path);
   if (changed) {
     agentEvents.forgetSelection();
@@ -1070,7 +1096,7 @@ const controlHost: ControlHost = {
   runCommand: async id => {
     const entry = COMMANDS.find(candidate => candidate.id === id);
     if (!entry) throw new Error(`Unknown command: ${id}`);
-    if (id === 'send-to-agent') throw new Error('Only the user can send a selection.');
+    if (id === 'send-to-agent' || id === 'send-area-to-agent') throw new Error(id === 'send-area-to-agent' ? 'Only the user can send an area.' : 'Only the user can send a selection.');
     const reason = unavailableReason(entry, { hasDocument: Boolean(activePane().reader), desktop, format: activePane().active?.format, split: splitContext() });
     if (reason) throw new Error(reason);
     await command(id);
@@ -1360,6 +1386,7 @@ function adoptSide(side: Side) {
 }
 function activateSide(side: Side) {
   if (side === focused || !sides.includes(side)) return;
+  areaDrag?.cancel();
   parkSide(focused); focused = side; adoptSide(side); saveSession();
 }
 // The pane last clicked or focused is the active one. A press inside a book's frame never reaches the page (a fixed-layout book's frames report theirs, see `onFrame` in `load`),

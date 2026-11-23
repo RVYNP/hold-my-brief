@@ -98,13 +98,13 @@ hmb events --follow | while read -r e; do …; done   # one JSON line per event,
 | --- | --- |
 | `--since N` | Only events with `seq` greater than N (default 0: everything the app still holds). |
 | `--wait SECONDS` | Without a matching event, wait up to this long (0–60, default 30). An empty list after the wait is not an error; the exit code is 0. |
-| `--type a,b` | Only these types (repeatable): `selection`, `page`, `tab`, `send`. |
+| `--type a,b` | Only these types (repeatable): `selection`, `page`, `tab`, `send`, `area`. |
 | `--limit N` | At most N events (default 50, at most 256). |
 | `--follow` | Loop forever, passing each reply's `next` as the next call's `since`, and print each event as one JSON line (NDJSON) as it arrives. A wait of 0 is raised to 1 s here. Ends on Ctrl-C, when the reader of the pipe goes away, or when the app stops answering (exit 1). |
 | `--json` | Print the reply (`{ "events": [...], "next": N }`) instead of one line per event. |
 
 Without `--json`, each event is one line: `seq type place text…`, where `place` is the position label, title or path. A reply that
-starts with `(older events were dropped)` had missed events (see `dropped` below).
+starts with `(older events were dropped)` had missed events (see `dropped` below). An `area` event is `seq area <title> p.<page> <w>×<h> <image path>` (no `p.<page>` for an image).
 
 ### Events
 
@@ -116,8 +116,25 @@ Every event has `seq` (starts at 1 and grows by one per event while the app runs
 | `send` | The user ran **Send selection to agent** (palette, or Ctrl+Shift+Enter / ⌘⇧↩) | the same as `selection` |
 | `page` | The active document's position label changed and stayed for 800 ms (not while a document loads or reloads) | `paneId`, `path`, `position`, `progress` (0–1, four decimals) |
 | `tab` | A pane showed another tab, or a tab was closed | `action` (`shown` \| `closed`), `paneId`, `path`, `title`, `format`, `brief` (boolean) |
+| `area` | The user ran **Send area to agent** (palette, or Ctrl+Shift+A / ⌘⇧A) and dragged a box over a PDF page or an image | `paneId`, `path`, `title`, `page` (1-based; the page under the box's centre; absent for an image), `box` (`x`, `y`, `w`, `h`: the part of the box over that page, as fractions 0–1 of the page's width and height, four decimals; for an image, of the image), `image` (absolute path of a PNG of the area), `width`, `height` (pixels of the PNG) |
 
 Briefs have `path` `hold-my-brief:brief/<id>`. No document text other than the user's selection is ever in an event; strings are cut at 2000 characters.
+
+#### Areas
+
+**Send selection to agent** needs text to select. For a scanned PDF, a chart or an image the user can run **Send area to agent**
+instead: a crosshair and a hint ("Drag a box to send · Esc to cancel") appear over the reading surface, they drag a box (smaller than
+8 × 8 px, Esc, a click outside the pane, switching tabs or a change in the pane's size cancels it) and the reader sends a picture of exactly that box. It works on PDF pages and images, not on Markdown,
+text or EPUB. Read the `image` file to see it.
+
+- The PNG is cut from the page's own pixels (a PDF at the resolution it is drawn at, an image at its natural one) and is at most 2048 px on
+  its longer side. A box across both pages of a two-page spread is one image; `page` is the page under its centre and `box` is the
+  part of the box on that page. `box` is as the page is shown (after any rotation).
+- The file is `<app local data>/agent-areas/<seq>.png`, readable by the user only. The app keeps the newest 20 and deletes older ones,
+  and deletes the whole folder (and the event log) when **Settings → Agent control** is turned off or the app starts. Copy a file you
+  want to keep. Nothing outside the reading surface is ever captured, and nothing is captured without the user's drag; an agent cannot
+  trigger it (`hmb cmd` refuses it).
+- A PNG over 8 MB, or bytes that are not a PNG, are refused. `hmb events --json` shows the same fields; `image` is the path to open.
 
 ### The `since` / `next` loop
 
@@ -137,7 +154,7 @@ The app keeps the newest 256 events. If `since` is older than the oldest it stil
 were lost, so re-read the state with `hmb status` rather than assuming. If the app restarted, its `seq` starts again at 1; a `since`
 larger than the latest `seq` returns `next` as the latest `seq`, which puts the loop back in step.
 
-Events are kept in memory only, never written to disk, and only while **Settings → Agent control** is on: turning it off drops the
+Events are kept in memory only, never written to disk (an `area` event's PNG is the one file, see Areas), and only while **Settings → Agent control** is on: turning it off drops the
 log and the reader stops recording. `events` is answered by the app itself, so a waiting call never delays `show`, `brief` or `status`.
 
 ## Visual blocks supported in Markdown & briefs

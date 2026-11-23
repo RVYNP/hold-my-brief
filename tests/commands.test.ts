@@ -126,15 +126,15 @@ describe('shortcut matching', () => {
 
 describe('Send selection to agent', () => {
   const command = byId('send-to-agent');
-  const ready = { hasDocument: true, desktop: true, agent: { enabled: true, selection: true } };
+  const ready = { hasDocument: true, desktop: true, agent: { enabled: true, selection: true, area: false } };
 
   it('is available with Agent control on and text selected', () => {
     expect(unavailableReason(command, ready)).toBeUndefined();
   });
 
   it('says why it is not: no selection, Agent control off, or no desktop app', () => {
-    expect(unavailableReason(command, { ...ready, agent: { enabled: true, selection: false } })).toBe('Select some text first');
-    expect(unavailableReason(command, { ...ready, agent: { enabled: false, selection: true } })).toBe('Turn on Agent control in Settings first');
+    expect(unavailableReason(command, { ...ready, agent: { enabled: true, selection: false, area: false } })).toBe('Select some text first');
+    expect(unavailableReason(command, { ...ready, agent: { enabled: false, selection: true, area: false } })).toBe('Turn on Agent control in Settings first');
     expect(unavailableReason(command, { hasDocument: true, desktop: true })).toBe('Turn on Agent control in Settings first');
     expect(unavailableReason(command, { ...ready, desktop: false })).toBe('Available in the desktop app');
   });
@@ -152,6 +152,34 @@ describe('Send selection to agent', () => {
     const rows = (desktop: boolean) => shortcutReference({ desktop }).flatMap(section => section.rows.map(row => row.label));
     expect(rows(true)).toContain('Send selection to agent');
     expect(rows(false)).not.toContain('Send selection to agent');
+  });
+});
+
+describe('Send area to agent', () => {
+  const command = byId('send-area-to-agent');
+  const ready = { hasDocument: true, desktop: true, agent: { enabled: true, selection: false, area: true } };
+
+  it('needs Agent control on and a document that can give a picture, not selected text', () => {
+    expect(unavailableReason(command, ready)).toBeUndefined();
+    expect(unavailableReason(command, { ...ready, agent: { enabled: false, selection: false, area: true } })).toBe('Turn on Agent control in Settings first');
+    expect(unavailableReason(command, { ...ready, agent: { enabled: true, selection: true, area: false } })).toBe('Area capture works on PDF pages and images; select text instead.');
+    expect(unavailableReason(command, { hasDocument: false, desktop: true, agent: { enabled: true, selection: false, area: false } })).toBe('Area capture works on PDF pages and images; select text instead.');
+    expect(unavailableReason(command, { ...ready, desktop: false })).toBe('Available in the desktop app');
+  });
+
+  it('is reached by Ctrl+Shift+A and ⌘+Shift+A, and by nothing plainer', () => {
+    expect(shortcutFor(event('a', { ctrlKey: true, shiftKey: true }))).toBe('send-area-to-agent');
+    expect(shortcutFor(event('A', { metaKey: true, shiftKey: true }))).toBe('send-area-to-agent');
+    expect(shortcutFor(event('a', { ctrlKey: true }))).toBeUndefined();
+    expect(shortcutFor(event('a', { shiftKey: true }))).toBeUndefined();
+    expect(command.shortcut).toBe('Ctrl Shift A');
+  });
+
+  it('is in the palette search and the desktop shortcut reference', () => {
+    expect(searchCommands('send area')[0]?.id).toBe('send-area-to-agent');
+    const rows = (desktop: boolean) => shortcutReference({ desktop }).flatMap(section => section.rows.map(row => row.label));
+    expect(rows(true)).toContain('Send area to agent');
+    expect(rows(false)).not.toContain('Send area to agent');
   });
 });
 
