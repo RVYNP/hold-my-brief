@@ -290,4 +290,14 @@ test('show and close take the Library ids that status reports: an open tab is sh
   const closed = await control<{ closed: string[] }>(page, 'r-close', 'close', { path: ids[0] });
   expect(closed.closed).toEqual([ids[0]]);
   expect(paths(await status('r-status-3'))).toEqual([ids[1]]);
+
+  // A brief path goes to `show` unchanged too, and opens as a brief (not as a file), also in a split.
+  await putBrief(page, 'plan', '# Plan\n\nBody.');
+  const briefPath = 'hold-my-brief:brief/plan';
+  const shownBrief = await control<{ path: string }>(page, 'r-show-brief', 'show', { path: briefPath, split: 'right' });
+  expect(shownBrief.path).toBe(briefPath);
+  const withBrief = await status('r-status-4');
+  expect(paths(withBrief).sort()).toEqual([ids[1], briefPath].sort());
+  expect(withBrief.panes.flatMap(pane => pane.tabs).find(tab => tab.path === briefPath)).toMatchObject({ brief: true });
+  await expect(page.locator('.reader-text-content', { hasText: 'Body.' }).last()).toContainText('Plan');
 });
