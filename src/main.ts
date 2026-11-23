@@ -39,6 +39,7 @@ import { createWindowControls, wireWindowControls } from './window-controls';
 import { Pane } from './pane';
 import { DEFAULT_PERCENT, MIN_SPLIT_WINDOW, PANE_IDS, boxes, evenRatio, fits, freeId, neighbour, panes as panesOf, receiver, removePane, renamePanes, setRatio, splitAt, splitPane, type Axis, type Direction, type Layout, type Path, type Rect } from './layout';
 import { createBody, createDivider, createRow, paintDivider, paintFold, paneMap, withoutIds, type SideView } from './split-view';
+import { hostSelectionText } from './pane-selection';
 import { createContextMenu, type MenuEntry } from './context-menu';
 import { BRIEF_PREFIX, briefIdOf, handleControlRequest, isBriefPath, type ControlHost } from './control';
 initAppearance();
@@ -880,7 +881,8 @@ function paneSelection(side: Side): string {
   const host = side.pane.host;
   if (!host) return '';
   const topSel = window.getSelection();
-  if (topSel && !topSel.isCollapsed && topSel.anchorNode && host.contains(topSel.anchorNode)) return topSel.toString().trim().slice(0, 8000);
+  const text = topSel ? hostSelectionText(host, topSel).trim() : '';
+  if (text) return text.slice(0, 8000);
   for (const frame of host.querySelectorAll<HTMLIFrameElement>('iframe')) {
     try {
       const sel = frame.contentWindow?.getSelection()?.toString().trim();

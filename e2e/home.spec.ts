@@ -240,7 +240,8 @@ test.describe('shelf scrolling', () => {
     const page0 = await page.locator('#empty').evaluate(node => node.scrollTop);
     await page.mouse.wheel(0, 120);
     await expect.poll(() => page.locator('#empty').evaluate(node => node.scrollTop)).toBeGreaterThanOrEqual(page0);
-    expect(await left(page)).toBe(before);
+    // scrollLeft is rounded: a strip resting on a fractional card edge (390.5) reads 391 once and 390 later, so allow that pixel.
+    expect(Math.abs((await left(page)) - before)).toBeLessThanOrEqual(1);
   });
 
   test('a sideways drag scrolls it without opening the card under the pointer', async ({ page }) => {
