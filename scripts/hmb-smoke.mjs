@@ -74,21 +74,26 @@ try {
     expect(r.path === md || r.path?.endsWith('/notes.md'), `reply path ${r.path}`);
     return r.title;
   });
-  await check('show a PDF at page 3', () => {
+  // While the screen is locked WebKit renders nothing, and a PDF never finishes opening (a document that needs no
+  // rendering pass, like Markdown or a brief, still does). Those checks are skipped then, never failed: the loop runs
+  // its smoke when the screen is unlocked, and an unattended worker reports them as skipped.
+  const locked = /CGSSessionScreenIsLocked<\/key>\s*<true\/>/.test(spawnSync('ioreg', ['-n', 'Root', '-d1', '-a'], { encoding: 'utf8' }).stdout ?? '');
+  const unlocked = fn => () => (locked ? { skipped: 'the screen is locked, and WebKit renders nothing until it is unlocked' } : fn());
+  await check('show a PDF at page 3', unlocked(() => {
     const r = call(['show', pdf, '--page', '3']);
     expect(/\b3\b/.test(r.position ?? ''), `position "${r.position}"`);
     return r.position;
-  });
+  }));
   let seq = events(0, 0).next;
-  await check('goto records a page event', async () => {
+  await check('goto records a page event', unlocked(async () => {
     call(['goto', '5']);
     const e = await eventMatching(seq, x => x.type === 'page' && /\b5\b/.test(x.position ?? ''), 'page 5');
     return e.position;
-  });
-  await check('tab events for both documents', () => {
+  }));
+  await check('tab events for the opened documents', () => {
     const shown = events(0, 0).events.filter(e => e.type === 'tab' && e.action === 'shown').map(e => e.path);
-    expect(shown.some(p => p.endsWith('notes.md')) && shown.some(p => p.endsWith('six-pages.pdf')), `shown: ${shown.join(', ')}`);
-    return `${shown.length} shown`;
+    expect(shown.some(p => p.endsWith('notes.md')) && (locked || shown.some(p => p.endsWith('six-pages.pdf'))), `shown: ${shown.join(', ')}`);
+    return `${shown.length} shown${locked ? ' (PDF skipped: screen locked)' : ''}`;
   });
 
   await check('split refused in a narrow window is reported', () => {
@@ -147,14 +152,14 @@ try {
       { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'hmb-smoke', version: '0' } } },
       { jsonrpc: '2.0', method: 'notifications/initialized' },
       { jsonrpc: '2.0', id: 2, method: 'tools/list' },
-      { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'hmb_events', arguments: { since: 0, wait: 1, types: ['page'] } } },
+      { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'hmb_events', arguments: { since: 0, wait: 1, types: ['tab'] } } },
     ].map(l => JSON.stringify(l)).join('\n') + '\n';
     const r = hmb(['mcp'], { input: lines, timeout: 15_000 });
     const replies = r.stdout.split('\n').filter(Boolean).map(l => JSON.parse(l));
     const tools = replies.find(x => x.id === 2)?.result?.tools?.map(t => t.name) ?? [];
     expect(tools.length === 5 && tools.includes('hmb_events'), `tools: ${tools.join(', ')}`);
     const reply = JSON.parse(replies.find(x => x.id === 3)?.result?.content?.[0]?.text ?? '{}');
-    expect(reply.events?.some(e => e.type === 'page'), `hmb_events: ${JSON.stringify(reply).slice(0, 200)}`);
+    expect(reply.events?.some(e => e.type === 'tab'), `hmb_events: ${JSON.stringify(reply).slice(0, 200)}`);
     return tools.join(', ');
   });
 
