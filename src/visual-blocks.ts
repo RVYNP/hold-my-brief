@@ -22,7 +22,10 @@ const str = (value: unknown, fallback = ''): string =>
 
 const formatValue = (value: number, unit = ''): string => {
   const formatted = Number.isInteger(value) ? value.toLocaleString('en-US') : Number(value.toFixed(2)).toLocaleString('en-US');
-  return unit ? `${formatted}${unit}` : formatted;
+  if (!unit) return formatted;
+  // Word units ("lines", "MB", "ms") are separated from the number; symbol units (%, °, ×, x, $) attach.
+  const attaches = !/^\p{L}/u.test(unit) || /^x$/i.test(unit);
+  return attaches ? `${formatted}${unit}` : `${formatted} ${unit}`;
 };
 
 // ---------------------------------------------------------------- chart
