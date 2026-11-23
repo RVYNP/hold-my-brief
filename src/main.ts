@@ -10,6 +10,7 @@ import { ImageAdapter } from './adapters/image';
 import { createPalette } from './palette';
 import { createFindBar } from './find-bar';
 import { COMMANDS, FOCUS_PANE_DIRECTIONS, shortcutFor, shortcutReference, splitReason as paneSplitReason, tabDigit, unavailableReason, type SplitContext } from './commands';
+import { createAgentEvents, progressFraction, selectionInfo, type SelectionInfo, type TabInfo } from './agent-events';
 import { appearance, initAppearance, onAppearanceChange, allPalettes, pageTones, saveAppearance, scheme, type AppearanceMode } from './theme';
 import { appearanceSummary } from './appearance';
 import { createSettingsSheet, type MoreItem } from './settings';
@@ -95,7 +96,7 @@ const settingsSheet = createSettingsSheet($<HTMLDialogElement>('settings'), {
   setControl: enabled => {
     if (!desktop) return;
     void native<{ enabled: boolean; running: boolean; transport: string }>('set_control_enabled', { enabled })
-      .then(status => settingsSheet.showControl(status))
+      .then(setControlState)
       .catch(fail);
   },
   more: item => { if (item === 'palette') openPalette(); else void command(item).catch(fail); },
@@ -124,6 +125,36 @@ const sides: Side[] = [];
 let focused!: Side;
 const activePane = () => focused.pane;
 const isSplit = () => sides.length > 1;
+/** What the reader tells agents (`hmb events`): while the user has Agent control on, what they select, read and send goes to the local control socket and nowhere else. */
+let agentControl = false;
+const agentEvents = createAgentEvents(event => void native('control_event', { event }).catch(() => undefined), () => desktop && agentControl);
+function setControlState(status: { enabled: boolean; running: boolean } | null) {
+  if (status) settingsSheet.showControl(status);
+  agentControl = Boolean(status?.enabled);
+  if (!agentControl) agentEvents.reset();
+}
+const selectionOf = (side: Side): SelectionInfo | undefined => {
+  const tab = side.shown;
+  return tab && side.pane.reader ? selectionInfo({ paneId: side.view.id, path: tab.path, title: tabTitle(tab), where: side.pane.position?.label ?? '' }, paneSelection(side)) : undefined;
+};
+const liveSelection = () => [focused, ...sides.filter(side => side !== focused)].map(selectionOf).find(info => info !== undefined);
+/** The selection Send selection to agent sends: the one on screen, or the last the user made when focus has moved to the palette. */
+const sendableSelection = () => liveSelection() ?? agentEvents.lastSelection();
+const agentContext = () => ({ enabled: agentControl, selection: Boolean(sendableSelection()) });
+function observeSelection() {
+  if (!agentControl || !focused) return;
+  const info = liveSelection();
+  // Focus in a dialog (the palette) empties the live selection without the user giving it up; anywhere else an empty one means they did.
+  if (!info && !document.activeElement?.closest('dialog')) agentEvents.forgetSelection();
+  agentEvents.observeSelection(info);
+}
+document.addEventListener('selectionchange', observeSelection);
+setInterval(observeSelection, 250); // Same-origin EPUB frames report selectionchange to their own document only.
+function sendSelection() {
+  const info = sendableSelection();
+  if (info && agentEvents.send(info)) notify('Sent to agent');
+}
+const tabInfo = (side: Side, tab: Tab): Omit<TabInfo, 'action'> => ({ paneId: side.view.id, path: tab.path, title: tabTitle(tab), format: tab.format, brief: Boolean(tab.brief) });
 /** What takes the whole reading area while split: Home, or the Library page. */
 let cover: 'home' | 'library' | undefined;
 /** While `restoreSplitView` opens the panes: the tabs it opens, and the side the user pressed, focused or selected since (that side keeps the focus). */
@@ -219,6 +250,8 @@ function showPosition(p: Position, save = true) {
     updateScrubValue();
   }
   if (save) pane.markDirty();
+  const shown = focused.shown;
+  if (agentControl) agentEvents.observePosition(!pane.loadingTarget && !cover && shown && shown.path !== LIBRARY_PATH ? { paneId: focused.view.id, path: shown.path, position: p.label, progress: progressFraction(p.fraction) } : undefined);
   updateViewControls();
 }
 function updateScrubValue(preview = false) {
@@ -539,7 +572,7 @@ function openPalette() {
     // Created on first use, and appended after the static dialogs, so the shared close handler
     // above (which focuses the reading surface) never attaches to it; the palette owns its focus.
     palette = createPalette({
-      hasDocument: () => Boolean(activePane().reader), format: () => activePane().active?.format, desktop, split: splitContext, run: id => command(id),
+      hasDocument: () => Boolean(activePane().reader), format: () => activePane().active?.format, desktop, split: splitContext, agent: agentContext, run: id => command(id),
       goTo: target => { const current = activePane().reader; return current?.goTo(target).then(() => activePane().host?.focus(), error => { if (activePane().reader === current) fail(error); }); },
       find: text => findBar.open(text),
       assistant,
@@ -597,6 +630,7 @@ const assistant = createAssistantPanel($('reader-layout'), {
     },
     runCommand: async id => {
       const entry = COMMANDS.find(candidate => candidate.id === id)!;
+      if (id === 'send-to-agent') throw new Error('Only the user can send a selection.');
       const reason = unavailableReason(entry, { hasDocument: Boolean(activePane().reader), desktop, format: activePane().active?.format });
       if (reason) throw new Error(reason);
       const before = { pinned: windowState.pinned, locked: windowState.locked };
@@ -613,7 +647,7 @@ async function command(id: string) {
   // The catalog's declared requirements are enforced here rather than by each caller, so the
   // keyboard, the menu and the palette cannot drift into different behaviour.
   const entry = COMMANDS.find(candidate => candidate.id === id);
-  const reason = entry && unavailableReason(entry, { hasDocument: Boolean(activePane().reader), desktop, format: activePane().active?.format, split: splitContext() });
+  const reason = entry && unavailableReason(entry, { hasDocument: Boolean(activePane().reader), desktop, format: activePane().active?.format, split: splitContext(), agent: agentContext() });
   if (reason) { notify(reason); return; }
   if (id === 'open' || id === 'new-tab') openFile();
   else if (id === 'close-tab') { const tab = closableTab(); if (tab) closeTab(tab.path); }
@@ -629,6 +663,7 @@ async function command(id: string) {
   else if (id === 'library-side') library.setSide(library.side() === 'left' ? 'right' : 'left');
   else if (id === 'find') findBar.open();
   else if (id === 'assistant') assistant.openSettings();
+  else if (id === 'send-to-agent') sendSelection();
   else await action(id);
 }
 
@@ -789,7 +824,12 @@ function show(next: Tab | undefined, refreshed = false) {
   if (side.shown === next && !refreshed && !cover) return;
   clearCover();
   if (side.shown && side.shown !== next) leave(side.shown);
+  const changed = side.shown !== next;
   side.shown = next; side.tabs.activate(next?.path);
+  if (changed) {
+    agentEvents.forgetSelection();
+    if (agentControl && next && next.path !== LIBRARY_PATH) agentEvents.tab({ action: 'shown', ...tabInfo(side, next) });
+  }
   pane.show(next);
   side.scanNoticeShown = next?.scanNoticeShown ?? false; ++scrubRequest; scrubbing = false;
   hibernateExcess();
@@ -1002,6 +1042,7 @@ const controlHost: ControlHost = {
   runCommand: async id => {
     const entry = COMMANDS.find(candidate => candidate.id === id);
     if (!entry) throw new Error(`Unknown command: ${id}`);
+    if (id === 'send-to-agent') throw new Error('Only the user can send a selection.');
     const reason = unavailableReason(entry, { hasDocument: Boolean(activePane().reader), desktop, format: activePane().active?.format, split: splitContext() });
     if (reason) throw new Error(reason);
     await command(id);
@@ -1089,6 +1130,7 @@ function closeTab(path: string) {
   if (side !== focused) activateSide(side);
   const pane = side.pane;
   if (pane.loadingTarget === tab) cancelOpen();
+  if (agentControl && path !== LIBRARY_PATH) agentEvents.tab({ action: 'closed', ...tabInfo(side, tab) });
   const wasShown = side.shown === tab;
   if (wasShown) {
     void pane.flush(); tab.find = undefined; findBar.close(); zoomGesture.cancel();
@@ -1959,7 +2001,7 @@ async function initialize() {
       ).catch(() => undefined);
     });
     const controlState = await native<{ enabled: boolean; running: boolean } | null>('control_status').catch(() => null);
-    if (controlState) settingsSheet.showControl(controlState);
+    setControlState(controlState);
     const appWindow = getCurrentWindow();
     let closing = false; await appWindow.onCloseRequested(async event => { if (closing) return; event.preventDefault(); await Promise.all(sides.map(side => side.pane.flush())); await flushSession(); closing = true; await appWindow.close(); });
     if (platform === 'windows') {

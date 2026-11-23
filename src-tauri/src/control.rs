@@ -34,6 +34,132 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 const READY_TIMEOUT: Duration = Duration::from_secs(8);
 const WATCH_POLL: Duration = Duration::from_millis(350);
 
+// ---------------------------------------------------------------- event log
+
+/// Event types the reader may record through `control_event`.
+pub const EVENT_TYPES: [&str; 4] = ["selection", "page", "tab", "send"];
+const EVENT_RING: usize = 256;
+const EVENT_STRING_CHARS: usize = 2000;
+const EVENTS_DEFAULT_LIMIT: usize = 50;
+const EVENTS_MAX_WAIT_MS: u64 = 60_000;
+
+#[derive(Default)]
+struct EventState {
+    events: VecDeque<Value>,
+    /// Seq of the newest event ever recorded; survives `clear` so seq never repeats within a process.
+    last_seq: u64,
+}
+
+/// In-memory ring of what the user did in the reader. Never written to disk.
+#[derive(Default)]
+pub struct EventLog {
+    state: Mutex<EventState>,
+    arrived: Condvar,
+}
+
+fn truncate_strings(value: &mut Value) {
+    match value {
+        Value::String(s) => {
+            if let Some((idx, _)) = s.char_indices().nth(EVENT_STRING_CHARS) {
+                s.truncate(idx);
+            }
+        }
+        Value::Array(items) => items.iter_mut().for_each(truncate_strings),
+        Value::Object(map) => map.values_mut().for_each(truncate_strings),
+        _ => {}
+    }
+}
+
+impl EventLog {
+    /// Validates and appends one event; the native side owns `seq` and `at`. Returns the new seq.
+    pub fn push(&self, event: Value) -> Result<u64, String> {
+        let Value::Object(mut fields) = event else {
+            return Err("An event must be a JSON object.".into());
+        };
+        let kind = match fields.get("type").and_then(Value::as_str) {
+            Some(kind) if EVENT_TYPES.contains(&kind) => kind.to_string(),
+            _ => return Err(format!("An event needs a string 'type' of: {}.", EVENT_TYPES.join(", "))),
+        };
+        fields.values_mut().for_each(truncate_strings);
+        let mut state = self.state.lock().map_err(|_| "Event log is unavailable")?;
+        state.last_seq += 1;
+        let seq = state.last_seq;
+        fields.insert("seq".into(), json!(seq));
+        fields.insert("at".into(), json!(now()));
+        fields.insert("type".into(), Value::String(kind));
+        if state.events.len() == EVENT_RING {
+            state.events.pop_front();
+        }
+        state.events.push_back(Value::Object(fields));
+        self.arrived.notify_all();
+        Ok(seq)
+    }
+
+    /// Drops every kept event (the seq counter stays) and wakes waiters so they return empty.
+    pub fn clear(&self) {
+        if let Ok(mut state) = self.state.lock() {
+            state.events.clear();
+            self.arrived.notify_all();
+        }
+    }
+
+    /// Events with `seq > since` whose type is in `types` (all when `None`), at most `limit`. Waits up
+    /// to `wait` for the first match. `next` is the last returned seq, or the latest seq if none.
+    pub fn query(&self, since: u64, wait: Duration, types: Option<&[String]>, limit: usize) -> Value {
+        let deadline = Instant::now() + wait;
+        let Ok(mut state) = self.state.lock() else {
+            return json!({ "events": [], "next": since });
+        };
+        loop {
+            let matching: Vec<Value> = state
+                .events
+                .iter()
+                .filter(|e| e["seq"].as_u64().is_some_and(|s| s > since))
+                .filter(|e| types.map_or(true, |t| e["type"].as_str().is_some_and(|k| t.iter().any(|x| x == k))))
+                .take(limit)
+                .cloned()
+                .collect();
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if !matching.is_empty() || remaining.is_zero() {
+                let oldest_kept = state.events.front().and_then(|e| e["seq"].as_u64()).unwrap_or(state.last_seq + 1);
+                let next = matching.last().and_then(|e| e["seq"].as_u64()).unwrap_or(state.last_seq);
+                let mut reply = json!({ "events": matching, "next": next });
+                if oldest_kept > since.saturating_add(1) {
+                    reply["dropped"] = json!(true);
+                }
+                return reply;
+            }
+            state = match self.arrived.wait_timeout(state, remaining) {
+                Ok((guard, _)) => guard,
+                Err(_) => return json!({ "events": [], "next": since }),
+            };
+        }
+    }
+}
+
+/// Parsed `events` request parameters.
+struct EventsQuery {
+    since: u64,
+    wait: Duration,
+    types: Option<Vec<String>>,
+    limit: usize,
+}
+
+fn parse_events_params(params: &Value) -> EventsQuery {
+    let since = params.get("since").and_then(Value::as_u64).unwrap_or(0);
+    let wait_ms = params.get("wait").and_then(Value::as_u64).unwrap_or(0).min(EVENTS_MAX_WAIT_MS);
+    let limit = params
+        .get("limit")
+        .and_then(Value::as_u64)
+        .map_or(EVENTS_DEFAULT_LIMIT, |n| n as usize)
+        .clamp(1, EVENT_RING);
+    let types = params
+        .get("types")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect());
+    EventsQuery { since, wait: Duration::from_millis(wait_ms), types, limit }
+}
+
 // ---------------------------------------------------------------- protocol types
 
 #[derive(Debug, Deserialize)]
