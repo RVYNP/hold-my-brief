@@ -117,8 +117,13 @@ test('desktop Settings shows the Agent control switch', async ({ page }) => {
   await expect(sheet.getByRole('switch', { name: 'Local CLI and agents' })).toBeVisible();
 });
 
-/** Sends one control request as the native bridge does and returns the reader's reply, which must be ok. */
+/**
+ * Sends one control request as the native bridge does and returns the reader's reply, which must be ok.
+ * The bridge only forwards requests once the reader has sent `control_ready`, after it registered its listeners; an event emitted earlier
+ * reaches nobody, so the reply never comes. Wait for that signal, as the bridge does.
+ */
 async function control<T>(page: Page, request: string, method: string, params: Record<string, unknown>): Promise<T> {
+  await expect.poll(() => page.evaluate(() => window.__mockControlReady)).toBe(true);
   await page.evaluate(([request, method, params]) => window.__mockEmit('control-request', { id: request, method, params }), [request, method, params] as const);
   await expect.poll(() => page.evaluate(request => window.__mockReplies.some(reply => reply.id === request), request)).toBe(true);
   const reply = await page.evaluate(request => window.__mockReplies.find(reply => reply.id === request)!, request);
