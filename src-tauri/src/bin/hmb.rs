@@ -248,9 +248,17 @@ fn send_or_launch(
     Err("Launched Hold My Brief, but its control bridge did not become ready in time.".into())
 }
 
+/// True for an id `status` reports that is not a file path: `folder:<root>:<relative>`, `source:<repo>:<item>`,
+/// `hold-my-brief:brief/<id>`. A name with a scheme-like prefix that exists on disk is still a file.
+fn is_library_id(path: &str) -> bool {
+    let Some((scheme, _)) = path.split_once(':') else { return false };
+    scheme.len() > 1 && scheme.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_') && !Path::new(path).exists()
+}
+
+/// Makes a relative file path absolute; library ids pass through, since the app resolves them.
 fn absolutize(path: &str) -> String {
     let p = Path::new(path);
-    if p.is_absolute() {
+    if p.is_absolute() || is_library_id(path) {
         path.to_string()
     } else if let Ok(cwd) = env::current_dir() {
         cwd.join(p).to_string_lossy().into_owned()
@@ -380,7 +388,7 @@ fn parse_args(args: &[String]) -> Result<ParsedCall, String> {
                     "--find" => { params.insert("find".into(), Value::String(next_val(&mut idx, "--find")?)); }
                     "--beside" => {
                         let b = next_val(&mut idx, "--beside")?;
-                        params.insert("beside".into(), Value::String(if b.starts_with("hold-my-brief:") { b } else { absolutize(&b) }));
+                        params.insert("beside".into(), Value::String(absolutize(&b)));
                     }
                     flag @ ("--beside-page" | "--beside-target") => {
                         params.insert("besideTarget".into(), Value::String(next_val(&mut idx, flag)?));
@@ -511,7 +519,7 @@ fn parse_args(args: &[String]) -> Result<ParsedCall, String> {
                 match tail[idx].as_str() {
                     "--briefs" => { params.insert("allBriefs".into(), Value::Bool(true)); }
                     pos if !pos.starts_with('-') => {
-                        if pos.contains('/') || pos.contains('\\') || Path::new(pos).exists() {
+                        if pos.contains('/') || pos.contains('\\') || is_library_id(pos) || Path::new(pos).exists() {
                             params.insert("path".into(), Value::String(absolutize(pos)));
                         } else {
                             params.insert("id".into(), Value::String(pos.to_string()));
@@ -709,6 +717,19 @@ fn mcp_events_params(args: &Value) -> Value {
     Value::Object(params)
 }
 
+/// The MCP `hmb_show` arguments: relative file paths (`path`, `beside`) are made absolute as the CLI does, since the app has another working directory.
+fn mcp_show_params(args: Value) -> Value {
+    let mut args = args;
+    if let Some(params) = args.as_object_mut() {
+        for key in ["path", "beside"] {
+            if let Some(Value::String(path)) = params.get_mut(key) {
+                *path = absolutize(path);
+            }
+        }
+    }
+    args
+}
+
 // ---------------------------------------------------------------- compact stdio MCP server
 
 fn mcp_tools() -> Value {
@@ -805,6 +826,8 @@ fn handle_mcp_message(msg: &Value, auto_launch: bool) -> Option<Value> {
             let mut args = params.and_then(|p| p.get("arguments")).cloned().unwrap_or_else(|| json!({}));
             if tool_name == "hmb_events" {
                 args = mcp_events_params(&args);
+            } else if tool_name == "hmb_show" {
+                args = mcp_show_params(args);
             }
             let rpc_method = match tool_name {
                 "hmb_brief" => Some("brief"),
@@ -1004,6 +1027,41 @@ mod tests {
         let list = handle_mcp_message(&json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}), false).unwrap();
         let names: Vec<&str> = list["result"]["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
         assert_eq!(names, ["hmb_brief", "hmb_show", "hmb_status", "hmb_read", "hmb_events"]);
+    }
+
+    #[test]
+    fn absolutize_keeps_library_ids_and_resolves_relative_files() {
+        for id in ["folder:abc:dir/x.pdf", "folder:485e41a8d1a72538:03_wwe_mag/source.pdf", "source:repo:item", "hold-my-brief:brief/plan"] {
+            assert_eq!(absolutize(id), id);
+        }
+        let cwd = env::current_dir().unwrap();
+        assert_eq!(absolutize("notes/x.md"), cwd.join("notes/x.md").to_string_lossy().as_ref());
+        assert_eq!(absolutize("/abs/x.md"), "/abs/x.md");
+    }
+
+    #[test]
+    fn show_and_close_send_library_ids_unchanged() {
+        let id = "folder:485e41a8d1a72538:03_wwe_mag/source.pdf";
+        let show = parse_args(&vec_args(&["show", id, "--page", "3", "--beside", "hold-my-brief:brief/plan"])).unwrap();
+        assert_eq!(show.params["path"], id);
+        assert_eq!(show.params["target"], "3");
+        assert_eq!(show.params["beside"], "hold-my-brief:brief/plan");
+        for id in [id, "source:repo:item", "hold-my-brief:brief/plan"] {
+            let close = parse_args(&vec_args(&["close", id])).unwrap();
+            assert_eq!(close.params["path"], id);
+            assert!(close.params.get("id").is_none());
+        }
+        assert_eq!(parse_args(&vec_args(&["close", "plan"])).unwrap().params["id"], "plan");
+    }
+
+    #[test]
+    fn mcp_show_absolutizes_relative_files_and_keeps_ids() {
+        let cwd = env::current_dir().unwrap();
+        let out = mcp_show_params(json!({ "path": "notes/x.md", "beside": "folder:abc:a/b.pdf", "target": "3" }));
+        assert_eq!(out["path"].as_str().unwrap(), cwd.join("notes/x.md").to_string_lossy());
+        assert_eq!(out["beside"], "folder:abc:a/b.pdf");
+        assert_eq!(out["target"], "3");
+        assert_eq!(mcp_show_params(json!({ "path": "hold-my-brief:brief/plan" }))["path"], "hold-my-brief:brief/plan");
     }
 
     #[test]

@@ -261,3 +261,33 @@ test('with Agent control off nothing is recorded and Send selection to agent is 
   await page.waitForTimeout(SETTLE);
   expect(await page.evaluate(() => window.__mockEvents)).toEqual([]);
 });
+
+test('show and close take the Library ids that status reports: an open tab is shown in whichever pane holds it, never opened twice', async ({ page }) => {
+  await mockDesktop(page);
+  await page.setViewportSize({ width: 1080, height: 760 });
+  await page.goto('/');
+  const ids = ['folder:485e41a8d1a72538:reports/alpha.md', 'folder:485e41a8d1a72538:reports/beta.md'];
+  await page.evaluate(ids => { for (const id of ids) window.__mockLibrary[id] = { name: id.split('/').pop()!, format: 'md', text: `# ${id.split('/').pop()}\n\nBody.` }; }, ids);
+  type Status = { panes: { id: string; tabs: { path: string; active: boolean }[] }[]; active: { paneId: string; path: string } | null };
+  const status = (request: string) => control<Status>(page, request, 'status', {});
+  const paths = (s: Status) => s.panes.flatMap(pane => pane.tabs.map(tab => tab.path));
+
+  await control(page, 'r-show-a', 'show', { path: ids[0] });
+  const beta = await control<{ path: string; paneId: string }>(page, 'r-show-b', 'show', { path: ids[1], split: 'right' });
+  expect(beta.path).toBe(ids[1]);
+  await expect(page.locator('#workspace')).toHaveClass(/is-split/);
+  const both = await status('r-status-1');
+  expect(paths(both).sort()).toEqual([...ids].sort());
+  expect(both.active!.path).toBe(ids[1]);
+
+  const again = await control<{ path: string; paneId: string }>(page, 'r-show-a-again', 'show', { path: ids[0] });
+  expect(again.path).toBe(ids[0]);
+  const after = await status('r-status-2');
+  expect(paths(after).sort()).toEqual([...ids].sort());
+  expect(after.active).toMatchObject({ path: ids[0], paneId: again.paneId });
+  expect(again.paneId).not.toBe(beta.paneId);
+
+  const closed = await control<{ closed: string[] }>(page, 'r-close', 'close', { path: ids[0] });
+  expect(closed.closed).toEqual([ids[0]]);
+  expect(paths(await status('r-status-3'))).toEqual([ids[1]]);
+});
