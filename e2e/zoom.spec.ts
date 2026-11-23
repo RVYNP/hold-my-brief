@@ -410,7 +410,7 @@ test('wheel zoom clamps to the range; plain wheel and Ctrl + wheel on reflowable
   await page.keyboard.down('Control'); await page.mouse.wheel(0, -100); await page.keyboard.up('Control');
   await page.waitForTimeout(300);
   expect(await page.evaluate(() => getComputedStyle(document.querySelector('.reader-host')!).fontSize)).toBe(before);
-  await expect(page.locator('#view-controls')).toBeHidden();
+  await expect(page.locator('#zoom-level')).toBeHidden();
   expect(errors).toEqual([]);
 });
 

@@ -400,6 +400,7 @@
 
 /* The Add files menu and the dialogs stand outside the panel, so they work while it is closed; the menu is fixed to the window, beside the icon rail's button. */
 .library-add-menu { position: fixed; z-index: 40; }
+.library-menu-sep { height: 1px; margin: 3px 4px; background: var(--hairline); }
 .library-dialog-host { display: contents; }
 
 /* Icon rail: from 720 px up, a 36 px strip (no box: an edge wash implies it) of bare icons, Home, Add files, Library and Search at the top and Settings at the foot (with Pinned on top and Size locked chips above it while those are on), with a 1 px hairline on its inner edge. It overlays the reading panel's

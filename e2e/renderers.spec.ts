@@ -758,7 +758,7 @@ test('PDF view controls zoom, pan 1:1 by hand tool and middle button, and keep l
   await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', 'width');
   await page.locator('#file-input').setInputFiles({ name: 'notes.md', mimeType: 'text/markdown', buffer: Buffer.from('# Notes\n\nPlain reflowing text.') });
   await expect(page.locator('#filename')).toHaveText('notes.md');
-  await expect(page.locator('#view-controls')).toBeHidden();
+  await expect(page.locator('#zoom-level')).toBeHidden(); // Markdown reflows: its pill holds the reading controls, not the zoom ones.
   expect(errors).toEqual([]);
 });
 

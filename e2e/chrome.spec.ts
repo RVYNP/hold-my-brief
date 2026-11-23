@@ -42,7 +42,7 @@ test('the library panel is a one-line header over the tree; the Library tab has 
   await expect(page.getByRole('button', { name: 'Add files or manage sources' })).toBeHidden();
   await expect(page.getByRole('button', { name: 'Close library' }).first()).toBeHidden();
   await page.locator('#library-rail').getByRole('button', { name: 'Add files', exact: true }).click();
-  await expect(page.getByRole('menuitem')).toHaveText(['Add files…', 'Sources…']);
+  await expect(page.getByRole('menuitem')).toHaveText(['Open file…', 'Add files…', 'Sources…']);
   await page.keyboard.press('Escape');
   await expect(page.getByRole('menuitem', { name: 'Add local documents or images' })).toBeHidden();
 
@@ -53,6 +53,35 @@ test('the library panel is a one-line header over the tree; the Library tab has 
   expect(tab.chips.height).toBeLessThan(36); expect(tab.bar.height).toBeLessThan(34);
   expect(tab.chips.y + tab.chips.height).toBeLessThanOrEqual(tab.bar.y + 1); expect(tab.bar.y + tab.bar.height).toBeLessThanOrEqual(tab.list.y + 4);
   await expect(page.getByRole('button', { name: 'Add files or manage sources' })).toBeHidden();
+});
+
+test('the + menu lists Open file… first, then a separator; choosing it opens the chooser Ctrl+O opens and closes the menu; arrows still move through the items', async ({ page }) => {
+  await page.setViewportSize({ width: 600, height: 680 });
+  await page.goto('/');
+  await page.locator('#library-toggle').click();
+  const plus = page.getByRole('button', { name: 'Add files or manage sources' });
+  await expect(plus).toHaveAttribute('title', 'Open or add files, manage sources');
+  await plus.click();
+  const menu = page.locator('.library-add-menu');
+  await expect(page.getByRole('menuitem')).toHaveText(['Open file…', 'Add files…', 'Sources…']);
+  expect(await menu.evaluate(el => [...el.children].map(child => child.getAttribute('role')))).toEqual(['menuitem', 'separator', 'menuitem', 'menuitem']);
+  // Keyboard navigation walks the three items, wrapping at both ends.
+  const items = page.getByRole('menuitem');
+  await items.first().focus();
+  await page.keyboard.press('ArrowDown'); await expect(items.nth(1)).toBeFocused();
+  await page.keyboard.press('ArrowDown'); await expect(items.nth(2)).toBeFocused();
+  await page.keyboard.press('ArrowDown'); await expect(items.first()).toBeFocused();
+  await page.keyboard.press('ArrowUp'); await expect(items.nth(2)).toBeFocused();
+  await page.keyboard.press('Home'); await expect(items.first()).toBeFocused();
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), items.first().click()]);
+  expect(chooser.isMultiple()).toBe(false);
+  await expect(menu).toBeHidden();
+  await expect(page.locator('.library-plus')).toHaveAttribute('aria-expanded', 'false');
+  // In the compact window the sheet gives way to the document it opened, as it does for a document chosen from its own list.
+  await chooser.setFiles({ name: 'note.md', mimeType: 'text/markdown', buffer: Buffer.from('# Hi\n\nBody.\n') });
+  await expect(page.locator('#tab-list .tab-title')).toHaveText('note.md');
+  await expect(page.locator('#library-root')).toBeHidden();
+  await expect(page.locator('#workspace')).not.toHaveAttribute('inert', /.*/);
 });
 
 test('the Library tab\'s file-type chips filter, one at a time, for the types the library holds', async ({ page }) => {
