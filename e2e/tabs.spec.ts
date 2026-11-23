@@ -161,7 +161,10 @@ test('Ctrl+Tab, Ctrl+Alt+arrows, Alt+1…9 and ⌘+1…9 move between tabs', asy
   await expect(page.locator('#empty')).toBeVisible();
   await page.keyboard.press('Control+Tab'); await shown(page, 'a.txt');
   // Ctrl+T asks for a file in a new tab.
+  // Playwright enables file-chooser interception asynchronously after `waitForEvent`. A key press sent straight after can open the chooser first, and then no event
+  // ever comes (11 of 200 runs under load; none of 400 with this round trip). `click()` has such round trips built in; a key press has not.
   const chooser = page.waitForEvent('filechooser');
+  await page.evaluate(() => 0);
   await page.keyboard.press('Control+t');
   await (await chooser).setFiles(text('fresh.txt'));
   await shown(page, 'fresh.txt');
