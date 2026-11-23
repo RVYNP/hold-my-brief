@@ -130,7 +130,7 @@ verify the real library remains intact afterward. Never use the real data folder
 
 CI never launches the macOS app, so nothing there proves the control socket or WKWebView. On a Mac,
 `scripts/dev-app.mjs` builds and runs a second copy, **Hold My Brief Dev** (`xyz.rpayton.holdmybrief.dev`),
-with its own data folder, WebKit storage, control socket and single-instance lock, beside an installed copy
+with its own data folder, WebKit storage, assistant keychain entries, control socket and single-instance lock, beside an installed copy
 that keeps running untouched:
 
 ```bash

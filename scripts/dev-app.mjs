@@ -2,8 +2,9 @@
 // A second, separate Hold My Brief for agents and the loop to drive on a Mac where the owner's copy is running.
 //
 // The dev build only differs in its bundle identifier (`xyz.rpayton.holdmybrief.dev`) and name ("Hold My Brief
-// Dev"). The identifier gives it its own data folder (state, library, control socket), its own WebKit storage and its
-// own single-instance lock, so starting, driving, resetting or quitting it never touches the installed app.
+// Dev"). The identifier gives it its own data folder (state, library, control socket), its own WebKit storage, its
+// own keychain entries for the AI assistant's API keys and its own single-instance lock, so starting, driving,
+// resetting or quitting it never touches the installed app.
 //
 //   node scripts/dev-app.mjs build    build dist-dev/Hold My Brief Dev.app (macOS only)
 //   node scripts/dev-app.mjs start    launch it hidden in the background and wait until `hmb ping` answers
