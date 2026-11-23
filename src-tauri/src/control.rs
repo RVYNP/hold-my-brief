@@ -809,25 +809,38 @@ impl ControlBridge {
                     .filter(|s| !s.is_empty())
                     .ok_or("show requires a file path.")?
                     .to_string();
-                let canonical = crate::catalog::canonical_file(Path::new(&raw_path))
-                    .map_err(|_| format!("File not found or unsupported format: {raw_path}"))?;
-                let canonical_str = canonical.to_string_lossy().into_owned();
-                {
-                    let mut store = shared.lock().map_err(|_| "Reading state is unavailable")?;
-                    store.authorized_files.insert(PathBuf::from(&raw_path));
-                    store.authorized_files.insert(canonical.clone());
+                let raw_passes = {
+                    let store = shared.lock().map_err(|_| "Reading state is unavailable")?;
+                    passes_unchanged(&store.saved.library.documents, &raw_path)
+                };
+                if !raw_passes {
+                    let canonical = crate::catalog::canonical_file(Path::new(&raw_path))
+                        .map_err(|_| format!("File not found or unsupported format: {raw_path}"))?;
+                    let canonical_str = canonical.to_string_lossy().into_owned();
+                    {
+                        let mut store = shared.lock().map_err(|_| "Reading state is unavailable")?;
+                        store.authorized_files.insert(PathBuf::from(&raw_path));
+                        store.authorized_files.insert(canonical.clone());
+                    }
+                    obj.insert("path".into(), Value::String(canonical_str.clone()));
+                    if obj.get("watch").and_then(Value::as_bool).unwrap_or(false) {
+                        self.watcher.watch(canonical_str, canonical);
+                    }
                 }
-                obj.insert("path".into(), Value::String(canonical_str.clone()));
-                if obj.get("watch").and_then(Value::as_bool).unwrap_or(false) {
-                    self.watcher.watch(canonical_str, canonical);
-                }
-                if let Some(beside_raw) = obj
+                let beside_raw = obj
                     .get("beside")
                     .and_then(Value::as_str)
                     .map(str::trim)
-                    .filter(|s| !s.is_empty() && !s.starts_with(BRIEF_PREFIX))
-                    .map(str::to_string)
-                {
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_string);
+                let beside_raw = match beside_raw {
+                    Some(raw) => {
+                        let store = shared.lock().map_err(|_| "Reading state is unavailable")?;
+                        if passes_unchanged(&store.saved.library.documents, &raw) { None } else { Some(raw) }
+                    }
+                    None => None,
+                };
+                if let Some(beside_raw) = beside_raw {
                     let beside_canonical = crate::catalog::canonical_file(Path::new(&beside_raw))
                         .map_err(|_| format!("Beside file not found or unsupported format: {beside_raw}"))?;
                     let beside_str = beside_canonical.to_string_lossy().into_owned();
@@ -1068,11 +1081,30 @@ pub fn brief_image_base(bridge: &ControlBridge, path: &str) -> Option<PathBuf> {
     entry.base_dir.map(|dir| dir.join("brief.md"))
 }
 
+/// A `show`/`beside` path that is not a file on disk: a brief (`hold-my-brief:brief/<id>`) or the
+/// `path` of a Library document (`folder:…`, `source:…`). The app resolves those itself, so they
+/// skip canonicalisation and file authorisation.
+fn passes_unchanged(documents: &[crate::state::LibraryDocument], raw_path: &str) -> bool {
+    raw_path.starts_with(BRIEF_PREFIX) || documents.iter().any(|d| d.path == raw_path)
+}
+
 // ---------------------------------------------------------------- tests
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn library_ids_and_briefs_pass_unchanged_but_missing_files_do_not() {
+        let documents = vec![crate::state::LibraryDocument {
+            path: "folder:485e41a8d1a72538:reports/source.pdf".into(),
+            ..Default::default()
+        }];
+        assert!(passes_unchanged(&documents, "folder:485e41a8d1a72538:reports/source.pdf"));
+        assert!(passes_unchanged(&documents, "hold-my-brief:brief/plan"));
+        assert!(!passes_unchanged(&documents, "folder:485e41a8d1a72538:reports/missing.pdf"));
+        assert!(!passes_unchanged(&documents, "/no/such/file.pdf"));
+    }
 
     #[test]
     fn brief_ids_are_validated_and_safe() {
