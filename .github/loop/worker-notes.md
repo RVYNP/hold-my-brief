@@ -9,6 +9,11 @@ Hold My Brief is being redesigned, so the loop takes fixes, not features.
 - **Exception:** a work order whose body has a line starting `Owner approved during freeze:` that names
   the work. Only that named work is in scope. Keep that line verbatim in the PR body whenever you rewrite
   it: the reviewer sees only the PR body and blocks a feature PR without it. Never write the line yourself.
+- **Agent control is exempt (owner, 2026-11-23):** features are in scope without that line when the work
+  is all agent control: the `hmb` CLI and `hmb mcp`, the control socket and its protocol, events, briefs
+  and their visual blocks (`chart`, `flow`, `svg`, callouts), the Agent control setting and the commands
+  that hand things to an agent, `skills/hold-my-brief/` and `docs/agent-control.md`. Restyling or
+  reorganising the rest of the UI stays out of scope.
 - An out-of-scope work order without that line: do not start it. Post
   `loop: blocked — fixes only: <what the order asks for>` and leave the PR a draft.
 - A fix that cannot work without a new control or setting: post `loop: blocked —` with the smallest
