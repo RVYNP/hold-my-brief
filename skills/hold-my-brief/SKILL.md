@@ -80,14 +80,16 @@ hmb read --limit 4000       # text of the visible page(s); scanned PDFs have non
 When you need the user to point at something (which option, which passage, which page), show it, tell them in chat, and wait instead of asking them to type:
 
 ```sh
-hmb events --wait 60 --type send,selection     # blocks up to 60 s; prints `seq type place text…` per event
+hmb events --wait 60 --type send,area,selection  # blocks up to 60 s; prints `seq type place text…` per event
 hmb events --since 12 --wait 60 --type send    # continue from the `next` of the last reply (use --json to read it)
 ```
 
 Tell the user they can select text and run **Send selection to agent** (palette Ctrl+K, or Ctrl+Shift+Enter / ⌘⇧↩); that is the `send` event, and the one to act on.
+For a scanned PDF, an image, a chart or a diagram there is no text to select: tell them they can press ⌘⇧A (Ctrl+Shift+A) or run **Send area to agent** and drag a box over the page. That is an `area` event
+(`seq area <title> p.<page> <w>×<h> <image path>`); read the PNG at its `image` path to see what they pointed at (`page` and `box` say where it is; `hmb events --json` has the fields). The file is kept only while Agent control is on, and only the newest 20.
 `selection` is only what they highlighted and left alone for a moment, `page` and `tab` say where they are reading. An empty result after the wait is normal (exit 0), not
 an error: say what you are waiting for, or carry on. `"dropped": true` means events were lost; re-read with `hmb status`. `hmb events --follow` streams one JSON line per event for a script;
-over MCP the tool is `hmb_events` (`wait` at most 30 s). Events appear only while Agent control is on, and carry only the text the user selected.
+over MCP the tool is `hmb_events` (`wait` at most 30 s). Events appear only while Agent control is on, and carry only what the user selected or boxed.
 
 ## Window and appearance
 

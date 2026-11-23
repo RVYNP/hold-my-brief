@@ -1,6 +1,7 @@
 import type { DocumentSearch, SearchHit, SearchOptions } from './search';
 import { ZOOM_MODEL, type ZoomLimits } from './zoom';
 import type { Anchor } from './zoom-anchor';
+import type { AreaCapture, Box } from './area';
 
 export type ImageFormat = 'png' | 'jpg' | 'jpeg' | 'webp' | 'gif' | 'avif' | 'bmp' | 'svg';
 export type Format = 'pdf' | 'epub' | 'md' | 'txt' | ImageFormat;
@@ -92,6 +93,11 @@ export interface ReaderAdapter {
    */
   setOptions(options: ReaderOptions, hold?: Anchor): Promise<void>;
   outline(): OutlineItem[];
+  /**
+   * The pixels under `box`, a rectangle in CSS px from the top-left of the reading surface (the host the adapter was opened in), as a PNG with where it
+   * is on the page. Only adapters that draw pages as bitmaps have it (PDF, images); for any other document the area commands are unavailable.
+   */
+  captureArea?(box: Box): Promise<AreaCapture>;
   /** The index in `outline()` of the entry the reader is in, or -1. Absent when the contents cannot say. */
   currentOutline?(): number;
   /** The flow a reflowable document is laid out in; absent for formats with no choice of flow. */

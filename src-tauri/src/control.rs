@@ -37,11 +37,17 @@ const WATCH_POLL: Duration = Duration::from_millis(350);
 // ---------------------------------------------------------------- event log
 
 /// Event types the reader may record through `control_event`.
-pub const EVENT_TYPES: [&str; 4] = ["selection", "page", "tab", "send"];
+pub const EVENT_TYPES: [&str; 5] = ["selection", "page", "tab", "send", "area"];
 const EVENT_RING: usize = 256;
 const EVENT_STRING_CHARS: usize = 2000;
 const EVENTS_DEFAULT_LIMIT: usize = 50;
 const EVENTS_MAX_WAIT_MS: u64 = 60_000;
+/// Folder (inside the app's local data) holding the PNGs of `area` events; it exists only while Agent control is on.
+const AREAS_DIR: &str = "agent-areas";
+/// The newest this many area PNGs are kept.
+const AREAS_KEPT: usize = 20;
+const AREA_MAX_BYTES: usize = 8 * 1024 * 1024;
+const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
 
 #[derive(Default)]
 struct EventState {
@@ -73,6 +79,12 @@ fn truncate_strings(value: &mut Value) {
 impl EventLog {
     /// Validates and appends one event; the native side owns `seq` and `at`. Returns the new seq.
     pub fn push(&self, event: Value) -> Result<u64, String> {
+        self.push_with(event, |_, _| Ok(()))
+    }
+
+    /// Like `push`, but `prepare` sees the seq the event is about to get and may add fields (after truncation) or refuse it. It runs
+    /// under the log's lock, so the seq it names is the one the event receives; a refusal consumes no seq.
+    fn push_with(&self, event: Value, prepare: impl FnOnce(u64, &mut serde_json::Map<String, Value>) -> Result<(), String>) -> Result<u64, String> {
         let Value::Object(mut fields) = event else {
             return Err("An event must be a JSON object.".into());
         };
@@ -84,6 +96,10 @@ impl EventLog {
         let mut state = self.state.lock().map_err(|_| "Event log is unavailable")?;
         state.last_seq += 1;
         let seq = state.last_seq;
+        if let Err(error) = prepare(seq, &mut fields) {
+            state.last_seq -= 1;
+            return Err(error);
+        }
         fields.insert("seq".into(), json!(seq));
         fields.insert("at".into(), json!(now()));
         fields.insert("type".into(), Value::String(kind));
@@ -466,6 +482,7 @@ impl FileWatcher {
 
 pub struct ControlBridge {
     discovery_path: PathBuf,
+    areas_dir: PathBuf,
     ready: Mutex<bool>,
     ready_cv: Condvar,
     next_id: AtomicU64,
@@ -500,6 +517,46 @@ fn set_owner_only(path: &Path) {
 
 #[cfg(not(unix))]
 fn set_owner_only(_path: &Path) {}
+
+#[cfg(unix)]
+fn set_owner_only_dir(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let _ = fs::set_permissions(path, fs::Permissions::from_mode(0o700));
+}
+
+#[cfg(not(unix))]
+fn set_owner_only_dir(_path: &Path) {}
+
+/// Writes a file that was never readable by anyone but its owner.
+fn write_owner_only(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let mut file = options.open(path)?;
+    set_owner_only(path);
+    file.write_all(bytes)
+}
+
+/// Deletes all but the `keep` highest-numbered `<seq>.png` files of `dir`.
+fn prune_areas(dir: &Path, keep: usize) {
+    let Ok(entries) = fs::read_dir(dir) else { return };
+    let mut files: Vec<(u64, PathBuf)> = entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let path = entry.path();
+            let seq = path.file_name()?.to_str()?.strip_suffix(".png")?.parse().ok()?;
+            Some((seq, path))
+        })
+        .collect();
+    files.sort_unstable_by_key(|(seq, _)| std::cmp::Reverse(*seq));
+    for (_, path) in files.into_iter().skip(keep) {
+        let _ = fs::remove_file(path);
+    }
+}
 
 fn write_discovery(path: &Path, info: &DiscoveryInfo) -> Result<(), String> {
     if let Some(parent) = path.parent() {
@@ -545,12 +602,13 @@ fn generate_token() -> String {
 
 impl ControlBridge {
     pub fn new(app: &AppHandle, app_data_dir: &Path) -> Arc<Self> {
-        Self::with_watcher(default_discovery_path(app_data_dir), FileWatcher::start(app.clone()))
+        Self::with_watcher(default_discovery_path(app_data_dir), app_data_dir.join(AREAS_DIR), FileWatcher::start(app.clone()))
     }
 
-    fn with_watcher(discovery_path: PathBuf, watcher: Arc<FileWatcher>) -> Arc<Self> {
+    fn with_watcher(discovery_path: PathBuf, areas_dir: PathBuf, watcher: Arc<FileWatcher>) -> Arc<Self> {
         Arc::new(Self {
             discovery_path,
+            areas_dir,
             ready: Mutex::new(false),
             ready_cv: Condvar::new(),
             next_id: AtomicU64::new(1),
@@ -560,6 +618,50 @@ impl ControlBridge {
             watcher,
             events: EventLog::default(),
         })
+    }
+
+    /// Deletes the folder of area PNGs.
+    pub fn clear_areas(&self) {
+        let _ = fs::remove_dir_all(&self.areas_dir);
+    }
+
+    /// Stores `png` as `<areas folder>/<seq>.png` (owner only), keeps the newest `AREAS_KEPT` files and records the `area` event
+    /// that names it. Returns the seq, or `None` (nothing written) while Agent control is off. `meta` supplies `paneId`, `path`, `title`, `page` and `box`; the size comes from the PNG itself.
+    fn record_area(&self, enabled: bool, png: &[u8], meta: Value) -> Result<Option<u64>, String> {
+        if !enabled {
+            return Ok(None);
+        }
+        if png.len() > AREA_MAX_BYTES {
+            return Err("That area is too large to send (over 8 MB).".into());
+        }
+        // Signature, then the IHDR chunk: length, "IHDR", width, height.
+        if png.len() < 24 || png[..8] != PNG_SIGNATURE || &png[12..16] != b"IHDR" {
+            return Err("The area is not a PNG image.".into());
+        }
+        let size = |at: usize| u32::from_be_bytes([png[at], png[at + 1], png[at + 2], png[at + 3]]);
+        let (width, height) = (size(16), size(20));
+        let Value::Object(meta) = meta else {
+            return Err("An area needs metadata.".into());
+        };
+        let mut event = serde_json::Map::new();
+        for key in ["paneId", "path", "title", "page", "box"] {
+            if let Some(value) = meta.get(key).filter(|v| !v.is_null()) {
+                event.insert(key.into(), value.clone());
+            }
+        }
+        event.insert("type".into(), json!("area"));
+        event.insert("width".into(), json!(width));
+        event.insert("height".into(), json!(height));
+        self.events.push_with(Value::Object(event), |seq, fields| {
+            fs::create_dir_all(&self.areas_dir).map_err(|e| format!("Could not store the area: {e}"))?;
+            set_owner_only_dir(&self.areas_dir);
+            let file = self.areas_dir.join(format!("{seq}.png"));
+            write_owner_only(&file, png).map_err(|e| format!("Could not store the area: {e}"))?;
+            fields.insert("image".into(), Value::String(file.to_string_lossy().into_owned()));
+            prune_areas(&self.areas_dir, AREAS_KEPT);
+            Ok(())
+        })
+        .map(Some)
     }
 
     pub fn mark_ready(&self) {
@@ -609,6 +711,8 @@ impl ControlBridge {
         if slot.is_some() {
             return Ok(());
         }
+        // The event log starts empty with the process, so area PNGs a previous run left behind belong to no event.
+        self.clear_areas();
         let shutdown = Arc::new(AtomicBool::new(false));
         let handle = self.spawn_listener(app, shutdown)?;
         *slot = Some(handle);
@@ -986,7 +1090,23 @@ pub fn control_event(
     if !enabled {
         return Ok(());
     }
+    // An `area` event names a file only `control_area` writes.
+    if event.get("type").and_then(Value::as_str) == Some("area") {
+        return Err("Area events are recorded with their image only.".into());
+    }
     bridge.events.push(event).map(|_| ())
+}
+
+/// The user dragged a box over a page: stores the PNG of that area and records an `area` event for it. Does nothing while Agent control is off.
+#[tauri::command]
+pub fn control_area(
+    png: Vec<u8>,
+    meta: Value,
+    state: State<'_, Shared>,
+    bridge: State<'_, Arc<ControlBridge>>,
+) -> Result<(), String> {
+    let enabled = state.lock().map_err(|_| "Reading state is unavailable")?.saved.control_enabled;
+    bridge.record_area(enabled, &png, meta).map(|_| ())
 }
 
 #[tauri::command]
@@ -1010,6 +1130,7 @@ pub fn set_control_enabled(
     } else {
         bridge.stop();
         bridge.events.clear();
+        bridge.clear_areas();
     }
     let mut store = state.lock().map_err(|_| "Reading state is unavailable")?;
     store.saved.control_enabled = enabled;
@@ -1301,9 +1422,99 @@ mod tests {
         assert_eq!(q.types, Some(vec!["send".to_string()]));
     }
 
+    /// A PNG header (signature, IHDR with the size) padded to `len` bytes: enough for `record_area`, which never decodes pixels.
+    fn fake_png(width: u32, height: u32, len: usize) -> Vec<u8> {
+        let mut bytes = PNG_SIGNATURE.to_vec();
+        bytes.extend_from_slice(&13u32.to_be_bytes());
+        bytes.extend_from_slice(b"IHDR");
+        bytes.extend_from_slice(&width.to_be_bytes());
+        bytes.extend_from_slice(&height.to_be_bytes());
+        bytes.resize(len.max(24), 0);
+        bytes
+    }
+
+    fn area_bridge(dir: &Path) -> Arc<ControlBridge> {
+        ControlBridge::with_watcher(dir.join("control.json"), dir.join(AREAS_DIR), FileWatcher::idle())
+    }
+
+    fn area_meta() -> Value {
+        json!({ "paneId": "p1", "path": "/a.pdf", "title": "A", "page": 2, "box": { "x": 0.1, "y": 0.2, "w": 0.3, "h": 0.4 }, "image": "/etc/passwd", "type": "send" })
+    }
+
+    #[test]
+    fn an_area_is_stored_and_recorded_with_the_path_of_its_png() {
+        let dir = tempfile::tempdir().unwrap();
+        let bridge = area_bridge(dir.path());
+        let png = fake_png(300, 200, 64);
+        let seq = bridge.record_area(true, &png, area_meta()).unwrap().unwrap();
+        let reply = bridge.events.query(0, Duration::ZERO, Some(&["area".to_string()]), 50);
+        let stored = &reply["events"][0];
+        let file = dir.path().join(AREAS_DIR).join(format!("{seq}.png"));
+        assert_eq!(stored["seq"], json!(seq));
+        assert_eq!(stored["type"], json!("area"));
+        assert_eq!(stored["image"], json!(file.to_string_lossy()));
+        assert_eq!((stored["paneId"].clone(), stored["title"].clone(), stored["page"].clone()), (json!("p1"), json!("A"), json!(2)));
+        assert_eq!(stored["box"], json!({ "x": 0.1, "y": 0.2, "w": 0.3, "h": 0.4 }));
+        assert_eq!((stored["width"].clone(), stored["height"].clone()), (json!(300), json!(200)));
+        assert_eq!(fs::read(&file).unwrap(), png);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(fs::metadata(&file).unwrap().permissions().mode() & 0o777, 0o600);
+            assert_eq!(fs::metadata(dir.path().join(AREAS_DIR)).unwrap().permissions().mode() & 0o777, 0o700);
+        }
+    }
+
+    #[test]
+    fn only_the_newest_twenty_areas_are_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        let bridge = area_bridge(dir.path());
+        let seqs: Vec<u64> = (0..25).map(|_| bridge.record_area(true, &fake_png(8, 8, 32), area_meta()).unwrap().unwrap()).collect();
+        let mut kept: Vec<u64> = fs::read_dir(dir.path().join(AREAS_DIR))
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_str().unwrap().trim_end_matches(".png").parse().unwrap())
+            .collect();
+        kept.sort_unstable();
+        assert_eq!(kept, seqs[5..].to_vec());
+    }
+
+    #[test]
+    fn a_non_png_or_oversize_area_is_refused_and_leaves_nothing_behind() {
+        let dir = tempfile::tempdir().unwrap();
+        let bridge = area_bridge(dir.path());
+        assert!(bridge.record_area(true, b"GIF89a not a png at all, long enough", area_meta()).is_err());
+        assert!(bridge.record_area(true, &PNG_SIGNATURE, area_meta()).is_err());
+        assert!(bridge.record_area(true, &fake_png(8, 8, AREA_MAX_BYTES + 1), area_meta()).is_err());
+        assert!(bridge.record_area(true, &fake_png(8, 8, 32), json!("meta")).is_err());
+        assert!(!dir.path().join(AREAS_DIR).exists());
+        assert_eq!(bridge.events.query(0, Duration::ZERO, None, 50)["events"], json!([]));
+        // A refusal consumes no seq.
+        assert_eq!(bridge.record_area(true, &fake_png(8, 8, AREA_MAX_BYTES), area_meta()).unwrap(), Some(1));
+    }
+
+    #[test]
+    fn nothing_is_stored_or_recorded_while_control_is_off() {
+        let dir = tempfile::tempdir().unwrap();
+        let bridge = area_bridge(dir.path());
+        assert_eq!(bridge.record_area(false, &fake_png(8, 8, 32), area_meta()), Ok(None));
+        assert!(!dir.path().join(AREAS_DIR).exists());
+        assert_eq!(bridge.events.query(0, Duration::ZERO, None, 50)["events"], json!([]));
+    }
+
+    #[test]
+    fn turning_control_off_removes_the_areas_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let bridge = area_bridge(dir.path());
+        bridge.record_area(true, &fake_png(8, 8, 32), area_meta()).unwrap();
+        assert!(dir.path().join(AREAS_DIR).exists());
+        bridge.clear_areas();
+        assert!(!dir.path().join(AREAS_DIR).exists());
+        bridge.clear_areas();
+    }
+
     #[test]
     fn a_waiting_events_call_does_not_block_ping_or_status() {
-        let bridge = ControlBridge::with_watcher(PathBuf::from("unused-control.json"), FileWatcher::idle());
+        let bridge = ControlBridge::with_watcher(PathBuf::from("unused-control.json"), PathBuf::from("unused-areas"), FileWatcher::idle());
         let waiter = bridge.clone();
         let handle = thread::spawn(move || {
             let req = ControlRequest {
