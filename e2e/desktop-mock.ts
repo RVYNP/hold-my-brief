@@ -22,20 +22,24 @@ declare global {
  * Makes the page believe it runs inside the desktop app: `isTauri()` is true and the few native commands the reader calls at startup and for
  * the window (state, pin, lock, presets) answer from a small in-page model, `window.__mockWindow`. `read_brief` answers from
  * `window.__mockBriefs`, the Library from `window.__mockLibrary`, `control_reply` is recorded in `window.__mockReplies`, `control_event` in `window.__mockEvents`, `save_tabs` in
- * `window.__mockSessions`, and `window.__mockEmit` delivers a native event. `control_status` answers `null` (Agent control not reported) unless
- * `control` says how the switch stands. Every other command, and every plugin call, answers `null`. Call before `page.goto`.
+ * `window.__mockSessions`, and `window.__mockEmit` delivers a native event. Like the native bridge, which forwards nothing before the reader
+ * calls `control_ready`, events emitted earlier wait and are delivered then, so a test may emit right after `page.goto`. `control_status`
+ * answers `null` (Agent control not reported) unless `control` says how the switch stands. Every other command, and every plugin call, answers
+ * `null`. Call before `page.goto`.
  */
 export async function mockDesktop(page: Page, { control = null }: { control?: { enabled: boolean; running: boolean } | null } = {}) {
   await page.addInitScript(control => {
     const state = { width: 420, height: 620, pinned: false, locked: false };
-    let callbackId = 0;
+    let callbackId = 0, ready = false;
     const callbacks = new Map<number, (message: unknown) => void>(), listeners = new Map<string, number[]>();
     const presets: Record<string, [number, number]> = { compact: [420, 620], reading: [760, 900] };
+    const held: [string, unknown][] = [];
+    const deliver = (event: string, payload: unknown) => { for (const id of listeners.get(event) ?? []) callbacks.get(id)?.({ event, id, payload }); };
     const replies: Window['__mockReplies'] = [], briefs: Window['__mockBriefs'] = {}, sessions: Window['__mockSessions'] = [], events: Window['__mockEvents'] = [];
     const library: Window['__mockLibrary'] = {};
     Object.assign(window, { isTauri: true, __mockLibrary: library, __mockWindow: state, __mockReplies: replies, __mockBriefs: briefs, __mockSessions: sessions, __mockEvents: events });
     Object.assign(window, {
-      __mockEmit: (event: string, payload: unknown) => { for (const id of listeners.get(event) ?? []) callbacks.get(id)?.({ event, id, payload }); },
+      __mockEmit: (event: string, payload: unknown) => { if (ready) deliver(event, payload); else held.push([event, payload]); },
       __TAURI_INTERNALS__: {
         metadata: { currentWindow: { label: 'main' }, currentWebview: { windowLabel: 'main', label: 'main' } },
         transformCallback: (callback?: (message: unknown) => void) => { const id = ++callbackId; if (callback) callbacks.set(id, callback); return id; },
@@ -54,6 +58,7 @@ export async function mockDesktop(page: Page, { control = null }: { control?: { 
           if (command === 'plugin:event|listen') { const event = String(args?.event), handler = Number(args?.handler); listeners.set(event, [...(listeners.get(event) ?? []), handler]); return handler; }
           if (command === 'read_brief') { const brief = briefs[String(args?.id)]; if (!brief) throw new Error('No such brief'); return brief; }
           if (command === 'control_reply') { replies.push(args as Window['__mockReplies'][number]); return null; }
+          if (command === 'control_ready') { ready = true; for (const [event, payload] of held.splice(0)) deliver(event, payload); return null; }
           if (command === 'control_event') { events.push(args?.event as Window['__mockEvents'][number]); return null; }
           if (command === 'control_status') return control && { ...control, transport: 'unix', discoveryPath: '' };
           if (command === 'save_tabs') { sessions.push(args?.session as Window['__mockSessions'][number]); return null; }
