@@ -223,6 +223,17 @@ test('Escape, a tiny box, a click outside the pane and a tab switch send nothing
   await expect(page.locator('#notice')).toBeHidden();
 });
 
+test('a layout change while the overlay is up cancels it and sends nothing', async ({ page }) => {
+  await openDocument(page, 'plan.pdf', 'pdf', pagedPdf(3));
+  await page.keyboard.press('Control+Shift+A');
+  await expect(overlay(page)).toBeVisible();
+  const before = (await page.locator(HOST).boundingBox())!;
+  await control(page, 'r-library', 'cmd', { command: 'library' }); // The library drawer changes the reading surface's size without a window resize.
+  await expect.poll(async () => (await page.locator(HOST).boundingBox())!.width).not.toBe(before.width);
+  await expect(overlay(page)).toHaveCount(0);
+  expect(await areas(page)).toEqual([]);
+});
+
 test('scrolling, zooming and page keys do nothing while the overlay is up', async ({ page }) => {
   await openDocument(page, 'plan.pdf', 'pdf', pagedPdf(3));
   await page.keyboard.press('Control+2'); // Fit width: the page is taller than the surface, so it scrolls.
