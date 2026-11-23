@@ -352,14 +352,23 @@ test('during a wheel gesture the page is only scaled about the pointer; one rend
     w.renders = 0; w.surfaces = [];
     new MutationObserver(records => { for (const record of records) for (const node of record.addedNodes) if (node instanceof HTMLElement && node.classList.contains('pdf-page')) w.renders++; }).observe(host, { childList: true });
   });
+  // The gesture ends 160 ms after its last event, in real time, and a loaded runner can take that long to produce the second frame: the page
+  // is then re-rendered before it is measured. So the page's clock is held: frames and the settle timer run only when this test advances it.
+  await page.clock.install();
+  await page.clock.pauseAt(new Date(Date.now() + 1000));
   // Fourteen events in one turn are one gesture, painted once per frame (about 5.4x).
-  const measured = await page.evaluate(async ({ x, y }) => {
-    const host = document.querySelector('.pdf-reader') as HTMLElement, sheet = host.querySelector('.pdf-page') as HTMLElement;
+  await page.evaluate(({ x, y }) => {
+    const host = document.querySelector('.pdf-reader') as HTMLElement, w = window as unknown as { sheet: Element };
+    w.sheet = host.querySelector('.pdf-page')!;
     for (let i = 0; i < 14; i++) host.dispatchEvent(new WheelEvent('wheel', { deltaY: -12, ctrlKey: true, clientX: x, clientY: y, bubbles: true, cancelable: true }));
-    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  }, pointer);
+  await page.clock.runFor(48); // Three frames, well inside the 160 ms quiet time.
+  const measured = await page.evaluate(() => {
+    const host = document.querySelector('.pdf-reader') as HTMLElement, sheet = (window as unknown as { sheet: HTMLElement }).sheet;
     const box = sheet.getBoundingClientRect();
     return { preview: host.classList.contains('zoom-preview'), same: host.querySelector('.pdf-page') === sheet, left: box.left, top: box.top, width: box.width, height: box.height, layout: sheet.offsetWidth, renders: (window as unknown as { renders: number }).renders };
-  }, pointer);
+  });
+  await page.clock.resume(); // From here the gesture settles on its own.
   expect(measured.preview).toBe(true);
   expect(measured.same).toBe(true); expect(measured.renders).toBe(0); // Nothing re-rendered yet.
   expect(measured.width / measured.layout).toBeGreaterThan(1.5); // Scaled by transform alone.
