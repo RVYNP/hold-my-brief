@@ -4,7 +4,7 @@ Hold My Brief exposes a fast, local per-user control bridge so coding and resear
 
 ## Why `hmb` is fast and cheap for agents
 
-- **Zero idle token overhead:** Use the thin `hmb` CLI (or the compact 4-tool `hmb mcp` bridge) instead of loading dozens of tool schemas into every turn.
+- **Zero idle token overhead:** Use the thin `hmb` CLI (or the compact 5-tool `hmb mcp` bridge) instead of loading dozens of tool schemas into every turn.
 - **Single-call compound state:** Open a PDF, jump to page 14, highlight a match, split beside a Markdown spec, and pin on top in **one command**.
 - **In-place live briefs:** `hmb brief --id plan` renders ephemeral Markdown, charts, flowcharts, and sanitized SVGs directly in a dedicated tab — updating that same tab in place without cluttering your Library or Recents, and without stealing keyboard focus.
 - **Bidirectional context:** Browse a 300-page PDF in the GUI, select a paragraph, and let your terminal agent inspect it with `hmb status` / `hmb read --selection`.
@@ -74,6 +74,65 @@ hmb cmd --theme graphite --mode dark --pin
 hmb close --briefs
 ```
 
+## Wait for the user
+
+The reader records what the user does, and `hmb events` returns it, waiting until something happens. Use it to let the user point at
+something instead of describing it: show a brief, then wait for them to select a passage and send it.
+
+```sh
+hmb events --wait 60 --type send,selection    # block up to 60 s; print what the user sent or selected
+hmb events --since 12 --json                  # everything after seq 12, as the reply JSON
+hmb events --follow | while read -r e; do …; done   # one JSON line per event, forever
+```
+
+`hmb events [--since N] [--wait SECONDS] [--type a,b] [--limit N] [--follow] [--json]`:
+
+| Flag | Meaning |
+| --- | --- |
+| `--since N` | Only events with `seq` greater than N (default 0: everything the app still holds). |
+| `--wait SECONDS` | Without a matching event, wait up to this long (0–60, default 30). An empty list after the wait is not an error; the exit code is 0. |
+| `--type a,b` | Only these types (repeatable): `selection`, `page`, `tab`, `send`. |
+| `--limit N` | At most N events (default 50, at most 256). |
+| `--follow` | Loop forever, passing each reply's `next` as the next call's `since`, and print each event as one JSON line (NDJSON) as it arrives. A wait of 0 is raised to 1 s here. Ends on Ctrl-C, when the reader of the pipe goes away, or when the app stops answering (exit 1). |
+| `--json` | Print the reply (`{ "events": [...], "next": N }`) instead of one line per event. |
+
+Without `--json`, each event is one line: `seq type place text…`, where `place` is the position label, title or path. A reply that
+starts with `(older events were dropped)` had missed events (see `dropped` below).
+
+### Events
+
+Every event has `seq` (starts at 1 and grows by one per event while the app runs), `at` (Unix ms), `type`, and these fields:
+
+| `type` | Sent when | Fields |
+| --- | --- | --- |
+| `selection` | The user's text selection in a reading surface stopped changing for 600 ms, is not empty and differs from the last one reported | `paneId`, `path`, `title`, `where` (position label), `text` (at most 2000 characters) |
+| `send` | The user ran **Send selection to agent** (palette, or Ctrl+Shift+Enter / ⌘⇧↩) | the same as `selection` |
+| `page` | The active document's position label changed and stayed for 800 ms (not while a document loads or reloads) | `paneId`, `path`, `position`, `progress` (0–1, four decimals) |
+| `tab` | A pane showed another tab, or a tab was closed | `action` (`shown` \| `closed`), `paneId`, `path`, `title`, `format`, `brief` (boolean) |
+
+Briefs have `path` `hold-my-brief:brief/<id>`. No document text other than the user's selection is ever in an event; strings are cut at 2000 characters.
+
+### The `since` / `next` loop
+
+A reply is `{ "events": [...], "next": N }`. `next` is the `seq` of the last event returned, or the latest `seq` when none matched, so
+passing it back as `since` never repeats or skips an event:
+
+```sh
+next=0
+while :; do
+  reply=$(hmb events --since "$next" --wait 30 --type send --json) || break
+  next=$(jq -r .next <<<"$reply")
+  jq -c '.events[]' <<<"$reply" | while read -r e; do …; done
+done
+```
+
+The app keeps the newest 256 events. If `since` is older than the oldest it still has, the reply also has `"dropped": true`: some events
+were lost, so re-read the state with `hmb status` rather than assuming. If the app restarted, its `seq` starts again at 1; a `since`
+larger than the latest `seq` returns `next` as the latest `seq`, which puts the loop back in step.
+
+Events are kept in memory only, never written to disk, and only while **Settings → Agent control** is on: turning it off drops the
+log and the reader stops recording. `events` is answered by the app itself, so a waiting call never delays `show`, `brief` or `status`.
+
 ## Visual blocks supported in Markdown & briefs
 
 Hold My Brief renders these natively using your active theme tokens (all 17 light, dark, and glow themes):
@@ -85,7 +144,7 @@ Hold My Brief renders these natively using your active theme tokens (all 17 ligh
 
 ## Compact MCP server (`hmb mcp`)
 
-For MCP-only clients, point your client at `hmb mcp` (stdio). It exposes only **4 coarse tools** (`hmb_brief`, `hmb_show`, `hmb_status`, `hmb_read`) to keep prompt token overhead minimal:
+For MCP-only clients, point your client at `hmb mcp` (stdio). It exposes only **5 coarse tools** (`hmb_brief`, `hmb_show`, `hmb_status`, `hmb_read`, `hmb_events`) to keep prompt token overhead minimal. `hmb_events` takes `since`, `wait` (seconds, at most 30) and `types`, and returns the same `{ "events": [...], "next": N }` reply as `hmb events --json`; the MCP server answers one request at a time, so a waiting `hmb_events` call holds the others until it returns.
 
 ```json
 {

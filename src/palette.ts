@@ -1,5 +1,5 @@
 import { looksLikeQuestion } from './assistant';
-import { appliesTo, groupCommands, parseIntent, scoreCommand, searchCommands, unavailableReason, type Command, type CommandGroup, type SplitContext } from './commands';
+import { appliesTo, groupCommands, parseIntent, scoreCommand, searchCommands, unavailableReason, type AgentContext, type Command, type CommandGroup, type SplitContext } from './commands';
 
 /**
  * A keyboard-first palette over the command catalog.
@@ -23,6 +23,8 @@ export type PaletteContext = {
   /** Format of the open document, for commands that apply to some formats only. */
   format: () => string | undefined;
   desktop: boolean;
+  /** Whether Agent control is on and some text is selected, for the commands that send the selection to an agent; absent where there is no agent control. */
+  agent?: () => AgentContext;
   /** How many panes the window has, the room and tabs of the active pane, and how many documents are open; absent where there is no split. */
   split?: () => SplitContext;
   /** Runs a command by id. Errors are the caller's to report. */
@@ -71,7 +73,7 @@ export function createPalette(context: PaletteContext): Palette {
   let actived = 0;
 
   function render(query: string): void {
-    const state = { hasDocument: context.hasDocument(), desktop: context.desktop, format: context.format(), split: context.split?.() };
+    const state = { hasDocument: context.hasDocument(), desktop: context.desktop, format: context.format(), split: context.split?.(), agent: context.agent?.() };
     const needsDocument = state.hasDocument ? undefined : 'Open a document first';
     const text = query.trim();
     const commands = searchCommands(query).filter(command => !state.hasDocument || appliesTo(command, state.format)).slice(0, MAX_ROWS);
