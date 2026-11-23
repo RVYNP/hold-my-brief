@@ -15,22 +15,27 @@ declare global {
     __mockSessions: { tabs: { path: string }[]; active: number | null; layout?: unknown }[];
     /** Every `control_event` (what the user selected, read or sent) the reader recorded, in order. */
     __mockEvents: { type: string; [field: string]: unknown }[];
+    /** The `paths` of every `prefetch_documents` call the reader made, in order. */
+    __mockPrefetch: string[][];
     /** Every `control_area` (the PNG as byte values, and what says where on the page it is) the reader sent, in order. */
     __mockAreas: { png: number[]; meta: { paneId: string; path: string; title: string; page?: number; box: { x: number; y: number; w: number; h: number } } }[];
   }
 }
 
+/** A saved session, as `get_state` returns it in `tabs`: the tabs in order, the shown one's index, and the split layout if any. */
+export type MockSession = { tabs: { path: string; name: string; format: string }[]; active: number | null; layout?: unknown };
+
 /**
  * Makes the page believe it runs inside the desktop app: `isTauri()` is true and the few native commands the reader calls at startup and for
  * the window (state, pin, lock, presets) answer from a small in-page model, `window.__mockWindow`. `read_brief` answers from
  * `window.__mockBriefs`, the Library from `window.__mockLibrary`, `control_reply` is recorded in `window.__mockReplies`, `control_event` in `window.__mockEvents`, `control_area` in `window.__mockAreas`, `save_tabs` in
- * `window.__mockSessions`, and `window.__mockEmit` delivers a native event. Like the native bridge, which forwards nothing before the reader
+ * `window.__mockSessions`, `prefetch_documents` in `window.__mockPrefetch`, and `window.__mockEmit` delivers a native event. Like the native bridge, which forwards nothing before the reader
  * calls `control_ready`, events emitted earlier wait and are delivered then, so a test may emit right after `page.goto`. `control_status`
- * answers `null` (Agent control not reported) unless `control` says how the switch stands. Every other command, and every plugin call, answers
+ * answers `null` (Agent control not reported) unless `control` says how the switch stands. `get_state` answers `session` as the saved tabs (none by default) and `recents`. Every other command, and every plugin call, answers
  * `null`. Call before `page.goto`.
  */
-export async function mockDesktop(page: Page, { control = null }: { control?: { enabled: boolean; running: boolean } | null } = {}) {
-  await page.addInitScript(control => {
+export async function mockDesktop(page: Page, { control = null, session = null, recents = [] }: { control?: { enabled: boolean; running: boolean } | null; session?: MockSession | null; recents?: { path: string; name: string; format: string; lastOpened: number }[] } = {}) {
+  await page.addInitScript(({ control, session, recents }) => {
     const state = { width: 420, height: 620, pinned: false, locked: false };
     let callbackId = 0, ready = false;
     const callbacks = new Map<number, (message: unknown) => void>(), listeners = new Map<string, number[]>();
@@ -38,8 +43,8 @@ export async function mockDesktop(page: Page, { control = null }: { control?: { 
     const held: [string, unknown][] = [];
     const deliver = (event: string, payload: unknown) => { for (const id of listeners.get(event) ?? []) callbacks.get(id)?.({ event, id, payload }); };
     const replies: Window['__mockReplies'] = [], briefs: Window['__mockBriefs'] = {}, sessions: Window['__mockSessions'] = [], events: Window['__mockEvents'] = [], areas: Window['__mockAreas'] = [];
-    const library: Window['__mockLibrary'] = {};
-    Object.assign(window, { isTauri: true, __mockLibrary: library, __mockWindow: state, __mockReplies: replies, __mockBriefs: briefs, __mockSessions: sessions, __mockEvents: events, __mockAreas: areas });
+    const library: Window['__mockLibrary'] = {}, prefetched: Window['__mockPrefetch'] = [];
+    Object.assign(window, { isTauri: true, __mockLibrary: library, __mockPrefetch: prefetched, __mockWindow: state, __mockReplies: replies, __mockBriefs: briefs, __mockSessions: sessions, __mockEvents: events, __mockAreas: areas });
     Object.assign(window, {
       __mockEmit: (event: string, payload: unknown) => { if (ready) deliver(event, payload); else held.push([event, payload]); },
       __TAURI_INTERNALS__: {
@@ -48,7 +53,7 @@ export async function mockDesktop(page: Page, { control = null }: { control?: { 
         unregisterCallback: (id: number) => { callbacks.delete(id); },
         convertFileSrc: (path: string) => path,
         invoke: async (command: string, args?: Record<string, unknown>) => {
-          if (command === 'get_state') return { recents: [], window: { ...state }, tabs: null };
+          if (command === 'get_state') return { recents, window: { ...state }, tabs: session };
           if (command === 'get_library') return { documents: Object.entries(library).map(([path, doc]) => ({ path, name: doc.name, format: doc.format, lastOpened: 0, collectionIds: [], favorite: false, tags: [], notes: '' })), collections: [], roots: [], imports: [] };
           if (command === 'reading_progress') return {};
           if (command === 'open_library_document') { const doc = library[String(args?.path)]; if (!doc) throw new Error('Item is no longer in the library.'); return { id: args?.path, path: args?.path, name: doc.name, format: doc.format }; }
@@ -64,10 +69,11 @@ export async function mockDesktop(page: Page, { control = null }: { control?: { 
           if (command === 'control_event') { events.push(args?.event as Window['__mockEvents'][number]); return null; }
           if (command === 'control_area') { areas.push(args as Window['__mockAreas'][number]); return null; }
           if (command === 'control_status') return control && { ...control, transport: 'unix', discoveryPath: '' };
+          if (command === 'prefetch_documents') { prefetched.push(args?.paths as string[]); return null; }
           if (command === 'save_tabs') { sessions.push(args?.session as Window['__mockSessions'][number]); return null; }
           return null;
         },
       },
     });
-  }, control);
+  }, { control, session, recents });
 }
