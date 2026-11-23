@@ -200,6 +200,11 @@ window. Escape closes it.
   dropped when you turn Agent control off. To hand an agent something on purpose, select text and run **Send selection to
   agent** from the palette (Ctrl+K) or with Ctrl+Shift+Enter (⌘⇧↩ on macOS); the notice says "Sent to agent". The command is
   dimmed, with the reason, when nothing is selected or Agent control is off.
+
+  A scanned page, a chart or an image has no text to select. Run **Send area to agent** (palette, or Ctrl+Shift+A, ⌘⇧A on macOS)
+  and drag a box over the page: the agent gets a picture of that box and where it is on the page, and the notice says "Sent area to
+  agent". Esc, a box smaller than 8 × 8 px, a click outside the pane or another tab cancels. It works on PDF pages and images only,
+  and the picture is kept in the app's data folder (the newest 20, readable by you only) until Agent control is turned off.
 - **Appearance:** colour and text, below.
 - **Library:** the side the library docks on, **Left** or **Right** (see Document library).
 - **More:** **All commands…** (Ctrl+K), **AI assistant…** (desktop app), **Keyboard shortcuts**, **Clear recent files** and
@@ -538,6 +543,7 @@ lock.
 | Resize library (divider focused) | Left / Right (Shift: larger steps), Home / End, Enter resets |
 | Pin / size lock | Ctrl+Shift+T / Ctrl+Shift+L |
 | Send the selection to an agent (Agent control on) | Ctrl+Shift+Enter (⌘⇧↩ on macOS) |
+| Send a dragged area of a PDF page or image to an agent | Ctrl+Shift+A (⌘⇧A on macOS) |
 | Fit page / fit width / actual size (100%) | Ctrl+0 / Ctrl+2 / Shift+0 |
 | New tab / close tab | Ctrl+T / Ctrl+W (⌘T / ⌘W on macOS) |
 | Next / previous tab | Ctrl+Tab / Ctrl+Shift+Tab |

@@ -9,6 +9,7 @@ import { BitmapCache, PREVIEW_CACHE_BYTES, THUMBNAIL_HEIGHT } from '../page-stri
 import { PREVIEW_CLASS } from '../zoom-gesture';
 import { restoreView, type Anchor } from '../zoom-anchor';
 import { clampZoom, DEFAULT_LIMITS, type ZoomLimits } from '../zoom';
+import { canvasPng, planArea, type AreaCapture, type Box } from '../area';
 
 GlobalWorkerOptions.workerSrc = workerURL;
 /** Bound on decoded page bitmaps kept for instant page turns (bytes of canvas backing store). */
@@ -584,6 +585,24 @@ export class PdfAdapter implements ReaderAdapter {
   }
   outline() { return this.items; }
   scroller() { return this.host; }
+
+  async captureArea(box: Box): Promise<AreaCapture> {
+    await Promise.allSettled(this.tasks.map(task => task.promise)); // A page still being drawn is not yet what the user sees.
+    if (this.disposed) throw new Error('The page is no longer shown.');
+    const origin = this.host.getBoundingClientRect();
+    const canvases = [...this.host.querySelectorAll<HTMLCanvasElement>('.pdf-page > canvas')];
+    const plan = planArea(box, canvases.map((canvas, index) => {
+      const rect = canvas.getBoundingClientRect();
+      return { page: this.pages[index], rect: { x: rect.left - origin.left, y: rect.top - origin.top, w: rect.width, h: rect.height }, pixelsWidth: canvas.width, pixelsHeight: canvas.height };
+    }));
+    if (!plan) throw new Error('Drag the box over a page.');
+    const out = document.createElement('canvas'); out.width = plan.width; out.height = plan.height;
+    const context = out.getContext('2d');
+    if (!context) throw new Error('The area could not be read.');
+    context.imageSmoothingQuality = 'high';
+    for (const { index, source, dest } of plan.draws) context.drawImage(canvases[index], source.x, source.y, source.w, source.h, dest.x, dest.y, dest.w, dest.h);
+    return { png: await canvasPng(out), width: plan.width, height: plan.height, page: plan.page, box: plan.box };
+  }
   zoomLevel() { return this.level; }
   zoomLimits() { return this.currentPages.length ? this.limitsOf(this.basesOf(this.currentPages)) : DEFAULT_LIMITS; }
   legacyZoomBase(fit: ReaderOptions['fit']) {

@@ -98,7 +98,7 @@ impl SendError {
     }
 }
 
-const EVENT_TYPES: [&str; 4] = ["selection", "page", "tab", "send"];
+const EVENT_TYPES: [&str; 5] = ["selection", "page", "tab", "send", "area"];
 const EVENTS_DEFAULT_WAIT_SECS: u64 = 30;
 const EVENTS_MAX_WAIT_SECS: u64 = 60;
 const MCP_MAX_WAIT_SECS: u64 = 30;
@@ -286,7 +286,7 @@ USAGE:
   hmb cmd [<command-id>] [--theme NAME] [--mode system|light|dark] [--page theme|white|sepia|dim]
           [--pin | --unpin] [--lock | --unlock] [--compact | --reading] [--focus]
   hmb events [--since N] [--wait SECONDS] [--type a,b] [--limit N] [--follow]
-             Wait for what the user does: selection, page, tab, send (--follow: NDJSON, never ends)
+             Wait for what the user does: selection, page, tab, send, area (--follow: NDJSON, never ends)
   hmb mcp                           Run compact stdio MCP server (5 tools)
   hmb ping                          Check connection
 
@@ -644,6 +644,9 @@ fn print_human(method: &str, value: &Value) {
 /// `seq type place text…` — one line per event. Whitespace in selected text is collapsed.
 fn event_line(event: &Value) -> String {
     let field = |key: &str| event.get(key).and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty());
+    if field("type") == Some("area") {
+        return area_line(event);
+    }
     let mut parts = vec![event.get("seq").and_then(Value::as_u64).unwrap_or(0).to_string()];
     parts.push(field("type").unwrap_or("?").to_string());
     let place = field("where").or_else(|| field("position")).or_else(|| field("title")).or_else(|| field("path"));
@@ -652,6 +655,20 @@ fn event_line(event: &Value) -> String {
     if let Some(text) = field("text") {
         parts.push(text.split_whitespace().collect::<Vec<_>>().join(" "));
     }
+    parts.join(" ")
+}
+
+/// `seq area <title> p.<page> <w>×<h> <image path>`; a document without pages has no `p.<page>`.
+fn area_line(event: &Value) -> String {
+    let text = |key: &str| event.get(key).and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty());
+    let number = |key: &str| event.get(key).and_then(Value::as_u64);
+    let mut parts = vec![event.get("seq").and_then(Value::as_u64).unwrap_or(0).to_string(), "area".to_string()];
+    parts.extend(text("title").or_else(|| text("path")).map(|title| title.split_whitespace().collect::<Vec<_>>().join(" ")));
+    parts.extend(number("page").map(|page| format!("p.{page}")));
+    if let (Some(width), Some(height)) = (number("width"), number("height")) {
+        parts.push(format!("{width}×{height}"));
+    }
+    parts.extend(text("image").map(str::to_string));
     parts.join(" ")
 }
 
@@ -791,13 +808,13 @@ fn mcp_tools() -> Value {
         },
         {
             "name": "hmb_events",
-            "description": "Wait for what the user does in Hold My Brief: text they select, pages they turn to, tabs they show or close, and 'Send selection to agent'. Returns { events, next }: pass `next` back as `since` to continue. Blocks up to `wait` seconds for a new event; an empty list after the wait is normal. Use types [\"send\",\"selection\"] to hear only what the user points at.",
+            "description": "Wait for what the user does in Hold My Brief: text they select, pages they turn to, tabs they show or close, 'Send selection to agent', and a box they drag over a PDF page or image ('area': read the file named by `image` to see it). Returns { events, next }: pass `next` back as `since` to continue. Blocks up to `wait` seconds for a new event; an empty list after the wait is normal. Use types [\"send\",\"area\",\"selection\"] to hear only what the user points at.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "since": { "type": "integer", "description": "Return events with seq greater than this (default 0). Use the `next` of the previous reply." },
                     "wait": { "type": "integer", "description": "Seconds to wait for a new event (default 0, at most 30)." },
-                    "types": { "type": "array", "items": { "type": "string", "enum": ["selection", "page", "tab", "send"] } }
+                    "types": { "type": "array", "items": { "type": "string", "enum": ["selection", "page", "tab", "send", "area"] } }
                 }
             }
         }
@@ -1120,6 +1137,10 @@ mod tests {
         assert_eq!(event_line(&page), "4 page p. 5");
         let tab = json!({ "seq": 5, "type": "tab", "action": "closed", "title": "Plan", "path": "hold-my-brief:brief/plan" });
         assert_eq!(event_line(&tab), "5 tab Plan closed");
+        let area = json!({ "seq": 6, "type": "area", "title": "Scan  2", "page": 3, "width": 640, "height": 480, "image": "/data/agent-areas/6.png" });
+        assert_eq!(event_line(&area), "6 area Scan 2 p.3 640×480 /data/agent-areas/6.png");
+        let picture = json!({ "seq": 7, "type": "area", "title": "Chart", "width": 20, "height": 10, "image": "/i.png" });
+        assert_eq!(event_line(&picture), "7 area Chart 20×10 /i.png");
         let mut out = Vec::new();
         write_events_human(&mut out, &json!({ "events": [selection], "next": 3, "dropped": true })).unwrap();
         assert_eq!(String::from_utf8(out).unwrap(), "(older events were dropped)\n3 selection p. 4 two lines\n");

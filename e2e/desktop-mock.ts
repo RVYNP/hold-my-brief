@@ -8,20 +8,22 @@ declare global {
     /** Briefs `read_brief` answers with, by path (`hold-my-brief:brief/<id>`). */
     __mockBriefs: Record<string, { id: string; path: string; title: string; format: string; content: string; updatedAt: number }>;
     /** Library documents by id: `get_library` lists them, `open_library_document` and `read_document_bytes` answer for them. */
-    __mockLibrary: Record<string, { name: string; format: string; text: string }>;
+    __mockLibrary: Record<string, { name: string; format: string; text?: string; /** The file's bytes, for a format that is not text. */ bytes?: number[] }>;
     /** Every `control_reply` the reader sent, in order. */
     __mockReplies: { id: string; ok: boolean; result: unknown; error: string | null }[];
     /** Every session `save_tabs` was asked to write, in order. */
     __mockSessions: { tabs: { path: string }[]; active: number | null; layout?: unknown }[];
     /** Every `control_event` (what the user selected, read or sent) the reader recorded, in order. */
     __mockEvents: { type: string; [field: string]: unknown }[];
+    /** Every `control_area` (the PNG as byte values, and what says where on the page it is) the reader sent, in order. */
+    __mockAreas: { png: number[]; meta: { paneId: string; path: string; title: string; page?: number; box: { x: number; y: number; w: number; h: number } } }[];
   }
 }
 
 /**
  * Makes the page believe it runs inside the desktop app: `isTauri()` is true and the few native commands the reader calls at startup and for
  * the window (state, pin, lock, presets) answer from a small in-page model, `window.__mockWindow`. `read_brief` answers from
- * `window.__mockBriefs`, the Library from `window.__mockLibrary`, `control_reply` is recorded in `window.__mockReplies`, `control_event` in `window.__mockEvents`, `save_tabs` in
+ * `window.__mockBriefs`, the Library from `window.__mockLibrary`, `control_reply` is recorded in `window.__mockReplies`, `control_event` in `window.__mockEvents`, `control_area` in `window.__mockAreas`, `save_tabs` in
  * `window.__mockSessions`, and `window.__mockEmit` delivers a native event. Like the native bridge, which forwards nothing before the reader
  * calls `control_ready`, events emitted earlier wait and are delivered then, so a test may emit right after `page.goto`. `control_status`
  * answers `null` (Agent control not reported) unless `control` says how the switch stands. Every other command, and every plugin call, answers
@@ -35,9 +37,9 @@ export async function mockDesktop(page: Page, { control = null }: { control?: { 
     const presets: Record<string, [number, number]> = { compact: [420, 620], reading: [760, 900] };
     const held: [string, unknown][] = [];
     const deliver = (event: string, payload: unknown) => { for (const id of listeners.get(event) ?? []) callbacks.get(id)?.({ event, id, payload }); };
-    const replies: Window['__mockReplies'] = [], briefs: Window['__mockBriefs'] = {}, sessions: Window['__mockSessions'] = [], events: Window['__mockEvents'] = [];
+    const replies: Window['__mockReplies'] = [], briefs: Window['__mockBriefs'] = {}, sessions: Window['__mockSessions'] = [], events: Window['__mockEvents'] = [], areas: Window['__mockAreas'] = [];
     const library: Window['__mockLibrary'] = {};
-    Object.assign(window, { isTauri: true, __mockLibrary: library, __mockWindow: state, __mockReplies: replies, __mockBriefs: briefs, __mockSessions: sessions, __mockEvents: events });
+    Object.assign(window, { isTauri: true, __mockLibrary: library, __mockWindow: state, __mockReplies: replies, __mockBriefs: briefs, __mockSessions: sessions, __mockEvents: events, __mockAreas: areas });
     Object.assign(window, {
       __mockEmit: (event: string, payload: unknown) => { if (ready) deliver(event, payload); else held.push([event, payload]); },
       __TAURI_INTERNALS__: {
@@ -50,7 +52,7 @@ export async function mockDesktop(page: Page, { control = null }: { control?: { 
           if (command === 'get_library') return { documents: Object.entries(library).map(([path, doc]) => ({ path, name: doc.name, format: doc.format, lastOpened: 0, collectionIds: [], favorite: false, tags: [], notes: '' })), collections: [], roots: [], imports: [] };
           if (command === 'reading_progress') return {};
           if (command === 'open_library_document') { const doc = library[String(args?.path)]; if (!doc) throw new Error('Item is no longer in the library.'); return { id: args?.path, path: args?.path, name: doc.name, format: doc.format }; }
-          if (command === 'read_document_bytes') { const doc = library[String(args?.path)]; return doc ? new TextEncoder().encode(doc.text).buffer : null; }
+          if (command === 'read_document_bytes') { const doc = library[String(args?.path)]; return doc ? (doc.bytes ? new Uint8Array(doc.bytes) : new TextEncoder().encode(doc.text ?? '')).buffer : null; }
           if (command === 'pending_open') return [];
           if (command === 'set_pin') { state.pinned = Boolean(args?.enabled); return { ...state }; }
           if (command === 'set_lock') { state.locked = Boolean(args?.enabled); return { ...state }; }
@@ -60,6 +62,7 @@ export async function mockDesktop(page: Page, { control = null }: { control?: { 
           if (command === 'control_reply') { replies.push(args as Window['__mockReplies'][number]); return null; }
           if (command === 'control_ready') { ready = true; for (const [event, payload] of held.splice(0)) deliver(event, payload); return null; }
           if (command === 'control_event') { events.push(args?.event as Window['__mockEvents'][number]); return null; }
+          if (command === 'control_area') { areas.push(args as Window['__mockAreas'][number]); return null; }
           if (command === 'control_status') return control && { ...control, transport: 'unix', discoveryPath: '' };
           if (command === 'save_tabs') { sessions.push(args?.session as Window['__mockSessions'][number]); return null; }
           return null;
