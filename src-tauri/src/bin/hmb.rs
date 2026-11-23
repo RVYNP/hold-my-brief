@@ -680,6 +680,20 @@ fn follow_events(
     }
 }
 
+/// The sender for a `--follow` loop. Only the first round may launch the app: a later unreachable
+/// app means the user quit it (or turned Agent control off), and the loop must end, not relaunch it.
+fn follow_sender<'a>(
+    load: impl Fn() -> Result<DiscoveryInfo, String> + 'a,
+    launch: impl Fn() -> bool + 'a,
+    auto_launch: bool,
+) -> impl FnMut(Value) -> Result<Value, String> + 'a {
+    let mut first = true;
+    move |params| {
+        let may_launch = auto_launch && std::mem::take(&mut first);
+        send_or_launch(&load, &launch, "events", params, may_launch)
+    }
+}
+
 /// The MCP `hmb_events` arguments (`wait` in seconds, at most 30) as control-method params.
 fn mcp_events_params(args: &Value) -> Value {
     let mut params = Map::new();
@@ -862,7 +876,7 @@ fn main() {
         let auto_launch = parsed.auto_launch;
         let params = parsed.params.as_object().cloned().unwrap_or_default();
         let result = follow_events(
-            |p| send_with_autolaunch("events", p, auto_launch),
+            follow_sender(load_discovery, try_launch_app, auto_launch),
             &mut io::stdout().lock(),
             params,
         );
@@ -1075,6 +1089,40 @@ mod tests {
         assert_eq!(calls, [Value::Null, json!(2), json!(2), json!(3)]);
         let lines: Vec<Value> = String::from_utf8(out).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect();
         assert_eq!(lines.iter().map(|e| e["seq"].as_u64().unwrap()).collect::<Vec<_>>(), [1, 2, 3]);
+    }
+
+    #[test]
+    fn follow_launches_the_app_for_the_first_round_only() {
+        let (info, seen) = stub_app(|_| json!({ "id": "1", "ok": true, "result": { "events": [{ "seq": 1, "type": "send" }], "next": 1 } }));
+        let loads = std::cell::Cell::new(0);
+        let launches = std::cell::Cell::new(0);
+        let mut out = Vec::new();
+        // The app answers the first round, then is gone (the user quit it).
+        let result = follow_events(
+            follow_sender(
+                || {
+                    loads.set(loads.get() + 1);
+                    if loads.get() == 1 { Ok(info.clone()) } else { Err("Hold My Brief is not running.".into()) }
+                },
+                || { launches.set(launches.get() + 1); true },
+                true,
+            ),
+            &mut out,
+            Map::new(),
+        );
+        assert_eq!(result.unwrap_err(), "Hold My Brief is not running.");
+        assert_eq!(launches.get(), 0);
+        assert_eq!(*seen.lock().unwrap(), ["events"]);
+
+        // With the app down from the start, the first round does launch (once).
+        let launches = std::cell::Cell::new(0);
+        let result = follow_events(
+            follow_sender(|| Err("Hold My Brief is not running.".into()), || { launches.set(launches.get() + 1); false }, true),
+            &mut Vec::new(),
+            Map::new(),
+        );
+        assert!(result.is_err());
+        assert_eq!(launches.get(), 1);
     }
 
     #[test]
