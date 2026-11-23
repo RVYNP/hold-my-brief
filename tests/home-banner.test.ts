@@ -59,11 +59,11 @@ describe('bannerPalette', () => {
 });
 
 describe('bannerGrid', () => {
-  it('is one dither pixel per 2 CSS px, the width rounded up to a bucket', () => {
-    expect(bannerGrid(1000, 140)).toEqual({ width: 512, height: 70 });
-    expect(bannerGrid(1000, 140)).toEqual(bannerGrid(1010, 140));
-    expect(bannerGrid(388, 64)).toEqual({ width: 208, height: 32 });
-    expect(bannerGrid(640, 14)).toEqual({ width: 320, height: 7 });
+  it('is one dither pixel per 3 CSS px, the width rounded up to a bucket', () => {
+    expect(bannerGrid(1000, 140)).toEqual({ width: 336, height: 47 });
+    expect(bannerGrid(1000, 140)).toEqual(bannerGrid(1008, 140));
+    expect(bannerGrid(388, 64)).toEqual({ width: 144, height: 21 });
+    expect(bannerGrid(640, 14)).toEqual({ width: 224, height: 5 });
   });
 });
 

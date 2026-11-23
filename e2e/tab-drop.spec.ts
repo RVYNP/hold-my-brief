@@ -98,7 +98,7 @@ test('over the reading area an overlay invites the drop, and it goes when the dr
   await expect(overlay).toContainText('Drop to open in a new tab');
   await expect(page.locator('#tab-strip .tab-drop-marker')).toBeHidden();
   const box = (await overlay.boundingBox())!, panel = (await page.locator('#workspace').boundingBox())!;
-  expect(Math.round(box.x - panel.x)).toBe(12); expect(Math.round(box.y - panel.y)).toBe(13); // 12 px inside the panel's 1 px top border.
+  expect(Math.round(box.x - panel.x)).toBe(12); expect(Math.round(box.y - panel.y)).toBe(12); // 12 px inside the panel (the toolbar owns the hairline above it).
   await page.dispatchEvent('body', 'dragleave', { relatedTarget: null });
   await expect(overlay).toBeHidden();
 });
@@ -117,7 +117,7 @@ test('a compact window has no strip, and a drop still opens its tabs after the a
   await expect(page.locator('#filename')).toHaveText('y.txt');
   await expect(page.locator('#tab-count')).toHaveText('4');
   await page.locator('#title').click();
-  await expect(page.locator('#tab-menu .tab-menu-row .tab-menu-title')).toHaveText(['Home', 'a.txt', 'x.txt', 'y.txt', 'b.txt', 'New tab…']);
+  await expect(page.locator('#tab-menu .tab-menu-row .tab-menu-title')).toHaveText(['Home', 'All documents', 'a.txt', 'x.txt', 'y.txt', 'b.txt', 'New tab…']);
 });
 
 test('a library row dragged onto the strip opens in a new tab at that spot, or after the tab being read; a short drag or an Escape opens nothing', async ({ page }) => {

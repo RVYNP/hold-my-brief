@@ -12,10 +12,13 @@
 .library-header-actions { display: flex; align-items: center; flex-shrink: 0; }
 .library-header button { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; color: var(--muted); }
 .library-header button:hover, .library-header button[aria-expanded=true] { color: var(--fg); }
-.library-header .library-title-button { display: inline; width: auto; height: auto; padding: 0; border: 0; border-radius: 4px; background: none; color: inherit; font: inherit; cursor: pointer; }
-.library-header .library-title-button:hover { color: var(--accent-ink); }
+.library-header .library-title-button { display: inline-flex; align-items: center; gap: 4px; width: auto; height: auto; margin: -2px 0 -2px -4px; padding: 2px 5px 2px 4px; border: 0; border-radius: 5px; background: none; color: inherit; font: inherit; cursor: pointer; }
+.library-header .library-title-button:hover { background: var(--hover-subtle); color: var(--accent-ink); }
 .library-header .library-title-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .library-header .library-title-button[aria-current=location] { color: var(--accent-ink); }
+.library-title-arrow { flex: none; color: var(--muted); opacity: .75; transition: color .12s, opacity .12s, translate .12s; }
+.library-title-button:hover .library-title-arrow, .library-title-button[aria-current=location] .library-title-arrow { color: var(--accent-ink); opacity: 1; }
+.library-title-button:hover .library-title-arrow { translate: 1px -1px; }
 .library-panel [hidden], .library-page [hidden] { display: none !important; }
 /* Resize handle: a 10 px hit area between the library and the reading panel, anchored to the 6 px page margin. */
 .library-right { flex-direction: row-reverse; }
@@ -48,11 +51,13 @@
   #reader-layout.library-open { --library-clear: calc(var(--library-width, 270px) + 64px); --workspace-clear: 0px; }
   #reader-layout.library-open:not(.library-right) > #workspace { margin-left: var(--library-clear); }
   #reader-layout.library-open.library-right > #workspace { margin-right: var(--library-clear); }
-  /* While the panel is closed the reading surface is inset by the rail's room (--workspace-clear is 0 once the panel is open, and #workspace's margin
-     takes over), so a page never runs under the rail's icons: it fits the cleared width. The host's box moves, not its padding: the adapters fit to clientWidth. */
-  #reader-layout:not(.library-right) .reader-host { left: var(--workspace-clear); }
-  #reader-layout.library-right .reader-host { right: var(--workspace-clear); }
-  #reader-layout.library-right #view-controls { left: auto; right: var(--workspace-clear); translate: none; }
+  /* While the panel is closed the reading surface and Library page are inset by the rail's room (--workspace-clear is 0 once the panel is open, and #workspace's margin
+     takes over), so neither a document nor All documents ever runs under the rail's icons. The host's box moves, not its padding: the adapters fit to clientWidth. */
+  #reader-layout:not(.library-right) .reader-host,
+  #reader-layout:not(.library-right) .library-page { left: var(--workspace-clear); }
+  #reader-layout.library-right .reader-host,
+  #reader-layout.library-right .library-page { right: var(--workspace-clear); }
+  #reader-layout.library-right #workspace:not(.is-split) #view-controls { left: auto; right: calc(var(--workspace-clear) + 16px); translate: none; }
   /* The panel and the rail reach the window's bottom, keeping the 6 px margin they keep at the outer edge. The footer is not under them: it
      belongs to the reading area (see style.css). */
   .library-root { bottom: 6px; left: 46px; }
@@ -400,11 +405,13 @@
 
 /* The Add files menu and the dialogs stand outside the panel, so they work while it is closed; the menu is fixed to the window, beside the icon rail's button. */
 .library-add-menu { position: fixed; z-index: 40; }
+.library-menu-sep { height: 1px; margin: 3px 4px; background: var(--hairline); }
 .library-dialog-host { display: contents; }
 
-/* Icon rail: from 720 px up, a 36 px strip (no box: an edge wash implies it) of five bare icons, Home, Add files, Library, Search and Settings, with a 1 px hairline on its inner edge. It overlays the reading panel's
-   edge while the panel is closed (--workspace-clear keeps the page's furniture off it) and stands beside the docked panel when it is open;
-   Library wears the accent-soft fill while the panel is open. */
+/* Icon rail: from 720 px up, a 36 px strip (no box: an edge wash implies it) of bare icons: Home, Library, Search and Add files at the top,
+   and Settings (plus active-only Pin/Lock chips on desktop) anchored at the foot, with a 1 px hairline on its inner edge while the panel is closed.
+   It overlays the reading panel's edge while the panel is closed (--workspace-clear keeps the page's furniture off it) and stands beside the docked
+   panel when it is open; Home wears the active tint on Home and Library wears it while the panel is open. */
 .icon-rail { display: none; }
 @media (min-width: 720px) {
   #reader-layout > .icon-rail { position: absolute; z-index: 21; top: 0; bottom: 6px; left: 2px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; box-sizing: border-box; width: 36px; padding: 8px 0; }
@@ -413,19 +420,23 @@
   #reader-layout > .icon-rail::before { content: ''; position: absolute; z-index: -1; top: 0; bottom: -6px; left: -2px; width: 44px; background: linear-gradient(to right, var(--rail-wash), transparent); pointer-events: none; }
   #reader-layout.library-right > .icon-rail { left: auto; right: 2px; }
   #reader-layout.library-right > .icon-rail::before { left: auto; right: -2px; background: linear-gradient(to left, var(--rail-wash), transparent); }
-  /* The hairline runs the window's height below the toolbar along the rail's inner edge (the side facing the content). */
-  #reader-layout > .icon-rail::after { content: ''; position: absolute; top: 0; bottom: -6px; left: 42px; width: 1px; background: var(--hairline); pointer-events: none; }
-  #reader-layout.library-right > .icon-rail::after { left: auto; right: 42px; }
+  /* The hairline and soft directional shadow run the window's height below the toolbar along the rail's inner edge while the panel is closed; clip-path keeps the shadow strictly on the workspace side. */
+  #reader-layout > .icon-rail::after { content: ''; position: absolute; top: 0; bottom: -6px; left: 42px; width: 1px; background: var(--hairline); box-shadow: 2px 0 12px 2px light-dark(#1a162629, #00000099), 8px 0 24px 2px light-dark(#1a162617, #00000066); clip-path: inset(0 -36px 0 0); pointer-events: none; }
+  #reader-layout.library-right > .icon-rail::after { left: auto; right: 42px; box-shadow: -2px 0 12px 2px light-dark(#1a162629, #00000099), -8px 0 24px 2px light-dark(#1a162617, #00000066); clip-path: inset(0 0 0 -36px); }
+  #reader-layout.library-open > .icon-rail::after { display: none; }
   #reader-layout:not(.library-right):not(.library-open) #empty.is-home { padding-left: calc(44px + var(--home-gutter)); }
   #reader-layout.library-right:not(.library-open) #empty.is-home { padding-right: 52px; }
+  #reader-layout:not(.library-right):not(.library-open) #empty:not(.is-home) { padding-left: 64px; }
+  #reader-layout.library-right:not(.library-open) #empty:not(.is-home) { padding-right: 64px; }
   /* The toolbar's library button is the compact window's door; here the icon rail is. */
   #library-toggle { display: none; }
 }
-.icon-rail-group { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.icon-rail-group { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; height: 100%; }
+.icon-rail-foot { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-top: auto; }
 .icon-rail-button { position: relative; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--muted); }
 .icon-rail-button:hover { background: var(--hover-subtle); color: var(--fg); }
-.icon-rail-button[aria-pressed=true] { background-color: var(--accent-soft); background-image: var(--sheen-wash); color: var(--accent-ink); }
-.icon-rail-button[aria-pressed=true]:hover { background-color: var(--accent-soft-hover); }
+.icon-rail-button[aria-pressed=true], .icon-rail-button[aria-current=page] { background-color: var(--accent-soft); background-image: var(--sheen-wash); color: var(--accent-ink); }
+.icon-rail-button[aria-pressed=true]:hover, .icon-rail-button[aria-current=page]:hover { background-color: var(--accent-soft-hover); }
 .icon-rail-button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 /* Light: the design's dark ink pill. Dark: a raised card. Drawn on the side away from the rail's edge, after a short hover, and only while the
    panel is closed: an open panel's header already names the view, and the tip would be drawn over its title and filter field. */

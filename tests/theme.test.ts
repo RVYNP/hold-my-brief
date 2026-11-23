@@ -50,21 +50,21 @@ describe('glow themes', () => {
 
 describe('parse: Home background', () => {
   const strength = (record: object) => parse(JSON.stringify(record)).backgroundStrength;
-  it('reads a kept strength from 0.02 to 0.30 as it is', () => {
-    for (const value of [0.02, 0.06, 0.09, 0.1, 0.11, 0.2, 0.28, 0.3]) expect(strength({ backgroundStrength: value })).toBe(value);
+  it('reads a kept strength from 0.02 to 0.40 as it is', () => {
+    for (const value of [0.02, 0.06, 0.09, 0.14, 0.2, 0.3, 0.4]) expect(strength({ backgroundStrength: value })).toBe(value);
   });
-  it('loads a record without a strength as 0.06', () => {
-    expect(defaultBackgroundStrength).toBe(0.06);
-    expect(strength({ palette: 'aurora', banner: 'arcs' })).toBe(0.06);
-    expect(parse(null).backgroundStrength).toBe(0.06);
-    expect(parse('not json').backgroundStrength).toBe(0.06);
+  it('loads a record without a strength as 0.14', () => {
+    expect(defaultBackgroundStrength).toBe(0.14);
+    expect(strength({ palette: 'aurora', banner: 'arcs' })).toBe(0.14);
+    expect(parse(null).backgroundStrength).toBe(0.14);
+    expect(parse('not json').backgroundStrength).toBe(0.14);
   });
-  it.each([0.019, 0.301, 0.31, 0.5, 0, -0.06, 1, 6, 1e9, null, '0.1', true, [0.1], {}])('loads the out-of-range or non-numeric strength %j as 0.06', value => {
-    expect(strength({ backgroundStrength: value })).toBe(0.06);
+  it.each([0.019, 0.401, 0.45, 0.5, 0, -0.06, 1, 6, 1e9, null, '0.1', true, [0.1], {}])('loads the out-of-range or non-numeric strength %j as 0.14', value => {
+    expect(strength({ backgroundStrength: value })).toBe(0.14);
   });
-  it('loads a non-finite strength (which JSON writes as null) as 0.06', () => {
-    expect(strength({ backgroundStrength: Number.NaN })).toBe(0.06);
-    expect(strength({ backgroundStrength: Number.POSITIVE_INFINITY })).toBe(0.06);
+  it('loads a non-finite strength (which JSON writes as null) as 0.14', () => {
+    expect(strength({ backgroundStrength: Number.NaN })).toBe(0.14);
+    expect(strength({ backgroundStrength: Number.POSITIVE_INFINITY })).toBe(0.14);
   });
   it('keeps every saved banner value meaning the same pattern, and none off, whatever the strength', () => {
     for (const banner of banners) {

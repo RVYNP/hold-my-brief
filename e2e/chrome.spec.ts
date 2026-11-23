@@ -42,7 +42,7 @@ test('the library panel is a one-line header over the tree; the Library tab has 
   await expect(page.getByRole('button', { name: 'Add files or manage sources' })).toBeHidden();
   await expect(page.getByRole('button', { name: 'Close library' }).first()).toBeHidden();
   await page.locator('#library-rail').getByRole('button', { name: 'Add files', exact: true }).click();
-  await expect(page.getByRole('menuitem')).toHaveText(['Add files…', 'Sources…']);
+  await expect(page.getByRole('menuitem')).toHaveText(['Open file…', 'Add files…', 'Sources…']);
   await page.keyboard.press('Escape');
   await expect(page.getByRole('menuitem', { name: 'Add local documents or images' })).toBeHidden();
 

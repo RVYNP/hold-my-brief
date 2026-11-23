@@ -559,12 +559,12 @@ test('the Library tab browses at full width and a detail strip joins from 900 px
   await expect(page.locator('.library-detail-name')).toHaveText(name);
   await expect(page.locator('#library-page')).toBeVisible();
   await expect(page.locator('#filename')).not.toHaveText(name);
-  // Enter opens the selected reference's tab; the Library tab stays in the strip.
+  // Enter opens the selected reference's tab; the pinned Library tab stays on the top bar.
   await tiles.nth(1).locator('.library-tile-open').focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('#filename')).toHaveText(name);
   await expect(page.locator('#library-page')).toBeHidden();
-  await expect(page.locator('#tab-list .tab[data-kind=library]')).toHaveCount(1);
+  await expect(page.locator('#library-pin')).toBeVisible();
   // The compact sheet's title still opens the Library tab, and the sheet gets out of the way.
   await page.setViewportSize({ width: 420, height: 620 });
   await libraryToggle(page).click();
@@ -758,7 +758,9 @@ test('PDF view controls zoom, pan 1:1 by hand tool and middle button, and keep l
   await expect(page.locator('#zoom-level')).toHaveAttribute('data-fit', 'width');
   await page.locator('#file-input').setInputFiles({ name: 'notes.md', mimeType: 'text/markdown', buffer: Buffer.from('# Notes\n\nPlain reflowing text.') });
   await expect(page.locator('#filename')).toHaveText('notes.md');
-  await expect(page.locator('#view-controls')).toBeHidden();
+  await expect(page.locator('#view-controls')).toHaveClass(/is-reading/);
+  await expect(page.locator('#zoom-level')).toBeHidden();
+  await expect(hand).toBeHidden();
   expect(errors).toEqual([]);
 });
 
@@ -1300,8 +1302,8 @@ test('view controls pill moves by its grip, stays inside the panel, persists, re
   const untouched = await geometry();
   const inside = async () => {
     const box = (await pill.boundingBox())!, panel = (await workspace.boundingBox())!;
-    // The panel's top border is 1 px; the pill keeps 8 px from every edge and 36 px above the bottom.
-    expect(box.x).toBeGreaterThanOrEqual(panel.x + 8 - .5); expect(box.y).toBeGreaterThanOrEqual(panel.y + 1 + 8 - .5);
+    // The pill keeps 8 px from every edge and 36 px above the bottom (the toolbar owns the hairline above the workspace).
+    expect(box.x).toBeGreaterThanOrEqual(panel.x + 8 - .5); expect(box.y).toBeGreaterThanOrEqual(panel.y + 8 - .5);
     expect(box.x + box.width).toBeLessThanOrEqual(panel.x + panel.width - 8 + .5); expect(box.y + box.height).toBeLessThanOrEqual(panel.y + panel.height - 36 + .5);
     return box;
   };
@@ -1319,7 +1321,7 @@ test('view controls pill moves by its grip, stays inside the panel, persists, re
   await page.mouse.move(panel.x + 1, panel.y + 1, { steps: 6 }); await page.mouse.up();
   const moved = await inside();
   // The icon rail stands at the panel's left edge, so the pill stops beside it (2 px + the 36 px rail) rather than at the 8 px margin.
-  expect(moved.x).toBeCloseTo(panel.x + 38 + 8, 0); expect(moved.y).toBeCloseTo(panel.y + 1 + 8, 0);
+  expect(moved.x).toBeCloseTo(panel.x + 38 + 8, 0); expect(moved.y).toBeCloseTo(panel.y + 8, 0);
   expect(await geometry()).toEqual(untouched);
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('hold-my-brief:view-controls')!))).toEqual({ x: expect.any(Number), y: expect.any(Number) });
 

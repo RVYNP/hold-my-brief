@@ -25,10 +25,10 @@ full title and path. There is no Home tab and no **+**: **Home** is the first ic
 fit, the strip scrolls and a **⌄** at its end lists them all, with each one's format and place. Drag a tab to reorder; middle-click a
 tab to close it. Empty strip space still drags the window.
 
-The **Library** tab (see *Library tab* under Document library) is a tab like the others, with the library glyph and the name of what it
-shows: `All documents`, `Favorites`, a collection's name, or a folder as `refs › 03_wwe_mag`. There is at most one: opening the library
-again from anywhere shows it and points it at the new selection instead of opening another. It starts at the front of the strip, can be dragged, closed
-with its × or middle-click, and is restored with the other tabs at the next launch, on the same selection.
+The **All documents** (Library) tab is pinned at the front of the top bar, before your open document tabs, with the library glyph and
+the name of what it currently shows: `All documents`, `Favorites`, a collection's name, or a folder as `refs › 03_wwe_mag`. Because it
+is pinned, it stays visible as document tabs scroll or split, has no close ×, and opening the library again from the sidebar or command
+palette focuses and retargets it in place. Its active scope and state are restored at the next launch.
 
 **Dropping files.** Drop one or several files anywhere on the window and each opens in its own tab, in the order dropped (a file that
 is already open is shown instead). While files are over the window the reading area dims behind a "Drop to open in a new tab" panel;
@@ -38,7 +38,7 @@ one notice names them. A document dragged out of the library (a tree row, row or
 the same way, with a small copy of its cover following the pointer; a plain click on any of them still opens it, and Escape cancels a drag.
 
 In a compact window (under 720 px) there is no strip. The title shows the open document's name, how many tabs are open and a ⌄; it
-opens a menu with Home, the Library tab when it is open, every document (with its format and place, and a close ×), and **New tab…**.
+opens a menu with Home, the pinned **All documents** (Library) tab, every document (with its format and place, and a close ×), and **New tab…**.
 That **Home** row is how a compact window reaches Home, since it has no icon rail.
 
 | Action | Shortcut |
@@ -63,8 +63,8 @@ browser's storage). Only the tab that was showing opens at once (while split, th
 With nothing saved, the window opens on **Hand it over.** Once documents have been opened, it opens
 on **Home**, a heading over these sections, in this order:
 
-- **Recently opened** is one wide card for the document you looked at last: the cover at its left edge, the title beside it, the
-  file type at the bottom left and where you got to (`p. 48 / 146`, `37 %`, `Finished`) at the bottom right. Click it to open the
+- **Recently opened** shows up to four wide cards across the top for the documents you looked at last: the cover at each card's left edge, the title beside it, the
+  file type at the bottom left and where you got to (`p. 48 / 146`, `37 %`, `Finished`) at the bottom right. Click any card to open the
   document (or switch to its tab). It is left out until something has been opened.
 - **Continue reading** shelves what you have started and not finished, most recent first. Under each cover are its title and one
   line with the file type and where you got to (`PDF · p. 40 / 146`). Each of these covers has a fine 1 px outline.
@@ -76,9 +76,9 @@ on **Home**, a heading over these sections, in this order:
   cards. Right-click a card for its menu, or drag it onto the tab strip to open it in a new tab. The whole library is in the library
   panel and the Library tab, with its favorites and collections.
 
-A faint **background** lies behind Home: a dithered picture of the theme's window glow that covers the whole window below the
-toolbar (the tab strip and the window buttons never show any of it), under the library rail and Home's content, at 6 %
-strength by default. Home itself is only the title and its shelves: no buttons and no filters.
+A dithered **background** lies behind Home: a Bayer-dithered picture of the theme's window glow that covers the whole window below the
+toolbar (the tab strip and the window buttons never show any of it), under the library rail and Home's content, at 14 %
+strength by default (adjustable up to 40 % in Appearance). Home itself is only the title and its shelves: no buttons and no filters.
 The picture changes once a day (by your local date) and stays the same until the day ends. It takes its colours
 from the theme and follows theme changes, and it is drawn only while Home is showing, once and still: nothing on it moves
 on its own, and a change fades from one picture to the next over 0.6 s (not at all with reduced motion). Reading
@@ -183,17 +183,14 @@ reader and everything returns.
 
 ## Settings
 
-**Settings** is a sheet at the bottom of the window: the icon rail's last icon opens it, and a compact window (no icon rail) has a
-Settings button at the toolbar's right end. It has four sections, top to bottom, and scrolls inside itself, so it fits a 420 × 620
-window. Escape closes it.
+**Settings** is a tabbed sheet at the bottom of the window: the icon rail's Settings gear icon (at the foot of the rail) opens it, and a compact window (no icon rail) has a
+Settings button at the toolbar's right end. Escape closes it.
 
+- **Appearance:** colour, background and text, below. Opens by default so hovering themes previews on the live page above.
 - **Window** (desktop app only): **Keep on top** (Ctrl+Shift+T) keeps the reader above ordinary windows, and **Lock size**
   (Ctrl+Shift+L) captures its outer dimensions while allowing movement. Each is a switch that stays in step with its shortcut
-  and with the palette while the sheet is open. **Compact** (420 × 620) and **Reading** (760 × 900) resize the window.
-- **Appearance:** colour and text, below.
-- **Library:** the side the library docks on, **Left** or **Right** (see Document library).
-- **More:** **All commands…** (Ctrl+K), **AI assistant…** (desktop app), **Keyboard shortcuts**, **Clear recent files** and
-  **Delete saved reading data…**.
+  and with the palette while the sheet is open; while active, a quiet indicator appears above Settings on the rail (or beside Settings in a compact toolbar) so you can see and clear it with one click. **Compact** (420 × 620) and **Reading** (760 × 900) resize the window.
+- **General:** the **Library** side (**Left** or **Right**) and **More** (**All commands…** Ctrl+K, **AI assistant…** in the desktop app, **Keyboard shortcuts**, **Clear recent files** and **Delete saved reading data…**).
 
 ## Appearance
 
@@ -306,10 +303,9 @@ drag pans or slides in any mode. The hand turns off when a new document opens (a
 reflow instead of zooming, so they have no pill and no panning; a reflowable EPUB has a pill of its own (next).
 
 **More.** Every pill ends with a **More** (⋯) button. It opens a menu of the document's own actions: **Go to…** (Ctrl+G),
-**Contents** (when the document has an outline; a reflowable EPUB's pill has its own **Contents**, so the menu leaves it out),
+**Contents** (when the document has an outline and the pill doesn't already show a **Contents** button),
 **Back after jump** (Alt+←), **Rotate page 90°** (page-based documents), **Two-page spread** (Ctrl+3) and **Cover page alone**
-(PDF and fixed-layout EPUB; it applies while two pages show). Escape, a choice or a press elsewhere closes the menu. A document with no pill
-(Markdown, TXT) reaches the same commands from the palette (Ctrl+K), the footer's position button (Go to) and Alt+←.
+(PDF and fixed-layout EPUB; it applies while two pages show). Escape, a choice or a press elsewhere closes the menu. Markdown and plain text show the same minimal reading pill (**Contents** when the document has headings, **A− / A+** text size, and **More**).
 
 **Reflowable EPUB: Contents, Pages or Scroll, text size.** Its pill reads **Contents** · **Pages | Scroll** · **A− 18 A+**.
 **Contents** opens the contents list above the pill (Ctrl+K → Contents opens the same list). A chapter entry reads "Chapter 3:
@@ -453,7 +449,7 @@ pipe is findable too.
 
 ### Command palette
 
-**Ctrl+K**, or a click on the document's name in the toolbar, opens a search field over every reader
+**Ctrl+K** (or **Settings › General › All commands…**) opens a search field over every reader
 action, so you can run something without finding it in the menu. Start typing to filter: matching is
 forgiving, so `zoom` finds the four zoom commands through their other names and `fit pa` finds
 **Fit page**. Arrow keys move the highlight, Enter runs the highlighted command and Escape closes the

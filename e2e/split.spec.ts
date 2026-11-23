@@ -416,23 +416,24 @@ test('a library row dragged onto a pane\'s row or reading surface opens in that 
   await expect(row(page, 'b').locator('.tab-title')).toHaveCount(1);
 });
 
-test('the Library tab stays in the top bar while split, covers the panes, and closing it brings the split back', async ({ page }) => {
+test('the pinned Library tab stays in the top bar while split, covers the panes, and selecting a pane brings the split back', async ({ page }) => {
   await split(page);
   const left = await box(page.locator('.pane-body[data-pane=a]'));
-  await page.locator('#library-root').getByRole('button', { name: 'Library', exact: true }).click();
+  await page.locator('#library-pin').click();
   await expect(page.locator('#library-page')).toBeVisible();
-  await expect(barTabs(page)).toHaveCount(1);
-  await expect(page.locator('#tab-list .tab[data-kind=library]')).toHaveClass(/is-active/);
+  await expect(barTabs(page)).toHaveCount(0);
+  await expect(page.locator('#library-pin')).toHaveClass(/is-active/);
   await expect(page.locator('.reader-host[data-pane=b]:not(.tab-hidden)')).toBeHidden();
   await expect(row(page, 'a')).toHaveCount(2);
   await row(page, 'b').first().click();
   await expect(page.locator('#library-page')).toBeHidden();
+  await expect(page.locator('#library-pin')).not.toHaveClass(/is-active/);
   await expect(page.locator('#workspace')).toHaveAttribute('data-active', 'b');
   expect(Math.abs((await box(page.locator('.pane-body[data-pane=a]'))).width - left.width)).toBeLessThanOrEqual(.5);
-  // With the split ended, the Library tab leads the strip again.
+  // With the split ended, the pinned Library tab still leads the strip before the document tabs.
   await run(page, 'Close the split');
-  await expect(barTabs(page).first()).toHaveAttribute('data-kind', 'library');
-  await expect(barTabs(page)).toHaveCount(4);
+  await expect(page.locator('#library-pin')).toBeVisible();
+  await expect(barTabs(page)).toHaveCount(3);
 });
 
 test('each pane\'s zoom label follows its own page through a split, a divider drag, a dock and a window resize', async ({ page }) => {

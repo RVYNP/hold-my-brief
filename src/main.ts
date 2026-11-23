@@ -39,10 +39,11 @@ import { Pane } from './pane';
 import { DEFAULT_PERCENT, MIN_SPLIT_WINDOW, PANE_IDS, boxes, evenRatio, fits, freeId, neighbour, panes as panesOf, receiver, removePane, renamePanes, setRatio, splitAt, splitPane, type Axis, type Direction, type Layout, type Path, type Rect } from './layout';
 import { createBody, createDivider, createRow, paintDivider, paintFold, paneMap, withoutIds, type SideView } from './split-view';
 import { createContextMenu, type MenuEntry } from './context-menu';
+import { BRIEF_PREFIX, briefIdOf, handleControlRequest, isBriefPath, type ControlHost } from './control';
 initAppearance();
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-  <header class="toolbar" data-tauri-drag-region><button id="library-toggle" class="icon-button" aria-label="Document library" aria-controls="library-root" aria-expanded="false" title="Document library (Ctrl+B)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16m-3-12v8"/></svg></button><nav id="tab-strip" class="tab-strip" aria-label="Open documents" data-tauri-drag-region><div id="tab-list" class="tab-list" role="tablist" aria-label="Documents"></div><button id="tab-overflow" class="tab-overflow" aria-label="All tabs" title="All tabs" aria-haspopup="menu" aria-expanded="false" hidden></button></nav><button id="title" class="title" aria-haspopup="menu" aria-expanded="false" title="Open tabs"><strong id="filename">Hold My Brief</strong><span id="filekind">A reader that holds.</span><span id="tab-count" class="tab-count"></span></button><button id="settings-toggle" class="icon-button" aria-label="Settings" title="Settings">${railIcons.settings}</button><div class="caption" role="group" aria-label="Window"><button id="caption-minimize" aria-label="Minimize" title="Minimize"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5.5h10" stroke="currentColor"/></svg></button><button id="caption-maximize" aria-label="Maximize" title="Maximize"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" aria-hidden="true"><rect class="caption-max" x=".5" y=".5" width="9" height="9"/><path class="caption-restore" d="M2.5 2.5V.5h7v7h-2M.5 2.5h7v7h-7z"/></svg></button><button id="caption-close" aria-label="Close" title="Close"><svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" aria-hidden="true"><path d="M.5.5l9 9m0-9l-9 9"/></svg></button></div></header>
+  <header class="toolbar" data-tauri-drag-region><button id="library-toggle" class="icon-button" aria-label="Document library" aria-controls="library-root" aria-expanded="false" title="Document library (Ctrl+B)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16m-3-12v8"/></svg></button><nav id="tab-strip" class="tab-strip" aria-label="Open documents" data-tauri-drag-region><button id="library-pin" type="button" class="tab tab-pinned" data-kind="library" aria-pressed="false" title="All documents"><span class="tab-format" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m16 6 4 14"/><path d="M12 6v14"/><path d="M8 8v12"/><path d="M4 4v16"/></svg></span><span class="tab-title">All documents</span></button><span class="tab-pin-sep" aria-hidden="true"></span><div id="tab-list" class="tab-list" role="tablist" aria-label="Documents"></div><button id="tab-overflow" class="tab-overflow" aria-label="All tabs" title="All tabs" aria-haspopup="menu" aria-expanded="false" hidden></button></nav><button id="title" class="title" aria-haspopup="menu" aria-expanded="false" title="Open tabs"><strong id="filename">Hold My Brief</strong><span id="filekind">A reader that holds.</span><span id="tab-count" class="tab-count"></span><svg class="title-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button><button id="status-pin" class="icon-button status-chip" aria-label="Pinned on top" aria-pressed="true" title="Pinned on top — click to unpin (Ctrl+Shift+T)" hidden>${railIcons.pin}</button><button id="status-lock" class="icon-button status-chip" aria-label="Size locked" aria-pressed="true" title="Size locked — click to unlock (Ctrl+Shift+L)" hidden>${railIcons.lock}</button><button id="settings-toggle" class="icon-button" aria-label="Settings" title="Settings">${railIcons.settings}</button><div class="caption" role="group" aria-label="Window"><button id="caption-minimize" aria-label="Minimize" title="Minimize"><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5.5h10" stroke="currentColor"/></svg></button><button id="caption-maximize" aria-label="Maximize" title="Maximize"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" aria-hidden="true"><rect class="caption-max" x=".5" y=".5" width="9" height="9"/><path class="caption-restore" d="M2.5 2.5V.5h7v7h-2M.5 2.5h7v7h-7z"/></svg></button><button id="caption-close" aria-label="Close" title="Close"><svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" aria-hidden="true"><path d="M.5.5l9 9m0-9l-9 9"/></svg></button></div></header>
   <aside id="notice" role="status" hidden><span></span><button id="retry-save" hidden>Retry save</button><button id="dismiss-notice" aria-label="Dismiss message">×</button></aside>
   <div id="reader-layout"><div id="loading" role="status" hidden><span></span><button id="cancel">Cancel</button></div><div id="library-root"></div><nav id="library-rail"></nav>
   <main id="workspace"><section id="empty"><div class="book-mark" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M9 3v18m4-13h3m-3 4h3"/></svg></div><p class="eyebrow">KEEP YOUR PLACE</p><h1>Hand it over.</h1><p>Drop a brief and it stays pinned<br>exactly where you leave it.</p><button id="empty-open" class="primary">Hold a brief <span>↗</span></button><p class="formats">PDF · EPUB · MARKDOWN · TEXT</p><div id="recents"></div><p id="preview-note" hidden>Browser preview · Pin and size lock are available in the desktop app.</p></section>
@@ -58,7 +59,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <dialog id="settings"></dialog>
   <dialog id="shortcuts" aria-labelledby="shortcuts-title" tabindex="-1" autofocus><div class="dialog-head"><h2 id="shortcuts-title">Keyboard shortcuts</h2><button data-close aria-label="Close shortcuts">×</button></div><div id="shortcut-list"></div></dialog>
   <dialog id="delete-data"><h2>Delete saved reading data?</h2><p>This removes saved positions and reading settings. Your documents and recent-file list remain. The current position will be saved again when you navigate.</p><div class="dialog-actions"><button data-close>Cancel</button><button id="confirm-delete" class="danger">Delete reading data</button></div></dialog>
-  <input id="file-input" type="file" accept=".pdf,.epub,.md,.markdown,.txt,.png,.jpg,.jpeg,.webp,.gif,.avif,.bmp" hidden>`;
+  <input id="file-input" type="file" accept=".pdf,.epub,.md,.markdown,.txt,.png,.jpg,.jpeg,.webp,.gif,.avif,.bmp,.svg" hidden>`;
 const windowControls = createWindowControls();
 document.querySelector('.toolbar')!.prepend(windowControls);
 // The window frame is drawn by the reader on both desktop systems. macOS hides its own traffic lights and the reader
@@ -91,6 +92,12 @@ const settingsSheet = createSettingsSheet($<HTMLDialogElement>('settings'), {
   toggle: which => void toggle(which),
   preset: preset => void command(preset).catch(fail),
   setSide: side => library.setSide(side),
+  setControl: enabled => {
+    if (!desktop) return;
+    void native<{ enabled: boolean; running: boolean; transport: string }>('set_control_enabled', { enabled })
+      .then(status => settingsSheet.showControl(status))
+      .catch(fail);
+  },
   more: item => { if (item === 'palette') openPalette(); else void command(item).catch(fail); },
 });
 // A modal dialog holds back the reader's shortcuts; the two window ones still work in the sheet, so its switches follow them.
@@ -122,16 +129,18 @@ let cover: 'home' | 'library' | undefined;
 /** While `restoreSplitView` opens the panes: the tabs it opens, and the side the user pressed, focused or selected since (that side keeps the focus). */
 let restoring: { tabs: (Tab | undefined)[]; picked?: Side } | undefined;
 const pick = (side: Side | undefined) => { if (restoring && side) restoring.picked = side; };
-/** The Library tab while split (not split, it is the first tab of the one side). */
-let libraryTab: Tab | undefined;
+/** The pinned Library tab's current scope/title on the top bar, and whether its page is showing (single-pane; split uses `cover === 'library'`). */
+let libraryPlace: LibraryPlace = { scope: 'all', title: 'All documents' };
+let libraryActive = false;
+const showingLibrary = () => isSplit() ? cover === 'library' : libraryActive;
 /** How the panes are laid out: a tree of pane ids, the dividers' places in it (`layout.ts`). Not split, it is the one pane. */
 let layout: Layout = { pane: 'a' };
 /** The dividers drawn, by the path of the split each belongs to, and where `applyLayout` last put them. */
 const dividers = new Map<string, HTMLElement>();
 /** The sides that are not in the window (a pane that was closed), by id: their row, layer and tab strip are made once and put back on a later split. */
 const spares = new Map<string, Side>();
-/** The tab of a document (or the Library tab) wherever it is open. */
-const known = (path: string): Tab | undefined => { for (const side of sides) { const tab = side.tabs.find(path); if (tab) return tab; } return path === LIBRARY_PATH ? libraryTab : undefined; };
+/** The tab of a document wherever it is open. */
+const known = (path: string): Tab | undefined => { for (const side of sides) { const tab = side.tabs.find(path); if (tab) return tab; } return undefined; };
 /** The side whose tabs hold `path`. */
 const holder = (path: string) => sides.find(side => side.tabs.find(path));
 /** The side an event target is in (a reading surface, a row of tabs, or a pane's layer). */
@@ -141,6 +150,10 @@ const sideUnder = (event: PointerEvent) => event.target === workspace && !worksp
 const carry = { over: (path: string, x: number, y: number) => carryOver(path, x, y), drop: (path: string, x: number, y: number) => carryDrop(path, x, y), clear: () => carryClear() };
 /** What a pane's placeholder for a tab with no page is made from (the first pane's own is the page's element, which leaves the page with it). */
 const stateTemplate = $('tab-state').cloneNode(true) as HTMLElement;
+const persistTab: typeof persist = async (doc, locator, options, progress) => {
+  if (isBriefPath(doc.path) || known(doc.path)?.ephemeral) return;
+  return persist(doc, locator, options, progress);
+};
 function makeSide(id: string): Side {
   const parts = createRow(id), body = createBody(id);
   let state: HTMLElement;
@@ -148,7 +161,7 @@ function makeSide(id: string): Side {
   workspace.append(parts.row, body);
   const tabsRow = createTabStrip({ strip: parts.row, list: parts.list, add: parts.add, overflow: parts.overflow }, { select: path => selectTab(path), close: closeTab, newTab: () => { activateSide(side); openFile(); }, move: (path, to) => { side.tabs.move(path, to); paintTabs(); saveSession(); }, menu: showTabMenu, carry }, platform === 'mac' ? '⌘T' : 'Ctrl T', false);
   parts.fold.onclick = () => showPaneMenu(parts.fold);
-  const side: Side = { pane: new Pane<Tab>({ persist, notify }), tabs: new TabList<Tab>(), shown: undefined, scanNoticeShown: false, view: { id, body, state, ...parts }, strip: tabsRow };
+  const side: Side = { pane: new Pane<Tab>({ persist: persistTab, notify }), tabs: new TabList<Tab>(), shown: undefined, scanNoticeShown: false, view: { id, body, state, ...parts }, strip: tabsRow };
   state.querySelector<HTMLElement>('.primary')!.onclick = () => stateAction(side);
   state.querySelector<HTMLElement>('.tab-state-actions button:not(.primary)')!.onclick = () => { if (side.shown) closeTab(side.shown.path); };
   return side;
@@ -169,6 +182,10 @@ type Tab = {
   problem?: { kind: 'missing' | 'failed'; message: string };
   /** The Library tab (`path` is `LIBRARY_PATH`, `format` `library`) holds no reader: its `name` is the scope's title and `scope` what it shows, in the form library-scope.ts saves. */
   scope?: string;
+  /** True for agent-pushed ephemeral briefs (`hold-my-brief:brief/<id>`) that update in place and stay out of Library/Recents. */
+  brief?: boolean;
+  /** True when the tab should not be recorded in Library, Recents, or saved sessions. */
+  ephemeral?: boolean;
 };
 
 function notify(message: string, retry = false) { $('notice').hidden = false; $('notice').querySelector('span')!.textContent = message; $('retry-save').hidden = !retry; }
@@ -188,7 +205,14 @@ document.addEventListener('pointerdown', down => {
   window.addEventListener('pointermove', move, true); window.addEventListener('pointerup', end, true); window.addEventListener('pointercancel', end, true);
 }, true);
 function fail(error: unknown) { notify(error instanceof Error ? error.message : String(error)); }
-function updateWindow(next: WindowState) { windowState = next; settingsSheet.showWindow(next); $<HTMLButtonElement>('caption-maximize').disabled = next.locked; }
+function updateWindow(next: WindowState) {
+  windowState = next;
+  settingsSheet.showWindow(next);
+  rail.setWindow(next);
+  $('status-pin').hidden = !next.pinned;
+  $('status-lock').hidden = !next.locked;
+  $<HTMLButtonElement>('caption-maximize').disabled = next.locked;
+}
 function showPosition(p: Position, save = true) {
   const pane = activePane();
   pane.position = p;
@@ -275,11 +299,11 @@ function updateViewControls() {
   $('page-strip-toggle').setAttribute('aria-pressed', String(stripWanted));
   $('page-strip-toggle').title = hidden ? `Page previews (Ctrl 4) · ${hidden}` : 'Page previews (Ctrl 4)';
   if (hidden) $('page-strip-toggle').setAttribute('aria-description', hidden); else $('page-strip-toggle').removeAttribute('aria-description');
-  // A reflowable EPUB has no page to zoom or pan: its pill holds the reading controls instead.
-  const reflowable = active.format === 'epub' && reader.mode !== 'fixed';
+  // Reflowable documents (reflowable EPUB, Markdown, plain text) have no page to zoom or pan: their pill holds reading controls instead.
+  const reflowable = reader.mode !== 'fixed';
   $('view-controls').classList.toggle('is-reading', reflowable);
   $('view-controls').hidden = !pan.pannable && !reflowable;
-  if (reflowable) readingControls.update({ flow: reader.flow?.() ?? 'paginated', fontSize: options.fontSize });
+  if (reflowable) readingControls.update({ flow: reader.flow?.(), hasContents: active.format === 'epub' || reader.outline().length > 0, fontSize: options.fontSize });
   if (pill.hidden) moreMenu.close(false);
   if (!pan.pannable) { zoomMenu.close(); return; }
   const { limits, canZoomIn, canZoomOut } = paintZoom(pane, pill);
@@ -317,8 +341,8 @@ function documentActions(): MenuEntry[] {
   const entry = (label: string, id: string, extra: Partial<MenuEntry> = {}): MenuEntry => ({ label, run: () => { (moreByPointer ? activePane().host : moreButton)?.focus(); void command(id).catch(fail); }, ...extra });
   return [
     entry('Go to…', 'goto', { keys: 'Ctrl G' }),
-    // A reflowable book's pill has its own Contents button.
-    ...(reader.outline().length && !(active.format === 'epub' && !fixed) ? [entry('Contents', 'outline')] : []),
+    // Reflowable documents with an outline show Contents directly in the pill.
+    ...(reader.outline().length && !(!fixed && (active.format === 'epub' || reader.outline().length > 0)) ? [entry('Contents', 'outline')] : []),
     entry('Back after jump', 'back', { keys: 'Alt ←' }),
     ...(fixed ? [entry('Rotate page 90°', 'rotate')] : []),
     ...(spreads ? [entry('Two-page spread', 'spread', { keys: 'Ctrl 3', checked: spread })] : []),
@@ -490,10 +514,12 @@ const rail = createIconRail($('library-rail'), {
   view: view => library.showView(view),
   add: anchor => library.openAddMenu(anchor),
   settings: () => settingsSheet.open(),
+  toggle: which => void toggle(which),
   moveSide: () => library.setSide(library.side() === 'left' ? 'right' : 'left'),
 });
 const library = createLibrary($('library-root'), {
   open: path => openPath(path),
+  openFile: () => openFile(),
   replace: path => stepImage(path),
   error: fail,
   openBackground: doc => openInBackground(doc),
@@ -639,10 +665,10 @@ async function adapter(format: string): Promise<ReaderAdapter> {
  * With `replace`, the document takes the place of that showing tab, in the same slot, and the tab it replaces is closed the way closing it would
  * (its place and view are saved first); when that tab is no longer showing by then, the document opens as a new tab at `at`.
  */
-async function load(open: () => Promise<Opened | null>, label = 'document', { target, at, replace }: { target?: Tab; at?: number; replace?: Tab } = {}): Promise<boolean> {
+async function load(open: () => Promise<Opened | null>, label = 'document', { target, at, replace, ephemeral, brief, reload }: { target?: Tab; at?: number; replace?: Tab; ephemeral?: boolean; brief?: boolean; reload?: boolean } = {}): Promise<boolean> {
   const side = focused, pane = side.pane, token = pane.beginLoad(target);
   paintTabState();
-  $('loading').hidden = false; $('loading').querySelector('span')!.textContent = `Opening ${label}…`;
+  if (!reload) { $('loading').hidden = false; $('loading').querySelector('span')!.textContent = `Opening ${label}…`; }
   let candidate: ReaderAdapter | undefined, staging: HTMLElement | undefined, opening = true;
   const urls: string[] = [];
   pane.cancelPending = () => { candidate?.destroy(); staging?.remove(); for (const url of urls) URL.revokeObjectURL(url); };
@@ -650,13 +676,20 @@ async function load(open: () => Promise<Opened | null>, label = 'document', { ta
     await pane.flush(); const doc = await open(); if (!doc || !pane.isCurrent(token)) return false;
     opening = false;
     // A dialog or a CLI request only now says which document it is: if it is already open, that tab is the one to fill or show.
-    const tab = target ?? known(doc.path) ?? { path: doc.path, name: doc.name, format: doc.format, options: { ...defaultOptions }, hand: false, scanNoticeShown: false };
-    if (tab.reader || (holder(tab.path) && holder(tab.path) !== side)) { doc.bytes = new Uint8Array(); selectTab(tab.path); void touch(tab); return true; }
-    if (tab.resume) doc.previousState = { locator: tab.resume.locator, options: tab.resume.options };
-    $('loading').querySelector('span')!.textContent = `Opening ${doc.name}…`;
+    const existing = target ?? known(doc.path);
+    const tab: Tab = existing ?? { path: doc.path, name: doc.name, format: doc.format, options: { ...defaultOptions }, hand: false, scanNoticeShown: false, ...(brief ? { brief: true } : {}), ...(ephemeral || brief ? { ephemeral: true } : {}) };
+    if (brief) { tab.brief = true; tab.ephemeral = true; }
+    else if (ephemeral) tab.ephemeral = true;
+    if (!reload && (tab.reader || (holder(tab.path) && holder(tab.path) !== side))) { doc.bytes = new Uint8Array(); selectTab(tab.path); if (!tab.ephemeral) void touch(tab); return true; }
+    const reloadSide = reload ? holder(tab.path) ?? side : side;
+    const prevLocator = reload && tab.reader ? (() => { try { return tab.reader!.getPosition().locator; } catch { return tab.position?.locator; } })() : undefined;
+    const prevOptions = reload && tab.reader ? { ...tab.options } : undefined;
+    if (prevLocator && prevOptions) doc.previousState = { locator: prevLocator, options: prevOptions };
+    else if (tab.resume) doc.previousState = { locator: tab.resume.locator, options: tab.resume.options };
+    if (!reload) $('loading').querySelector('span')!.textContent = `Opening ${doc.name}…`;
     candidate = await adapter(doc.format); if (!pane.isCurrent(token)) return false;
     stripSpace(candidate); // A page-preview strip's room is there before the document is fitted, so opening never refits it.
-    staging = document.createElement('section'); staging.className = 'reader-host staging'; staging.tabIndex = 0; staging.setAttribute('aria-label', 'Reading surface'); staging.dataset.pane = side.view.id; workspace.insertBefore(staging, sides[0].view.row); if (isSplit()) applyLayout();
+    staging = document.createElement('section'); staging.className = 'reader-host staging'; staging.tabIndex = 0; staging.setAttribute('aria-label', 'Reading surface'); staging.dataset.pane = reloadSide.view.id; workspace.insertBefore(staging, sides[0].view.row); if (isSplit()) applyLayout();
     // Options saved before zoom was a true scale hold a multiplier of the fit. They open fitted and are converted below, once the document is drawn, so the page keeps its size; saving then writes the new form.
     const saved = doc.previousState?.options, legacy = Boolean(saved) && saved!.zoomModel !== ZOOM_MODEL, legacyZoom = Number(saved?.zoom);
     const prefs: ReaderOptions = { ...defaultOptions, ...saved, zoomModel: ZOOM_MODEL, ...(legacy ? { fitted: true, zoom: 1 } : {}) };
@@ -665,7 +698,7 @@ async function load(open: () => Promise<Opened | null>, label = 'document', { ta
       // The tab showing hears its reader fully; a live tab out of sight only keeps the place.
       // The tab may have crossed to the other side since it opened: the side that holds it now is the one that hears its reader.
       onPosition: p => {
-        const owner = holder(tab.path) ?? side;
+        const owner = holder(tab.path) ?? reloadSide;
         if (owner.pane.reader === current) { if (owner === focused) showPosition(p); else { owner.pane.position = p; owner.pane.markDirty(); paintTabs(); refreshGhost(owner); } }
         else if (tab.reader === current) tab.position = p;
       }, onError: fail, openExternal, requestPassword: password, onFrame: doc => { pan.watchFrame(doc); watchFrameZoom(doc); doc.addEventListener('pointerdown', () => { const owner = holder(tab.path); if (owner && isSplit()) { pick(owner); activateSide(owner); } }, true); },
@@ -674,40 +707,48 @@ async function load(open: () => Promise<Opened | null>, label = 'document', { ta
     // A reflowable book opens in the flow the reader last chose; with none saved the adapter picked one from the book, and it is kept from here on.
     const flow = candidate.flow?.();
     if (flow) prefs.flow = flow;
-    if (doc.previousState?.locator) await candidate.restore(doc.previousState.locator);
+    if (doc.previousState?.locator) await candidate.restore(doc.previousState.locator).catch(() => undefined);
     if (legacy && candidate.mode === 'fixed') {
       const converted = migrateLegacyZoom({ fit: prefs.fit, zoom: legacyZoom }, candidate.legacyZoomBase?.(prefs.fit), candidate.zoomLimits?.());
       if (!converted.fitted) { Object.assign(prefs, converted); await candidate.setOptions(prefs); }
     }
     if (!pane.isCurrent(token)) return false;
-    await confirmDocument(doc).catch(error => notify(`Your library could not be saved. Reading is still available. ${error instanceof Error ? error.message : String(error)}`));
+    if (!tab.ephemeral) {
+      await confirmDocument(doc).catch(error => notify(`Your library could not be saved. Reading is still available. ${error instanceof Error ? error.message : String(error)}`));
+    }
     await pane.flush();
     if (!pane.isCurrent(token)) return false;
     doc.bytes = new Uint8Array();
+    if (reload && tab.reader) {
+      tab.reader.destroy(); tab.host?.remove();
+    }
     // A split being restored does not let a document that finishes opening take the focus from the pane the user pressed meanwhile, and nor does a tab reopening in its own pane
     // (a split, a move or a closed pane left it showing a tab that had gone to sleep) while the focus has gone to another pane.
-    const away = target && focused !== side ? focused : undefined;
+    const away = target && focused !== reloadSide ? focused : undefined;
     const held = (restoring?.tabs.includes(target) ? restoring.picked : undefined) ?? away, keep = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : undefined;
-    if (focused !== side) activateSide(side); // The reader asked for another side while this one opened: the document goes where it was asked for.
-    const swapping = replace && !side.tabs.find(tab.path) && side.shown === replace && side.tabs.find(replace.path) === replace ? replace : undefined;
-    Object.assign(tab, { name: doc.name, format: doc.format, doc, reader: candidate, host: staging, options: prefs, position: candidate.getPosition(), hand: false, stripScroll: undefined, find: undefined, scanNoticeShown: false, resume: undefined, problem: undefined });
+    if (focused !== reloadSide) activateSide(reloadSide); // The reader asked for another side while this one opened: the document goes where it was asked for.
+    const swapping = replace && !reloadSide.tabs.find(tab.path) && reloadSide.shown === replace && reloadSide.tabs.find(replace.path) === replace ? replace : undefined;
+    Object.assign(tab, { name: doc.name, format: doc.format, doc, reader: candidate, host: staging, options: prefs, position: candidate.getPosition(), hand: reload ? tab.hand : false, stripScroll: undefined, find: undefined, scanNoticeShown: false, resume: undefined, problem: undefined });
     staging.classList.remove('staging'); staging.classList.add('tab-hidden'); // `enter` shows it
     if (swapping) {
       // The tab being replaced goes the way a closed one does: its place and view are saved, its reader lets go, and it is gone from the strip.
       void pane.flush(); swapping.find = undefined; findBar.close(); zoomGesture.cancel();
       pane.reader = undefined; syncPageStrip();
       swapping.reader?.destroy(); swapping.host?.remove(); swapping.reader = swapping.host = undefined;
-      side.tabs.replace(swapping.path, tab); side.shown = undefined;
-    } else if (!side.tabs.find(tab.path)) side.tabs.open(tab, at);
-    side.tabs.markLive(tab.path);
+      reloadSide.tabs.replace(swapping.path, tab); reloadSide.shown = undefined;
+    } else if (!reloadSide.tabs.find(tab.path)) reloadSide.tabs.open(tab, at);
+    reloadSide.tabs.markLive(tab.path);
     show(tab, true);
-    showPosition(candidate.getPosition()); // A reopened or converted document saves its place and options again.
-    staging.focus(); candidate = undefined; staging = undefined; pane.cancelPending = undefined;
+    showPosition(candidate.getPosition(), !tab.ephemeral); // A reopened or converted document saves its place and options again.
+    if (!reload) staging.focus();
+    candidate = undefined; staging = undefined; pane.cancelPending = undefined;
     if (held && focused !== held) { activateSide(held); (keep?.isConnected ? keep : held.pane.host)?.focus(); }
     if (doc.warning) notify(doc.warning);
-    if (tab.format === 'epub') void homeThumbs.loadEpub(tab.path, () => Boolean(known(tab.path))).then(() => paintTabs());
-    if (desktop) homeRecents = (await state()).recents; // The store moves the opened document to the front.
-    await library.refresh(doc.path).catch(fail);
+    if (!tab.ephemeral) {
+      if (tab.format === 'epub') void homeThumbs.loadEpub(tab.path, () => Boolean(known(tab.path))).then(() => paintTabs());
+      if (desktop) homeRecents = (await state()).recents; // The store moves the opened document to the front.
+      await library.refresh(doc.path).catch(fail);
+    }
     return true;
   } catch (error) {
     if (pane.isCurrent(token)) {
@@ -753,11 +794,27 @@ function hibernateExcess() {
   }
 }
 
+/** Shows the pinned Library page in single-pane mode, leaving open document tabs untouched in `#tab-list`. */
+function showLibrary(refreshed = false) {
+  if (isSplit()) { showCover('library'); return; }
+  if (libraryActive && !refreshed) return;
+  const side = focused, pane = side.pane;
+  if (pane.cancelPending) cancelOpen();
+  if (side.shown) { leave(side.shown); side.shown = undefined; side.tabs.activate(undefined); pane.show(undefined); }
+  libraryActive = true;
+  side.scanNoticeShown = false; ++scrubRequest; scrubbing = false;
+  $('empty').hidden = true;
+  syncPageStrip(); syncFooter();
+  lastBackground = undefined;
+  library.setActive(undefined); library.showPage(true);
+  paintTabState(); paintTabs(); saveSession();
+}
+
 /** Shows `next` (or Home, for none) in the focused side: the one place the working copy changes hands. */
 function show(next: Tab | undefined, refreshed = false) {
   const side = focused, pane = side.pane;
-  if (side.shown === next && !refreshed && !cover) return;
-  clearCover();
+  if (side.shown === next && !refreshed && !cover && !libraryActive) return;
+  clearCover(); libraryActive = false;
   if (side.shown && side.shown !== next) leave(side.shown);
   side.shown = next; side.tabs.activate(next?.path);
   pane.show(next);
@@ -771,16 +828,15 @@ function show(next: Tab | undefined, refreshed = false) {
   pane.host?.focus();
   if (next?.find !== undefined) findBar.open(next.find, false);
   lastBackground = undefined;
-  // The Library tab's page is drawn while the tab is in front; the document that was showing is no longer the one the tree marks.
-  if (next?.path === LIBRARY_PATH) { library.setActive(undefined); library.showPage(true); } else { library.showPage(false); library.setActive(next?.path); }
+  library.showPage(false); library.setActive(next?.path);
   paintTabState(); paintTabs(); saveSession();
   if (!next) paintHome();
-  else if (!next.reader && !next.problem && next.path !== LIBRARY_PATH) void reopen(next);
+  else if (!next.reader && !next.problem) void reopen(next);
 }
 
 /** The footer follows the focused pane: its arrows, position and progress line, or the resting text when it shows no document (or Home or the Library page covers it). */
 function syncFooter() {
-  const pane = focused.pane, live = Boolean(pane.reader) && !cover;
+  const pane = focused.pane, live = Boolean(pane.reader) && !cover && !libraryActive;
   for (const id of ['previous', 'position', 'next']) $<HTMLButtonElement>(id).disabled = !live;
   if (live && pane.position) showPosition(pane.position, false); else paintNoDocument();
 }
@@ -794,9 +850,205 @@ function paintNoDocument() {
 }
 
 /** Reopens a tab that holds nothing: its place was saved when it hibernated (or by the last session), and the page comes back there. */
-function reopen(tab: Tab) { return load(() => openLibraryDocument(tab.path), tab.name, { target: tab }); }
+function reopen(tab: Tab) {
+  if (tab.brief && desktop) return load(() => readBriefDocument(tab.path), tab.name, { target: tab, brief: true, ephemeral: true });
+  return load(() => openLibraryDocument(tab.path), tab.name, { target: tab, ephemeral: tab.ephemeral });
+}
 
-const tabTitle = (tab: Tab) => tab.path === LIBRARY_PATH ? tab.name : displayTitle(tab, tab.format === 'epub' ? homeThumbs.epub(tab.path)?.title : undefined);
+type BriefRecord = { id: string; path: string; title: string; format: string; content: string; updatedAt: number };
+async function readBriefDocument(idOrPath: string): Promise<Opened> {
+  const entry = await native<BriefRecord>('read_brief', { id: idOrPath });
+  return {
+    id: entry.path,
+    path: entry.path,
+    name: entry.title,
+    format: entry.format as Opened['format'],
+    bytes: new TextEncoder().encode(entry.content),
+  };
+}
+
+/** Reads the user's current text selection inside `side`'s reading surface (including same-origin EPUB frames). */
+function paneSelection(side: Side): string {
+  const host = side.pane.host;
+  if (!host) return '';
+  const topSel = window.getSelection();
+  if (topSel && !topSel.isCollapsed && topSel.anchorNode && host.contains(topSel.anchorNode)) {
+    return topSel.toString().trim().slice(0, 8000);
+  }
+  for (const frame of host.querySelectorAll<HTMLIFrameElement>('iframe')) {
+    try {
+      const sel = frame.contentWindow?.getSelection()?.toString().trim();
+      if (sel) return sel.slice(0, 8000);
+    } catch { /* Cross-origin frame. */ }
+  }
+  return '';
+}
+
+const sideById = (paneId?: string) => (paneId ? sides.find(s => s.view.id === paneId) : undefined) ?? focused;
+
+async function reloadOpenFile(path: string) {
+  const tab = known(path);
+  if (!tab) return;
+  const owner = holder(path);
+  if (owner && owner !== focused) activateSide(owner);
+  if (tab.brief) {
+    await load(() => readBriefDocument(path), tab.name, { target: tab, brief: true, ephemeral: true, reload: true });
+  } else {
+    await load(() => chooseDocument(path), tab.name, { target: tab, ephemeral: tab.ephemeral, reload: true });
+  }
+}
+
+const controlHost: ControlHost = {
+  status: () => {
+    const activeSide = focused;
+    const activeTab = cover || libraryActive ? undefined : activeSide.shown;
+    const activePos = activeTab ? (activeSide.pane.position ?? activeTab.position) : undefined;
+    return {
+      window: {
+        width: windowState.width,
+        height: windowState.height,
+        pinned: windowState.pinned,
+        locked: windowState.locked,
+        focused: !document.documentElement.classList.contains('window-inactive'),
+      },
+      appearance: appearanceSummary(),
+      layout: isSplit() ? 'split' : 'single',
+      libraryOpen: $('library-toggle').getAttribute('aria-expanded') === 'true',
+      panes: sides.map(side => ({
+        id: side.view.id,
+        active: side === focused,
+        shown: side.shown?.path ?? null,
+        tabs: side.tabs.tabs.map(tab => {
+          const place = tab === side.shown ? side.pane.position : tab.position;
+          return {
+            path: tab.path,
+            title: tabTitle(tab),
+            format: tab.format,
+            brief: Boolean(tab.brief),
+            active: tab === side.tabs.active,
+            ...(place ? { position: place.label, progress: Number(place.fraction.toFixed(4)) } : {}),
+          };
+        }),
+      })),
+      active: activeTab ? {
+        paneId: activeSide.view.id,
+        path: activeTab.path,
+        title: tabTitle(activeTab),
+        format: activeTab.format,
+        brief: Boolean(activeTab.brief),
+        position: activePos?.label ?? '',
+        ...(activePos ? { progress: Number(activePos.fraction.toFixed(4)) } : {}),
+        outlineCount: activeSide.pane.reader?.outline().length ?? 0,
+        selection: paneSelection(activeSide),
+      } : null,
+    };
+  },
+  openFile: async (path, options) => {
+    const existing = known(path);
+    if (options.split && (!isSplit() || holder(path) === focused)) {
+      const wantAxis = options.split;
+      const other = isSplit() ? sides.find(s => s !== focused) : undefined;
+      if (other) {
+        activateSide(other);
+      } else if (!openSplitReason(path, wantAxis)) {
+        const format = path.split('.').pop()?.toLowerCase() ?? 'txt';
+        openInSplit({ path, name: baseName(path), format: format === 'markdown' ? 'md' : format }, wantAxis);
+        const tab = known(path);
+        if (tab) {
+          if (options.ephemeral) tab.ephemeral = true;
+          const ok = await load(() => chooseDocument(path), tab.name, { target: tab, ephemeral: options.ephemeral, reload: Boolean(tab.reader) });
+          if (!ok) throw new Error(`Could not open ${path}`);
+          const owner = holder(path) ?? focused;
+          return { path: tab.path, title: tabTitle(tab), format: tab.format, paneId: owner.view.id, position: owner.pane.position?.label ?? '' };
+        }
+      }
+    }
+    const ok = await load(() => chooseDocument(path), baseName(path), { target: existing, ephemeral: options.ephemeral, reload: Boolean(existing?.reader) });
+    if (!ok) throw new Error(`Could not open ${path}`);
+    const tab = known(path) ?? focused.shown;
+    if (!tab) throw new Error(`Could not open ${path}`);
+    const owner = holder(tab.path) ?? focused;
+    return { path: tab.path, title: tabTitle(tab), format: tab.format, paneId: owner.view.id, position: owner.pane.position?.label ?? '' };
+  },
+  openBrief: async spec => {
+    const existing = known(spec.path);
+    if (spec.split && !existing) {
+      const other = isSplit() ? sides.find(s => s !== focused) : undefined;
+      if (other) {
+        activateSide(other);
+      } else if (!openSplitReason(spec.path, spec.split)) {
+        openInSplit({ path: spec.path, name: spec.title, format: spec.format }, spec.split);
+      }
+    } else if (existing) {
+      const owner = holder(spec.path);
+      if (owner && owner !== focused) activateSide(owner);
+      existing.name = spec.title;
+      existing.format = spec.format;
+      existing.brief = true;
+      existing.ephemeral = true;
+    }
+    const target = known(spec.path);
+    const ok = await load(() => readBriefDocument(spec.path), spec.title, { target, brief: true, ephemeral: true, reload: Boolean(target?.reader) });
+    if (!ok) throw new Error(`Could not display brief "${spec.id}".`);
+    const tab = known(spec.path) ?? focused.shown;
+    if (!tab) throw new Error(`Could not display brief "${spec.id}".`);
+    const owner = holder(tab.path) ?? focused;
+    return { path: tab.path, title: tabTitle(tab), format: tab.format, paneId: owner.view.id, position: owner.pane.position?.label ?? '' };
+  },
+  goTo: async (target, paneId) => {
+    const side = sideById(paneId);
+    const reader = side.pane.reader;
+    if (!reader) throw new Error('No document is open.');
+    await reader.goTo(target);
+    return reader.getPosition().label;
+  },
+  outline: paneId => sideById(paneId).pane.reader?.outline() ?? [],
+  search: async (query, options, paneId) => sideById(paneId).pane.reader?.search?.(query, options),
+  showMatch: async (hit, _query, paneId) => {
+    const side = sideById(paneId);
+    const reader = side.pane.reader;
+    if (!reader) throw new Error('No document is open.');
+    await reader.revealSearchMatch?.(hit);
+    return reader.getPosition().label;
+  },
+  readText: async (limit, paneId) => sideById(paneId).pane.reader?.readText?.(limit),
+  selection: paneId => paneSelection(sideById(paneId)),
+  closeTab: target => {
+    const closed: string[] = [];
+    if (target.allBriefs) {
+      const paths = sides.flatMap(side => side.tabs.tabs.filter(t => t.brief).map(t => t.path));
+      for (const path of paths) { closeTab(path); closed.push(path); }
+      return closed;
+    }
+    const wantPath = target.path ?? (target.id ? (target.id.startsWith(BRIEF_PREFIX) ? target.id : `${BRIEF_PREFIX}${target.id}`) : undefined);
+    const tab = wantPath ? known(wantPath) : sides.flatMap(s => s.tabs.tabs).find(t => briefIdOf(t.path) === target.id);
+    if (tab) { closeTab(tab.path); closed.push(tab.path); }
+    else if (!wantPath && focused.shown) { const p = focused.shown.path; closeTab(p); closed.push(p); }
+    return closed;
+  },
+  setAppearance: change => {
+    const kept = appearance();
+    saveAppearance({
+      ...kept,
+      mode: (['system', 'light', 'dark'] as const satisfies readonly AppearanceMode[]).find(mode => mode === change.mode) ?? kept.mode,
+      palette: allPalettes.find(palette => palette === change.theme) ?? kept.palette,
+      page: pageTones.find(tone => tone === change.page) ?? kept.page,
+    });
+    return appearanceSummary();
+  },
+  runCommand: async id => {
+    const entry = COMMANDS.find(candidate => candidate.id === id);
+    if (!entry) throw new Error(`Unknown command: ${id}`);
+    const reason = unavailableReason(entry, { hasDocument: Boolean(activePane().reader), desktop, format: activePane().active?.format, split: splitContext() });
+    if (reason) throw new Error(reason);
+    await command(id);
+    return entry.label;
+  },
+  library: async () => (await getLibrary()).documents,
+  filterLibrary: change => library.filter(change),
+};
+
+const tabTitle = (tab: Tab) => tab.path === LIBRARY_PATH || tab.brief ? tab.name : displayTitle(tab, tab.format === 'epub' ? homeThumbs.epub(tab.path)?.title : undefined);
 /** Where a tab is, short: "40 / 146" for pages and lines, a percentage for the rest. */
 function tabWhere(side: Side, tab: Tab) {
   const place = tab === side.shown ? side.pane.position : tab.position;
@@ -806,23 +1058,31 @@ function tabWhere(side: Side, tab: Tab) {
 }
 let paintedTabs = '';
 function paintTabs() {
-  const all = [...(libraryTab ? [libraryTab] : []), ...sides.flatMap(side => side.tabs.tabs)];
-  const hints = titleHints(all.filter(tab => tab.path !== LIBRARY_PATH).map(tab => ({ path: tab.path, title: tabTitle(tab) })));
+  const libActive = showingLibrary();
+  const all = sides.flatMap(side => side.tabs.tabs);
+  const hints = titleHints(all.map(tab => ({ path: tab.path, title: tabTitle(tab) })));
   const viewOf = (side: Side, tab: Tab, active: boolean): TabView => {
     const place = tab === side.shown ? side.pane.position : tab.position;
-    return { path: tab.path, title: tabTitle(tab), hint: hints.get(tab.path) ?? '', format: tab.format, where: tabWhere(side, tab), paged: /^Pages? /.test(place?.label ?? ''), progress: formatProgress(progressOf(place ?? { fraction: NaN, scrub: { current: 0, total: 0, unit: 'line' } })) ?? '', active, problem: Boolean(tab.problem), library: tab.path === LIBRARY_PATH, image: Object.hasOwn(imageFormats, tab.format) };
+    return { path: tab.path, title: tabTitle(tab), hint: hints.get(tab.path) ?? '', format: tab.format, where: tabWhere(side, tab), paged: /^Pages? /.test(place?.label ?? ''), progress: formatProgress(progressOf(place ?? { fraction: NaN, scrub: { current: 0, total: 0, unit: 'line' } })) ?? '', active, problem: Boolean(tab.problem), library: false, image: Object.hasOwn(imageFormats, tab.format), brief: Boolean(tab.brief) };
   };
   const rows = sides.map(side => side.tabs.tabs.map(tab => viewOf(side, tab, tab === side.tabs.active)));
-  const bar = isSplit() ? (libraryTab ? [viewOf(sides[0], libraryTab, cover === 'library')] : []) : rows[0], home = isSplit() ? cover === 'home' : !sides[0].tabs.active;
-  const key = JSON.stringify([bar, home, isSplit() ? [rows, focused.view.id] : 0, all.length]);
+  const bar = isSplit() ? [] : rows[0], home = isSplit() ? cover === 'home' : !libActive && !sides[0].tabs.active;
+  const pinned = { title: libraryPlace.title, active: libActive };
+  const key = JSON.stringify([bar, home, pinned, isSplit() ? [rows, focused.view.id] : 0, all.length]);
   if (key === paintedTabs) return;
   paintedTabs = key;
-  strip.paint(bar, home);
+  const pin = $('library-pin');
+  pin.classList.toggle('is-active', libActive);
+  pin.setAttribute('aria-pressed', String(libActive));
+  pin.title = libraryPlace.title;
+  pin.querySelector('.tab-title')!.textContent = libraryPlace.title;
+  strip.paint(bar, home, pinned);
   rail.setHome(home);
   if (isSplit()) sides.forEach((side, index) => { side.strip.paint(rows[index], false); side.view.row.classList.toggle('is-inactive', side !== focused || Boolean(cover)); });
   paintFolds();
-  const here = isSplit() ? (cover ? (cover === 'library' ? libraryTab : undefined) : focused.shown) : sides[0].tabs.active;
-  $('filename').textContent = here ? tabTitle(here) : 'Hold My Brief'; $('filename').title = here?.path ?? '';
+  const here = libActive ? undefined : isSplit() ? (cover ? undefined : focused.shown) : sides[0].tabs.active;
+  $('filename').textContent = libActive ? libraryPlace.title : here ? tabTitle(here) : 'Hold My Brief';
+  $('filename').title = libActive ? libraryPlace.title : (here?.path ?? '');
   $('tab-count').textContent = all.length ? String(all.length) : '';
 }
 
@@ -850,25 +1110,21 @@ function stateAction(side: Side) {
 
 /** Tab 1…8, or 9 for the last one: reached by Alt+digit and ⌘+digit as keys and, on macOS, by the Window menu's items. No such tab: nothing happens. */
 function selectTabNumber(digit: number) { const tab = focused.tabs.byNumber(digit); if (tab) selectTab(tab.path); }
-/** Shows a tab, or Home for none. A tab with no page yet starts opening; opening something else meanwhile is given up. While split, a tab of either side
- *  returns the split as it was (leaving Home or the Library page) and makes its side the focused one; Home and the Library tab cover the split. */
+/** Shows a tab, Library (`LIBRARY_PATH`), or Home (`undefined`). A tab with no page yet starts opening; opening something else meanwhile is given up. While split, a tab of either side
+ *  returns the split as it was (leaving Home or the Library page) and makes its side the focused one; Home and the Library page cover the split. */
 function selectTab(path: string | undefined) {
-  if (isSplit() && (path === undefined || path === LIBRARY_PATH)) { showCover(path === undefined ? 'home' : 'library'); return; }
+  if (path === LIBRARY_PATH) { openLibraryTab(); return; }
+  if (isSplit() && path === undefined) { showCover('home'); return; }
   const side = path === undefined ? focused : holder(path), tab = path === undefined ? undefined : side?.tabs.find(path);
   if (path !== undefined && !tab) return;
   if (isSplit()) { clearCover(); pick(side); if (side) activateSide(side); }
-  if (tab === focused.shown) return;
+  if (tab === focused.shown && !libraryActive) return;
   if (focused.pane.loadingTarget !== tab) cancelOpen();
   show(tab);
 }
 
 function closeTab(path: string) {
-  if (path === LIBRARY_PATH && isSplit()) {
-    libraryTab = undefined; library.forgetScope();
-    if (cover === 'library') clearCover();
-    paintTabs(); saveSession();
-    return;
-  }
+  if (path === LIBRARY_PATH) return;
   const side = holder(path), tab = side?.tabs.find(path);
   if (!side || !tab) return;
   if (side !== focused) activateSide(side);
@@ -880,10 +1136,10 @@ function closeTab(path: string) {
     pane.reader = undefined; syncPageStrip(); // The strip lets go of the reader before it is destroyed.
   }
   tab.reader?.destroy(); tab.host?.remove(); tab.reader = tab.host = undefined;
+  if (desktop) void native('unwatch_file', { path }).catch(() => undefined);
   const next = side.tabs.close(path);
   if (isSplit() && !side.tabs.size) { side.shown = undefined; pane.show(undefined); closePane(side); }
   else if (wasShown) { side.shown = undefined; show(next, true); } else { paintTabs(); saveSession(); }
-  if (path === LIBRARY_PATH) library.forgetScope();
 }
 
 let sessionPending = false;
@@ -914,15 +1170,29 @@ const savedTab = (tab: Tab): SavedTab => ({ path: tab.path, name: tab.name, form
  * and, for two panes side by side, the same as an older build saved it (see `TabSession`).
  */
 function sessionOf(): TabSession {
-  if (!isSplit()) return focused.tabs.session(savedTab);
-  const ordered = [...(libraryTab ? [libraryTab] : []), ...sides.flatMap(side => side.tabs.tabs)];
-  const showing = cover === 'library' ? libraryTab : cover ? undefined : focused.shown;
-  const pane = (side: Side) => ({ tabs: side.tabs.tabs.map(tab => tab.path), shown: side.shown?.path ?? side.tabs.tabs[0]?.path ?? '' });
+  const lib: SavedTab[] = showingLibrary() || libraryPlace.scope !== 'all' ? [{ path: LIBRARY_PATH, name: libraryPlace.title, format: 'library', ...(libraryPlace.scope !== 'all' ? { scope: libraryPlace.scope } : {}) }] : [];
+  const persistable = (tab: Tab) => !tab.brief && !tab.ephemeral;
+  if (!isSplit()) {
+    const kept = focused.tabs.tabs.filter(persistable);
+    const activeIndex = focused.tabs.active && persistable(focused.tabs.active) ? kept.indexOf(focused.tabs.active) : -1;
+    const active = libraryActive ? 0 : activeIndex < 0 ? null : activeIndex + lib.length;
+    return { tabs: [...lib, ...kept.map(savedTab)], active };
+  }
+  const ordered = sides.flatMap(side => side.tabs.tabs.filter(persistable));
+  const tabs = [...lib, ...ordered.map(savedTab)];
+  const active = cover === 'library' ? 0 : cover === 'home' ? null : focused.shown && persistable(focused.shown) ? ordered.indexOf(focused.shown) + lib.length : null;
+  const pane = (side: Side) => {
+    const kept = side.tabs.tabs.filter(persistable);
+    const shown = side.shown && persistable(side.shown) ? side.shown.path : kept[0]?.path ?? '';
+    return { tabs: kept.map(tab => tab.path), shown };
+  };
+  const nonEmptySides = sides.filter(side => side.tabs.tabs.some(persistable));
+  if (nonEmptySides.length < 2) return { tabs, active };
   const saved: SavedLayout = { tree: layout, panes: Object.fromEntries(sides.map(side => [side.view.id, pane(side)])), active: focused.view.id }, split = legacySplit(saved);
-  return { tabs: ordered.map(savedTab), active: showing ? ordered.indexOf(showing) : null, layout: saved, ...(split ? { split } : {}) };
+  return { tabs, active, layout: saved, ...(split ? { split } : {}) };
 }
-/** The tab Close tab (Ctrl W) closes: the one the reader sees, which is the Library tab while its page covers the split. */
-const closableTab = () => cover === 'library' ? libraryTab : cover ? undefined : focused.shown;
+/** The tab Close tab (Ctrl W) closes: the shown document tab (the pinned Library tab and Home are never closed). */
+const closableTab = () => showingLibrary() || cover ? undefined : focused.shown;
 
 /** What the split commands need to know. */
 const documentCount = () => sides.reduce((total, side) => total + side.tabs.tabs.filter(tab => tab.path !== LIBRARY_PATH).length, 0);
@@ -1078,7 +1348,7 @@ window.addEventListener('blur', () => setTimeout(() => { const side = isSplit() 
 
 /** While split, Home or the Library page takes the whole reading area; the panes, and what they show, stay as they were. */
 function showCover(kind: 'home' | 'library') {
-  if (cover === kind || (kind === 'library' && !libraryTab)) return;
+  if (cover === kind) return;
   if (focused.pane.cancelPending) cancelOpen();
   cover = kind;
   findBar.close(); closePillMenus();
@@ -1099,7 +1369,7 @@ function clearCover() {
 /** Puts a side in the window with `id` and `tabs`: the one made for an earlier split is put back, else it is made. Nothing is shown in it yet; the layout and the order of `sides` are the caller's. */
 function createSide(id: string, tabs: TabList<Tab>, like: Side): Side {
   const spare = spares.get(id), side = spare ?? makeSide(id);
-  if (spare) { spares.delete(id); workspace.append(side.view.row, side.view.body); side.pane = new Pane<Tab>({ persist, notify }); side.shown = undefined; side.scanNoticeShown = false; } else watchSide(side);
+  if (spare) { spares.delete(id); workspace.append(side.view.row, side.view.body); side.pane = new Pane<Tab>({ persist: persistTab, notify }); side.shown = undefined; side.scanNoticeShown = false; } else watchSide(side);
   side.tabs = tabs; side.pane.pillPlacement = like.pane.pillPlacement;
   sides.push(side);
   return side;
@@ -1116,12 +1386,10 @@ function orderSides() {
  * most recently); `place` is then `'after'`, the dragged tab being the first pane.
  */
 function startSplit(tab: Tab, near: Side, axis: Axis, mirrored = false, place: 'before' | 'after' = 'after') {
-  clearCover();
+  clearCover(); libraryActive = false;
   activateSide(near);
   if (near.pane.cancelPending) cancelOpen();
   syncBack(near); findBar.close(); zoomGesture.cancel();
-  const entry = near.tabs.find(LIBRARY_PATH);
-  if (entry) { near.tabs.detach(LIBRARY_PATH); libraryTab = entry; }
   const added = createSide(freeId(layout)!, (mirrored ? splitOffRest : splitOff)(near.tabs, tab.path)!, near);
   layout = splitPane(layout, near.view.id, axis, place, added.view.id)!; orderSides();
   const beside = added.tabs.active!;
@@ -1193,7 +1461,8 @@ function focusPane(direction: Direction): boolean {
 function mergeInto(into: Side, gone: readonly Side[]) {
   if (!isSplit() || gone.includes(into)) return;
   const ends = gone.length >= sides.length - 1;
-  const keep = ends ? (cover === 'library' ? libraryTab : cover === 'home' ? undefined : focused.shown ?? sides.find(side => side !== focused)?.shown) : into.shown;
+  const wasLibraryCover = ends && cover === 'library';
+  const keep = ends ? (cover ? undefined : focused.shown ?? sides.find(side => side !== focused)?.shown) : into.shown;
   if (ends) clearCover();
   activateSide(into);
   for (const side of gone) {
@@ -1207,10 +1476,10 @@ function mergeInto(into: Side, gone: readonly Side[]) {
     layout = removePane(layout, side.view.id) ?? layout;
     if (loading && !sides.some(other => other.pane.cancelPending)) $('loading').hidden = true;
   }
-  if (!isSplit() && libraryTab) { into.tabs.add(libraryTab, 0); libraryTab = undefined; }
   for (const tab of into.tabs.tabs) tab.host?.setAttribute('data-pane', into.view.id);
   orderSides(); applyLayout();
-  if (ends) show(keep, true); else { hibernateExcess(); paintTabState(); paintTabs(); saveSession(); }
+  if (wasLibraryCover) showLibrary(true);
+  else if (ends) show(keep, true); else { hibernateExcess(); paintTabState(); paintTabs(); saveSession(); }
 }
 /** Closes a pane (the active one, by default): its tabs join the pane that takes its room, its sibling in the layout or that sibling's first pane in reading order, and that pane becomes the active one. */
 function closePane(side = focused) {
@@ -1226,11 +1495,9 @@ function endSplit() {
  * False, and nothing changed, when the session no longer holds a document in each pane.
  */
 function restoreSplitView(session: TabSession, saved: SavedLayout): boolean {
-  const order = panesOf(saved.tree), first = sides[0], entry = first.tabs.find(LIBRARY_PATH);
-  if (entry) first.tabs.detach(LIBRARY_PATH);
+  const order = panesOf(saved.tree), first = sides[0];
   const lists = restorePanes(first.tabs, order.map(id => saved.panes[id]));
-  if (!lists) { if (entry) first.tabs.add(entry, 0); return false; }
-  libraryTab = entry;
+  if (!lists) return false;
   layout = renamePanes(saved.tree, id => PANE_IDS[order.indexOf(id)]);
   lists.slice(1).forEach((tabs, index) => createSide(PANE_IDS[index + 1], tabs, first));
   orderSides();
@@ -1280,6 +1547,16 @@ function showTabMenu(path: string, anchor: HTMLElement, at: { x: number; y: numb
     const here = holder(path), others = sides.filter(side => side !== here);
     if (here && others.length === 1) entries.push({ label: 'Move to the other side', run: () => moveTab(path, others[0]) });
     else if (here && others.length > 1) entries.push({ label: 'Move to pane', submenu: others.map(side => ({ label: tabTitle(side.shown ?? side.tabs.tabs[0]), run: () => moveTab(path, side) })) });
+  }
+  if (tab.brief && desktop) {
+    entries.push({
+      label: 'Save brief…',
+      run: () => {
+        void native<string | null>('save_brief_as', { id: tab.path })
+          .then(saved => { if (saved) notify(`Saved brief to ${baseName(saved)}`); })
+          .catch(fail);
+      },
+    });
   }
   entries.push({ label: 'Close', run: () => closeTab(path) });
   if (isSplit() && path !== LIBRARY_PATH) entries.push({ label: 'Close pane', run: () => closePane(holder(path)) }, { label: 'Close the split', run: () => endSplit() });
@@ -1383,25 +1660,23 @@ function showHomeMenu(item: { path: string; name: string; format: string }, anch
   ], anchor, at);
 }
 $('title').onclick = () => { const menu = isSplit() ? focused.strip : strip; if (menu.isMenuOpen()) menu.closeMenu(); else menu.openMenu($('title')); };
+$('library-pin').onclick = () => openLibraryTab();
 
 /**
- * The Library tab: at most one, at the front of the strip. Opening it names a scope (a double-click in the panel, the panel's
- * title); a tab that is already open is shown and retargeted rather than opened again. With no scope named, an open tab is only shown.
+ * The pinned Library tab at the front of the top bar. Opening it shows the Library page on its current scope (default `All documents`);
+ * passing a `place` (double-click in the panel, panel title, scope menu) retargets the pinned tab's scope and title first.
  */
 function openLibraryTab(place?: LibraryPlace) {
-  const existing = known(LIBRARY_PATH);
-  if (!place) { if (existing) selectTab(LIBRARY_PATH); else library.browse(); return; }
-  if (existing) { retargetLibraryTab(place); selectTab(LIBRARY_PATH); return; }
-  cancelOpen();
-  const tab: Tab = { path: LIBRARY_PATH, name: place.title, format: 'library', scope: place.scope, options: { ...defaultOptions }, hand: false, scanNoticeShown: false };
-  if (isSplit()) { libraryTab = tab; showCover('library'); paintTabs(); saveSession(); return; }
-  sides[0].tabs.open(tab, 0); show(tab, true);
+  if (place) libraryPlace = { scope: place.scope, title: place.title };
+  if (isSplit()) { showCover('library'); paintTabs(); saveSession(); return; }
+  showLibrary();
+  paintTabs(); saveSession();
 }
-/** The Library tab's title and saved scope follow what the library shows; with no such tab, nothing is kept. */
+/** The pinned Library tab's title and saved scope follow what the library shows. */
 function retargetLibraryTab(place: LibraryPlace) {
-  const tab = known(LIBRARY_PATH);
-  if (!tab || tab.name === place.title && tab.scope === place.scope) return;
-  tab.name = place.title; tab.scope = place.scope; paintTabs(); saveSession();
+  if (libraryPlace.title === place.title && libraryPlace.scope === place.scope) return;
+  libraryPlace = { scope: place.scope, title: place.title };
+  paintTabs(); saveSession();
 }
 /** Opens a library document in a tab, or shows the tab it is already in. */
 function openPath(path: string, name = path.split(/[\\/]/).pop()) { return openTab(path, () => openLibraryDocument(path), name); }
@@ -1410,14 +1685,15 @@ function openPath(path: string, name = path.split(/[\\/]/).pop()) { return openT
  * tab, which is then shown and the showing one left as it is. With no showing image tab it opens like any other document.
  */
 function stepImage(path: string) {
-  const shown = focused.shown, here = shown && shown.path !== LIBRARY_PATH && Object.hasOwn(imageFormats, shown.format) && shown.path !== path ? shown : undefined;
+  const shown = focused.shown, here = shown && Object.hasOwn(imageFormats, shown.format) && shown.path !== path ? shown : undefined;
   return openTab(path, () => openLibraryDocument(path), path.split(/[\\/]/).pop(), undefined, here);
 }
 /** The tab a background open added last, so the next one lands after it (as a browser's middle clicks do); forgotten when another tab is shown. */
 let lastBackground: string | undefined;
 /** Gives a library document a tab beside the one showing without showing it; it opens when it is first shown. */
 function openInBackground(doc: { path: string; name: string; format: string }) {
-  const tabs = focused.tabs, at = lastBackground && tabs.find(lastBackground) ? tabs.indexOf(lastBackground) + 1 : insertionIndex(undefined, tabs.activeIndex, tabs.size);
+  const tabs = focused.tabs;
+  const at = lastBackground && tabs.find(lastBackground) ? tabs.indexOf(lastBackground) + 1 : showingLibrary() ? 0 : insertionIndex(undefined, tabs.activeIndex, tabs.size);
   if (known(doc.path) || !tabs.add({ path: doc.path, name: doc.name, format: doc.format, options: { ...defaultOptions }, hand: false, scanNoticeShown: false }, at)) return;
   lastBackground = doc.path; paintTabs(); saveSession();
 }
@@ -1517,6 +1793,8 @@ $('position').onclick = jump;
 $('jump').querySelector('form')!.onsubmit = event => { event.preventDefault(); void activePane().reader?.goTo($<HTMLInputElement>('target').value.trim()).then(() => closeDialog($<HTMLDialogElement>('jump'))).catch(error => { $('jump-error').textContent = String(error instanceof Error ? error.message : error); }); };
 async function toggle(which: 'pin' | 'lock') { if (!desktop) { notify('Pin and size lock are available in the desktop app.'); return; } try { updateWindow(await native(`set_${which}`, { enabled: !(which === 'pin' ? windowState.pinned : windowState.locked) })); } catch (error) { fail(error); } }
 $('settings-toggle').onclick = () => settingsSheet.open();
+$('status-pin').onclick = () => void toggle('pin');
+$('status-lock').onclick = () => void toggle('lock');
 /**
  * What a zoom or fit change holds still (see zoom-anchor.ts): a zoom, the centre of the view; fit width, the line at its top, so the reading
  * position survives; fit page shows the whole page and centres it. A wheel or pinch gesture passes the point under the pointer itself.
@@ -1530,7 +1808,7 @@ async function changeOptions(next: Partial<ReaderOptions>, hold: Hold | Spot | f
  * the toolbar. The entry the reader is in is marked, scrolled to the middle of the list and focused, so Enter goes there and the arrow keys move from it.
  */
 function openContents() {
-  const dialog = $<HTMLDialogElement>('contents'), anchored = !$('view-controls').hidden && $('view-controls').classList.contains('is-reading');
+  const dialog = $<HTMLDialogElement>('contents'), anchored = !$('view-controls').hidden && $('view-controls').classList.contains('is-reading') && !readingControls.contents.hidden;
   const current = fillContents($('outline-list'), activePane().reader?.outline() ?? [], activePane().reader?.currentOutline?.() ?? -1, item => { void activePane().reader?.goTo(item.target).then(() => closeDialog(dialog)).catch(fail); });
   showDialog('contents', anchored ? $('view-controls').getBoundingClientRect() : undefined);
   current?.focus({ preventScroll: true });
@@ -1705,19 +1983,44 @@ async function initialize() {
   await library.refresh().catch(fail);
   homeLibrary = await getLibrary().catch(() => emptyLibrary());
   paintHome();
-  for (const entry of saved.tabs.tabs) focused.tabs.open({ ...entry, options: { ...defaultOptions }, hand: false, scanNoticeShown: false });
-  library.restoreScope(known(LIBRARY_PATH)?.scope);
-  if (!saved.tabs.layout || !restoreSplitView(saved.tabs, saved.tabs.layout)) show(saved.tabs.active === null ? undefined : focused.tabs.tabs[saved.tabs.active], true);
+  let restoreLibraryActive = false;
+  const restoredDocs: SavedTab[] = [];
+  let restoredActiveDoc: number | null = null;
+  saved.tabs.tabs.forEach((entry, index) => {
+    if (entry.path === LIBRARY_PATH) {
+      libraryPlace = { scope: entry.scope ?? 'all', title: entry.name || 'All documents' };
+      if (saved.tabs.active === index) restoreLibraryActive = true;
+      return;
+    }
+    if (saved.tabs.active === index) restoredActiveDoc = restoredDocs.length;
+    restoredDocs.push(entry);
+  });
+  for (const entry of restoredDocs) focused.tabs.open({ ...entry, options: { ...defaultOptions }, hand: false, scanNoticeShown: false });
+  library.restoreScope(libraryPlace.scope);
+  if (!saved.tabs.layout || !restoreSplitView(saved.tabs, saved.tabs.layout)) {
+    if (restoreLibraryActive) showLibrary(true);
+    else show(restoredActiveDoc === null ? undefined : focused.tabs.tabs[restoredActiveDoc], true);
+  }
   if (desktop) {
     const { listen } = await import('@tauri-apps/api/event');
     const { getCurrentWindow } = await import('@tauri-apps/api/window');
     await listen<string[]>('open-request', event => openRequested(event.payload));
     await listen<WindowState>('window-state', event => updateWindow(event.payload));
-    // macOS routes ⌘W through its menu (see install_menu in main.rs). With no tab to close, it closes the window as it always did.
+    // macOS routes ⌘W through its menu (see install_menu in main.rs). With no tab to close (and not on the pinned Library tab), it closes the window as it always did.
     // macOS also routes ⌘1…⌘9 through its menu; the number arrives here instead of as a key event.
     await listen<number>('select-tab-request', event => { if (!document.querySelector('dialog[open]')) selectTabNumber(event.payload); });
-    await listen('close-tab-request', () => { const tab = closableTab(); if (tab) closeTab(tab.path); else void getCurrentWindow().close(); });
+    await listen('close-tab-request', () => { const tab = closableTab(); if (tab) closeTab(tab.path); else if (!showingLibrary() && !sides.some(side => side.tabs.size)) void getCurrentWindow().close(); });
     await listen<string | null>('reader-warning', event => { if (event.payload) notify(event.payload); });
+    await listen<string>('file-changed', event => { void reloadOpenFile(event.payload).catch(fail); });
+    await listen<{ id: string; method: string; params: unknown }>('control-request', event => {
+      const { id, method, params } = event.payload;
+      void handleControlRequest(controlHost, method, params).then(
+        result => native('control_reply', { id, ok: true, result, error: null }),
+        error => native('control_reply', { id, ok: false, result: null, error: error instanceof Error ? error.message : String(error) }),
+      ).catch(() => undefined);
+    });
+    const ctlStatus = await native<{ enabled: boolean; running: boolean; transport: string } | null>('control_status').catch(() => null);
+    if (ctlStatus) settingsSheet.showControl(ctlStatus);
     const appWindow = getCurrentWindow();
     let closing = false; await appWindow.onCloseRequested(async event => { if (closing) return; event.preventDefault(); await Promise.all(sides.map(side => side.pane.flush())); await flushSession(); closing = true; await appWindow.close(); });
     if (platform === 'windows') {
@@ -1759,6 +2062,7 @@ async function initialize() {
       await syncFullscreen();
     }
     const pending = await native<string[]>('pending_open'); if (pending.length) openRequested(pending);
+    await native('control_ready').catch(() => undefined);
   }
 }
 void initialize().catch(fail);

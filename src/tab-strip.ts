@@ -6,11 +6,11 @@
  * Dragging (reordering, and carrying a tab to another strip, a pane or an edge) uses pointer events, not HTML5 drag and drop: with Tauri's native drag-drop enabled WebView2 does not
  * deliver HTML5 drag events inside the page.
  */
-import { slotAt } from './tabs';
+import { LIBRARY_PATH, slotAt } from './tabs';
 import { middleTruncate } from './tab-titles';
 
 /** What one tab shows. `image` tabs keep the end of a long title (cut in the middle); the others keep its start. `where` is the short place ("40 / 146"; the toolbar prints it "P. 40/146" when `paged`, and as it is for lines), empty until the document has been read; `progress` is the library's wording for how far in it is ("p. 12 / 96", "37 %", "Finished"), for the tab menu. The Library tab (`library`) shows a glyph for the format and its title for the path. */
-export type TabView = { path: string; title: string; hint: string; format: string; where: string; paged: boolean; progress: string; active: boolean; problem: boolean; library: boolean; image: boolean };
+export type TabView = { path: string; title: string; hint: string; format: string; where: string; paged: boolean; progress: string; active: boolean; problem: boolean; library: boolean; image: boolean; brief?: boolean };
 
 export type TabHandlers = {
   /** A tab was chosen; `undefined` is Home (only the toolbar's open-tabs menu says so). */
@@ -60,8 +60,8 @@ function fitsIn(font: string, limit: number): (candidate: string) => boolean {
   context.font = font;
   return candidate => context.measureText(candidate).width <= limit - .5;
 }
-/** A tab's tooltip: the Library tab's title, else the path, under the title when a folder hint is shown beside it. */
-const tooltip = (view: TabView) => view.library ? view.title : view.hint ? `${view.title}\n${view.path}` : view.path;
+/** A tab's tooltip: the Library tab's title, a brief's note, else the path, under the title when a folder hint is shown beside it. */
+const tooltip = (view: TabView) => view.library ? view.title : view.brief ? `${view.title}\nEphemeral brief · not saved to library` : view.hint ? `${view.title}\n${view.path}` : view.path;
 const closeButton = (title: string) => {
   const button = document.createElement('button');
   button.type = 'button'; button.className = 'tab-close'; button.tabIndex = -1;
@@ -70,8 +70,10 @@ const closeButton = (title: string) => {
   return button;
 };
 
+export type PinnedLibraryView = { title: string; active: boolean };
+
 export type TabStrip = {
-  paint: (tabs: readonly TabView[], home: boolean) => void;
+  paint: (tabs: readonly TabView[], home: boolean, pinnedLibrary?: PinnedLibraryView) => void;
   /** Shows the open-tabs menu under `anchor`. */
   openMenu: (anchor: HTMLElement) => void;
   closeMenu: () => void;
@@ -95,7 +97,7 @@ const placeOf = (where: string) => where.replace(/^([\d–-]+) \/ (\d+)$/, 'P. $
 export function createTabStrip(elements: { strip: HTMLElement; list: HTMLElement; add?: HTMLElement; overflow: HTMLElement }, handlers: TabHandlers, newTabKeys: string, toolbar: boolean): TabStrip {
   const { strip, list, add, overflow } = elements;
   const nodes = new Map<string, HTMLElement>();
-  let views: readonly TabView[] = [], homeActive = true, dragging = false, repaint = false;
+  let views: readonly TabView[] = [], homeActive = true, pinnedLibrary: PinnedLibraryView | undefined, dragging = false, repaint = false;
 
   if (add) { add.replaceChildren(icon(icons.plus, 14, 2)); add.onclick = () => handlers.newTab(); }
   overflow.replaceChildren(icon(icons.chevron, 14, 2));
@@ -111,11 +113,12 @@ export function createTabStrip(elements: { strip: HTMLElement; list: HTMLElement
   }
   function fill(tab: HTMLElement, view: TabView) {
     tab.classList.toggle('is-active', view.active); tab.classList.toggle('has-problem', view.problem);
-    tab.setAttribute('aria-selected', String(view.active)); tab.dataset.kind = view.library ? 'library' : 'document';
+    tab.classList.toggle('is-brief', Boolean(view.brief));
+    tab.setAttribute('aria-selected', String(view.active)); tab.dataset.kind = view.library ? 'library' : view.brief ? 'brief' : 'document';
     tab.title = tooltip(view);
-    if (!view.library) tab.dataset.format = view.format.toUpperCase();
+    if (!view.library) tab.dataset.format = view.brief ? 'BRIEF' : view.format.toUpperCase();
     const mark = tab.querySelector('.tab-format');
-    if (mark) { if (!view.library) setText(mark, view.format.toUpperCase()); else if (!mark.firstElementChild) mark.replaceChildren(icon(icons.library, 12)); }
+    if (mark) { if (!view.library) setText(mark, view.brief ? 'BRIEF' : view.format.toUpperCase()); else if (!mark.firstElementChild) mark.replaceChildren(icon(icons.library, 12)); }
     setText(tab.querySelector('.tab-hint')!, view.hint);
     setText(tab.querySelector('.tab-where')!, toolbar ? (view.paged ? placeOf(view.where) : view.where) : view.active ? view.where : '');
     tab.querySelector('.tab-close')!.setAttribute('aria-label', `Close ${view.title}`);
@@ -128,7 +131,7 @@ export function createTabStrip(elements: { strip: HTMLElement; list: HTMLElement
   function fit(tab: HTMLElement, view: TabView) {
     const title = tab.querySelector<HTMLElement>('.tab-title')!;
     if (!view.image || view.library) { delete title.dataset.fit; setText(title, view.title); tab.removeAttribute('aria-label'); return; }
-    const style = getComputedStyle(title), font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`, limit = parseFloat(style.maxWidth);
+    const style = getComputedStyle(title), font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`, limit = parseFloat(style.maxWidth) || title.clientWidth;
     const key = `${view.title}\n${font}\n${limit}`;
     if (title.dataset.fit !== key) {
       title.dataset.fit = key;
@@ -151,8 +154,8 @@ export function createTabStrip(elements: { strip: HTMLElement; list: HTMLElement
   }
   function measure() { overflow.hidden = list.scrollWidth <= list.clientWidth + 1; }
 
-  function paint(next: readonly TabView[], atHome: boolean) {
-    views = next; homeActive = atHome;
+  function paint(next: readonly TabView[], atHome: boolean, nextPinned?: PinnedLibraryView) {
+    views = next; homeActive = atHome; pinnedLibrary = nextPinned;
     if (dragging) { repaint = true; return; }
     const wanted = new Set(next.map(view => view.path));
     for (const [path, node] of nodes) if (!wanted.has(path)) { node.remove(); nodes.delete(path); }
@@ -256,14 +259,14 @@ export function createTabStrip(elements: { strip: HTMLElement; list: HTMLElement
     settle(held);
     if (held.away) { putBack(held); if (dropped) handlers.carry.drop(held.tab.dataset.path!, event.clientX, event.clientY); }
     else if (dropped) handlers.move(held.tab.dataset.path!, [...list.querySelectorAll('.tab')].indexOf(held.tab));
-    if (repaint || !dropped) { repaint = false; paint(views, homeActive); }
+    if (repaint || !dropped) { repaint = false; paint(views, homeActive, pinnedLibrary); }
   };
   list.addEventListener('pointerup', endDrag); list.addEventListener('pointercancel', endDrag);
   document.addEventListener('keydown', event => {
     if (event.key !== 'Escape' || !drag?.moved || drag.cancelled) return;
     event.preventDefault(); event.stopPropagation();
     drag.cancelled = true; putBack(drag); settle(drag);
-    if (repaint) { repaint = false; paint(views, homeActive); }
+    if (repaint) { repaint = false; paint(views, homeActive, pinnedLibrary); }
   }, true);
 
   // The menu of open tabs: Home, every document, then New tab. The compact title opens it, and so does the strip's overflow button.
@@ -284,7 +287,10 @@ export function createTabStrip(elements: { strip: HTMLElement; list: HTMLElement
     return item;
   }
   function fillMenu() {
-    const rows: HTMLElement[] = toolbar ? [row('Home', undefined, homeActive, icons.home, () => handlers.select(undefined))] : [];
+    const rows: HTMLElement[] = toolbar ? [
+      row('Home', undefined, homeActive, icons.home, () => handlers.select(undefined)),
+      ...(pinnedLibrary ? [row(pinnedLibrary.title, undefined, pinnedLibrary.active, icons.library, () => handlers.select(LIBRARY_PATH), undefined, '', pinnedLibrary.title)] : []),
+    ] : [];
     for (const view of views) {
       const item = row(view.title, view.library ? undefined : [view.format.toUpperCase(), view.progress].filter(Boolean).join(' · '), view.active, view.library ? icons.library : icons.document, () => handlers.select(view.path), () => handlers.close(view.path), view.hint, view.library ? view.title : `${view.title}\n${view.path}`);
       item.dataset.path = view.path; rows.push(item);

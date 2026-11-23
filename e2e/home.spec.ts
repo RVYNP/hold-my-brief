@@ -60,18 +60,21 @@ for (const viewport of viewports) {
       await expect(home.locator('.home-collection, .home-mosaic')).toHaveCount(0);
     });
 
-    test('Recently opened is exactly one card: the latest document\'s title, its type at bottom left and its progress at bottom right', async ({ page }) => {
+    test('Recently opened shows up to four recent cards in a horizontal row, each with title, type at bottom left and progress at bottom right', async ({ page }) => {
       await seedLibrary(page, mixed, mixedCollections);
       const section = region(page, 'Recently opened');
-      const card = section.locator('.home-recent-open');
-      await expect(section.locator('[data-home-path]')).toHaveCount(1);
-      await expect(card).toHaveCount(1);
-      expect(await cardPaths(section)).toEqual(['Alpha.pdf']);
+      const cards = section.locator('.home-recent-open');
+      await expect(section.locator('[data-home-path]')).toHaveCount(4);
+      await expect(cards).toHaveCount(4);
+      expect(await cardPaths(section)).toEqual(['Alpha.pdf', 'Beta.epub', 'Notes.md', 'Plain.txt']);
+      const card = cards.first();
       await expect(card.locator('.home-card-title')).toHaveText('Alpha');
       await expect(card.locator('.home-recent-type')).toHaveText('PDF');
       await expect(card.locator('.home-recent-progress')).toHaveText('p. 40 / 146');
-      const box = (await card.boundingBox())!;
-      expect(box.width).toBeCloseTo(256, 0); expect(box.height).toBeCloseTo(114, 0);
+      const box = (await card.boundingBox())!, secondBox = (await cards.nth(1).boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(220); expect(box.width).toBeLessThanOrEqual(269); expect(box.height).toBeCloseTo(114, 0);
+      expect(Math.abs(secondBox.y - box.y)).toBeLessThan(2); // Side by side on the top row.
+      expect(secondBox.x).toBeGreaterThan(box.x + box.width);
       const cover = (await card.locator('.library-tile-media').boundingBox())!;
       expect(cover.x).toBeCloseTo(box.x, 0); expect(cover.height).toBeCloseTo(114, 0);
       const title = (await card.locator('.home-card-title').boundingBox())!, type = (await card.locator('.home-recent-type').boundingBox())!, progress = (await card.locator('.home-recent-progress').boundingBox())!;
@@ -305,7 +308,7 @@ test('Home with a 300-document library renders at once, a capped shelf per type,
   const { documents, collections } = bigLibrary(300);
   await seedLibrary(page, documents, collections);
   await expect(page.getByRole('heading', { level: 2 })).toHaveText(everySection);
-  await expect(region(page, 'Recently opened').locator('[data-home-path]')).toHaveCount(1);
+  await expect(region(page, 'Recently opened').locator('[data-home-path]')).toHaveCount(4);
   for (const name of ['PDFs', 'EPUBs', 'Markdown', 'Text', 'Images']) await expect(region(page, name).getByRole('listitem')).toHaveCount(30);
   expect(await region(page, 'Continue reading').getByRole('listitem').count()).toBeGreaterThan(5);
   // Scrolls: the last shelf comes into view, and there is no sideways overflow.

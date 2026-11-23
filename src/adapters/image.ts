@@ -2,11 +2,12 @@ import type { Format, Locator, Position, ReaderAdapter, ReaderContext, ReaderOpt
 import { PREVIEW_CLASS } from '../zoom-gesture';
 import { restoreView, type Anchor } from '../zoom-anchor';
 import { clampZoom, DEFAULT_LIMITS, type ZoomLimits } from '../zoom';
+import { documentThemeVar, sanitizeSvg } from '../svg-sanitize';
 
 /** The longest an image may be drawn along either side, in CSS px, short of the browsers' ~33 M px layout ceiling. */
 const MAX_EXTENT = 24_000;
 
-const mimeTypes: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', avif: 'image/avif', bmp: 'image/bmp' };
+const mimeTypes: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', avif: 'image/avif', bmp: 'image/bmp', svg: 'image/svg+xml' };
 const clamp = (value: number) => Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
 
 export class ImageAdapter implements ReaderAdapter {
@@ -29,7 +30,16 @@ export class ImageAdapter implements ReaderAdapter {
     host.classList.add('image-reader');
     this.frame = document.createElement('div'); this.frame.className = 'image-frame';
     this.image = document.createElement('img'); this.image.alt = source.name; this.image.draggable = false;
-    this.url = URL.createObjectURL(new Blob([source.bytes as Uint8Array<ArrayBuffer>], { type: mimeTypes[source.format] }));
+    let blob: Blob;
+    if (source.format === 'svg') {
+      const raw = new TextDecoder('utf-8', { fatal: false }).decode(source.bytes);
+      const clean = sanitizeSvg(raw, documentThemeVar);
+      if (!clean) throw Error('This SVG file could not be read safely.');
+      blob = new Blob([clean], { type: 'image/svg+xml' });
+    } else {
+      blob = new Blob([source.bytes as Uint8Array<ArrayBuffer>], { type: mimeTypes[source.format] });
+    }
+    this.url = URL.createObjectURL(blob);
     this.image.src = this.url;
     this.frame.append(this.image); host.replaceChildren(this.frame);
     try { await this.image.decode(); }

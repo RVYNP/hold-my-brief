@@ -16,6 +16,8 @@ import type { Banner } from './theme';
 
 /** Most cards on one shelf. */
 export const shelfLimit = 30;
+/** Most cards in the top "Recently opened" row. */
+export const recentLimit = 4;
 
 export type HomeRecent = { path: string; name: string; format: string; lastOpened?: number | string };
 export type HomeDocument = HomeRecent & { coverSeed?: number; collectionIds?: string[]; availability?: string };
@@ -127,7 +129,7 @@ export function homeSections(input: HomeInput): HomeSections {
       .slice(0, shelfLimit).map(({ item }) => tile(item)),
   })).filter(shelf => shelf.tiles.length);
   return {
-    recent: recent.slice(0, 1).map(tile),
+    recent: recent.slice(0, recentLimit).map(tile),
     reading: opened.filter(item => inProgress(progress[item.path])).slice(0, shelfLimit).map(tile),
     types,
   };
@@ -495,9 +497,17 @@ export function renderHome(root: HTMLElement, sections: HomeSections, actions: H
   const view = { shelves: [] as Shelf[], frame: 0, reduced: matchMedia('(prefers-reduced-motion: reduce)'), resize: new ResizeObserver(() => scheduleSync(view)), ground } as NonNullable<typeof current>;
   const painter: Painter = { actions, appearance, view };
   if (sections.recent.length) {
-    const { region } = section('recent', 'Recently opened');
+    const { region, heading } = section('recent', 'Recently opened');
     region.classList.add('home-recent-section');
-    region.append(...sections.recent.map(item => recentCard(item, painter)));
+    const row = element('div', 'home-recent-row');
+    row.setAttribute('role', 'list');
+    row.setAttribute('aria-labelledby', heading.id);
+    for (const item of sections.recent) {
+      const card = recentCard(item, painter);
+      card.setAttribute('role', 'listitem');
+      row.append(card);
+    }
+    region.append(row);
     root.append(region);
   }
   if (sections.reading.length) root.append(shelf('reading', 'Continue reading', sections.reading.map(item => documentCard(item, painter, true)), painter));

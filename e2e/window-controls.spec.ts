@@ -32,6 +32,13 @@ test('at rest the three controls share one fill; pointing at the group shows all
   await page.locator('#mac-minimize').hover();
   expect(await fills(page)).toEqual(['rgb(255, 95, 87)', 'rgb(254, 188, 46)', 'rgb(40, 200, 64)']);
   await expect(page.locator('#mac-close svg')).toHaveCSS('opacity', '1');
+  // Every glyph SVG fits inside the 10 px inner circle and is centred on its button.
+  for (const id of ['mac-close', 'mac-minimize', 'mac-zoom']) {
+    const btn = (await page.locator(`#${id}`).boundingBox())!;
+    const svg = (await page.locator(`#${id} svg`).first().boundingBox())!;
+    expect(Math.abs((svg.x + svg.width / 2) - (btn.x + btn.width / 2)), `${id} centre x`).toBeLessThanOrEqual(.5);
+    expect(Math.abs((svg.y + svg.height / 2) - (btn.y + btn.height / 2)), `${id} centre y`).toBeLessThanOrEqual(.5);
+  }
   await page.mouse.move(700, 500);
   expect(await fills(page)).toEqual(rest);
   await expect(page.locator('#mac-close svg')).toHaveCSS('opacity', '0');

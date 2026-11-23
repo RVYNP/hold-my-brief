@@ -66,6 +66,7 @@ test('Settings › More opens the palette, a typed number goes there and free te
   await expect(page.locator('#filename')).toHaveText('palette.txt');
 
   const sheet = await openSettings(page);
+  await sheet.getByRole('tab', { name: 'General', exact: true }).click();
   await sheet.getByRole('button', { name: /^All commands…/ }).click();
   await expect(sheet).toBeHidden();
   await expect(page.locator('#palette-input')).toBeFocused();

@@ -4,12 +4,13 @@
 import { bayer8, renderCover, seedFrom, type Cover } from './procedural-cover';
 import type { Rgb } from './theme';
 
-/** CSS px per dither pixel: the covers' pixel size. */
-export const bannerPixel = 2;
-/** The art is drawn for a width rounded up to this many CSS px, so a window resized a little reuses the picture. */
-export const bannerBucket = 32;
-/** How much a texture pixel adds to the glow before the threshold. */
-const inkWeight = .12;
+/** CSS px per dither pixel: sized at 3 CSS px so the ordered Bayer pattern reads crisply on HiDPI displays. */
+export const bannerPixel = 3;
+/** The art is drawn for a width rounded up to this many CSS px, so a window resized a little reuses the picture (48 / 3 = 16, a multiple of the 8 x 8 Bayer cell). */
+export const bannerBucket = 48;
+/** How much a texture pixel boosts or carves the glow before the Bayer threshold so the chosen pattern reads clearly in both glow and ground. */
+const inkWeight = .24;
+const carveWeight = .10;
 
 export interface BannerSpec {
   seed: number;
@@ -42,10 +43,10 @@ export function renderBanner(spec: BannerSpec): Cover {
   const texture = renderCover({ seed, family, tones: 2, hue: 0, scheme: 'light', width, height });
   const pixels = new Uint8Array(width * height);
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
-    const index = y * width + x, t = bayer8(x, y), ink = texture.pixels[index] ? inkWeight : 0;
+    const index = y * width + x, t = bayer8(x, y), ink = texture.pixels[index] ? inkWeight : -carveWeight;
     const fa = Math.max(0, 1 - Math.hypot((x / width - .62) / .7, (y / height + .08) / .55));
     const fb = Math.max(0, 1 - Math.hypot((x / width - .95) / .65, (y / height - 1) / .6));
-    pixels[index] = fb + ink > t ? 3 : fa + ink > t ? 2 : (fa + fb) * .6 + ink > t ? 1 : 0;
+    pixels[index] = fb + ink > t ? 3 : fa + ink > t ? 2 : (fa + fb) * 1.15 + ink * 1.35 > t ? 1 : 0;
   }
   return { width, height, pixels, palette: bannerPalette(ground, a, b, strength), family: texture.family };
 }

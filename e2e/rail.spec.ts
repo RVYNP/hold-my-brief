@@ -158,10 +158,15 @@ test('a compact window has no icon rail and its sheet still covers the whole lay
   expect(Math.round(sheet.y + sheet.height)).toBe(Math.round(layout.y + layout.height));
 });
 
-/** The Left or Right choice of Settings › Library. */
+/** The Left or Right choice of Settings › General › Library. */
 const librarySide = (sheet: Locator, name: 'Left' | 'Right') => sheet.getByRole('radiogroup', { name: 'SIDE' }).getByRole('radio', { name, exact: true });
+const openGeneralSettings = async (page: Page) => {
+  const sheet = await openSettings(page);
+  await sheet.getByRole('tab', { name: 'General', exact: true }).click();
+  return sheet;
+};
 
-test('the rail has exactly five buttons; the library side is moved from Settings › Library or the rail\'s right-click menu, shared with the palette command, and a reload keeps it', async ({ page }) => {
+test('the rail has five primary buttons (Settings anchored at the foot); the library side is moved from Settings › General › Library or the rail\'s right-click menu, shared with the palette command, and a reload keeps it', async ({ page }) => {
   await page.setViewportSize({ width: 1080, height: 680 });
   await page.goto('/');
   const rail = page.locator('#library-rail'), key = 'hold-my-brief:library-side';
@@ -169,16 +174,16 @@ test('the rail has exactly five buttons; the library side is moved from Settings
   await expect(rail).toBeVisible();
   await expect(rail).toHaveAttribute('data-library-side', 'left');
 
-  // Home, Add files, Library, Search, Settings in one group, no spacer: no Favorites, Collections and no side button.
+  // Home, Library, Search, Add files at the top; Settings anchored at the foot.
   const buttons = rail.getByRole('button');
-  expect(await buttons.evaluateAll(list => list.map(button => button.getAttribute('aria-label')))).toEqual(['Home', 'Add files', 'Library', 'Search', 'Settings']);
+  expect(await buttons.evaluateAll(list => list.map(button => button.getAttribute('aria-label')))).toEqual(['Home', 'Library', 'Search', 'Add files', 'Settings']);
   const ys = await buttons.evaluateAll(list => list.map(button => { const box = button.getBoundingClientRect(); return [Math.round(box.y), Math.round(box.y + box.height)]; }));
   expect(ys.map(([top]) => top)).toEqual([...ys.map(([top]) => top)].sort((a, b) => a - b));
-  expect(ys[4]![0]! - ys[3]![1]!).toBeLessThan(10); // Settings sits directly under Search
+  expect(ys[4]![0]! - ys[3]![1]!).toBeGreaterThan(100); // Settings sits anchored at the foot of the rail
   expect(await page.getByRole('button', { name: /Move library/ }).count()).toBe(0);
 
-  // Settings holds the side (Library › Left | Right), on the stored setting.
-  const sheet = await openSettings(page);
+  // Settings › General holds the side (Library › Left | Right), on the stored setting.
+  const sheet = await openGeneralSettings(page);
   await expect(librarySide(sheet, 'Left')).toHaveAttribute('aria-checked', 'true');
   await page.keyboard.press('Escape');
   await expect(sheet).toBeHidden();
@@ -200,8 +205,8 @@ test('the rail has exactly five buttons; the library side is moved from Settings
   // The panel beside it follows to the right.
   expect((await boxOf(page.locator('#library-root'))).x).toBeGreaterThan(1080 / 2);
 
-  // Settings › Library shows the side, and moves it back.
-  const settings = await openSettings(page);
+  // Settings › General › Library shows the side, and moves it back.
+  const settings = await openGeneralSettings(page);
   await expect(librarySide(settings, 'Right')).toHaveAttribute('aria-checked', 'true');
   await librarySide(settings, 'Left').click();
   await expect(rail).toHaveAttribute('data-library-side', 'left');
@@ -217,7 +222,7 @@ test('the rail has exactly five buttons; the library side is moved from Settings
   await page.keyboard.press('Enter');
   await expect(rail).toHaveAttribute('data-library-side', 'right');
   expect(await side()).toBe('right');
-  await expect(librarySide(await openSettings(page), 'Right')).toHaveAttribute('aria-checked', 'true');
+  await expect(librarySide(await openGeneralSettings(page), 'Right')).toHaveAttribute('aria-checked', 'true');
   await page.keyboard.press('Escape');
 
   // The side survives a reload, rail and panel alike, and both routes show it.
@@ -227,7 +232,7 @@ test('the rail has exactly five buttons; the library side is moved from Settings
   expect((await boxOf(rail)).x).toBeGreaterThan(1080 - 2 - 36 - 1);
   await expect(page.locator('#library-root')).toBeVisible();
   expect((await boxOf(page.locator('#library-root'))).x).toBeGreaterThan(1080 / 2);
-  await expect(librarySide(await openSettings(page), 'Right')).toHaveAttribute('aria-checked', 'true');
+  await expect(librarySide(await openGeneralSettings(page), 'Right')).toHaveAttribute('aria-checked', 'true');
   await page.keyboard.press('Escape');
   await rail.click({ button: 'right', position: { x: 30, y: 200 } });
   await expect(railMenu.getByRole('menuitem', { name: 'Move to the left side' })).toBeVisible();
@@ -241,7 +246,7 @@ test('a user with the library kept on the right (a setting stored before Setting
   await page.addInitScript(() => localStorage.setItem('hold-my-brief:library-side', 'right'));
   await page.goto('/');
   await expect(page.locator('#library-rail')).toHaveAttribute('data-library-side', 'right');
-  await expect(librarySide(await openSettings(page), 'Right')).toHaveAttribute('aria-checked', 'true');
+  await expect(librarySide(await openGeneralSettings(page), 'Right')).toHaveAttribute('aria-checked', 'true');
 });
 
 test('rail tooltips show only while the panel is closed: an open panel names the view itself and the tip would sit over its title and filter field', async ({ page }) => {
@@ -355,28 +360,33 @@ test('in a compact window the page strip also ends above the footer, and the pil
 });
 
 for (const side of ['left', 'right'] as const) {
-  test(`library on the ${side}: the rail has five bare buttons, Home first, and a 1 px hairline on its inner edge`, async ({ page }) => {
+  test(`library on the ${side}: the rail has five bare buttons, Home first, Settings anchored at the foot, and a 1 px hairline on its inner edge when closed`, async ({ page }) => {
     await page.setViewportSize({ width: 1080, height: 760 });
     await page.goto('/');
     await expect(page.locator('#home-tab, #tab-add')).toHaveCount(0);
     if (side === 'right') await chooseLibrarySide(page, 'right');
     const rail = page.locator('#library-rail'), buttons = rail.getByRole('button');
     await expect(buttons).toHaveText(['', '', '', '', '']);
-    expect(await buttons.evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label')))).toEqual(['Home', 'Add files', 'Library', 'Search', 'Settings']);
-    // No box: the group and the rail are transparent and unbordered, and the buttons sit in one group with no spacer between Search and Settings.
+    expect(await buttons.evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label')))).toEqual(['Home', 'Library', 'Search', 'Add files', 'Settings']);
+    // No box: the group and the rail are transparent and unbordered; top four buttons are 4 px apart and Settings is anchored at the foot.
     const group = rail.locator('.icon-rail-group');
     await expect(group).toHaveCount(1);
     expect(await group.evaluate(node => { const style = getComputedStyle(node); return { fill: style.backgroundColor, border: style.borderTopWidth + style.borderRightWidth + style.borderBottomWidth + style.borderLeftWidth }; })).toEqual({ fill: 'rgba(0, 0, 0, 0)', border: '0px0px0px0px' });
     const boxes = await buttons.evaluateAll(nodes => nodes.map(node => { const box = node.getBoundingClientRect(); return [box.top, box.bottom]; }));
-    for (let i = 1; i < boxes.length; i++) expect(boxes[i]![0] - boxes[i - 1]![1]).toBe(4);
-    // The hairline: 1 px wide, the theme's hairline colour, the window's height below the toolbar, on the edge that faces the content.
+    for (let i = 1; i < 4; i++) expect(boxes[i]![0] - boxes[i - 1]![1]).toBe(4);
+    expect(boxes[4]![0] - boxes[3]![1]).toBeGreaterThan(100);
+    // When the library panel is open its own edge separates it from the rail, so the rail's inner hairline hides.
+    expect(await rail.evaluate(node => getComputedStyle(node, '::after').display)).toBe('none');
+    // Close the library panel: the hairline runs 1 px wide, the theme's hairline colour, the window's height below the toolbar, on the edge that faces the content.
+    await rail.getByRole('button', { name: 'Library', exact: true }).click();
+    await expect(page.locator('#library-root')).toBeHidden();
     const line = await rail.evaluate(node => {
       const style = getComputedStyle(node, '::after'), at = node.getBoundingClientRect();
       const probe = Object.assign(document.createElement('i'), { style: 'background: var(--hairline)' }); document.body.append(probe);
       const hairline = getComputedStyle(probe).backgroundColor; probe.remove();
-      return { width: style.width, height: parseFloat(style.height), colour: style.backgroundColor, hairline, top: at.top + parseFloat(style.top), x: at.left + parseFloat(style.left) };
+      return { width: style.width, height: parseFloat(style.height), colour: style.backgroundColor, shadow: style.boxShadow, hairline, top: at.top + parseFloat(style.top), x: at.left + parseFloat(style.left) };
     });
-    expect(line.width).toBe('1px'); expect(line.colour).toBe(line.hairline);
+    expect(line.width).toBe('1px'); expect(line.colour).toBe(line.hairline); expect(line.shadow).not.toBe('none');
     const layout = (await page.locator('#reader-layout').boundingBox())!, toolbar = (await page.locator('.toolbar').boundingBox())!;
     expect(layout.y).toBeCloseTo(toolbar.y + toolbar.height, 0);
     expect(line.top).toBeCloseTo(layout.y, 0); expect(line.height).toBeCloseTo(layout.height, 0);

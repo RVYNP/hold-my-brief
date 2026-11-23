@@ -20,13 +20,16 @@ async function seed(page: Page) {
   await expect(page.locator('#library-root')).toBeVisible();
 }
 
-test('the panel title opens the Library tab on all documents; there is no sidebar and no Back to reading', async ({ page }) => {
+test('All documents is pinned on the top bar, opens the Library page without a close button, and clears the icon rail when the sidebar is closed', async ({ page }) => {
   await seed(page);
-  await expect(libraryTab(page)).toHaveCount(0);
-  await openLibraryTab(page);
   await expect(libraryTab(page)).toHaveCount(1);
-  await expect(libraryTab(page)).toHaveClass(/is-active/);
+  await expect(libraryTab(page)).toBeVisible();
+  await expect(libraryTab(page)).not.toHaveClass(/is-active/);
   await expect(libraryTab(page).locator('.tab-title')).toHaveText('All documents');
+  await expect(libraryTab(page).locator('.tab-close')).toHaveCount(0);
+  await libraryTab(page).click();
+  await expect(libraryPage(page)).toBeVisible();
+  await expect(libraryTab(page)).toHaveClass(/is-active/);
   await expect(page.locator('#filename')).toHaveText('All documents');
   await expect(page.locator('.library-scope-label')).toHaveText('All documents');
   await expect(count(page)).toHaveText('40 references');
@@ -34,22 +37,33 @@ test('the panel title opens the Library tab on all documents; there is no sideba
   await expect(page.locator('#empty')).toBeHidden();
   const box = (await libraryPage(page).boundingBox())!, panel = (await page.locator('#library-root .library-panel').boundingBox())!;
   expect(box.x).toBeGreaterThanOrEqual(panel.x + panel.width);
+  // Collapsing the sidebar keeps the Library page clear of the icon rail (never drawn underneath the icons).
+  await page.locator('#library-rail').getByRole('button', { name: 'Library', exact: true }).click();
+  await expect(page.locator('#library-root')).toBeHidden();
+  const closedBox = (await libraryPage(page).boundingBox())!, railBox = (await page.locator('#library-rail').boundingBox())!;
+  expect(closedBox.x).toBeGreaterThanOrEqual(railBox.x + railBox.width);
+  await page.locator('#library-rail').getByRole('button', { name: 'Library', exact: true }).click();
+  await expect(page.locator('#library-root')).toBeVisible();
   // The panel marks it: its title is the current place.
   await expect(page.locator('#library-root .library-title-button')).toHaveAttribute('aria-current', 'location');
   // What the board had is gone.
   await expect(page.getByRole('button', { name: /Back to reading/ })).toHaveCount(0);
   for (const gone of ['.library-board-nav', '.library-navigation', '.library-filter', '.library-board-back', '.is-board']) await expect(page.locator(gone)).toHaveCount(0);
-  // Escape does not dismiss it.
+  // Escape and Ctrl+W do not dismiss or close the pinned tab.
   await page.locator('.library-search').focus();
   await page.keyboard.press('Escape');
   await expect(libraryPage(page)).toBeVisible();
+  await page.locator('#library-pin').focus();
+  await page.keyboard.press('Control+w');
+  await expect(libraryTab(page)).toBeVisible();
+  await expect(libraryPage(page)).toBeVisible();
 });
 
-test('double-clicking a folder or a collection retargets the one tab, and the panel marks the scope', async ({ page }) => {
+test('double-clicking a folder or a collection retargets the pinned tab, and the panel marks the scope', async ({ page }) => {
   await seed(page);
   const magazine = node(page, folder('refs', '03_vintage_magazine'));
   await magazine.dblclick();
-  await expect(libraryTab(page)).toHaveCount(1);
+  await expect(libraryTab(page)).toHaveClass(/is-active/);
   await expect(libraryTab(page).locator('.tab-title')).toHaveText('refs › 03_vintage_magazine');
   await expect(page.locator('.library-scope-label')).toHaveText('refs › 03_vintage_magazine');
   await expect(count(page)).toHaveText('2 references');
@@ -58,19 +72,19 @@ test('double-clicking a folder or a collection retargets the one tab, and the pa
   await expect(magazine).toHaveAttribute('aria-expanded', 'false');
 
   await node(page, 'c:c-Fashion photo and catalogues').dblclick();
-  await expect(tabTitles(page)).toHaveText(['Fashion photo and catalogues']);
+  await expect(libraryTab(page).locator('.tab-title')).toHaveText('Fashion photo and catalogues');
   await expect(count(page)).toHaveText('2 references');
   await expect(node(page, 'c:c-Fashion photo and catalogues')).toHaveClass(/is-scope/);
   await expect(magazine).not.toHaveClass(/is-scope/);
   await expect(page.locator('#library-root .library-title-button')).not.toHaveAttribute('aria-current', 'location');
 
-  // The title goes back to every document: still the same tab.
+  // The title goes back to every document: still the same pinned tab.
   await openLibraryTab(page);
-  await expect(tabTitles(page)).toHaveText(['All documents']);
+  await expect(libraryTab(page).locator('.tab-title')).toHaveText('All documents');
   await expect(node(page, 'c:c-Fashion photo and catalogues')).not.toHaveClass(/is-scope/);
 });
 
-test('the scope menu in the header offers what the tree has no row for, and retargets the same tab', async ({ page }) => {
+test('the scope menu in the header offers what the tree has no row for, and retargets the pinned tab', async ({ page }) => {
   await seed(page);
   await openLibraryTab(page);
   const menu = page.locator('.library-scope-menu');
@@ -79,65 +93,55 @@ test('the scope menu in the header offers what the tree has no row for, and reta
   await expect(menu.getByRole('menuitemradio', { name: 'All documents' })).toHaveAttribute('aria-checked', 'true');
   await menu.getByRole('menuitemradio', { name: 'Continue reading' }).click();
   await expect(menu).toBeHidden();
-  await expect(tabTitles(page)).toHaveText(['Continue reading']);
+  await expect(libraryTab(page).locator('.tab-title')).toHaveText('Continue reading');
   await expect(count(page)).toHaveText('2 references');
 
   await page.locator('.library-scope-button').click();
   await menu.getByRole('menuitemradio', { name: 'Unfiled' }).click();
-  await expect(tabTitles(page)).toHaveText(['Unfiled']);
+  await expect(libraryTab(page).locator('.tab-title')).toHaveText('Unfiled');
 
   await page.locator('.library-scope-button').click();
   await menu.getByRole('menuitemradio', { name: 'refs' }).click();
-  await expect(tabTitles(page)).toHaveText(['refs']);
+  await expect(libraryTab(page).locator('.tab-title')).toHaveText('refs');
   await expect(libraryTab(page)).toHaveCount(1);
 });
 
-test('the palette opens the tab and shows it as it is, from Home as from another tab', async ({ page }) => {
+test('the palette opens the pinned Library tab and shows it as it is, from Home as from another tab', async ({ page }) => {
   await seed(page);
   await openLibraryTab(page);
   await page.locator('.library-scope-button').click();
   await page.locator('.library-scope-menu').getByRole('menuitemradio', { name: 'Continue reading' }).click();
-  await expect(libraryTab(page)).toHaveCount(1);
-  await expect(tabTitles(page)).toHaveText(['Continue reading']);
+  await expect(libraryTab(page).locator('.tab-title')).toHaveText('Continue reading');
   await expect(count(page)).toHaveText('2 references');
 
   await railHome(page).click();
   await expect(libraryPage(page)).toBeHidden();
-  // The palette command shows the tab as it is (it names no scope), from another tab as from Home.
+  await expect(libraryTab(page)).not.toHaveClass(/is-active/);
+  // The palette command shows the pinned Library tab as it is (it names no scope).
   await page.keyboard.press('Control+k');
   await page.locator('#palette-input').fill('library tab');
   await page.keyboard.press('Enter');
   await expect(libraryTab(page)).toHaveClass(/is-active/);
-  await expect(tabTitles(page)).toHaveText(['Continue reading']);
-
-  // With no tab open it opens one on all documents.
-  await libraryTab(page).locator('.tab-close').click();
-  await expect(libraryTab(page)).toHaveCount(0);
-  await page.keyboard.press('Control+k');
-  await page.locator('#palette-input').fill('library tab');
-  await page.keyboard.press('Enter');
-  await expect(tabTitles(page)).toHaveText(['All documents']);
+  await expect(libraryTab(page).locator('.tab-title')).toHaveText('Continue reading');
 });
 
-test('the Library tab survives a reload, on the same scope, and closing it forgets the scope', async ({ page }) => {
+test('the pinned Library tab survives a reload on the same scope', async ({ page }) => {
   await seed(page);
   await node(page, folder('refs', '03_vintage_magazine')).dblclick();
-  await expect(tabTitles(page)).toHaveText(['refs › 03_vintage_magazine']);
+  await expect(libraryTab(page).locator('.tab-title')).toHaveText('refs › 03_vintage_magazine');
   await page.reload();
   await expect(libraryTab(page)).toHaveCount(1);
   await expect(libraryTab(page)).toHaveClass(/is-active/);
-  await expect(tabTitles(page)).toHaveText(['refs › 03_vintage_magazine']);
+  await expect(libraryTab(page).locator('.tab-title')).toHaveText('refs › 03_vintage_magazine');
   await expect(libraryPage(page)).toBeVisible();
   await expect(count(page)).toHaveText('2 references');
   await expect(node(page, folder('refs', '03_vintage_magazine'))).toHaveClass(/is-scope/);
 
-  await libraryTab(page).locator('.tab-close').click();
-  await expect(libraryTab(page)).toHaveCount(0);
+  await railHome(page).click();
   await expect(libraryPage(page)).toBeHidden();
   await expect(railHome(page)).toHaveAttribute('aria-current', 'page');
-  await expect(node(page, folder('refs', '03_vintage_magazine'))).not.toHaveClass(/is-scope/);
   await openLibraryTab(page);
-  await expect(tabTitles(page)).toHaveText(['All documents']);
+  await expect(libraryTab(page).locator('.tab-title')).toHaveText('All documents');
   await expect(count(page)).toHaveText('40 references');
 });
 
@@ -153,9 +157,9 @@ test('a tab change is stored within the task that made it', async ({ page }) => 
     return JSON.parse(localStorage.getItem('hold-my-brief-tabs') ?? 'null')?.tabs?.map((tab: { format: string }) => tab.format) ?? [];
   });
   expect(written).toEqual(['library']);
-  // Closing it is stored the same way.
+  // Switching back to Home clears the active Library entry when on the default scope.
   const cleared = await page.evaluate(async () => {
-    document.querySelector<HTMLElement>('#tab-list .tab[data-kind=library] .tab-close')!.click();
+    document.querySelector<HTMLButtonElement>('#library-rail [data-rail="home"]')!.click();
     await Promise.resolve();
     return JSON.parse(localStorage.getItem('hold-my-brief-tabs') ?? 'null')?.tabs?.length;
   });
@@ -196,35 +200,40 @@ test('opening a document from the tab opens or focuses its tab; ⌘/Ctrl-click a
   await row('Brush-Notes.md').locator('.library-document-open').click();
   await expect(page.locator('#tab-list .tab.is-active .tab-title')).toHaveText('Brush-Notes.md');
   await expect(libraryPage(page)).toBeHidden();
-  await expect(tabTitles(page)).toHaveText(['All documents', 'Brush-Notes.md']);
+  await expect(tabTitles(page)).toHaveText(['Brush-Notes.md']);
 
   // Back on the Library tab, the same document focuses the tab it already has instead of opening another.
   await libraryTab(page).click();
   await row('Brush-Notes.md').locator('.library-document-open').click();
   await expect(page.locator('#tab-list .tab.is-active .tab-title')).toHaveText('Brush-Notes.md');
-  await expect(tabTitles(page)).toHaveText(['All documents', 'Brush-Notes.md']);
+  await expect(tabTitles(page)).toHaveText(['Brush-Notes.md']);
 
   // ⌘/Ctrl-click and a middle click leave the Library tab in front and give the document a tab beside it.
   await libraryTab(page).click();
   await search.fill('Layer-Notes');
   await row('Layer-Notes.md').locator('.library-document-open').click({ modifiers: ['ControlOrMeta'] });
-  await expect(tabTitles(page)).toHaveText(['All documents', 'Layer-Notes.md', 'Brush-Notes.md']); // Beside the tab that is showing.
+  await expect(tabTitles(page)).toHaveText(['Layer-Notes.md', 'Brush-Notes.md']); // Beside the pinned Library tab.
   await expect(libraryTab(page)).toHaveClass(/is-active/);
   await expect(libraryPage(page)).toBeVisible();
   await search.fill('Photoshop-Notes');
   await row('Photoshop-Notes.md').locator('.library-document-open').click({ button: 'middle' });
-  await expect(tabTitles(page)).toHaveText(['All documents', 'Layer-Notes.md', 'Photoshop-Notes.md', 'Brush-Notes.md']); // The next one lands after the last background tab.
+  await expect(tabTitles(page)).toHaveText(['Layer-Notes.md', 'Photoshop-Notes.md', 'Brush-Notes.md']); // The next one lands after the last background tab.
   await expect(libraryTab(page)).toHaveClass(/is-active/);
 });
 
-test('the Library tab is a tab like the rest: it is reached with the tab keys', async ({ page }) => {
+test('document tab keys jump to document tabs while All documents stays pinned on the top bar', async ({ page }) => {
   await seed(page);
   await openLibraryTab(page);
-  await page.locator('#library-root').getByRole('button', { name: 'Library', exact: true }).focus();
-  await page.keyboard.press('Alt+1');
+  await chooseFromViewMenu(page, 'List');
+  // The first match is already selected, so one click opens it in a document tab beside the pinned tab.
+  await page.locator('#library-page .library-document').first().locator('.library-document-open').click();
+  await expect(page.locator('#tab-list .tab')).toHaveCount(1);
+  await libraryTab(page).click();
   await expect(libraryTab(page)).toHaveClass(/is-active/);
-  await railHome(page).click();
-  await page.keyboard.press('Control+Tab');
+  await page.keyboard.press('Alt+1');
+  await expect(page.locator('#tab-list .tab').first()).toHaveClass(/is-active/);
+  await expect(libraryPage(page)).toBeHidden();
+  await libraryTab(page).click();
   await expect(libraryTab(page)).toHaveClass(/is-active/);
   await expect(libraryPage(page)).toBeVisible();
 });

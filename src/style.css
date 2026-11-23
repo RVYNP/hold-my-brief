@@ -991,7 +991,7 @@ select:hover { border-color: var(--accent-border); }
 .title svg { flex: none; color: var(--muted); }
 @media (min-width: 720px) {
   .tab-strip { display: flex; }
-  .title, #settings-toggle { display: none; }
+  .title, #settings-toggle, .toolbar .status-chip { display: none; }
 }
 .tab-add, .tab-overflow { flex: none; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border-radius: 6px; color: var(--muted); }
 .tab-overflow[hidden] { display: none; }
@@ -1012,16 +1012,23 @@ select:hover { border-color: var(--accent-border); }
 .tab-title { max-width: 118px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px/1.2 var(--font-ui); }
 .tab.is-active .tab-title { max-width: 140px; font-weight: 600; }
 .tab.has-problem .tab-title { font-style: italic; }
+.tab.is-brief .tab-title::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--accent-ink); vertical-align: 1px; }
+.settings-note { margin: 2px 0 0; font: 11.5px/1.45 var(--font-ui); color: var(--muted); }
 .tab-hint { color: var(--muted); font: 12px/1.2 var(--font-ui); font-weight: 400; white-space: nowrap; max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
 .tab-hint:empty { display: none; }
 .tab-hint::before { content: '·'; display: inline-block; margin-right: 4px; }
 .tab-menu-title .tab-hint { margin-left: 6px; font-size: 11px; }
 .tab-where { font: 11px/1 var(--font-mono); font-variant-numeric: tabular-nums; color: var(--muted); }
 .tab-where:empty { display: none; }
-/* The toolbar's tabs: wide flat chips, the title on the left and the place on the right in small monospace capitals; the active one has a light fill, not a box. No format badge (the pane rows keep theirs). */
-.toolbar .tab { flex: 0 1 290px; min-width: 240px; }
+/* The toolbar's tabs: flat chips, the title on the left and the place on the right in small monospace capitals; the active one has a light fill, not a box. No format badge (the pane rows keep theirs). */
+.toolbar .tab { flex: 0 1 220px; width: 220px; min-width: 164px; }
+.toolbar .tab.tab-pinned { flex: none; width: auto; min-width: 0; max-width: 196px; padding: 0 10px 0 8px; }
+.toolbar .tab.tab-pinned .tab-title { max-width: 156px; }
+.tab-pin-sep { flex: none; width: 1px; height: 16px; margin: 0 3px; background: var(--hairline); pointer-events: none; }
+#tab-strip:has(#tab-list:empty) .tab-pin-sep { display: none; }
 .toolbar .tab.is-active { background: var(--hover); border-color: transparent; box-shadow: none; }
-.toolbar .tab-title, .toolbar .tab.is-active .tab-title { max-width: 150px; font: 600 13px/1.2 var(--font-ui); }
+.toolbar .tab-title, .toolbar .tab.is-active .tab-title { flex: 0 1 auto; min-width: 0; max-width: 136px; font: 600 13px/1.2 var(--font-ui); }
+.toolbar .tab:not(:has(.tab-where:not(:empty))) .tab-title { max-width: 176px; }
 .toolbar .tab-where { margin-left: auto; flex: none; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
 .tab-close { display: none; place-items: center; flex: none; width: 18px; height: 18px; padding: 0; border-radius: 5px; color: var(--muted); }
 .tab.is-active .tab-close, .tab:hover .tab-close, .tab:focus-within .tab-close { display: grid; }
@@ -1068,9 +1075,9 @@ select:hover { border-color: var(--accent-border); }
 /* --find-bar-height is the find bar's real height, so the reading surface and the opening strip can
    move below it without guessing at font metrics (Windows renders the bar a pixel taller than macOS).
    --workspace-border is the reading panel's edge, which the strip is positioned outside of. */
-#reader-layout { --find-bar-height: 39px; --workspace-border: 1px; position: relative; display: flex; flex: 1; min-height: 0; min-width: 0; }
-/* The page is not boxed: it meets the chrome edge to edge, set apart by tone and one hairline. */
-#workspace { position: relative; flex: 1; min-height: 0; min-width: 0; border-top: var(--workspace-border) solid var(--hairline); background: var(--glass-surface); overflow: hidden; }
+#reader-layout { --find-bar-height: 39px; --workspace-border: 0px; position: relative; display: flex; flex: 1; min-height: 0; min-width: 0; }
+/* The page is not boxed: it meets the chrome edge to edge, under the toolbar's single bottom hairline. */
+#workspace { position: relative; flex: 1; min-height: 0; min-width: 0; background: var(--glass-surface); overflow: hidden; }
 /* First run is a page of type, not a stack of boxes: the mark is a plain glyph, the one filled
    control is the call to action sized to its words, and recents are a quiet list. */
 #empty { height: 100%; overflow: auto; padding: 32px 28px 24px; max-width: 640px; margin: auto; display: flex; flex-direction: column; align-items: flex-start; }
@@ -1111,14 +1118,14 @@ h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 1px 0 
    the opacity is the Appearance's STRENGTH (--ground-strength, set by theme.ts), the blend lighten in the dark schemes and the glow themes and multiply in the light ones.
    A changed picture cross-fades by a transition of --ground-fade; nothing in it animates on its own. */
 @property --ground-fade { syntax: '<number>'; inherits: false; initial-value: 1; }
-.home-ground { position: absolute; z-index: -1; pointer-events: none; image-rendering: pixelated; mix-blend-mode: multiply; opacity: calc(var(--ground-strength, .06) * var(--ground-fade)); transition: --ground-fade 600ms linear; }
+.home-ground { position: absolute; z-index: -1; pointer-events: none; image-rendering: pixelated; mix-blend-mode: multiply; opacity: calc(var(--ground-strength, .14) * var(--ground-fade)); transition: --ground-fade 600ms linear; }
 :root[data-theme='dark'] .home-ground { mix-blend-mode: lighten; }
 .home-ground.is-entering, .home-ground.is-leaving { --ground-fade: 0; }
 #empty[hidden] ~ .home-ground { display: none; }
 @media (prefers-reduced-motion: reduce) { .home-ground { transition: none; } }
-/* Home's muted ink: --muted up to 8 % STRENGTH (data-ground-deep is set by theme.ts above it), then mixed toward --fg in step with the strength, whole at the slider's maximum (30 %), so the text stays at 4.5:1 on a stronger ground. .08 is groundInkStrength and .22 is backgroundStrengthMax - groundInkStrength in theme.ts: change them together. */
+/* Home's muted ink: --muted up to 8 % STRENGTH (data-ground-deep is set by theme.ts above it), then mixed toward --fg in step with the strength, whole at the slider's maximum (40 %), so the text stays at 4.5:1 on a stronger ground. .08 is groundInkStrength and .32 is backgroundStrengthMax - groundInkStrength in theme.ts: change them together. */
 #empty.is-home { --home-muted: var(--muted); }
-:root[data-ground-deep] #empty.is-home { --home-muted: color-mix(in oklab, var(--muted), var(--fg) clamp(0%, calc((var(--ground-strength, .06) - .08) / .22 * 100%), 100%)); }
+:root[data-ground-deep] #empty.is-home { --home-muted: color-mix(in oklab, var(--muted), var(--fg) clamp(0%, calc((var(--ground-strength, .14) - .08) / .32 * 100%), 100%)); }
 .home-section { align-self: stretch; min-width: 0; margin: 0 0 26px; }
 .home-section h2 { margin: 0 0 10px; font: 700 17px/1.3 var(--font-ui); letter-spacing: 0; color: var(--fg); }
 .home-recent-section h2 { margin-bottom: 8px; font-size: 13px; font-weight: 600; }
@@ -1130,8 +1137,9 @@ h1 { font: 400 36px/1.12 var(--font-read); letter-spacing: -.4px; margin: 1px 0 
 .home-recent-open .library-tile-scrim, .home-recent-open .library-cover-text, .home-recent-open .library-tile-format, .home-recent-open .library-tile-note,
 .home-card-cover .library-tile-scrim { display: none; }
 .home-recent-open .library-cover-art { height: 100%; }
-/* Recently opened: one 256 x 114 card (never wider than the page), the cover 86 x 114 flush left, the title in the middle of the rest, the file type and the progress along its foot. */
-.home-recent { position: relative; width: 256px; max-width: 100%; }
+/* Recently opened: up to 4 cards in a responsive horizontal row (each 114 tall, capped at 268 wide so a single card stays compact and 4 sit on one row from 1080 px up), cover 86 x 114 flush left, title in the middle, file type and progress along its foot. */
+.home-recent-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 268px)); gap: 10px; }
+.home-recent { position: relative; min-width: 0; max-width: 100%; }
 .home-recent-open { display: flex; width: 100%; height: 114px; padding: 0; border-radius: 6px; background: var(--home-card); overflow: hidden; }
 .home-recent-open:hover { background: color-mix(in srgb, var(--home-card) 88%, var(--fg)); }
 .home-recent-open .library-tile-media { flex: none; width: 86px; height: 114px; aspect-ratio: auto; border-radius: 0; }
@@ -1395,15 +1403,21 @@ dd { margin: 0; color: var(--muted); }
 #settings[open] { display: flex; flex-direction: column; gap: 10px; }
 #settings [hidden] { display: none; }
 #settings::backdrop { background: transparent; }
-.sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
-.sheet-head h2 { margin: 0; }
+.sheet-head { display: flex; align-items: center; gap: 12px; }
+.sheet-head h2 { margin: 0; flex: none; }
+.settings-tabs { display: flex; align-items: center; gap: 2px; margin-right: auto; padding: 2px; border-radius: 7px; background: var(--hover-subtle); }
+.settings-tabs button { padding: 4px 10px; border: 0; border-radius: 5px; color: var(--muted); font-size: 12px; font-weight: 500; line-height: 1.25; }
+.settings-tabs button:hover { color: var(--fg); background: transparent; }
+.settings-tabs button[aria-selected=true] { background: var(--card); color: var(--fg); box-shadow: 0 1px 2px light-dark(#1e1a2e14, transparent); }
 /* The sections scroll inside the sheet (its head stays), so it never outgrows a 420 × 620 window. */
 .settings-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 14px; padding-bottom: 18px; overflow-y: auto; overscroll-behavior: contain; }
+.settings-panel { display: flex; flex-direction: column; gap: 14px; }
+.settings-panel[hidden] { display: none; }
 .settings-section { flex: none; display: flex; flex-direction: column; gap: 14px; }
 .settings-section:not([hidden]) ~ .settings-section { padding-top: 14px; border-top: 1px solid var(--hairline); }
 .settings-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-height: 24px; }
 .settings-heading h3 { margin: 0; font: 600 13px/1.3 var(--font-ui); }
-.settings-heading .appearance-modes { flex: 0 0 auto; margin-left: auto; }
+.settings-heading .appearance-modes { flex: 0 0 auto; flex-wrap: nowrap; margin-left: auto; }
 .settings-row { display: flex; align-items: center; gap: 10px; min-height: 24px; }
 .settings-name { flex: 1; min-width: 0; font-size: 13px; }
 .settings-switch { position: relative; flex: none; width: 34px; height: 20px; padding: 0; border: 0; border-radius: 10px; background: color-mix(in srgb, var(--muted) 35%, transparent); transition: background-color .15s; }
@@ -1423,7 +1437,7 @@ dd { margin: 0; color: var(--muted); }
 #settings .appearance-hint[data-previewing] { color: var(--accent-ink); }
 #settings .appearance-hint[data-previewing] .appearance-name { color: inherit; }
 .sheet-label { color: var(--muted); font: 11px/1.3 var(--font-mono); letter-spacing: .2px; }
-.choices { flex: 1; display: flex; gap: 2px; min-width: 0; }
+.choices { flex: 1; display: flex; flex-wrap: wrap; gap: 2px; min-width: 0; }
 .choices button { flex: 0 1 auto; display: flex; align-items: center; gap: 6px; min-width: 0; padding: 5px 9px; border: 0; border-radius: 6px; color: var(--muted); font-size: 12px; }
 .choices button:hover { background: var(--hover-subtle); color: var(--fg); }
 .choices button[aria-checked=true] { background: var(--accent-soft); color: var(--accent-ink); }
@@ -1586,6 +1600,7 @@ dialog, dialog.drop, #settings, .tab-menu, .zoom-menu { background-image: var(--
 #workspace.is-split .reader-host { bottom: var(--pane-bottom, 0px); }
 #workspace.is-split .pane-strip { position: absolute; z-index: 7; top: 0; height: 28px; display: flex; align-items: center; gap: 2px; padding: 0 4px; background: var(--chrome); border-bottom: 1px solid var(--hairline); -webkit-user-select: none; user-select: none; }
 #workspace.is-split .pane-strip .tab, #workspace.is-split .pane-strip .tab-add, #workspace.is-split .pane-strip .tab-overflow { height: 24px; }
+#workspace.is-split .pane-strip .tab.is-active { background: var(--hover); border-color: transparent; box-shadow: none; }
 #workspace.is-split .pane-strip .tab-add, #workspace.is-split .pane-strip .tab-overflow { width: 24px; }
 #workspace.is-split .pane-strip .tab-list { flex: 0 1 auto; }
 /* A folded split: the shown pane's row ends with the button that holds the pane map (hillclimb 23 · 3B, 3C) and opens the menu of panes. */

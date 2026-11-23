@@ -67,8 +67,8 @@ test('text settings live in the appearance sheet, apply to the open text and kee
   await page.locator('#palette-input').fill('text size');
   await page.keyboard.press('Enter');
   const sheet = page.locator('#settings');
-  // One page: no tabs, and "Text size & spacing" only moves focus to the size stepper.
-  await expect(sheet.getByRole('tab')).toHaveCount(0);
+  // Appearance tab is active, and "Text size & spacing" moves focus straight to the size stepper.
+  await expect(sheet.getByRole('tab', { name: 'Appearance' })).toHaveAttribute('aria-selected', 'true');
   await expect(sheet.getByRole('button', { name: 'Smaller text' })).toBeFocused();
   await sheet.getByRole('button', { name: 'Larger text' }).click();
   await expect(content).toHaveCSS('font-size', '20px');
@@ -99,7 +99,7 @@ test('text settings live in the appearance sheet, apply to the open text and kee
     await expect(sheet).toBeHidden();
   }
 });
-test('appearance is one page: no tabs, seven themes and ten glows named by their buttons, a status line that follows the preview, and it fits the compact window', async ({ page }) => {
+test('appearance keeps colour and text on one tab: seven themes and ten glows named by their buttons, a status line that follows the preview, and it fits the compact window', async ({ page }) => {
   await page.setViewportSize({ width: 420, height: 620 });
   await page.emulateMedia({ colorScheme: 'light' });
   await page.goto('/');
@@ -108,7 +108,7 @@ test('appearance is one page: no tabs, seven themes and ten glows named by their
   await expect(page.locator('#filename')).toHaveText('notes.txt');
   const sheet = await openSettings(page);
   await expect(sheet).toBeVisible();
-  await expect(sheet.getByRole('tab')).toHaveCount(0);
+  await expect(sheet.getByRole('tab', { name: 'Appearance' })).toHaveAttribute('aria-selected', 'true');
   const families = sheet.locator('.theme-row:not(.theme-row-glow) .theme-card'), glows = sheet.locator('.theme-row-glow .theme-card');
   await expect(families).toHaveCount(7);
   await expect(glows).toHaveCount(10);

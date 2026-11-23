@@ -23,10 +23,10 @@ describe('Recently opened', () => {
     expect(sections.recent).toEqual([]);
   });
 
-  it('is the first recent only, whatever else was opened', () => {
-    const recents = Array.from({ length: 5 }, (_, index) => recent(`b${index}.pdf`, `Book ${index}.pdf`));
+  it('keeps up to the first four recents in order', () => {
+    const recents = Array.from({ length: 6 }, (_, index) => recent(`b${index}.pdf`, `Book ${index}.pdf`));
     const { recent: tiles } = homeSections({ recents, documents: [] });
-    expect(paths(tiles)).toEqual(['b0.pdf']);
+    expect(paths(tiles)).toEqual(['b0.pdf', 'b1.pdf', 'b2.pdf', 'b3.pdf']);
     expect(tiles[0].title).toBe('Book 0');
   });
 
@@ -125,12 +125,12 @@ describe('the file-type shelves', () => {
 });
 
 describe('Home as a whole', () => {
-  it('has Recently opened (one card), Continue reading, then a shelf per type, in that order', () => {
+  it('has Recently opened (up to four cards), Continue reading, then a shelf per type, in that order', () => {
     const documents = [doc('a.pdf', 9), doc('b.pdf', 5), doc('book.epub', 7, { format: 'epub' }), doc('notes.md', 3, { format: 'md' })];
     const progress = { 'a.pdf': { fraction: .5, page: 5, pages: 10 }, 'notes.md': { fraction: .4 } };
     const sections = homeSections({ recents: [recent('a.pdf'), recent('book.epub', 'book.epub', 'epub')], documents, progress });
     expect(Object.keys(sections)).toEqual(['recent', 'reading', 'types']);
-    expect(paths(sections.recent)).toEqual(['a.pdf']);
+    expect(paths(sections.recent)).toEqual(['a.pdf', 'book.epub']);
     expect(paths(sections.reading)).toEqual(['a.pdf', 'notes.md']);
     expect(sections.types.map(shelf => shelf.title)).toEqual(['PDFs', 'EPUBs', 'Markdown']);
   });

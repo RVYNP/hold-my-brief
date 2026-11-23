@@ -54,7 +54,7 @@ for (const size of [{ width: 1440, height: 900 }, { width: 1080, height: 760 }])
     await expect(page.locator('#tab-list .tab-where')).toHaveText([/^30 \/ 240$/, /^60 \/ 240$/, /^P\. 3\/5$/]);
     await expect(page.locator('#tab-list .tab-format')).toHaveCount(0);
     await expectFormats(page.locator('#tab-list .tab'), ['TXT', 'TXT', 'PDF']);
-    for (const name of ['a.txt', 'b.txt']) expect((await tab(page, name).boundingBox())!.width).toBeGreaterThanOrEqual(240);
+    for (const name of ['a.txt', 'b.txt']) expect((await tab(page, name).boundingBox())!.width).toBeGreaterThanOrEqual(164);
     // The title is on the left and the place on the right.
     const [title, where] = [await tab(page, 'b.txt').locator('.tab-title').boundingBox(), await tab(page, 'b.txt').locator('.tab-where').boundingBox()];
     expect(title!.x + title!.width).toBeLessThan(where!.x);
@@ -97,7 +97,8 @@ test('switching tabs keeps each tab\'s place, zoom, hand tool and find text; a h
   await expect(page.locator('#find-bar')).toBeVisible();
   await expect(page.locator('#find-status')).toContainText(/of \d+/); // The search has run and moved to its first match, so this is the place to come back to.
   const notesPlace = (await page.locator('#position').textContent())!;
-  await expect(page.locator('#view-controls')).toBeHidden(); // Text has no zoom pill; the PDF's did not follow it here.
+  await expect(page.locator('#view-controls')).toHaveClass(/is-reading/); // Text uses the minimal reading pill, not the PDF's zoom pill.
+  await expect(page.locator('#zoom-level')).toBeHidden();
 
   await tab(page, 'plates.pdf').click(); await shown(page, 'plates.pdf');
   await expect(page.locator('#position')).toContainText('3');
@@ -205,7 +206,7 @@ test('a compact window has no strip: the title names the document and counts the
   await page.locator('#title').click();
   const menu = page.locator('#tab-menu');
   await expect(menu).toBeVisible();
-  await expect(menu.locator('.tab-menu-row .tab-menu-title')).toHaveText(['Home', 'a.txt', 'b.txt', 'New tab…']);
+  await expect(menu.locator('.tab-menu-row .tab-menu-title')).toHaveText(['Home', 'All documents', 'a.txt', 'b.txt', 'New tab…']);
   await expect(menu.locator('.tab-menu-row.is-active')).toHaveText(/b\.txt/);
   await menu.getByRole('menuitem', { name: /a\.txt/ }).click();
   await expect(menu).toBeHidden();
@@ -254,7 +255,7 @@ test('too many tabs scroll the strip, and the ⌄ at its end lists them all', as
   await expect(page.locator('#tab-overflow')).toBeVisible();
   await expect(tab(page, names[11])).toBeInViewport(); // The active tab is kept in view.
   await page.locator('#tab-overflow').click();
-  await expect(page.locator('#tab-menu .tab-menu-row .tab-menu-title')).toHaveCount(14);
+  await expect(page.locator('#tab-menu .tab-menu-row .tab-menu-title')).toHaveCount(15);
   await page.locator('#tab-menu').getByRole('menuitem', { name: new RegExp(names[0]) }).click();
   await shown(page, names[0]);
   await expect(tab(page, names[0])).toBeInViewport();
@@ -372,9 +373,9 @@ test('tabs with the same title say which folder each is from; the others stay pl
   await page.setViewportSize({ width: 420, height: 620 });
   await page.locator('#title').click();
   const rows = page.locator('#tab-menu .tab-menu-row');
-  await expect(rows.nth(1).locator('.tab-hint')).toHaveText(/^[0-9a-f]{6}$/);
   await expect(rows.nth(2).locator('.tab-hint')).toHaveText(/^[0-9a-f]{6}$/);
-  await expect(rows.nth(3).locator('.tab-hint')).toHaveCount(0);
+  await expect(rows.nth(3).locator('.tab-hint')).toHaveText(/^[0-9a-f]{6}$/);
+  await expect(rows.nth(4).locator('.tab-hint')).toHaveCount(0);
   // Closing one of the pair takes the other's hint away.
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 1080, height: 680 });

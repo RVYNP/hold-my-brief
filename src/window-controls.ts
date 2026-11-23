@@ -5,7 +5,7 @@
 // .mac-titlebar, the way the Windows caption buttons are shown only under .windows-titlebar.
 
 const glyph = (body: string, fill = false) =>
-  `<svg width="12" height="12" viewBox="0 0 12 12" ${fill ? 'fill="currentColor"' : 'fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"'} aria-hidden="true">${body}</svg>`;
+  `<svg width="10" height="10" viewBox="0 0 10 10" ${fill ? 'fill="currentColor"' : 'fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"'} aria-hidden="true">${body}</svg>`;
 
 export type WindowActions = {
   close(): Promise<unknown>;
@@ -21,11 +21,11 @@ export function createWindowControls(): HTMLElement {
   group.setAttribute('role', 'group');
   group.setAttribute('aria-label', 'Window');
   group.innerHTML =
-    `<button type="button" id="mac-close" class="mac-control" aria-label="Close" title="Close">${glyph('<path d="M3.5 3.5l5 5m0-5l-5 5"/>')}</button>` +
-    `<button type="button" id="mac-minimize" class="mac-control" aria-label="Minimize" title="Minimize">${glyph('<path d="M3 6h6"/>')}</button>` +
+    `<button type="button" id="mac-close" class="mac-control" aria-label="Close" title="Close">${glyph('<path d="M2.6 2.6l4.8 4.8m0-4.8l-4.8 4.8"/>')}</button>` +
+    `<button type="button" id="mac-minimize" class="mac-control" aria-label="Minimize" title="Minimize">${glyph('<path d="M2.2 5h5.6"/>')}</button>` +
     `<button type="button" id="mac-zoom" class="mac-control" aria-label="Enter Full Screen" title="Enter Full Screen">` +
-      `<span class="mac-glyph-full">${glyph('<path d="M3 3h4L3 7zM9 9H5l4-4z"/>', true)}</span>` +
-      `<span class="mac-glyph-zoom">${glyph('<path d="M6 3v6M3 6h6"/>')}</span></button>`;
+      `<span class="mac-glyph-full">${glyph('<path d="M2.2 2.2h3.6L2.2 5.8zM7.8 7.8H4.2l3.6-3.6z"/>', true)}</span>` +
+      `<span class="mac-glyph-zoom">${glyph('<path d="M5 2.2v5.6M2.2 5h5.6"/>')}</span></button>`;
   const zoom = group.querySelector<HTMLButtonElement>('#mac-zoom')!;
   // Holding Option turns the green control from full screen into zoom (maximize and restore), as it does on a Mac.
   const option = (held: boolean) => {

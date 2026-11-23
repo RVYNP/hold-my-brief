@@ -45,13 +45,13 @@ for (const side of ['left', 'right'] as const) {
     const look = await rail.evaluate(node => { const style = getComputedStyle(node); return { border: style.borderTopWidth + style.borderRightWidth + style.borderBottomWidth + style.borderLeftWidth, radius: style.borderTopLeftRadius + style.borderTopRightRadius + style.borderBottomLeftRadius + style.borderBottomRightRadius, shadow: style.boxShadow, image: style.backgroundImage, colour: style.backgroundColor }; });
     expect(look).toEqual({ border: '0px0px0px0px', radius: '0px0px0px0px', shadow: 'none', image: 'none', colour: 'rgba(0, 0, 0, 0)' });
 
-    const buttons = await centre(page, '.icon-rail-button'), target = side === 'left' ? 20 : 1080 - 20;
+    const buttons = await centre(page, '.icon-rail-button:not([hidden])'), target = side === 'left' ? 20 : 1080 - 20;
     expect(buttons.length).toBe(5);
     for (const x of buttons) expect(x).toBeCloseTo(target, 0);
     expect(side === 'left' ? target : 1080 - target).toBeCloseTo(20, 0);
     const box = (await rail.boundingBox())!;
     expect(box.width).toBe(36); expect(side === 'left' ? box.x : 1080 - box.x - box.width).toBe(2);
-    for (const button of await page.locator('.icon-rail-button').all()) { const size = (await button.boundingBox())!; expect([size.width, size.height]).toEqual([36, 36]); }
+    for (const button of await page.locator('.icon-rail-button:not([hidden])').all()) { const size = (await button.boundingBox())!; expect([size.width, size.height]).toEqual([36, 36]); }
 
     // The wash: its own layer from the toolbar's bottom edge to the window's bottom, 44 px from the window's edge, fading out.
     const wash = await rail.evaluate(node => { const style = getComputedStyle(node, '::before'), at = node.getBoundingClientRect(), layout = document.querySelector('#reader-layout')!.getBoundingClientRect(); return { width: style.width, image: style.backgroundImage, border: style.borderTopWidth, shadow: style.boxShadow, top: node.getBoundingClientRect().top - layout.top, bottom: innerHeight - at.bottom + parseFloat(style.bottom) }; });
@@ -159,7 +159,7 @@ interface RailIcon { label: string; rect: number[]; colour: number[]; pressed: s
 /** Each rail icon: its box, its resting colour (--muted) as rgba, and whether it is pressed. */
 const railIcons = (page: Page): Promise<RailIcon[]> => page.evaluate(() => {
   const swatch = document.createElement('canvas').getContext('2d', { willReadFrequently: true })!; swatch.canvas.width = swatch.canvas.height = 1;
-  return [...document.querySelectorAll<HTMLElement>('.icon-rail-button')].map(button => {
+  return [...document.querySelectorAll<HTMLElement>('.icon-rail-button:not([hidden])')].map(button => {
     const svg = button.querySelector('svg')!.getBoundingClientRect(), colour = getComputedStyle(button).color;
     swatch.clearRect(0, 0, 1, 1); swatch.fillStyle = colour; swatch.fillRect(0, 0, 1, 1);
     const [r, g, b, a] = swatch.getImageData(0, 0, 1, 1).data;

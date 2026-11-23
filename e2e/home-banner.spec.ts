@@ -61,7 +61,7 @@ test('Home is a heading over its sections: no header buttons, no band, sheen or 
   expect(look.height).toBeLessThan(48);
 });
 
-test('the ground is one pixelated canvas, 6 % by default, at the window\'s left edge and the toolbar\'s bottom edge', async ({ page }) => {
+test('the ground is one pixelated canvas, 14 % by default, at the window\'s left edge and the toolbar\'s bottom edge', async ({ page }) => {
   await seedLibrary(page, documents, collections);
   await pixels(page);
   await expect(canvases(page)).toHaveCount(1);
@@ -79,16 +79,16 @@ test('the ground is one pixelated canvas, 6 % by default, at the window\'s left 
   expect(look.left).toBe(0);
   expect(look.right).toBeGreaterThanOrEqual(look.view[0]);
   expect(look.bottom).toBeGreaterThanOrEqual(look.view[1]);
-  expect(look.opacity).toBe('0.06');
+  expect(look.opacity).toBe('0.14');
   expect(look.blend).toBe('multiply');
   expect(look.rendering).toBe('pixelated');
   expect(look.events).toBe('none');
   expect(look.backdrop).toBe('none');
-  // One dither pixel per 2 CSS px, drawn for the whole window: the rows of the toolbar are cut off the top, and the extra bucket width is clipped.
-  expect(look.grid[1]).toBe(Math.round(look.view[1] / 2) - 20);
-  expect(look.grid[0]).toBeGreaterThanOrEqual(look.view[0] / 2);
-  expect(look.grid[0]).toBeLessThan(look.view[0] / 2 + 16);
-  expect(look.bottom - look.top).toBe(look.grid[1] * 2);
+  // One dither pixel per 3 CSS px, drawn for the whole window: the rows of the toolbar are cut off the top, and the extra bucket width is clipped.
+  expect(look.grid[1]).toBe(Math.round(look.view[1] / 3) - Math.round(look.toolbar / 3));
+  expect(look.grid[0]).toBeGreaterThanOrEqual(look.view[0] / 3);
+  expect(look.grid[0]).toBeLessThan(look.view[0] / 3 + 16);
+  expect(look.bottom - look.top).toBe(look.grid[1] * 3);
 });
 
 test('the glow\'s geometry belongs to the window: with the library panel open the picture is the same, and still starts at the window\'s left edge', async ({ page }) => {
@@ -186,35 +186,35 @@ test('the toolbar never shows any of it: a pixel sample across the toolbar match
   }
 });
 
-test('STRENGTH sets the opacity live, from 2 to 30 %, and is kept', async ({ page }) => {
+test('STRENGTH sets the opacity live, from 2 to 40 %, and is kept', async ({ page }) => {
   await seedLibrary(page, documents, collections);
   await pixels(page);
-  expect(await opacityOf(shown(page))).toBe('0.06');
+  expect(await opacityOf(shown(page))).toBe('0.14');
   const sheet = await openSettings(page);
   const slider = sheet.locator('input[type=range]');
   await expect(sheet.locator('.sheet-label', { hasText: 'BACKGROUND' })).toBeVisible();
   await expect(sheet.locator('.sheet-label', { hasText: 'STRENGTH' })).toBeVisible();
   await expect(sheet.locator('.sheet-label', { hasText: 'BANNER' })).toHaveCount(0);
   await expect(slider).toHaveAttribute('min', '2');
-  await expect(slider).toHaveAttribute('max', '30');
+  await expect(slider).toHaveAttribute('max', '40');
   await expect(slider).toHaveAttribute('step', '1');
-  await expect(slider).toHaveValue('6');
-  await expect(sheet.locator('.strength-value')).toHaveText('6 %');
+  await expect(slider).toHaveValue('14');
+  await expect(sheet.locator('.strength-value')).toHaveText('14 %');
   await expect(slider).toBeEnabled();
   await slider.fill('9');
   await expect(sheet.locator('.strength-value')).toHaveText('9 %');
   await expect.poll(() => opacityOf(shown(page))).toBe('0.09');
   await slider.fill('2');
   await expect.poll(() => opacityOf(shown(page))).toBe('0.02');
-  await slider.fill('30');
-  await expect.poll(() => opacityOf(shown(page))).toBe('0.3');
-  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).backgroundStrength, appearanceKey)).toBe(.3);
+  await slider.fill('40');
+  await expect.poll(() => opacityOf(shown(page))).toBe('0.4');
+  expect(await page.evaluate(key => JSON.parse(localStorage.getItem(key)!).backgroundStrength, appearanceKey)).toBe(.4);
   await page.reload();
   await pixels(page);
-  expect(await opacityOf(shown(page))).toBe('0.3');
+  expect(await opacityOf(shown(page))).toBe('0.4');
   const again = await openSettings(page);
-  await expect(again.locator('input[type=range]')).toHaveValue('30');
-  await expect(again.locator('.strength-value')).toHaveText('30 %');
+  await expect(again.locator('input[type=range]')).toHaveValue('40');
+  await expect(again.locator('.strength-value')).toHaveText('40 %');
 });
 
 test('BACKGROUND None removes the ground, greys STRENGTH, and a pattern brings them back', async ({ page }) => {
@@ -240,27 +240,27 @@ test('BACKGROUND None removes the ground, greys STRENGTH, and a pattern brings t
   await pixels(page);
 });
 
-test('a saved record with banner none and no strength shows no ground; STRENGTH reads 6 % and is disabled', async ({ page }) => {
+test('a saved record with banner none and no strength shows no ground; STRENGTH reads 14 % and is disabled', async ({ page }) => {
   await seedLibrary(page, documents, collections);
   await keepAppearance(page, { mode: 'light', palette: 'brief', accent: null, page: 'theme', banner: 'none' });
   await expect(canvases(page)).toHaveCount(0);
   const sheet = await openSettings(page);
   await expect(sheet.locator('[data-banner=none]')).toHaveAttribute('aria-checked', 'true');
-  await expect(sheet.locator('input[type=range]')).toHaveValue('6');
-  await expect(sheet.locator('.strength-value')).toHaveText('6 %');
+  await expect(sheet.locator('input[type=range]')).toHaveValue('14');
+  await expect(sheet.locator('.strength-value')).toHaveText('14 %');
   await expect(sheet.locator('input[type=range]')).toBeDisabled();
   await expect(sheet.locator('input[type=range]')).toHaveAttribute('aria-disabled', 'true');
 });
 
-test('a saved record from before the strength shows its pattern at 6 %; an out-of-range or non-numeric strength loads as 6 %', async ({ page }) => {
+test('a saved record from before the strength shows its pattern at 14 %; an out-of-range or non-numeric strength loads as 14 %', async ({ page }) => {
   await seedLibrary(page, documents, collections);
   await keepAppearance(page, { mode: 'light', palette: 'brief', banner: 'arcs' });
   await pixels(page);
-  expect(await opacityOf(shown(page))).toBe('0.06');
-  for (const bad of [0.5, 0.31, 0.01, -1, '0.1', null]) {
+  expect(await opacityOf(shown(page))).toBe('0.14');
+  for (const bad of [0.5, 0.41, 0.01, -1, '0.1', null]) {
     await keepAppearance(page, { mode: 'light', palette: 'brief', banner: 'arcs', backgroundStrength: bad });
     await pixels(page);
-    expect(await opacityOf(shown(page)), String(bad)).toBe('0.06');
+    expect(await opacityOf(shown(page)), String(bad)).toBe('0.14');
   }
 });
 
@@ -379,7 +379,7 @@ test('Home text drawn on the ground reads at 4.5:1 against the worst ground pixe
   await seedLibrary(page, documents, collections);
   const sheet = await openSettings(page);
   const maximum = Number(await sheet.locator('input[type=range]').getAttribute('max')) / 100;
-  expect(maximum).toBe(.3);
+  expect(maximum).toBe(.4);
   const worst: Record<string, string> = {};
   for (const strength of [Math.round((inkStart + .01) * 100) / 100, .2, maximum]) {
     for (const [name, record] of everyTheme) {
@@ -463,7 +463,7 @@ test('the ink deepens as the slider rises above T (8 %) and is whole at the maxi
     return (r + g + b) / 3;
   });
   const seen: number[] = [];
-  for (const value of ['8', '15', '20', '30']) { await slider.fill(value); await expect(sheet.locator('.strength-value')).toHaveText(`${value} %`); seen.push(await colour()); }
+  for (const value of ['8', '15', '25', '40']) { await slider.fill(value); await expect(sheet.locator('.strength-value')).toHaveText(`${value} %`); seen.push(await colour()); }
   expect(seen[1]).toBeLessThan(seen[0]);
   expect(seen[2]).toBeLessThan(seen[1]);
   expect(seen[3]).toBeLessThan(seen[2]);

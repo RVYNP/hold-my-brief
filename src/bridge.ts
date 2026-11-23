@@ -13,7 +13,7 @@ export type Saved = { locator: Locator; options: ReaderOptions; progress?: Progr
 export type Opened = { id: string; path: string; name: string; format: Format; bytes: Uint8Array; previousState?: Saved; warning?: string };
 export type OpenedMeta = Omit<Opened, 'bytes'>;
 export type State = { recents: Recent[]; window: WindowState; tabs: TabSession; warning?: string };
-export const imageFormats: Record<string, true> = { png: true, jpg: true, jpeg: true, webp: true, gif: true, avif: true, bmp: true };
+export const imageFormats: Record<string, true> = { png: true, jpg: true, jpeg: true, webp: true, gif: true, avif: true, bmp: true, svg: true };
 
 // Failed renders can be garbage-collected together with their pending file.
 const pendingFiles = new WeakMap<Opened, File>();

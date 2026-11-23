@@ -23,6 +23,8 @@ const titleCase = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 
 type Callbacks = {
   open: (path: string) => Promise<boolean>;
+  /** Opens a local file directly in a new tab (from the + menu's Open file… action). */
+  openFile?: () => void;
   /** Opens an image in place of the one showing (the image pager's step); a tab that already holds it is shown instead. */
   replace: (path: string) => Promise<boolean>;
   /** Gives a document a tab beside the one showing without showing it (⌘/Ctrl-click in the tree). */
@@ -90,6 +92,7 @@ const closeIcon = icon('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>');
 const plusIcon = icon('<path d="M5 12h14"/><path d="M12 5v14"/>');
 const menuIcon = icon('<path d="M4 6h16M4 12h16M4 18h16"/>').replace('width="15" height="15"', 'width="13" height="13" class="library-menu-icon"');
 const chevronIcon = icon('<path d="m6 9 6 6 6-6"/>').replace('width="15" height="15"', 'width="12" height="12" class="library-menu-icon"');
+const browseIcon = icon('<path d="M7 17 17 7"/><path d="M7 7h10v10"/>').replace('width="15" height="15"', 'width="12" height="12" class="library-title-arrow"');
 const listIcon = icon('<path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>');
 const gridIcon = icon('<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>');
 function savedPreference(key: string) { try { return localStorage.getItem(key); } catch { return null; } }
@@ -167,17 +170,20 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   const header = element('div', 'library-header'); const headerActions = element('div', 'library-header-actions');
   // Header, one line: the title and the count, then + (add files, sources; compact windows only: the icon rail has Add files) and, in the compact sheet, close.
   // The title is the button that opens the Library tab on All documents.
-  const heading = element('h2'); const titleButton = button('Library', undefined, 'title'); titleButton.className = 'library-title-button'; titleButton.title = 'Browse the whole library';
+  const heading = element('h2'); const titleButton = button('Library', undefined, 'title'); titleButton.className = 'library-title-button'; titleButton.title = 'Open Library tab (browse all documents)'; titleButton.insertAdjacentHTML('beforeend', browseIcon);
   const headingCount = element('span', 'library-title-count'); heading.append(titleButton, headingCount);
   const close = button('', 'Close library'); close.className = 'library-close'; close.innerHTML = closeIcon; close.title = 'Close library';
-  const plus = button('', 'Add files or manage sources', 'plus'); plus.className = 'library-plus'; plus.innerHTML = plusIcon; plus.title = 'Add files, manage sources'; plus.setAttribute('aria-haspopup', 'menu'); plus.setAttribute('aria-expanded', 'false');
+  const plus = button('', 'Add files or manage sources', 'plus'); plus.className = 'library-plus'; plus.innerHTML = plusIcon; plus.title = 'Open or add files, manage sources'; plus.setAttribute('aria-haspopup', 'menu'); plus.setAttribute('aria-expanded', 'false');
   headerActions.append(plus, close); header.append(heading, headerActions);
   // The Add files menu and the dialogs live beside the panel, not in it: the icon rail opens them while the panel is closed.
   const addMenu = element('div', 'library-item-menu library-add-menu'); addMenu.setAttribute('role', 'menu'); addMenu.hidden = true;
   const dialogHost = element('div', 'library-dialog-host');
+  const openLocal = button('Open file…', 'Open a file in a new tab'); openLocal.setAttribute('role', 'menuitem');
+  openLocal.onclick = () => { closeChromeMenu(false); callbacks.openFile?.(); };
+  const addSep = element('div', 'library-menu-sep'); addSep.setAttribute('role', 'separator');
   const add = button('Add files…', 'Add local documents or images'); const sourcesButton = button('Sources…', 'Index folders and manage source locations');
   for (const item of [add, sourcesButton]) item.setAttribute('role', 'menuitem');
-  addMenu.append(add, sourcesButton); (layout ?? root).append(addMenu, dialogHost);
+  addMenu.append(...(callbacks.openFile ? [openLocal, addSep] : []), add, sourcesButton); (layout ?? root).append(addMenu, dialogHost);
   dialogHost.addEventListener('keydown', event => { if (shortcutFor(event) !== 'command-palette') event.stopPropagation(); });
   const searchLabel = element('label', 'library-search-label', 'Search library');
   const search = element('input', 'library-search'); search.type = 'search'; search.placeholder = 'Title, tags, notes, folder…'; search.id = 'library-search'; search.autocomplete = 'off'; searchLabel.htmlFor = search.id;

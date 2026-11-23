@@ -101,8 +101,8 @@ test('a collection with sub-collections shows its own documents first, then one 
   await expect(heads).toHaveCount(2);
   await expect(heads.locator('.library-shelf-name')).toHaveText(['Languages', 'Creative apps']);
   await expect(heads.locator('.library-shelf-count')).toHaveText(['3', '2']);
-  // The tab and the scope row show display names; the stored names are untouched.
-  await expect(page.locator('#tab-list .tab[data-kind=library] .tab-title')).toHaveText('Reference');
+  // The pinned tab and the scope row show display names; the stored names are untouched.
+  await expect(page.locator('#library-pin .tab-title')).toHaveText('Reference');
   await expect(page.locator('.library-scope-label')).toHaveText('Reference');
   await expect(page.getByRole('button', { name: '1-languages', exact: true })).toHaveCount(0);
   // Headers sit above their tiles, in DOM order: shelf by shelf, so keyboard order follows.

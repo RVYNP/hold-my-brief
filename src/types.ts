@@ -2,7 +2,7 @@ import type { DocumentSearch, SearchHit, SearchOptions } from './search';
 import { ZOOM_MODEL, type ZoomLimits } from './zoom';
 import type { Anchor } from './zoom-anchor';
 
-export type ImageFormat = 'png' | 'jpg' | 'jpeg' | 'webp' | 'gif' | 'avif' | 'bmp';
+export type ImageFormat = 'png' | 'jpg' | 'jpeg' | 'webp' | 'gif' | 'avif' | 'bmp' | 'svg';
 export type Format = 'pdf' | 'epub' | 'md' | 'txt' | ImageFormat;
 export type Locator = { kind: Format; [key: string]: unknown };
 export type Position = {
