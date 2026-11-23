@@ -230,17 +230,18 @@ test('the filter is always under the header, narrows the tree as you type, highl
   expect(await focused(page)).toMatch(/^s:/);
 });
 
-test('the icon rail: Home, Add files, Library, Search, then Settings, in one group; each does one thing, and Library wears the fill while the panel is open', async ({ page }) => {
+test('the icon rail: Home, Add files, Library and Search at the top, Settings at the foot; each does one thing, and Library wears the fill while the panel is open', async ({ page }) => {
   await seed(page);
   const names = ['Home', 'Add files', 'Library', 'Search', 'Settings'];
   const buttons = iconRail(page).getByRole('button');
   await expect(buttons).toHaveText(names.map(() => ''));
   expect(await buttons.evaluateAll(list => list.map(button => button.getAttribute('aria-label')))).toEqual(names);
   expect(await buttons.evaluateAll(list => list.map(button => button.getAttribute('data-tip')))).toEqual(['Home', 'Add files', 'Library  Ctrl+B', 'Search  Ctrl+Shift+F', 'Settings']);
-  // Top to bottom, evenly stacked: Settings is directly under Search.
+  // Top to bottom: the four top icons evenly stacked, Settings apart from them at the foot.
   const ys = await buttons.evaluateAll(list => list.map(button => Math.round(button.getBoundingClientRect().y)));
   expect([...ys].sort((a, b) => a - b)).toEqual(ys);
-  expect(new Set(ys.slice(1).map((y, i) => y - ys[i]!)).size).toBe(1);
+  expect(new Set(ys.slice(1, 4).map((y, i) => y - ys[i]!)).size).toBe(1);
+  expect(ys[4]! - ys[3]!).toBeGreaterThan(100);
 
   // Library is the pressed icon while the panel is open, and collapses it; the filled tone is the accent-soft one.
   const fill = (name: string) => icon(page, name).evaluate(button => getComputedStyle(button).backgroundColor);

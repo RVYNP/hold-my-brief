@@ -260,7 +260,7 @@ document.addEventListener('pointerdown', down => {
   window.addEventListener('pointermove', move, true); window.addEventListener('pointerup', end, true); window.addEventListener('pointercancel', end, true);
 }, true);
 function fail(error: unknown) { notify(error instanceof Error ? error.message : String(error)); }
-function updateWindow(next: WindowState) { windowState = next; settingsSheet.showWindow(next); $<HTMLButtonElement>('caption-maximize').disabled = next.locked; }
+function updateWindow(next: WindowState) { windowState = next; settingsSheet.showWindow(next); rail.setWindow(next); $<HTMLButtonElement>('caption-maximize').disabled = next.locked; }
 function showPosition(p: Position, save = true) {
   const pane = activePane();
   pane.position = p;
@@ -566,6 +566,7 @@ const rail = createIconRail($('library-rail'), {
   view: view => library.showView(view),
   add: anchor => library.openAddMenu(anchor),
   settings: () => settingsSheet.open(),
+  ...(desktop ? { toggle: (which: 'pin' | 'lock') => void toggle(which) } : {}),
   moveSide: () => library.setSide(library.side() === 'left' ? 'right' : 'left'),
 });
 const library = createLibrary($('library-root'), {
