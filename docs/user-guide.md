@@ -327,8 +327,9 @@ reflow instead of zooming, so they have no zoom controls and no panning; their p
 in the palette (Ctrl+K), and the footer's position button (Go to) and Alt+← reach two of them.
 
 **Reflowable EPUB, Markdown and TXT: Contents, Pages or Scroll, text size.** A reflowable EPUB's pill reads **Contents** · **Pages | Scroll** · **A− 18 A+**.
-A Markdown or TXT document (an agent brief too) has no page flow, so its pill drops **Pages | Scroll**: **Contents** · **A− 18 A+**, and **Contents** only
-when the document has at least one heading (with none, the pill reads **A− 18 A+**). Everything below about **Contents** and the text size applies to all three.
+A Markdown or TXT document (an agent brief too) has no page flow, so its pill drops **Pages | Scroll**: **Contents** · **A− 18 A+**. **Contents** shows in
+all three only when the document has an outline (a contents list for an EPUB, at least one heading for Markdown and TXT); with none, the pill reads
+**A− 18 A+** (an EPUB keeps **Pages | Scroll**). Everything below about **Contents** and the text size applies to all three.
 **Contents** opens the contents list above the pill (Ctrl+K → Contents opens the same list). A chapter entry reads "Chapter 3:
 Working with Pointers": the number, then the title; text before the chapter number is dropped, and an entry with no chapter
 number keeps its own label. Entries keep the contents' nesting, show the page each
