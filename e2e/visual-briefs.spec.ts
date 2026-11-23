@@ -256,6 +256,19 @@ test('a selection that reaches the reader chrome sends only the document text', 
   expect(selected!.text).toBe(documentText);
   expect(sent!.text).toBe(documentText);
   expect(chrome(String(sent!.text))).toBe(false);
+  // Reading the selection must not change it: after the settled read, neither frames nor the poll's ticks may rewrite it or fire `selectionchange`.
+  const rewrites = await page.evaluate(async settle => {
+    let count = 0;
+    const proto = Selection.prototype as unknown as Record<string, (...args: unknown[]) => unknown>;
+    const original = ['removeAllRanges', 'addRange', 'setBaseAndExtent', 'removeRange'].map(name => [name, proto[name]!] as const);
+    for (const [name, fn] of original) proto[name] = function (this: Selection, ...args: unknown[]) { count++; return fn.apply(this, args); };
+    document.addEventListener('selectionchange', () => { count++; });
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await new Promise(resolve => setTimeout(resolve, settle));
+    for (const [name, fn] of original) proto[name] = fn;
+    return count;
+  }, SETTLE);
+  expect(rewrites).toBe(0);
 
   // A selection that starts in the document and ends in the footer, and one that starts in the footer and ends in the document,
   // yields the document part, and the selection stays.
