@@ -1857,7 +1857,7 @@ async function changeOptions(next: Partial<ReaderOptions>, hold: Hold | Spot | f
   try { await activePane().changeOptions(next, hold, pan, showPosition); } catch (error) { fail(error); }
 }
 /**
- * The Contents popover. A reflowable EPUB, whose pill carries the Contents button, opens it above the pill; any other document drops it from
+ * The Contents popover. A reflowable document (EPUB, Markdown, TXT), whose pill carries the Contents button, opens it above the pill; any other document drops it from
  * the toolbar. The entry the reader is in is marked, scrolled to the middle of the list and focused, so Enter goes there and the arrow keys move from it.
  */
 function openContents() {
