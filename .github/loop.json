@@ -3,5 +3,11 @@
   "ciOptionalPaths": [],
   "reviewNotes": ".github/loop/review-notes.md",
   "workerNotes": ".github/loop/worker-notes.md",
-  "maxWorkers": 3
+  "maxWorkers": 3,
+  "liveSmoke": {
+    "setup": ["npm", "ci", "--prefer-offline", "--no-audit", "--no-fund"],
+    "command": ["node", "scripts/hmb-smoke.mjs", "--build", "--json"],
+    "env": { "HMB_DEV_SUFFIX": "main", "CARGO_BUILD_JOBS": "4" },
+    "timeoutMinutes": 30
+  }
 }

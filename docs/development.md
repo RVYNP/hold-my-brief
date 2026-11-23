@@ -126,6 +126,29 @@ This checks empty app data and the native bundle, not Gatekeeper approval under 
 For an installed-app update, back up the existing app and complete data folder before replacement;
 verify the real library remains intact afterward. Never use the real data folder as a clean-install fixture.
 
+### Live agent-control smoke (dev app)
+
+CI never launches the macOS app, so nothing there proves the control socket or WKWebView. On a Mac,
+`scripts/dev-app.mjs` builds and runs a second copy, **Hold My Brief Dev** (`xyz.rpayton.holdmybrief.dev`),
+with its own data folder, WebKit storage, assistant keychain entries, control socket and single-instance lock, beside an installed copy
+that keeps running untouched:
+
+```bash
+node scripts/dev-app.mjs build      # dist-dev/Hold My Brief Dev.app, with hmb inside it
+npm run smoke:agent                 # reset, launch hidden, drive it through hmb, quit
+```
+
+The smoke starts from an empty data folder and checks: the control socket answers; `show` (Markdown, a PDF at a
+page) and `goto`, with their `tab` and `page` events; `splitRefused` in a compact window; `cmd`'s reply for pin
+changes; `brief --append` adding once; chart and SVG briefs opening; `hmb mcp` listing five tools and answering
+`hmb_events`; `close --briefs`; and that `events --follow` exits 1 when the app quits without relaunching it.
+`--gui` adds select-all and **Send selection to agent** with System Events keystrokes (it needs Accessibility
+permission and takes focus, so never run it unattended). `--keep` leaves the dev app running; then
+`eval "$(node scripts/dev-app.mjs env)"` points an `hmb` at it (`HMB_CONTROL_FILE`, `HMB_APP_BIN`). Set
+`HMB_DEV_SUFFIX` (for example `pr123`) to run several dev apps at once, each with its own identity, and
+`node scripts/dev-app.mjs reset` to remove one's data. The loop runs the smoke on every new `main` (see
+`liveSmoke` in `.github/loop.json`).
+
 Home and the library intentionally share card classes. Browser scenarios measuring the drawer must
 scope their tile selectors to `.library-documents`, rather than counting Home's tiles too.
 

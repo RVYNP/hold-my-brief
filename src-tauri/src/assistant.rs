@@ -6,7 +6,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::{sync::OnceLock, time::Duration};
 
-const SERVICE: &str = "xyz.rpayton.holdmybrief";
+/// The keychain service: the running app's bundle identifier, set once at startup. A build with another
+/// identifier (the dev app, `xyz.rpayton.holdmybrief.dev…`) never reads, overwrites or deletes the installed
+/// app's keys. The release build's identifier is the service its keys were always stored under.
+static SERVICE: OnceLock<String> = OnceLock::new();
+
+/// Files the API keys under `identifier`. Call once, before any key is read.
+pub fn set_service(identifier: &str) {
+    let _ = SERVICE.set(identifier.to_string());
+}
 const ANTHROPIC_VERSION: &str = "2023-06-01";
 const OPENROUTER_REFERER: &str = "https://github.com/RVYNP/hold-my-brief";
 const OPENROUTER_TITLE: &str = "Hold My Brief";
@@ -110,8 +118,11 @@ enum Endpoint {
 mod vault {
     use super::{Provider, SERVICE, STORE_FAILED};
 
+    const DEFAULT_SERVICE: &str = "xyz.rpayton.holdmybrief";
+
     fn entry(provider: Provider) -> Result<keyring::Entry, String> {
-        keyring::Entry::new(SERVICE, provider.account()).map_err(|_| STORE_FAILED.to_string())
+        let service = SERVICE.get().map_or(DEFAULT_SERVICE, String::as_str);
+        keyring::Entry::new(service, provider.account()).map_err(|_| STORE_FAILED.to_string())
     }
 
     pub fn load(provider: Provider) -> Result<Option<String>, String> {
