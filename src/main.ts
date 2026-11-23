@@ -568,6 +568,7 @@ const rail = createIconRail($('library-rail'), {
 });
 const library = createLibrary($('library-root'), {
   open: path => openPath(path),
+  openFile: () => { void command('open'); },
   replace: path => stepImage(path),
   error: fail,
   openBackground: doc => openInBackground(doc),
