@@ -705,6 +705,8 @@ fn main() {
             windows::reapply_window_chrome
         ])
         .setup(|app| {
+            // Before anything can read a key: the assistant's keychain items belong to this bundle identifier.
+            assistant::set_service(&app.config().identifier);
             let directory = app.path().app_local_data_dir()?;
             let store = Store::load(directory.join("state.json"));
             let control_enabled = store.saved.control_enabled;
