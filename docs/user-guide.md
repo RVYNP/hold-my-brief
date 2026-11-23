@@ -580,7 +580,7 @@ In windows 720 pixels wide and up, a slim **icon rail** (no box, only a soft was
 library **panel** opens beside it. Its icons stand at the top of the reading area, and an open document is fitted beside the rail, never under its icons. The icon rail has five bare icons in one group, from the top: **Home**, **Add files**, **Library**, **Search** and
 **Settings**. That is all of it: there is one way to the library. **Home** shows Home and is marked as the current page while Home is showing; it has no keyboard shortcut. **Library** (**Ctrl+B**) opens the panel or collapses it (the
 icon rail stays) and is filled with the accent tone while the panel is open. **Search** (**Ctrl+Shift+F**) opens the panel
-if it is closed and puts the cursor in its filter field. **Add files** opens a menu with **Add files…** and **Sources…**
+if it is closed and puts the cursor in its filter field. **Add files** opens a menu with **Open file…**, **Add files…** and **Sources…**
 (indexing folders), even when the panel is closed. **Settings** opens the Settings sheet (see Settings). Hover an icon for its name and
 shortcut; the names are shown only while the panel is closed, because an open panel already says where you are.
 
@@ -643,6 +643,7 @@ In compact windows the sheet covers the reading panel behind a scrim, cannot be 
 outside it or after you open a document from it. Escape closes it while focus is inside. It has the same header, filter
 field and sections; its title still opens the Library tab, and the sheet gets out of the way so you can see it.
 
+- **Open file…** (first in the **+** menu) does what **Ctrl+O** does: it opens a file in a tab.
 - **Add files** (in the **+** menu) selects several documents or images at once without opening them. Show a
   collection in the Library tab first to add new entries directly to it. New references with no picture of their own
   open the **intake** sheet (below).
