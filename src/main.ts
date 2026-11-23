@@ -904,6 +904,12 @@ async function reloadOpenFile(path: string) {
   else await load(() => chooseDocument(path), tab.name, { target: tab, ephemeral: tab.ephemeral, reload: true });
 }
 
+/** How a request opens what it names: a brief the way `reopen` does, a Library document (a `folder:<root>:<path>` id, as `status` reports it) the way the Library opens it, any other path as a file. */
+async function requestOpener(path: string) {
+  if (isBriefPath(path)) return () => readBriefDocument(path);
+  const inLibrary = (await getLibrary().catch(() => emptyLibrary())).documents.some(doc => doc.path === path);
+  return () => inLibrary ? openLibraryDocument(path) : chooseDocument(path);
+}
 const controlHost: ControlHost = {
   status: () => {
     const activeSide = focused;
@@ -950,7 +956,8 @@ const controlHost: ControlHost = {
     };
   },
   openFile: async (path, options) => {
-    const existing = known(path);
+    const open = await requestOpener(path), existing = known(path);
+    const brief = isBriefPath(path);
     // A split the window cannot make (too narrow or short, four panes already) opens the file as a tab instead, and the reply says why.
     let splitRefused: string | undefined;
     if (options.split && (!isSplit() || holder(path) === focused)) {
@@ -963,18 +970,21 @@ const controlHost: ControlHost = {
         openInSplit({ path, name: baseName(path), format: format === 'markdown' ? 'md' : format }, options.split);
         const tab = known(path);
         if (tab) {
-          if (options.ephemeral) tab.ephemeral = true;
-          const ok = await load(() => chooseDocument(path), tab.name, { target: tab, ephemeral: options.ephemeral, reload: Boolean(tab.reader) });
+          if (options.ephemeral || brief) tab.ephemeral = true;
+          if (brief) tab.brief = true;
+          const ok = await load(open, tab.name, { target: tab, ...(brief ? { brief: true } : {}), ephemeral: options.ephemeral || brief, reload: Boolean(tab.reader) });
           if (!ok) throw new Error(`Could not open ${path}`);
           const owner = holder(path) ?? focused;
           return { path: tab.path, title: tabTitle(tab), format: tab.format, paneId: owner.view.id, position: owner.pane.position?.label ?? '' };
         }
       }
     }
-    const ok = await load(() => chooseDocument(path), baseName(path), { target: existing, ephemeral: options.ephemeral, reload: Boolean(existing?.reader) });
+    const ok = await load(open, baseName(path), { target: existing, ...(brief ? { brief: true } : {}), ephemeral: options.ephemeral || brief, reload: Boolean(existing?.reader) });
     if (!ok) throw new Error(`Could not open ${path}`);
     const tab = known(path) ?? focused.shown;
     if (!tab) throw new Error(`Could not open ${path}`);
+    // A tab that was already open is reloaded where it is, which leaves the focus with the pane the user was in: the request asks for this tab.
+    if (existing) selectTab(tab.path);
     const owner = holder(tab.path) ?? focused;
     return { path: tab.path, title: tabTitle(tab), format: tab.format, paneId: owner.view.id, position: owner.pane.position?.label ?? '', ...(splitRefused ? { splitRefused } : {}) };
   },
