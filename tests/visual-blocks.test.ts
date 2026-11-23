@@ -12,7 +12,7 @@ describe('visual blocks', () => {
     }));
     expect(hbar).toContain('hmb-chart');
     expect(hbar).toContain('Latency');
-    expect(hbar).toContain('14ms');
+    expect(hbar).toContain('14 ms');
 
     const bar = renderChartBlock(JSON.stringify({ type: 'bar', data: [{ label: 'A', value: 5 }, { label: 'B', value: 10 }] }));
     expect(bar).toContain('<rect');
@@ -26,6 +26,23 @@ describe('visual blocks', () => {
     }));
     expect(metrics).toContain('hmb-metrics-grid');
     expect(metrics).toContain('1,143');
+  });
+
+  it('separates word units from the value and attaches symbol units', () => {
+    const labels = (unit?: string) => {
+      const html = renderChartBlock(JSON.stringify({ type: 'hbar', ...(unit === undefined ? {} : { unit }), data: [{ label: 'A', value: 510 }] })) ?? '';
+      return [...html.matchAll(/text-anchor="start"[^>]*>([^<]*)</g)].map((m) => m[1]);
+    };
+    expect(labels('lines')).toEqual(['510 lines']);
+    expect(labels('ms')).toEqual(['510 ms']);
+    expect(labels('MB')).toEqual(['510 MB']);
+    expect(labels('%')).toEqual(['510%']);
+    expect(labels('°')).toEqual(['510°']);
+    expect(labels('×')).toEqual(['510×']);
+    expect(labels('x')).toEqual(['510x']);
+    expect(labels()).toEqual(['510']);
+    const line = renderChartBlock(JSON.stringify({ type: 'line', unit: 'lines', data: [{ label: 'a', value: 1 }, { label: 'b', value: 4.2 }] })) ?? '';
+    expect(line).toMatch(/>\d[\d.,]* lines</);
   });
 
   it('returns null for invalid chart JSON so Markdown falls back to a normal code block', () => {
