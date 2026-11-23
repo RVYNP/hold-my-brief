@@ -123,8 +123,8 @@ Briefs have `path` `hold-my-brief:brief/<id>`. No document text other than the u
 #### Areas
 
 **Send selection to agent** needs text to select. For a scanned PDF, a chart or an image the user can run **Send area to agent**
-instead: the reading surface dims under a crosshair, they drag a box (smaller than 8 × 8 px, Esc, a click outside the pane or
-switching tabs cancels it) and the reader sends a picture of exactly that box. It works on PDF pages and images, not on Markdown,
+instead: a crosshair and a hint ("Drag a box to send · Esc to cancel") appear over the reading surface, they drag a box (smaller than
+8 × 8 px, Esc, a click outside the pane, switching tabs or a change in the pane's size cancels it) and the reader sends a picture of exactly that box. It works on PDF pages and images, not on Markdown,
 text or EPUB. Read the `image` file to see it.
 
 - The PNG is cut from the page's own pixels (a PDF at the resolution it is drawn at, an image at its natural one) and is at most 2048 px on
