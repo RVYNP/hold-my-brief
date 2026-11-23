@@ -1,5 +1,5 @@
 type Endpoints = readonly [Node, number, Node, number];
-let cached: { host: HTMLElement; endpoints: Endpoints[]; text: string } | undefined;
+const cached = new WeakMap<HTMLElement, { endpoints: Endpoints[]; text: string }>();
 const endpointsOf = (sel: Selection): Endpoints[] => Array.from({ length: sel.rangeCount }, (_, i) => {
   const range = sel.getRangeAt(i);
   return [range.startContainer, range.startOffset, range.endContainer, range.endOffset] as const;
@@ -20,7 +20,8 @@ export function hostSelectionText(host: HTMLElement, sel: Selection): string {
   if (!ranges.some(range => range.intersectsNode(host))) return '';
   if (ranges.every(range => host.contains(range.startContainer) && host.contains(range.endContainer))) return sel.toString();
   const endpoints = endpointsOf(sel);
-  if (cached?.host === host && sameEndpoints(cached.endpoints, endpoints)) return cached.text;
+  const entry = cached.get(host);
+  if (entry && sameEndpoints(entry.endpoints, endpoints)) return entry.text;
   // The selection reaches outside: read it back clipped to the host, then put the user's selection back as it was.
   const { anchorNode, anchorOffset, focusNode, focusOffset } = sel;
   const kept = ranges.map(range => range.cloneRange());
@@ -40,6 +41,6 @@ export function hostSelectionText(host: HTMLElement, sel: Selection): string {
   else for (const range of kept) sel.addRange(range);
   // The browser may normalise the restored endpoints, so remember the selection as it now reads too.
   const restored = endpointsOf(sel);
-  cached = { host, endpoints: sameEndpoints(restored, endpoints) ? endpoints : restored, text };
+  cached.set(host, { endpoints: sameEndpoints(restored, endpoints) ? endpoints : restored, text });
   return text;
 }

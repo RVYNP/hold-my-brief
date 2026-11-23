@@ -257,18 +257,20 @@ test('a selection that reaches the reader chrome sends only the document text', 
   expect(sent!.text).toBe(documentText);
   expect(chrome(String(sent!.text))).toBe(false);
   // Reading the selection must not change it: after the settled read, neither frames nor the poll's ticks may rewrite it or fire `selectionchange`.
-  const rewrites = await page.evaluate(async settle => {
+  const rewritesAfterRead = () => page.evaluate(async settle => {
     let count = 0;
     const proto = Selection.prototype as unknown as Record<string, (...args: unknown[]) => unknown>;
     const original = ['removeAllRanges', 'addRange', 'setBaseAndExtent', 'removeRange'].map(name => [name, proto[name]!] as const);
     for (const [name, fn] of original) proto[name] = function (this: Selection, ...args: unknown[]) { count++; return fn.apply(this, args); };
-    document.addEventListener('selectionchange', () => { count++; });
+    const listener = () => { count++; };
+    document.addEventListener('selectionchange', listener);
     await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     await new Promise(resolve => setTimeout(resolve, settle));
     for (const [name, fn] of original) proto[name] = fn;
+    document.removeEventListener('selectionchange', listener);
     return count;
   }, SETTLE);
-  expect(rewrites).toBe(0);
+  expect(await rewritesAfterRead()).toBe(0);
 
   // A selection that starts in the document and ends in the footer, and one that starts in the footer and ends in the document,
   // yields the document part, and the selection stays.
@@ -286,6 +288,19 @@ test('a selection that reaches the reader chrome sends only the document text', 
     expect(chrome(text)).toBe(false);
     expect(await page.evaluate(() => getSelection()!.isCollapsed)).toBe(false);
   }
+
+  // Two reader panes: each pane reads the same selection, and none of those reads may undo what another one cached.
+  await putBrief(page, 'second', '# Second\n\nAnother brief in the other pane.');
+  await pushBrief(page, 'r-second', 'second', 'right');
+  await expect(page.locator('.reader-host:not(.staging)')).toHaveCount(2);
+  const sends = (await recorded(page, 'send')).length;
+  await page.locator('.reader-host:not(.staging)').first().focus();
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.press('Control+Shift+Enter');
+  await expect.poll(async () => (await recorded(page, 'send')).length).toBe(sends + 1);
+  expect(String((await recorded(page, 'send')).at(-1)!.text)).toBe(documentText);
+  await page.waitForTimeout(SETTLE);
+  expect(await rewritesAfterRead()).toBe(0);
 });
 
 test('closing a brief records a tab event, and showing it recorded one before', async ({ page }) => {
