@@ -21,8 +21,14 @@ those paths as your worktree. This repository is public: never post absolute pat
   `npm run desktop`, `tauri dev`, `npm run test:native` or a built app with the default identifier
   `xyz.rpayton.holdmybrief`: the single-instance plugin hands the launch to the owner's running app, and
   its data folder is real. Never quit or kill that app, and never read or write
-  `~/Library/Application Support/xyz.rpayton.holdmybrief*`. Native checks are CI's job: list them under
-  **Not run**.
+  `~/Library/Application Support/xyz.rpayton.holdmybrief` (or any of its siblings other than your own dev one).
+  Never call the plain `hmb` on your PATH: it drives the owner's app.
+- **Your own dev app.** When the change touches the control socket, `hmb`, events, briefs or anything WKWebView
+  renders, run it live on a separate dev app: `export HMB_DEV_SUFFIX=pr<PR number>`, then
+  `node scripts/dev-app.mjs build` and `npm run smoke:agent` (add `--keep` to drive it further with the
+  `hmb` inside `dist-dev/`, after `eval "$(node scripts/dev-app.mjs env)"`). Never pass `--gui`: it types into
+  the frontmost window of the owner's desktop. Finish with `node scripts/dev-app.mjs reset`, and put the smoke
+  output in the PR body. Other native checks (Windows, the installer) are CI's job: list them under **Not run**.
 - Setup, once per worktree: `export TMPDIR=$(realpath "$TMPDIR")`, then `npm ci` (it applies the
   required foliate sandbox patch; never skip it).
 - Checks, each with its counts in the PR body:

@@ -14,6 +14,8 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:native": "node tests/browser/native-smoke.mjs && node tests/browser/raw-bytes-smoke.mjs",
+    "dev-app": "node scripts/dev-app.mjs",
+    "smoke:agent": "node scripts/hmb-smoke.mjs",
     "test:layout": "node tests/browser/text-layout.mjs",
     "postinstall": "node scripts/secure-foliate.mjs",
     "desktop": "tauri dev",

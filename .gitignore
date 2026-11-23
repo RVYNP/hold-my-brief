@@ -14,3 +14,4 @@ public/pdfjs/
 .DS_Store
 desktop.ini
 e2e-report.json
+dist-dev/
