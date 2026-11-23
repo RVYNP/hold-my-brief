@@ -5,6 +5,11 @@
   or removes a feature, unless the PR body has a line starting `Owner approved during freeze:` that names
   that work. On a fix PR, anything beyond the fix (extra options, polish, refactors it does not need) is a
   required change: take it out.
+  **Agent control is exempt (owner, 2026-11-23).** Features pass without that line when all of the PR's
+  work is agent control: the `hmb` CLI and `hmb mcp`, the control socket and its protocol, events,
+  briefs and their visual blocks (`chart`, `flow`, `svg`, callouts), the Agent control setting and the
+  commands that hand things to an agent, `skills/hold-my-brief/` and `docs/agent-control.md`. A PR that
+  also restyles or reorganises the rest of the UI is still under the freeze for that part.
 - This repository is **public** (MIT, downloads published). Anything committed is published: no
   in-copyright documents or scans (tests build their own small documents; README media come from
   public-domain works via `scripts/reshoot-media.mjs`), no machine paths, keys or personal data.
