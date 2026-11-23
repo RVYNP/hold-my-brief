@@ -76,7 +76,12 @@ test('the + menu lists Open file… first, then a separator; choosing it opens t
   const [chooser] = await Promise.all([page.waitForEvent('filechooser'), items.first().click()]);
   expect(chooser.isMultiple()).toBe(false);
   await expect(menu).toBeHidden();
-  await expect(plus).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('.library-plus')).toHaveAttribute('aria-expanded', 'false');
+  // In the compact window the sheet gives way to the document it opened, as it does for a document chosen from its own list.
+  await chooser.setFiles({ name: 'note.md', mimeType: 'text/markdown', buffer: Buffer.from('# Hi\n\nBody.\n') });
+  await expect(page.locator('#tab-list .tab-title')).toHaveText('note.md');
+  await expect(page.locator('#library-root')).toBeHidden();
+  await expect(page.locator('#workspace')).not.toHaveAttribute('inert', /.*/);
 });
 
 test('the Library tab\'s file-type chips filter, one at a time, for the types the library holds', async ({ page }) => {

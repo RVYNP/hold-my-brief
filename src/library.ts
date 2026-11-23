@@ -178,7 +178,7 @@ export function createLibrary(root: HTMLElement, callbacks: Callbacks): {
   const addMenu = element('div', 'library-item-menu library-add-menu'); addMenu.setAttribute('role', 'menu'); addMenu.hidden = true;
   const dialogHost = element('div', 'library-dialog-host');
   const openLocal = button('Open file…', 'Open a file in a new tab'); openLocal.setAttribute('role', 'menuitem');
-  openLocal.onclick = () => { closeChromeMenu(false); callbacks.openFile?.(); };
+  openLocal.onclick = () => { closeChromeMenu(false); if (!wide.matches && visible) setVisible(false, false, false); callbacks.openFile?.(); };
   const addSep = element('div', 'library-menu-sep'); addSep.setAttribute('role', 'separator');
   const add = button('Add files…', 'Add local documents or images'); const sourcesButton = button('Sources…', 'Index folders and manage source locations');
   for (const item of [add, sourcesButton]) item.setAttribute('role', 'menuitem');
