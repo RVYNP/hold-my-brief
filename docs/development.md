@@ -147,7 +147,8 @@ permission and takes focus, so never run it unattended). `--keep` leaves the dev
 `eval "$(node scripts/dev-app.mjs env)"` points an `hmb` at it (`HMB_CONTROL_FILE`, `HMB_APP_BIN`). Set
 `HMB_DEV_SUFFIX` (for example `pr123`) to run several dev apps at once, each with its own identity, and
 `node scripts/dev-app.mjs reset` to remove one's data. The loop runs the smoke on every new `main` (see
-`liveSmoke` in `.github/loop.json`).
+`liveSmoke` in `.github/loop.json`). While the screen is locked, WebKit renders nothing and a PDF never finishes
+opening, so the PDF and page checks report **skipped** then; the loop waits for an unlocked screen before its run.
 
 Home and the library intentionally share card classes. Browser scenarios measuring the drawer must
 scope their tile selectors to `.library-documents`, rather than counting Home's tiles too.
