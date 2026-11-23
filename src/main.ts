@@ -793,7 +793,7 @@ let warmed = false;
  * documents likely to be opened next (see `prefetch_documents`), so the OS file cache is warm for them. Nothing is copied or shown.
  */
 function warmLikelyDocuments() {
-  if (!desktop || warmed || sides.some(side => side.pane.cancelPending !== undefined)) return;
+  if (!desktop || warmed || restoring !== undefined || sides.some(side => side.pane.cancelPending !== undefined)) return;
   warmed = true;
   const reading = homeSections({ recents: lastOpened(), documents: homeLibrary.documents, titleOf: knownTitle, progress: homeProgress }).reading.map(tile => tile.path);
   const tabs = sides.flatMap(side => side.tabs.tabs).map(tab => ({ path: tab.path, loaded: Boolean(tab.reader), ephemeral: tab.ephemeral || tab.brief, problem: Boolean(tab.problem) }));
@@ -1550,7 +1550,7 @@ function restoreSplitView(session: TabSession, saved: SavedLayout): boolean {
     // Home or the Library page was covering the panes: it does again, once they have opened.
     const showing = session.active === null ? undefined : session.tabs[session.active];
     if (!showing) showCover('home'); else if (showing.path === LIBRARY_PATH) showCover('library');
-  })().catch(fail).finally(() => { if (restoring === run) restoring = undefined; });
+  })().catch(fail).finally(() => { if (restoring === run) { restoring = undefined; warmLikelyDocuments(); } });
   return true;
 }
 

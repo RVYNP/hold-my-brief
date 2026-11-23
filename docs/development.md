@@ -203,7 +203,7 @@ Never commit in-copyright scans; the README's Credits section names the document
 
 ## Read-ahead
 
-Once the first document of a launch has rendered, and while nothing else is loading, the reader calls the native command
+Once the first document of a launch has rendered, and while nothing else is loading (a split session waits until every pane has opened), the reader calls the native command
 `prefetch_documents` once with the other tabs restored from the session, the Continue reading items and the five most recent
 documents (`src/read-ahead.ts` chooses and orders the list; no duplicates, nothing already open and loaded). A single
 background thread (`src-tauri/src/prefetch.rs`, background QoS on macOS) reads each file to the end in 1 MiB chunks and drops
