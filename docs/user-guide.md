@@ -318,15 +318,17 @@ when it is already fitted), when you switch between one and two pages, or when y
 spot at the centre of the panel instead and may keep the page slid (see "Where a zoom stays", below). Text
 selection pauses while the hand is on, and a click without movement still follows links. Middle-button
 drag pans or slides in any mode. The hand turns off when a new document opens (and, in a fixed-layout EPUB, when switching between one and two pages rebuilds the view). Markdown and TXT
-reflow instead of zooming, so they have no pill and no panning; a reflowable EPUB has a pill of its own (next).
+reflow instead of zooming, so they have no zoom controls and no panning; their pill and a reflowable EPUB's hold reading controls instead (next).
 
 **More.** Every pill ends with a **More** (⋯) button. It opens a menu of the document's own actions: **Go to…** (Ctrl+G),
-**Contents** (when the document has an outline; a reflowable EPUB's pill has its own **Contents**, so the menu leaves it out),
+**Contents** (when the document has an outline; the pill of a reflowable EPUB, Markdown or TXT document has its own **Contents**, so the menu leaves it out),
 **Back after jump** (Alt+←), **Rotate page 90°** (page-based documents), **Two-page spread** (Ctrl+3) and **Cover page alone**
-(PDF and fixed-layout EPUB; it applies while two pages show). Escape, a choice or a press elsewhere closes the menu. A document with no pill
-(Markdown, TXT) reaches the same commands from the palette (Ctrl+K), the footer's position button (Go to) and Alt+←.
+(PDF and fixed-layout EPUB; it applies while two pages show). Escape, a choice or a press elsewhere closes the menu. The same commands are
+in the palette (Ctrl+K), and the footer's position button (Go to) and Alt+← reach two of them.
 
-**Reflowable EPUB: Contents, Pages or Scroll, text size.** Its pill reads **Contents** · **Pages | Scroll** · **A− 18 A+**.
+**Reflowable EPUB, Markdown and TXT: Contents, Pages or Scroll, text size.** A reflowable EPUB's pill reads **Contents** · **Pages | Scroll** · **A− 18 A+**.
+A Markdown or TXT document (an agent brief too) has no page flow, so its pill drops **Pages | Scroll**: **Contents** · **A− 18 A+**, and **Contents** only
+when the document has at least one heading (with none, the pill reads **A− 18 A+**). Everything below about **Contents** and the text size applies to all three.
 **Contents** opens the contents list above the pill (Ctrl+K → Contents opens the same list). A chapter entry reads "Chapter 3:
 Working with Pointers": the number, then the title; text before the chapter number is dropped, and an entry with no chapter
 number keeps its own label. Entries keep the contents' nesting, show the page each

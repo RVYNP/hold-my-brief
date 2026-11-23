@@ -97,7 +97,7 @@ test('switching tabs keeps each tab\'s place, zoom, hand tool and find text; a h
   await expect(page.locator('#find-bar')).toBeVisible();
   await expect(page.locator('#find-status')).toContainText(/of \d+/); // The search has run and moved to its first match, so this is the place to come back to.
   const notesPlace = (await page.locator('#position').textContent())!;
-  await expect(page.locator('#view-controls')).toBeHidden(); // Text has no zoom pill; the PDF's did not follow it here.
+  await expect(page.locator('#zoom-level')).toBeHidden(); // Text has no zoom control; the PDF's did not follow it here.
 
   await tab(page, 'plates.pdf').click(); await shown(page, 'plates.pdf');
   await expect(page.locator('#position')).toContainText('3');
