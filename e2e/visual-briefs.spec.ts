@@ -239,6 +239,42 @@ test('Send selection to agent records a send event from the palette and from its
   expect((await recorded(page, 'send'))[1]).toMatchObject({ text: 'Second paragraph, also worth sending.' });
 });
 
+test('a selection that reaches the reader chrome sends only the document text', async ({ page }) => {
+  await openAgentBrief(page, { enabled: true, running: true });
+  const documentText = await page.evaluate(() => { getSelection()!.selectAllChildren(document.querySelector('.reader-text-content')!); return getSelection()!.toString().trim(); });
+  expect(documentText).toContain('Second paragraph, also worth sending.');
+  const chrome = (text: string) => /[←→]|position/.test(text);
+
+  // Select all, as the user does: the footer's pager and position label are on the page but are not the document.
+  await page.evaluate(() => getSelection()!.removeAllRanges());
+  await page.locator('.reader-host:not(.staging)').focus();
+  await page.keyboard.press('ControlOrMeta+a');
+  await expect.poll(() => recorded(page, 'selection')).toHaveLength(1);
+  await page.keyboard.press('Control+Shift+Enter');
+  await expect.poll(() => recorded(page, 'send')).toHaveLength(1);
+  const [selected] = await recorded(page, 'selection'), [sent] = await recorded(page, 'send');
+  expect(selected!.text).toBe(documentText);
+  expect(sent!.text).toBe(documentText);
+  expect(chrome(String(sent!.text))).toBe(false);
+
+  // A selection that starts in the document and ends in the footer, and one that starts in the footer and ends in the document,
+  // yields the document part, and the selection stays.
+  for (const [index, [from, to]] of ([['text', 'footer'], ['footer', 'text']] as const).entries()) {
+    await page.locator('.reader-host:not(.staging)').focus();
+    await page.evaluate(([from, to]) => {
+      const text = document.querySelector('.reader-text-content p')!.firstChild!, next = document.querySelector('#next')!;
+      const point = (which: string) => which === 'text' ? [text, 4] as const : [next, 1] as const;
+      getSelection()!.setBaseAndExtent(...point(from), ...point(to));
+    }, [from, to] as const);
+    await page.keyboard.press('Control+Shift+Enter');
+    await expect.poll(() => recorded(page, 'send')).toHaveLength(index + 2);
+    const text = String((await recorded(page, 'send'))[index + 1]!.text);
+    expect(text.length).toBeGreaterThan(0);
+    expect(chrome(text)).toBe(false);
+    expect(await page.evaluate(() => getSelection()!.isCollapsed)).toBe(false);
+  }
+});
+
 test('closing a brief records a tab event, and showing it recorded one before', async ({ page }) => {
   await openAgentBrief(page, { enabled: true, running: true });
   await control(page, 'r-close', 'close', { id: 'plan' });
