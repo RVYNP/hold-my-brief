@@ -897,6 +897,7 @@ function show(next: Tab | undefined, refreshed = false) {
 
 /** The footer follows the focused pane: its arrows, position and progress line, or the resting text when it shows no document (or Home or the Library page covers it). */
 function syncFooter() {
+  closeStaleContents();
   const pane = focused.pane, live = Boolean(pane.reader) && !cover;
   for (const id of ['previous', 'position', 'next']) $<HTMLButtonElement>(id).disabled = !live;
   if (live && pane.position) showPosition(pane.position, false); else paintNoDocument();
@@ -1862,10 +1863,18 @@ async function changeOptions(next: Partial<ReaderOptions>, hold: Hold | Spot | f
  * The Contents popover. A reflowable document (EPUB, Markdown, TXT), whose pill carries the Contents button, opens it above the pill; any other document drops it from
  * the toolbar. The entry the reader is in is marked, scrolled to the middle of the list and focused, so Enter goes there and the arrow keys move from it.
  */
+let contentsFor: { side: Side; tab: Tab | undefined } | undefined;
+/** The list is filled once, for the document shown when it opened: it closes when the focused pane shows another document, none, or Home or the Library page covers it. */
+function closeStaleContents() {
+  const dialog = $<HTMLDialogElement>('contents');
+  if (!contentsFor || !dialog.open) { contentsFor = undefined; return; }
+  if (cover || focused !== contentsFor.side || focused.shown !== contentsFor.tab || !focused.pane.reader) { contentsFor = undefined; closeDialog(dialog); }
+}
 function openContents() {
   const dialog = $<HTMLDialogElement>('contents'), anchored = !$('view-controls').hidden && $('view-controls').classList.contains('is-reading');
   const current = fillContents($('outline-list'), activePane().reader?.outline() ?? [], activePane().reader?.currentOutline?.() ?? -1, item => { void activePane().reader?.goTo(item.target).then(() => closeDialog(dialog)).catch(fail); });
   showDialog('contents', anchored ? $('view-controls').getBoundingClientRect() : undefined);
+  contentsFor = { side: focused, tab: focused.shown };
   current?.focus({ preventScroll: true });
   current?.scrollIntoView({ block: 'center' });
 }
