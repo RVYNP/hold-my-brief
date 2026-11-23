@@ -124,6 +124,37 @@ describe('shortcut matching', () => {
   });
 });
 
+describe('Send selection to agent', () => {
+  const command = byId('send-to-agent');
+  const ready = { hasDocument: true, desktop: true, agent: { enabled: true, selection: true } };
+
+  it('is available with Agent control on and text selected', () => {
+    expect(unavailableReason(command, ready)).toBeUndefined();
+  });
+
+  it('says why it is not: no selection, Agent control off, or no desktop app', () => {
+    expect(unavailableReason(command, { ...ready, agent: { enabled: true, selection: false } })).toBe('Select some text first');
+    expect(unavailableReason(command, { ...ready, agent: { enabled: false, selection: true } })).toBe('Turn on Agent control in Settings first');
+    expect(unavailableReason(command, { hasDocument: true, desktop: true })).toBe('Turn on Agent control in Settings first');
+    expect(unavailableReason(command, { ...ready, desktop: false })).toBe('Available in the desktop app');
+  });
+
+  it('is reached by Ctrl+Shift+Enter and ⌘+Shift+Enter, and by nothing plainer', () => {
+    expect(shortcutFor(event('Enter', { ctrlKey: true, shiftKey: true }))).toBe('send-to-agent');
+    expect(shortcutFor(event('Enter', { metaKey: true, shiftKey: true }))).toBe('send-to-agent');
+    expect(shortcutFor(event('Enter', { ctrlKey: true }))).toBeUndefined();
+    expect(shortcutFor(event('Enter', { shiftKey: true }))).toBeUndefined();
+    expect(command.shortcut).toBe('Ctrl Shift Enter');
+  });
+
+  it('is in the palette search and the shortcut reference of the desktop app only', () => {
+    expect(searchCommands('send selection')[0]?.id).toBe('send-to-agent');
+    const rows = (desktop: boolean) => shortcutReference({ desktop }).flatMap(section => section.rows.map(row => row.label));
+    expect(rows(true)).toContain('Send selection to agent');
+    expect(rows(false)).not.toContain('Send selection to agent');
+  });
+});
+
 describe('command availability', () => {
   const open = { hasDocument: true, desktop: true };
 
