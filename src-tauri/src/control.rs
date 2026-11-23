@@ -95,7 +95,7 @@ impl EventLog {
         Ok(seq)
     }
 
-    /// Drops every kept event (the seq counter stays) and wakes waiters so they return empty.
+    /// Drops every kept event (the seq counter stays); a waiting `query` keeps waiting for new events until its wait ends.
     pub fn clear(&self) {
         if let Ok(mut state) = self.state.lock() {
             state.events.clear();
