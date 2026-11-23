@@ -1,5 +1,5 @@
 import './style.css';
-import { defaultOptions, type Position, type ReaderAdapter, type ReaderOptions } from './types';
+import { defaultOptions, type Format, type Position, type ReaderAdapter, type ReaderOptions } from './types';
 import { nudgeFor, parsePlacement, placementOf, resolvePlacement, serialisePlacement, type Point } from './view-controls-position';
 import { desktop, native, state, browserFile, persist, openExternal, confirmDocument, touchDocument, openLibraryDocument, chooseDocument, getLibrary, imageFormats, locateLibraryDocument, saveTabs, type Opened, type Recent, type WindowState } from './bridge';
 import { emptyLibrary, type Library } from './catalog-types';
@@ -313,6 +313,8 @@ function paintZoom(pane: Pane<Tab>, root: ParentNode) {
   if (into) into.disabled = !canZoomIn;
   return { current, limits, canZoomIn, canZoomOut };
 }
+/** Whether the document reflows (reflowable EPUB, Markdown, TXT), so its pill holds the reading controls rather than the zoom ones. */
+const isReflowable = (format: Format, mode: ReaderAdapter['mode']) => format === 'md' || format === 'txt' || format === 'epub' && mode !== 'fixed';
 /** Syncs the view-controls pill, page-layout toggles and the title subtitle with the current position, zoom, layout and hand-tool state. */
 function updateViewControls() {
   const pane = activePane(), { reader, active, options, position } = pane;
@@ -349,11 +351,11 @@ function updateViewControls() {
   $('page-strip-toggle').setAttribute('aria-pressed', String(stripWanted));
   $('page-strip-toggle').title = hidden ? `Page previews (Ctrl 4) · ${hidden}` : 'Page previews (Ctrl 4)';
   if (hidden) $('page-strip-toggle').setAttribute('aria-description', hidden); else $('page-strip-toggle').removeAttribute('aria-description');
-  // A reflowable EPUB has no page to zoom or pan: its pill holds the reading controls instead.
-  const reflowable = active.format === 'epub' && reader.mode !== 'fixed';
+  // Reflowable text (EPUB, Markdown, TXT) has no page to zoom or pan: its pill holds the reading controls instead.
+  const reflowable = isReflowable(active.format, reader.mode);
   $('view-controls').classList.toggle('is-reading', reflowable);
   $('view-controls').hidden = !pan.pannable && !reflowable;
-  if (reflowable) readingControls.update({ flow: reader.flow?.() ?? 'paginated', fontSize: options.fontSize });
+  if (reflowable) readingControls.update({ flow: active.format === 'epub' ? reader.flow?.() ?? 'paginated' : undefined, hasContents: reader.outline().length > 0, fontSize: options.fontSize });
   if (pill.hidden) moreMenu.close(false);
   if (!pan.pannable) { zoomMenu.close(); return; }
   const { limits, canZoomIn, canZoomOut } = paintZoom(pane, pill);
@@ -391,8 +393,8 @@ function documentActions(): MenuEntry[] {
   const entry = (label: string, id: string, extra: Partial<MenuEntry> = {}): MenuEntry => ({ label, run: () => { (moreByPointer ? activePane().host : moreButton)?.focus(); void command(id).catch(fail); }, ...extra });
   return [
     entry('Go to…', 'goto', { keys: 'Ctrl G' }),
-    // A reflowable book's pill has its own Contents button.
-    ...(reader.outline().length && !(active.format === 'epub' && !fixed) ? [entry('Contents', 'outline')] : []),
+    // A reflowable document's pill has its own Contents button.
+    ...(reader.outline().length && !isReflowable(active.format, reader.mode) ? [entry('Contents', 'outline')] : []),
     entry('Back after jump', 'back', { keys: 'Alt ←' }),
     ...(fixed ? [entry('Rotate page 90°', 'rotate')] : []),
     ...(spreads ? [entry('Two-page spread', 'spread', { keys: 'Ctrl 3', checked: spread })] : []),
@@ -1855,7 +1857,7 @@ async function changeOptions(next: Partial<ReaderOptions>, hold: Hold | Spot | f
   try { await activePane().changeOptions(next, hold, pan, showPosition); } catch (error) { fail(error); }
 }
 /**
- * The Contents popover. A reflowable EPUB, whose pill carries the Contents button, opens it above the pill; any other document drops it from
+ * The Contents popover. A reflowable document (EPUB, Markdown, TXT), whose pill carries the Contents button, opens it above the pill; any other document drops it from
  * the toolbar. The entry the reader is in is marked, scrolled to the middle of the list and focused, so Enter goes there and the arrow keys move from it.
  */
 function openContents() {
