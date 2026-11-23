@@ -225,7 +225,8 @@ test('forced colours and increased contrast leave every token in the block\'s in
       return style.color !== ink || style.fontStyle !== 'normal' || !/, 0\)$/.test(style.backgroundColor);
     }).length;
   });
-  expect(await flat()).toBeGreaterThan(10);
+  // Highlighting lands block by block after the blocks appear; wait for all of it.
+  await expect.poll(flat).toBeGreaterThan(10);
   await page.emulateMedia({ contrast: 'more' });
   expect(await flat()).toBe(0);
   await page.emulateMedia({ contrast: 'no-preference', forcedColors: 'active' });
