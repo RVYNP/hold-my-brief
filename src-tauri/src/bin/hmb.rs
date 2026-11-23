@@ -1036,7 +1036,8 @@ mod tests {
         }
         let cwd = env::current_dir().unwrap();
         assert_eq!(absolutize("notes/x.md"), cwd.join("notes/x.md").to_string_lossy().as_ref());
-        assert_eq!(absolutize("/abs/x.md"), "/abs/x.md");
+        let abs = cwd.join("abs").join("x.md").to_string_lossy().into_owned();
+        assert_eq!(absolutize(&abs), abs);
     }
 
     #[test]
