@@ -234,6 +234,17 @@ test('a layout change while the overlay is up cancels it and sends nothing', asy
   expect(await areas(page)).toEqual([]);
 });
 
+test('hmb cmd send-area-to-agent is refused and starts nothing', async ({ page }) => {
+  await openDocument(page, 'plan.pdf', 'pdf', pagedPdf(3));
+  await page.evaluate(() => window.__mockEmit('control-request', { id: 'r-area', method: 'cmd', params: { command: 'send-area-to-agent' } }));
+  await expect.poll(() => page.evaluate(() => window.__mockReplies.some(reply => reply.id === 'r-area'))).toBe(true);
+  const reply = await page.evaluate(() => window.__mockReplies.find(reply => reply.id === 'r-area')!);
+  expect(reply.ok).toBe(false);
+  expect(reply.error).toBe('Only the user can send an area.');
+  await expect(overlay(page)).toHaveCount(0);
+  expect(await areas(page)).toEqual([]);
+});
+
 test('scrolling, zooming and page keys do nothing while the overlay is up', async ({ page }) => {
   await openDocument(page, 'plan.pdf', 'pdf', pagedPdf(3));
   await page.keyboard.press('Control+2'); // Fit width: the page is taller than the surface, so it scrolls.
