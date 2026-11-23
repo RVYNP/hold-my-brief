@@ -201,6 +201,20 @@ The panes stills (`panes-1b-dark.png`: three panes, an EPUB above a Markdown fil
 
 Never commit in-copyright scans; the README's Credits section names the documents in use.
 
+## Read-ahead
+
+Once the first document of a launch has rendered, and while nothing else is loading, the reader calls the native command
+`prefetch_documents` once with the other tabs restored from the session, the Continue reading items and the five most recent
+documents (`src/read-ahead.ts` chooses and orders the list; no duplicates, nothing already open and loaded). A single
+background thread (`src-tauri/src/prefetch.rs`, background QoS on macOS) reads each file to the end in 1 MiB chunks and drops
+the bytes, so the OS file cache is warm when the document is opened: on a network share the first read is nearly all of a slow
+first open, and a cached file opens as fast as a local copy. Nothing is copied, kept or sent anywhere, and there is no setting or
+visible UI. Each path resolves exactly like `read_document_bytes` just before its turn, so a path the reader may not open is
+skipped without an error. Files over the document size limit are skipped, a session reads at most 2 GiB, a file is read at most once per
+session, and a new call replaces the queue that has not started (the file being read finishes). To see it work, watch the file's
+disk or network reads (Activity Monitor, or `fs_usage -f filesys` on macOS) after launch: the likely documents are read once,
+in the background, before anything is opened.
+
 ## Security model
 
 Source files remain unchanged. Document scripts and automatic external-resource requests are

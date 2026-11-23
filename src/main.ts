@@ -27,6 +27,7 @@ import { createZoomGesture } from './zoom-gesture';
 import type { Hold, Spot } from './zoom-anchor';
 import { createZoomMenu } from './zoom-menu';
 import { createProgressPreview } from './progress-preview';
+import { readAheadPaths } from './read-ahead';
 import { LIBRARY_PATH, TabList, hibernationAcross, legacySplit, mergeLists, moveAcross, restorePanes, splitOff, splitOffRest, type SavedLayout, type SavedTab, type TabSession } from './tabs';
 import { createTabStrip, type TabStrip, type TabView } from './tab-strip';
 import { titleHints } from './tab-titles';
@@ -773,6 +774,7 @@ async function load(open: () => Promise<Opened | null>, label = 'document', { ta
       if (tab.format === 'epub') void homeThumbs.loadEpub(tab.path, () => Boolean(known(tab.path))).then(() => paintTabs());
       if (desktop) homeRecents = (await state()).recents; // The store moves the opened document to the front.
       await library.refresh(doc.path).catch(fail);
+      if (!reload) warmLikelyDocuments();
     }
     return true;
   } catch (error) {
@@ -783,6 +785,20 @@ async function load(open: () => Promise<Opened | null>, label = 'document', { ta
     return false;
   }
   finally { candidate?.destroy(); staging?.remove(); if (pane.endLoad(token)) { $('loading').hidden = true; syncPageStrip(); paintTabState(); } }
+}
+
+let warmed = false;
+/**
+ * Once per launch, after the first document has rendered and while nothing else is loading: asks the native side to read the
+ * documents likely to be opened next (see `prefetch_documents`), so the OS file cache is warm for them. Nothing is copied or shown.
+ */
+function warmLikelyDocuments() {
+  if (!desktop || warmed || sides.some(side => side.pane.cancelPending !== undefined)) return;
+  warmed = true;
+  const reading = homeSections({ recents: lastOpened(), documents: homeLibrary.documents, titleOf: knownTitle, progress: homeProgress }).reading.map(tile => tile.path);
+  const tabs = sides.flatMap(side => side.tabs.tabs).map(tab => ({ path: tab.path, loaded: Boolean(tab.reader), ephemeral: tab.ephemeral || tab.brief, problem: Boolean(tab.problem) }));
+  const paths = readAheadPaths({ tabs, reading, recents: homeRecents.map(recent => recent.path), skip: path => path === LIBRARY_PATH });
+  if (paths.length) void native('prefetch_documents', { paths }).catch(() => undefined);
 }
 
 /** Writes what `side`'s pane holds of the tab it shows back into the tab, and saves its place. `side` is the focused one: the hand tool, the page strip and the find bar are its. */

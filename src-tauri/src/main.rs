@@ -7,6 +7,7 @@ mod windows;
 mod catalog;
 mod folder_index;
 mod thumbnails;
+mod prefetch;
 
 use serde::Serialize;
 use serde_json::Value;
@@ -173,6 +174,22 @@ async fn read_document_bytes(path: String, app: AppHandle) -> Result<RawBytes, S
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// How `prefetch_documents` finds a file: exactly as `read_document_bytes` does, asked just before the file is read.
+fn prefetch_resolver(shared: Shared) -> impl Fn(&str) -> Result<PathBuf, String> + Send + 'static {
+    move |path| {
+        let store = shared.lock().map_err(|_| "Reading state is unavailable")?;
+        resolve_readable(&store, path)
+    }
+}
+
+/// Warms the OS file cache for documents the reader is likely to open next. Returns at once; one background thread reads
+/// the files in order and drops the bytes. A document the reader may not open, or that is missing, is skipped without an error.
+/// A new call replaces the queue that has not started yet.
+#[tauri::command]
+fn prefetch_documents(paths: Vec<String>, app: AppHandle) {
+    app.state::<Arc<prefetch::Prefetch>>().submit(paths, prefetch_resolver(app.state::<Shared>().inner().clone()), MAX_DOCUMENT);
 }
 
 fn resolve_original(store: &Store, library_path: &str) -> Result<PathBuf, String> {
@@ -671,6 +688,7 @@ fn main() {
             locate_library_document,
             open_library_document,
             read_document_bytes,
+            prefetch_documents,
             thumbnails::read_library_thumbnail,
             thumbnails::put_library_thumbnail,
             thumbnails::library_thumbnail_index,
@@ -711,6 +729,7 @@ fn main() {
             let store = Store::load(directory.join("state.json"));
             let control_enabled = store.saved.control_enabled;
             let shared = Arc::new(Mutex::new(store));
+            app.manage(Arc::new(prefetch::Prefetch::default()));
             app.manage(shared.clone());
             let bridge = control::ControlBridge::new(app.handle(), &directory);
             app.manage(bridge.clone());
@@ -1029,5 +1048,35 @@ mod tests {
             assert_eq!(resolve_readable(&store, path), Err(crate::state::NOT_AUTHORIZED.to_string()), "{path}");
             assert_eq!(store.authorized_file(path), Err(crate::state::NOT_AUTHORIZED.to_string()), "{path}");
         }
+    }
+
+    #[test]
+    fn read_ahead_reads_what_read_document_bytes_would_serve_and_nothing_else() {
+        let dir = tempfile::tempdir().unwrap();
+        let known = dir.path().join("known.pdf");
+        let stranger = dir.path().join("stranger.pdf");
+        let missing = dir.path().join("missing.pdf");
+        fs::write(&known, vec![1u8; 4096]).unwrap();
+        fs::write(&stranger, vec![2u8; 8192]).unwrap();
+        let known = fs::canonicalize(&known).unwrap();
+        let stranger = fs::canonicalize(&stranger).unwrap();
+        let mut store = Store::load(dir.path().join("state.json"));
+        store.saved.recents = vec![recent_at(&known)];
+        store.rebuild_authorized();
+        let name = |path: &Path| path.to_string_lossy().into_owned();
+        // The two commands agree on every path.
+        assert!(resolve_readable(&store, &name(&known)).is_ok());
+        assert!(resolve_readable(&store, &name(&stranger)).is_err());
+        let shared: Shared = Arc::new(Mutex::new(store));
+        let prefetch = prefetch::Prefetch::default();
+        assert!(prefetch.enqueue(vec![name(&stranger), name(&missing), name(&known)]));
+        prefetch.drain(prefetch_resolver(shared.clone()), MAX_DOCUMENT);
+        assert_eq!(prefetch.bytes_read(), 4096, "only the authorized document was read");
+        // Access taken away after the call is honoured when the file's turn comes.
+        shared.lock().unwrap().remove_recent(&name(&known)).unwrap();
+        let again = prefetch::Prefetch::default();
+        assert!(again.enqueue(vec![name(&known)]));
+        again.drain(prefetch_resolver(shared), MAX_DOCUMENT);
+        assert_eq!(again.bytes_read(), 0);
     }
 }
