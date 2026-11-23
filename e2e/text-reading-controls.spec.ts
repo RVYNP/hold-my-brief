@@ -35,6 +35,21 @@ test('Contents opens the Markdown outline above the pill and goes to the heading
   await expect(dialog).toBeHidden();
 });
 
+test('Contents closes, focus in the reader, when another document is shown; scrolling the same one leaves it open', async ({ page }) => {
+  await openText(page, 'guide.md', 'text/markdown', `# Guide\n\n${body}\n\n## Details\n\n${body}\n`);
+  const dialog = page.locator('#contents');
+  await page.locator('#view-contents').click();
+  await expect(dialog).toBeVisible();
+  await page.locator('.reader-host:not(.tab-hidden)').first().evaluate(host => { const scroller = [host, ...host.querySelectorAll('*')].find(el => el.scrollHeight > el.clientHeight + 50); scroller?.scrollBy(0, 200); });
+  await page.waitForTimeout(300);
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('.outline-entry')).toHaveText(['Guide', 'Details']);
+  await page.locator('#file-input').setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from(body) });
+  await expect(page.locator('#filename')).toHaveText('notes.txt');
+  await expect(dialog).toBeHidden();
+  await expect(page.locator('.reader-host:focus, .reader-host:focus-within').first()).toBeAttached();
+});
+
 test('A+ and A− change the Markdown text size, within the limits of the Appearance setting', async ({ page }) => {
   await openText(page, 'guide.md', 'text/markdown', `# Guide\n\n${body}\n`);
   const size = page.locator('#text-size'), larger = page.locator('#text-larger'), smaller = page.locator('#text-smaller');
