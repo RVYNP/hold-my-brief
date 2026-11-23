@@ -402,7 +402,7 @@
 .library-add-menu { position: fixed; z-index: 40; }
 .library-dialog-host { display: contents; }
 
-/* Icon rail: from 720 px up, a 36 px strip (no box: an edge wash implies it) of five bare icons, Home, Add files, Library, Search and Settings, with a 1 px hairline on its inner edge. It overlays the reading panel's
+/* Icon rail: from 720 px up, a 36 px strip (no box: an edge wash implies it) of bare icons, Home, Add files, Library and Search at the top and Settings at the foot (with Pinned on top and Size locked chips above it while those are on), with a 1 px hairline on its inner edge. It overlays the reading panel's
    edge while the panel is closed (--workspace-clear keeps the page's furniture off it) and stands beside the docked panel when it is open;
    Library wears the accent-soft fill while the panel is open. */
 .icon-rail { display: none; }
@@ -421,7 +421,10 @@
   /* The toolbar's library button is the compact window's door; here the icon rail is. */
   #library-toggle { display: none; }
 }
-.icon-rail-group { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.icon-rail-group, .icon-rail-foot { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+/* Settings stands at the rail's foot; the Pinned on top and Size locked chips above it exist only while that window state is on. */
+.icon-rail-foot { margin-top: auto; }
+.icon-rail-button[hidden] { display: none; }
 .icon-rail-button { position: relative; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--muted); }
 .icon-rail-button:hover { background: var(--hover-subtle); color: var(--fg); }
 .icon-rail-button[aria-pressed=true] { background-color: var(--accent-soft); background-image: var(--sheen-wash); color: var(--accent-ink); }

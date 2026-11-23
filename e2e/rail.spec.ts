@@ -1,7 +1,8 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { pagedPdf } from './paged-pdf';
 import { chooseLibrarySide } from './library-controls';
-import { openSettings } from './settings-controls';
+import { openSettings, runFromPalette } from './settings-controls';
+import { mockDesktop } from './desktop-mock';
 import { seedLibrary, type FixtureDocument } from './home-fixture';
 
 const open = (page: Page, name: string) => page.locator('#file-input').setInputFiles({ name, mimeType: 'text/plain', buffer: Buffer.from(`${name}\n\nBody of ${name}.\n`) });
@@ -169,12 +170,12 @@ test('the rail has exactly five buttons; the library side is moved from Settings
   await expect(rail).toBeVisible();
   await expect(rail).toHaveAttribute('data-library-side', 'left');
 
-  // Home, Add files, Library, Search, Settings in one group, no spacer: no Favorites, Collections and no side button.
+  // Home, Add files, Library, Search at the top and Settings at the foot: no Favorites, Collections and no side button, and no chip while the window is not pinned or locked.
   const buttons = rail.getByRole('button');
   expect(await buttons.evaluateAll(list => list.map(button => button.getAttribute('aria-label')))).toEqual(['Home', 'Add files', 'Library', 'Search', 'Settings']);
   const ys = await buttons.evaluateAll(list => list.map(button => { const box = button.getBoundingClientRect(); return [Math.round(box.y), Math.round(box.y + box.height)]; }));
   expect(ys.map(([top]) => top)).toEqual([...ys.map(([top]) => top)].sort((a, b) => a - b));
-  expect(ys[4]![0]! - ys[3]![1]!).toBeLessThan(10); // Settings sits directly under Search
+  expect(ys[4]![0]! - ys[3]![1]!).toBeGreaterThan(100); // Settings is anchored at the foot, apart from the top group
   expect(await page.getByRole('button', { name: /Move library/ }).count()).toBe(0);
 
   // Settings holds the side (Library › Left | Right), on the stored setting.
@@ -355,7 +356,7 @@ test('in a compact window the page strip also ends above the footer, and the pil
 });
 
 for (const side of ['left', 'right'] as const) {
-  test(`library on the ${side}: the rail has five bare buttons, Home first, and a 1 px hairline on its inner edge`, async ({ page }) => {
+  test(`library on the ${side}: the rail has five bare buttons, Home first with Settings at the foot, and a 1 px hairline on its inner edge`, async ({ page }) => {
     await page.setViewportSize({ width: 1080, height: 760 });
     await page.goto('/');
     await expect(page.locator('#home-tab, #tab-add')).toHaveCount(0);
@@ -363,12 +364,13 @@ for (const side of ['left', 'right'] as const) {
     const rail = page.locator('#library-rail'), buttons = rail.getByRole('button');
     await expect(buttons).toHaveText(['', '', '', '', '']);
     expect(await buttons.evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label')))).toEqual(['Home', 'Add files', 'Library', 'Search', 'Settings']);
-    // No box: the group and the rail are transparent and unbordered, and the buttons sit in one group with no spacer between Search and Settings.
+    // No box: the group and the rail are transparent and unbordered, and the four top buttons sit in one group, 4 px apart, and Settings stands apart at the foot.
     const group = rail.locator('.icon-rail-group');
     await expect(group).toHaveCount(1);
     expect(await group.evaluate(node => { const style = getComputedStyle(node); return { fill: style.backgroundColor, border: style.borderTopWidth + style.borderRightWidth + style.borderBottomWidth + style.borderLeftWidth }; })).toEqual({ fill: 'rgba(0, 0, 0, 0)', border: '0px0px0px0px' });
     const boxes = await buttons.evaluateAll(nodes => nodes.map(node => { const box = node.getBoundingClientRect(); return [box.top, box.bottom]; }));
-    for (let i = 1; i < boxes.length; i++) expect(boxes[i]![0] - boxes[i - 1]![1]).toBe(4);
+    for (let i = 1; i < 4; i++) expect(boxes[i]![0] - boxes[i - 1]![1]).toBe(4);
+    expect(boxes[4]![0] - boxes[3]![1]).toBeGreaterThan(100);
     // The hairline: 1 px wide, the theme's hairline colour, the window's height below the toolbar, on the edge that faces the content.
     const line = await rail.evaluate(node => {
       const style = getComputedStyle(node, '::after'), at = node.getBoundingClientRect();
@@ -400,4 +402,124 @@ test('Home on the rail shows Home from a document tab and is marked current; cho
   await page.locator('#tab-list .tab', { hasText: 'a.txt' }).click();
   await expect(home).not.toHaveAttribute('aria-current', 'page');
   await shown(page, 'a.txt');
+});
+
+// The window state the desktop mock keeps, as Pinned on top and Size locked chips above Settings at the rail's foot.
+const windowState = (page: Page) => page.evaluate(() => window.__mockWindow);
+
+test('desktop: Pinned on top and Size locked chips show only while on, follow every route, and clicking one turns it off like the Settings switch', async ({ page }) => {
+  await mockDesktop(page);
+  await page.setViewportSize({ width: 1080, height: 680 });
+  await page.goto('/');
+  const rail = page.locator('#library-rail');
+  const pin = rail.getByRole('button', { name: 'Pinned on top' }), lock = rail.getByRole('button', { name: 'Size locked' });
+  await expect(rail).toBeVisible();
+  await expect(pin).toBeHidden(); await expect(lock).toBeHidden();
+
+  // Settings is the rail's last button, not the top group's.
+  expect(await rail.locator('.icon-rail-group .icon-rail-button').evaluateAll(nodes => nodes.map(node => (node as HTMLElement).dataset.rail))).toEqual(['home', 'add', 'library', 'search']);
+
+  // The shortcut pins: the chip appears, pressed, with a tooltip that says how to undo it and the shortcut.
+  await page.keyboard.press('Control+Shift+T');
+  await expect(pin).toBeVisible();
+  await expect(pin).toHaveAttribute('aria-pressed', 'true');
+  await expect(pin).toHaveAttribute('data-tip', 'Pinned on top — click to unpin  Ctrl+Shift+T');
+  await expect(lock).toBeHidden();
+  // Clicking it unpins, through the same path as the Settings switch: the chip hides, the mock agrees, and the switch is off.
+  await pin.click();
+  await expect(pin).toBeHidden();
+  expect((await windowState(page)).pinned).toBe(false);
+  let sheet = await openSettings(page);
+  await expect(sheet.getByRole('switch', { name: 'Keep on top' })).toHaveAttribute('aria-checked', 'false');
+
+  // The Settings switch turns it on, the chip follows; the palette turns the lock on.
+  await sheet.getByRole('switch', { name: 'Keep on top' }).click();
+  await expect(pin).toBeVisible();
+  await sheet.getByRole('switch', { name: 'Lock size' }).click();
+  await expect(lock).toBeVisible();
+  await expect(lock).toHaveAttribute('data-tip', 'Size locked — click to unlock  Ctrl+Shift+L');
+  await sheet.getByRole('switch', { name: 'Lock size' }).click();
+  await expect(lock).toBeHidden();
+  await page.keyboard.press('Escape');
+  await runFromPalette(page, 'Toggle size lock');
+  await expect(lock).toBeVisible();
+  expect((await windowState(page)).locked).toBe(true);
+
+  // The lock chip unlocks, and the Settings switch agrees; the pin chip stays while the pin is on.
+  await lock.click();
+  await expect(lock).toBeHidden();
+  await expect(pin).toBeVisible();
+  expect((await windowState(page)).locked).toBe(false);
+  sheet = await openSettings(page);
+  await expect(sheet.getByRole('switch', { name: 'Lock size' })).toHaveAttribute('aria-checked', 'false');
+  await expect(sheet.getByRole('switch', { name: 'Keep on top' })).toHaveAttribute('aria-checked', 'true');
+  await page.keyboard.press('Escape');
+
+  // A change the reader did not make (the native window-state event, as `hmb cmd --pin` causes) is followed too.
+  await page.evaluate(() => window.__mockEmit('window-state', { ...window.__mockWindow, pinned: false, locked: true }));
+  await expect(pin).toBeHidden();
+  await expect(lock).toBeVisible();
+});
+
+test('desktop: arrows, Home and End move between the visible rail buttons only, so a hidden chip is skipped', async ({ page }) => {
+  await mockDesktop(page);
+  await page.setViewportSize({ width: 1080, height: 680 });
+  await page.goto('/');
+  const rail = page.locator('#library-rail');
+  const focused = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.rail);
+  const settings = rail.getByRole('button', { name: 'Settings', exact: true });
+
+  await settings.focus();
+  await page.keyboard.press('ArrowUp');
+  expect(await focused()).toBe('search');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowDown');
+  expect(await focused()).toBe('home'); // wraps past no chip
+  await page.keyboard.press('End');
+  expect(await focused()).toBe('settings');
+
+  await page.keyboard.press('Control+Shift+L');
+  await expect(rail.getByRole('button', { name: 'Size locked' })).toBeVisible();
+  await page.keyboard.press('ArrowUp');
+  expect(await focused()).toBe('lock');
+  await page.keyboard.press('ArrowUp');
+  expect(await focused()).toBe('search'); // the pin chip is hidden and skipped
+  await page.keyboard.press('End');
+  await page.keyboard.press('Control+Shift+T');
+  await expect(rail.getByRole('button', { name: 'Pinned on top' })).toBeVisible();
+  await page.keyboard.press('ArrowUp'); await page.keyboard.press('ArrowUp');
+  expect(await focused()).toBe('pin');
+  await page.keyboard.press('ArrowUp');
+  expect(await focused()).toBe('search');
+
+  // A focused chip that turns its state off hands focus to Settings rather than dropping it.
+  await rail.getByRole('button', { name: 'Size locked' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(rail.getByRole('button', { name: 'Size locked' })).toBeHidden();
+  expect(await focused()).toBe('settings');
+});
+
+test('desktop: at the smallest window height Settings sits at the rail\'s foot, below both chips and clear of the top group', async ({ page }) => {
+  await mockDesktop(page);
+  await page.setViewportSize({ width: 760, height: 420 });
+  await page.goto('/');
+  await page.keyboard.press('Control+Shift+T'); await page.keyboard.press('Control+Shift+L');
+  const rail = page.locator('#library-rail');
+  await expect(rail.getByRole('button', { name: 'Size locked' })).toBeVisible();
+  const box = async (name: string) => boxOf(rail.getByRole('button', { name, exact: true }));
+  const [searchBox, pinBox, lockBox, settingsBox, railBox] = [await box('Search'), await box('Pinned on top'), await box('Size locked'), await box('Settings'), await boxOf(rail)];
+  expect(searchBox.y + searchBox.height).toBeLessThanOrEqual(pinBox.y + .5);
+  expect(pinBox.y + pinBox.height).toBeLessThanOrEqual(lockBox.y + .5);
+  expect(lockBox.y + lockBox.height).toBeLessThanOrEqual(settingsBox.y + .5);
+  expect(settingsBox.y + settingsBox.height).toBeLessThanOrEqual(railBox.y + railBox.height + .5);
+  expect(railBox.y + railBox.height - (settingsBox.y + settingsBox.height)).toBeLessThanOrEqual(10);
+});
+
+test('the browser preview has no pin or size lock, so no chip ever shows', async ({ page }) => {
+  await page.setViewportSize({ width: 1080, height: 680 });
+  await page.goto('/');
+  await expect(page.locator('#library-rail')).toBeVisible();
+  await page.keyboard.press('Control+Shift+T'); await page.keyboard.press('Control+Shift+L');
+  await expect(page.locator('#library-rail .icon-rail-status')).toHaveCount(2);
+  await expect(page.locator('#library-rail .icon-rail-status:not([hidden])')).toHaveCount(0);
 });

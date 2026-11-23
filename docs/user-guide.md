@@ -183,13 +183,16 @@ reader and everything returns.
 
 ## Settings
 
-**Settings** is a sheet at the bottom of the window: the icon rail's last icon opens it, and a compact window (no icon rail) has a
+**Settings** is a sheet at the bottom of the window: the icon rail's foot icon opens it, and a compact window (no icon rail) has a
 Settings button at the toolbar's right end. It has five sections, top to bottom, and scrolls inside itself, so it fits a 420 × 620
 window. Escape closes it.
 
 - **Window** (desktop app only): **Keep on top** (Ctrl+Shift+T) keeps the reader above ordinary windows, and **Lock size**
   (Ctrl+Shift+L) captures its outer dimensions while allowing movement. Each is a switch that stays in step with its shortcut
-  and with the palette while the sheet is open. **Compact** (420 × 620) and **Reading** (760 × 900) resize the window.
+  and with the palette while the sheet is open. While the window is pinned or its size is locked, a small **Pinned on top** or
+  **Size locked** chip stands above Settings on the icon rail (nothing shows while a state is off, and the browser preview never
+  shows them); its tooltip says how to undo it, and clicking it turns that state off, as the switch does. The chips follow
+  every route: the switches, the shortcuts, the palette and `hmb cmd --pin`. **Compact** (420 × 620) and **Reading** (760 × 900) resize the window.
 - **Agent control** (desktop app only): **Local CLI & agents** lets the `hmb` command and AI agents on this computer show
   documents and live briefs in the reader (see [Agent control](agent-control.md)). It is on by default; turning it off closes the
   private socket at once.
@@ -574,8 +577,7 @@ can show it; positions saved before this version have none until you read the do
 ## Document library
 
 In windows 720 pixels wide and up, a slim **icon rail** (no box, only a soft wash from the window's edge and a 1 px hairline along its inner edge) stands on the side the library is kept on, and the
-library **panel** opens beside it. Its icons stand at the top of the reading area, and an open document is fitted beside the rail, never under its icons. The icon rail has five bare icons in one group, from the top: **Home**, **Add files**, **Library**, **Search** and
-**Settings**. That is all of it: there is one way to the library. **Home** shows Home and is marked as the current page while Home is showing; it has no keyboard shortcut. **Library** (**Ctrl+B**) opens the panel or collapses it (the
+library **panel** opens beside it. Its icons stand at the top of the reading area, and an open document is fitted beside the rail, never under its icons. The icon rail has five bare icons: **Home**, **Add files**, **Library** and **Search** from the top, and **Settings** anchored at the foot. That is all of it: there is one way to the library. **Home** shows Home and is marked as the current page while Home is showing; it has no keyboard shortcut. **Library** (**Ctrl+B**) opens the panel or collapses it (the
 icon rail stays) and is filled with the accent tone while the panel is open. **Search** (**Ctrl+Shift+F**) opens the panel
 if it is closed and puts the cursor in its filter field. **Add files** opens a menu with **Add files…** and **Sources…**
 (indexing folders), even when the panel is closed. **Settings** opens the Settings sheet (see Settings). Hover an icon for its name and
