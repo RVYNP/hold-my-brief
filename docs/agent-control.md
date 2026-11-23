@@ -35,6 +35,13 @@ hmb show spec.pdf --page 14 --find "token refresh" --beside docs/auth.md --pin
 # 3. Auto-reload a file as an agent edits it on disk
 hmb show docs/plan.md --watch
 
+# Every `path` that `hmb status` reports can be passed back: a Library document's id
+# (`folder:<root>:<relative path>`, `source:<repo>:<item>`) or a brief (`hold-my-brief:brief/<id>`) goes to `show`
+# (and `--beside`) and `close` unchanged. A tab that is already open is shown in whichever pane holds it, not opened twice.
+# Only relative file paths are made absolute. `goto` and `read` take the `paneId` that `show` or `status` reports.
+hmb show "folder:485e41a8d1a72538:reports/source.pdf" --page 3
+hmb close "folder:485e41a8d1a72538:reports/source.pdf"
+
 # A split needs room: side by side, the reading area must be at least 728 px wide (two 360 px panes and the divider); stacked, 488 px tall.
 # When the window cannot make the split, the document opens as a tab in the current pane and the reply
 # says why in `splitRefused` (for example "The window is too narrow to split"); try `--split down` or widen the window.

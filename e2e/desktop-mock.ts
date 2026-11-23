@@ -9,6 +9,8 @@ declare global {
     __mockControlReady: boolean;
     /** Briefs `read_brief` answers with, by path (`hold-my-brief:brief/<id>`). */
     __mockBriefs: Record<string, { id: string; path: string; title: string; format: string; content: string; updatedAt: number }>;
+    /** Library documents by id: `get_library` lists them, `open_library_document` and `read_document_bytes` answer for them. */
+    __mockLibrary: Record<string, { name: string; format: string; text: string }>;
     /** Every `control_reply` the reader sent, in order. */
     __mockReplies: { id: string; ok: boolean; result: unknown; error: string | null }[];
     /** Every session `save_tabs` was asked to write, in order. */
@@ -21,7 +23,7 @@ declare global {
 /**
  * Makes the page believe it runs inside the desktop app: `isTauri()` is true and the few native commands the reader calls at startup and for
  * the window (state, pin, lock, presets) answer from a small in-page model, `window.__mockWindow`. `read_brief` answers from
- * `window.__mockBriefs`, `control_reply` is recorded in `window.__mockReplies`, `control_event` in `window.__mockEvents`, `save_tabs` in
+ * `window.__mockBriefs`, the Library from `window.__mockLibrary`, `control_reply` is recorded in `window.__mockReplies`, `control_event` in `window.__mockEvents`, `save_tabs` in
  * `window.__mockSessions`, `window.__mockEmit` delivers a native event (wait for `window.__mockControlReady` first), and `control_ready` sets `window.__mockControlReady`. `control_status` answers `null` (Agent control not reported) unless
  * `control` says how the switch stands. Every other command, and every plugin call, answers `null`. Call before `page.goto`.
  */
@@ -32,7 +34,8 @@ export async function mockDesktop(page: Page, { control = null }: { control?: { 
     const callbacks = new Map<number, (message: unknown) => void>(), listeners = new Map<string, number[]>();
     const presets: Record<string, [number, number]> = { compact: [420, 620], reading: [760, 900] };
     const replies: Window['__mockReplies'] = [], briefs: Window['__mockBriefs'] = {}, sessions: Window['__mockSessions'] = [], events: Window['__mockEvents'] = [];
-    Object.assign(window, { isTauri: true, __mockWindow: state, __mockReplies: replies, __mockBriefs: briefs, __mockSessions: sessions, __mockEvents: events, __mockControlReady: false });
+    const library: Window['__mockLibrary'] = {};
+    Object.assign(window, { isTauri: true, __mockLibrary: library, __mockWindow: state, __mockReplies: replies, __mockBriefs: briefs, __mockSessions: sessions, __mockEvents: events, __mockControlReady: false });
     Object.assign(window, {
       __mockEmit: (event: string, payload: unknown) => { for (const id of listeners.get(event) ?? []) callbacks.get(id)?.({ event, id, payload }); },
       __TAURI_INTERNALS__: {
@@ -42,7 +45,10 @@ export async function mockDesktop(page: Page, { control = null }: { control?: { 
         convertFileSrc: (path: string) => path,
         invoke: async (command: string, args?: Record<string, unknown>) => {
           if (command === 'get_state') return { recents: [], window: { ...state }, tabs: null };
-          if (command === 'get_library') return { documents: [], collections: [], roots: [], imports: [] };
+          if (command === 'get_library') return { documents: Object.entries(library).map(([path, doc]) => ({ path, name: doc.name, format: doc.format, lastOpened: 0, collectionIds: [], favorite: false, tags: [], notes: '' })), collections: [], roots: [], imports: [] };
+          if (command === 'reading_progress') return {};
+          if (command === 'open_library_document') { const doc = library[String(args?.path)]; if (!doc) throw new Error('Item is no longer in the library.'); return { id: args?.path, path: args?.path, name: doc.name, format: doc.format }; }
+          if (command === 'read_document_bytes') { const doc = library[String(args?.path)]; return doc ? new TextEncoder().encode(doc.text).buffer : null; }
           if (command === 'pending_open') return [];
           if (command === 'set_pin') { state.pinned = Boolean(args?.enabled); return { ...state }; }
           if (command === 'set_lock') { state.locked = Boolean(args?.enabled); return { ...state }; }

@@ -809,36 +809,46 @@ impl ControlBridge {
                     .filter(|s| !s.is_empty())
                     .ok_or("show requires a file path.")?
                     .to_string();
-                let canonical = crate::catalog::canonical_file(Path::new(&raw_path))
-                    .map_err(|_| format!("File not found or unsupported format: {raw_path}"))?;
-                let canonical_str = canonical.to_string_lossy().into_owned();
-                {
-                    let mut store = shared.lock().map_err(|_| "Reading state is unavailable")?;
-                    store.authorized_files.insert(PathBuf::from(&raw_path));
-                    store.authorized_files.insert(canonical.clone());
+                let target = {
+                    let store = shared.lock().map_err(|_| "Reading state is unavailable")?;
+                    resolve_show_target(&store.saved.library.documents, &raw_path)
                 }
-                obj.insert("path".into(), Value::String(canonical_str.clone()));
-                if obj.get("watch").and_then(Value::as_bool).unwrap_or(false) {
-                    self.watcher.watch(canonical_str, canonical);
+                .ok_or_else(|| format!("File not found or unsupported format: {raw_path}"))?;
+                if let ShowTarget::File(canonical) = target {
+                    let canonical_str = canonical.to_string_lossy().into_owned();
+                    {
+                        let mut store = shared.lock().map_err(|_| "Reading state is unavailable")?;
+                        store.authorized_files.insert(PathBuf::from(&raw_path));
+                        store.authorized_files.insert(canonical.clone());
+                    }
+                    obj.insert("path".into(), Value::String(canonical_str.clone()));
+                    if obj.get("watch").and_then(Value::as_bool).unwrap_or(false) {
+                        self.watcher.watch(canonical_str, canonical);
+                    }
                 }
-                if let Some(beside_raw) = obj
+                let beside_raw = obj
                     .get("beside")
                     .and_then(Value::as_str)
                     .map(str::trim)
-                    .filter(|s| !s.is_empty() && !s.starts_with(BRIEF_PREFIX))
-                    .map(str::to_string)
-                {
-                    let beside_canonical = crate::catalog::canonical_file(Path::new(&beside_raw))
-                        .map_err(|_| format!("Beside file not found or unsupported format: {beside_raw}"))?;
-                    let beside_str = beside_canonical.to_string_lossy().into_owned();
-                    {
-                        let mut store = shared.lock().map_err(|_| "Reading state is unavailable")?;
-                        store.authorized_files.insert(PathBuf::from(&beside_raw));
-                        store.authorized_files.insert(beside_canonical.clone());
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_string);
+                if let Some(beside_raw) = beside_raw {
+                    let beside_target = {
+                        let store = shared.lock().map_err(|_| "Reading state is unavailable")?;
+                        resolve_show_target(&store.saved.library.documents, &beside_raw)
                     }
-                    obj.insert("beside".into(), Value::String(beside_str.clone()));
-                    if obj.get("watch").and_then(Value::as_bool).unwrap_or(false) {
-                        self.watcher.watch(beside_str, beside_canonical);
+                    .ok_or_else(|| format!("Beside file not found or unsupported format: {beside_raw}"))?;
+                    if let ShowTarget::File(beside_canonical) = beside_target {
+                        let beside_str = beside_canonical.to_string_lossy().into_owned();
+                        {
+                            let mut store = shared.lock().map_err(|_| "Reading state is unavailable")?;
+                            store.authorized_files.insert(PathBuf::from(&beside_raw));
+                            store.authorized_files.insert(beside_canonical.clone());
+                        }
+                        obj.insert("beside".into(), Value::String(beside_str.clone()));
+                        if obj.get("watch").and_then(Value::as_bool).unwrap_or(false) {
+                            self.watcher.watch(beside_str, beside_canonical);
+                        }
                     }
                 }
                 Ok(params)
@@ -1068,11 +1078,55 @@ pub fn brief_image_base(bridge: &ControlBridge, path: &str) -> Option<PathBuf> {
     entry.base_dir.map(|dir| dir.join("brief.md"))
 }
 
+/// What a `show`/`beside` path names.
+#[derive(Debug, PartialEq)]
+enum ShowTarget {
+    /// A file on disk: canonicalised, authorised and (with `--watch`) watched.
+    File(PathBuf),
+    /// A brief (`hold-my-brief:brief/<id>`) or the `path` of a Library document (`folder:…`, `source:…`).
+    /// The app resolves those itself, so they are sent on unchanged.
+    Unchanged,
+}
+
+/// A file on disk always takes the file route, even when the Library also stores its path (every
+/// document opened without `--ephemeral` is added to the Library), so `--watch` keeps working. Only a
+/// path that is not a supported file may pass through unchanged.
+fn resolve_show_target(documents: &[crate::state::LibraryDocument], raw_path: &str) -> Option<ShowTarget> {
+    match crate::catalog::canonical_file(Path::new(raw_path)) {
+        Ok(canonical) => Some(ShowTarget::File(canonical)),
+        Err(_) if raw_path.starts_with(BRIEF_PREFIX) || documents.iter().any(|d| d.path == raw_path) => {
+            Some(ShowTarget::Unchanged)
+        }
+        Err(_) => None,
+    }
+}
+
 // ---------------------------------------------------------------- tests
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn library_ids_and_briefs_pass_unchanged_but_files_keep_the_file_route() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("plan.md");
+        std::fs::write(&file, "# Plan").unwrap();
+        let canonical = crate::catalog::canonical_file(&file).unwrap();
+        let documents = vec![
+            crate::state::LibraryDocument { path: "folder:485e41a8d1a72538:reports/source.pdf".into(), ..Default::default() },
+            // `confirm_open` stores the opened file's own path in the Library.
+            crate::state::LibraryDocument { path: canonical.to_string_lossy().into_owned(), ..Default::default() },
+        ];
+        let id = "folder:485e41a8d1a72538:reports/source.pdf";
+        assert_eq!(resolve_show_target(&documents, id), Some(ShowTarget::Unchanged));
+        assert_eq!(resolve_show_target(&documents, "hold-my-brief:brief/plan"), Some(ShowTarget::Unchanged));
+        // A file that is also a Library path is still canonicalised (and so authorised and watched).
+        assert_eq!(resolve_show_target(&documents, canonical.to_str().unwrap()), Some(ShowTarget::File(canonical.clone())));
+        assert_eq!(resolve_show_target(&documents, file.to_str().unwrap()), Some(ShowTarget::File(canonical)));
+        assert_eq!(resolve_show_target(&documents, "folder:485e41a8d1a72538:reports/missing.pdf"), None);
+        assert_eq!(resolve_show_target(&documents, "/no/such/file.pdf"), None);
+    }
 
     #[test]
     fn brief_ids_are_validated_and_safe() {
