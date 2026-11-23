@@ -1,9 +1,5 @@
 import { boxBetween, worthSending, type Box } from './area';
 
-/** Keys the overlay keeps from the reader while it is up: scrolling, turning pages and zooming would move the page under the box. */
-const MOVING = new Set(['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'pageup', 'pagedown', 'home', 'end', ' ']);
-const ZOOMING = new Set(['+', '=', '-', '_', '0', '2', '3', '4']);
-
 export type AreaDrag = {
   /** Takes the overlay away without sending anything. Harmless once the drag has ended. */
   cancel(): void;
@@ -13,7 +9,7 @@ export type AreaDrag = {
  * Lays a transparent overlay over `host` (the reading surface) and lets the user drag a box over it: a crosshair cursor, a hint at the
  * top, a 1 px accent border with a faint accent fill. Releasing a box of at least 8 × 8 px calls `onBox` with it in CSS px from the host's
  * top-left corner; a smaller one, Escape, a press outside the host's area, a window resize, any change in the host's size or `cancel()` ends it without `onBox`.
- * The wheel, pinch and the keys that scroll, turn pages or zoom do nothing meanwhile. The overlay is removed in every case, `onEnd` called last.
+ * The wheel, pinch and every key but Escape do nothing meanwhile. The overlay is removed in every case, `onEnd` called last.
  */
 export function startAreaDrag(host: HTMLElement, { onBox, onEnd }: { onBox: (box: Box) => void; onEnd?: () => void }): AreaDrag {
   const bounds = host.getBoundingClientRect();
@@ -35,9 +31,8 @@ export function startAreaDrag(host: HTMLElement, { onBox, onEnd }: { onBox: (box
   };
   const cancel = () => finish();
   const key = (event: KeyboardEvent) => {
-    const name = event.key.toLowerCase(), zoom = (event.ctrlKey || event.metaKey) && ZOOMING.has(name), move = !event.ctrlKey && !event.metaKey && !event.altKey && MOVING.has(name);
-    if (name === 'escape') { event.preventDefault(); event.stopImmediatePropagation(); cancel(); }
-    else if (zoom || move) { event.preventDefault(); event.stopImmediatePropagation(); }
+    event.preventDefault(); event.stopImmediatePropagation();
+    if (event.key === 'Escape') cancel();
   };
   const outside = (event: PointerEvent) => { if (!(event.target instanceof Node && overlay.contains(event.target))) cancel(); };
 

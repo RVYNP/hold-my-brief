@@ -245,7 +245,7 @@ test('scrolling, zooming and page keys do nothing while the overlay is up', asyn
   await page.mouse.move(box.x + 100, box.y + 100);
   await page.mouse.wheel(0, 400);
   await page.keyboard.down('Control'); await page.mouse.wheel(0, -400); await page.keyboard.up('Control');
-  for (const key of ['Control+=', 'Control+-', 'PageDown', 'ArrowDown', 'Space']) await page.keyboard.press(key);
+  for (const key of ['Control+=', 'Control+-', 'PageDown', 'ArrowDown', 'Space', 'Shift+0', 'Alt+ArrowLeft']) await page.keyboard.press(key);
   await page.waitForTimeout(250);
   expect(await state()).toEqual(before);
   await page.keyboard.press('Escape');
