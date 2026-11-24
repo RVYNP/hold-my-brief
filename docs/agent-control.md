@@ -166,6 +166,41 @@ Hold My Brief renders these natively using your active theme tokens (all 17 ligh
 - **Flowcharts (` ```flow `):** `direction: LR` or `TB`, optional `title: ...`, and chains like `A[Client] --HTTP--> B(Server) -> C[DB]` (`(...)` highlights a node with the theme accent).
 - **Inline SVG (` ```svg `)** and **standalone `.svg` files:** Strictly sanitized, supporting Hold My Brief theme variables (`var(--fg)`, `var(--muted)`, `var(--accent)`, `var(--accent-ink)`, `var(--card)`, `var(--border)`).
 
+## Who is asking
+
+Every request carries `client: { kind, name, pid, terminal? }`, so the app can tell agents apart. `hmb` works it out itself by walking its own parent
+processes (`/proc` on Linux, `libproc` and `sysctl` on macOS, a Toolhelp snapshot on Windows):
+
+| `kind` | `name` | Recognised by |
+| --- | --- | --- |
+| `omp` | `omp` | `omp`, or a `…/omp/versions/<version>` binary |
+| `claude` | `Claude Code` | `claude`, or a `…/claude/versions/<version>` binary, or `node` running `claude-code` |
+| `codex` | `Codex` | `codex`, or `node` running `codex` |
+| `cursor` | `Cursor` | the `Cursor` application (its helper processes are not the agent) |
+| `other` | the nearest ancestor that is not a shell, for example `tmux` | no known agent above `hmb` |
+| `unknown` | `unknown` | a client that sends no `client` (an older `hmb`) |
+
+The nearest known ancestor wins, and `pid` is its process id. `terminal` names the terminal app above it (Terminal, iTerm2, Ghostty, Tern, WezTerm,
+Windows Terminal) when there is one. `HMB_AGENT=<name>` overrides the detection for scripts and tests: a known name (`omp`, `claude`, `codex`, `cursor`)
+picks that kind, any other name is reported as `kind: "other"`. On Windows `hmb` sees program names but not arguments, so a script run by `node.exe` is
+reported as `node`. `hmb mcp` works it out once at startup; its parent is the agent.
+
+This is for display, not security: the socket is already owner-only, so the app believes what it is told.
+
+The app keeps one entry per agent (kind and pid): `kind, name, terminal, firstSeen, lastRequest, lastAction { method, title, path, at }` and `listening`.
+`lastAction` is set only by requests that change the screen: `show`, `brief`, `goto`, `find` with `--show`, `close`, `cmd` with a command.
+`listening` is true while an `events` call from the agent is waiting, and for 5 s around a `hmb events --follow` round. An entry is dropped
+once its process is gone or it made no request for 10 minutes, unless it is listening.
+
+```sh
+hmb agents          # one line per agent, newest request first: name pid terminal listening|idle last: method title
+hmb agents --json   # { "agents": [ { "kind": "omp", "name": "omp", "pid": 4242, "terminal": "Ghostty", "firstSeen": …, "lastRequest": …, "lastAction": {…}, "listening": true } ] }
+```
+
+`hmb status --json` and the MCP `hmb_status` result carry the same list as `agents`. The reader window receives every change as the native event
+`control-agents` (the full list) and each applied screen-changing request as `control-agent-action` (`{ agent, method, path, target }`). Nothing draws
+either yet.
+
 ## Compact MCP server (`hmb mcp`)
 
 For MCP-only clients, point your client at `hmb mcp` (stdio). It exposes only **5 coarse tools** (`hmb_brief`, `hmb_show`, `hmb_status`, `hmb_read`, `hmb_events`) to keep prompt token overhead minimal. `hmb_events` takes `since`, `wait` (seconds, at most 30) and `types`, and returns the same `{ "events": [...], "next": N }` reply as `hmb events --json`; the MCP server answers one request at a time, so a waiting `hmb_events` call holds the others until it returns.
