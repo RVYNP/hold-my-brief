@@ -5,7 +5,7 @@
 use crate::state::{now, Store};
 use serde::Serialize;
 use serde_json::Value;
-use std::{collections::HashMap, fs, io::Write, path::PathBuf, sync::{Arc, Mutex}};
+use std::{collections::HashMap, ffi::OsStr, fs, io::Write, path::{Path, PathBuf}, sync::{Arc, Mutex}};
 use tauri::{AppHandle, Manager, State};
 
 /// The most an icon file may weigh. src/agent-appearance.ts (`ICON_MAX_BYTES`) says the same to the user.
@@ -79,6 +79,12 @@ fn clean_kind(kind: &str) -> Result<String, String> {
     Ok(kind.to_string())
 }
 
+/// `dir/name` when `name` is a bare file name, else `None`. The names in `state.json` are ours, but the file is editable: a name
+/// that reaches outside `dir` is never read or deleted.
+fn icon_path(dir: &Path, name: &str) -> Option<PathBuf> {
+    (Path::new(name).file_name() == Some(OsStr::new(name))).then(|| dir.join(name))
+}
+
 impl Store {
     fn agent_icon_dir(&self) -> Result<PathBuf, String> {
         Ok(self.file.parent().ok_or("Invalid application-data directory")?.join("agent-icons"))
@@ -106,8 +112,8 @@ impl Store {
         temporary.persist(dir.join(&name)).map_err(|e| e.error.to_string())?;
         let old = self.saved.agent_icons.insert(kind, name);
         self.persist()?;
-        if let Some(old) = old {
-            let _ = fs::remove_file(dir.join(old));
+        if let Some(path) = old.and_then(|old| icon_path(&dir, &old)) {
+            let _ = fs::remove_file(path);
         }
         Ok(())
     }
@@ -117,7 +123,9 @@ impl Store {
         let dir = self.agent_icon_dir()?;
         if let Some(old) = self.saved.agent_icons.remove(kind.trim()) {
             self.persist()?;
-            let _ = fs::remove_file(dir.join(old));
+            if let Some(path) = icon_path(&dir, &old) {
+                let _ = fs::remove_file(path);
+            }
         }
         Ok(())
     }
@@ -126,9 +134,7 @@ impl Store {
     pub fn agent_icons(&self) -> HashMap<String, String> {
         let Ok(dir) = self.agent_icon_dir() else { return HashMap::new() };
         self.saved.agent_icons.iter().filter_map(|(kind, name)| {
-            // The name is ours; a hand-edited state file must not point outside the folder.
-            let name = std::path::Path::new(name).file_name().filter(|file| *file == std::ffi::OsStr::new(name))?;
-            let path = dir.join(name);
+            let path = icon_path(&dir, name)?;
             if fs::metadata(&path).ok()?.len() > MAX_ICON_BYTES {
                 return None;
             }
@@ -261,5 +267,13 @@ mod tests {
         let mut store = store(dir.path());
         store.saved.agent_icons.insert("omp".into(), "../secret.json".into());
         assert!(store.agent_icons().is_empty());
+
+        // Choosing or resetting an icon never deletes what such an entry names.
+        store.set_agent_icon("omp", &icon().to_string()).unwrap();
+        assert!(dir.path().join("secret.json").exists());
+        store.saved.agent_icons.insert("codex".into(), "../secret.json".into());
+        store.reset_agent_icon("codex").unwrap();
+        assert!(dir.path().join("secret.json").exists());
+        assert!(!store.saved.agent_icons.contains_key("codex"));
     }
 }
