@@ -427,6 +427,9 @@ test('live readers: with four panes and eight tabs at most four readers are live
     for (const name of shown) {
       await tab(page, id, name).click();
       await expect(page.locator(`.pane-strip[data-pane=${id}] .tab.is-active .tab-title`)).toHaveText(name);
+      // A tab being reopened has its page built off screen first, in a `.staging` host that is not `.tab-hidden`: it is settled once that is gone, and only then are the live readers counted.
+      await expect(page.locator('.reader-host:not(.tab-hidden)')).toHaveCount(4);
+      await expect(page.locator('.reader-host.staging')).toHaveCount(0);
       await expect(page.locator('.reader-host:not(.tab-hidden)')).toHaveCount(4);
     }
   }
