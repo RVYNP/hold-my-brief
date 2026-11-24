@@ -176,6 +176,275 @@ fn parse_events_params(params: &Value) -> EventsQuery {
     EventsQuery { since, wait: Duration::from_millis(wait_ms), types, limit }
 }
 
+// ---------------------------------------------------------------- agent registry
+
+/// An entry stays this long after the agent's last request (while its process is alive and it is not listening).
+const AGENT_IDLE_MS: u64 = 10 * 60 * 1000;
+/// A `--follow` round keeps its agent listening this long after it starts, and after it ends, so the gap between rounds does not flicker.
+const FOLLOW_GRACE_MS: u64 = 5_000;
+const AGENT_SWEEP: Duration = Duration::from_secs(1);
+const CLIENT_TEXT_CHARS: usize = 64;
+const AGENT_KINDS: [&str; 6] = ["omp", "claude", "codex", "cursor", "other", "unknown"];
+
+type EventSink = Arc<dyn Fn(&str, Value) + Send + Sync>;
+
+/// Who sent a request, as the client said (cosmetic: the socket is owner-only, so the app trusts it).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClientInfo {
+    pub kind: String,
+    pub name: String,
+    pub pid: Option<u32>,
+    pub terminal: Option<String>,
+}
+
+/// One registry entry: kind and pid.
+pub type AgentKey = (String, Option<u32>);
+
+impl ClientInfo {
+    fn unknown() -> Self {
+        Self { kind: "unknown".into(), name: "unknown".into(), pid: None, terminal: None }
+    }
+
+    /// Reads a request's `client`; anything missing or malformed is dropped rather than refusing the request.
+    pub fn from_value(value: Option<&Value>) -> Self {
+        let Some(Value::Object(map)) = value else { return Self::unknown() };
+        let text = |key: &str| {
+            map.get(key)
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(|s| s.chars().take(CLIENT_TEXT_CHARS).collect::<String>())
+        };
+        let kind = text("kind").filter(|k| AGENT_KINDS.contains(&k.as_str())).unwrap_or_else(|| "other".into());
+        let name = text("name").unwrap_or_else(|| kind.clone());
+        let pid = map.get("pid").and_then(Value::as_u64).and_then(|p| u32::try_from(p).ok()).filter(|p| *p > 0);
+        Self { kind, name, pid, terminal: text("terminal") }
+    }
+
+    pub fn key(&self) -> AgentKey {
+        (self.kind.clone(), self.pid)
+    }
+
+    /// `{ kind, name, pid, terminal? }`
+    fn to_json(&self) -> Value {
+        let mut map = serde_json::Map::new();
+        map.insert("kind".into(), json!(self.kind));
+        map.insert("name".into(), json!(self.name));
+        if let Some(pid) = self.pid {
+            map.insert("pid".into(), json!(pid));
+        }
+        if let Some(terminal) = &self.terminal {
+            map.insert("terminal".into(), json!(terminal));
+        }
+        Value::Object(map)
+    }
+}
+
+/// A request that changed what the reader shows, as the registry and the reader's `agentAction` see it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AgentAction {
+    method: String,
+    title: Option<String>,
+    path: Option<String>,
+    target: Option<String>,
+}
+
+impl AgentAction {
+    /// `{ method, title?, path?, at }`
+    fn last_action(&self, at: u64) -> Value {
+        let mut map = serde_json::Map::new();
+        map.insert("method".into(), json!(self.method));
+        for (key, value) in [("title", &self.title), ("path", &self.path)] {
+            if let Some(value) = value {
+                map.insert(key.into(), json!(value));
+            }
+        }
+        map.insert("at".into(), json!(at));
+        Value::Object(map)
+    }
+
+    /// `{ agent, method, path?, target? }`: what the reader receives as `agentAction`.
+    fn payload(&self, agent: &ClientInfo) -> Value {
+        let mut map = serde_json::Map::new();
+        map.insert("agent".into(), agent.to_json());
+        map.insert("method".into(), json!(self.method));
+        for (key, value) in [("path", &self.path), ("target", &self.target)] {
+            if let Some(value) = value {
+                map.insert(key.into(), json!(value));
+            }
+        }
+        Value::Object(map)
+    }
+}
+
+/// The action of a request the reader applied, or `None` when it did not change the screen: `show`, `brief`, `goto`, `find` with
+/// show, `close` (of something) and `cmd` with a command.
+fn agent_action(method: &str, params: &Value, result: &Value) -> Option<AgentAction> {
+    let text = |value: &Value, key: &str| value.get(key).and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
+    let mut action = AgentAction { method: method.to_string(), title: text(result, "title"), path: text(result, "path"), target: None };
+    match method {
+        "show" | "brief" => {
+            action.path = action.path.or_else(|| text(params, "path"));
+            action.target = text(params, "target").or_else(|| text(params, "heading")).or_else(|| text(params, "find"));
+        }
+        "goto" => action.target = text(params, "target").or_else(|| text(params, "heading")),
+        "find" => {
+            let shows = params.get("show").is_some_and(|s| s.is_number() || s.as_bool() == Some(true));
+            if !shows || result.get("shown").is_none() {
+                return None;
+            }
+            action.target = text(params, "query");
+        }
+        "close" => {
+            action.path = Some(result.get("closed").and_then(Value::as_array)?.first()?.as_str()?.to_string());
+        }
+        "cmd" => {
+            let command = text(params, "command")?;
+            action.title = Some(command.clone());
+            action.target = Some(command);
+        }
+        _ => return None,
+    }
+    Some(action)
+}
+
+struct AgentEntry {
+    client: ClientInfo,
+    first_seen: u64,
+    last_request: u64,
+    last_action: Option<Value>,
+    /// `events` calls from this agent that are blocked waiting right now.
+    waiting: u32,
+    follow_until: u64,
+}
+
+impl AgentEntry {
+    fn listening(&self, now: u64) -> bool {
+        self.waiting > 0 || self.follow_until > now
+    }
+
+    fn to_json(&self, now: u64) -> Value {
+        let mut map = match self.client.to_json() {
+            Value::Object(map) => map,
+            _ => serde_json::Map::new(),
+        };
+        map.insert("firstSeen".into(), json!(self.first_seen));
+        map.insert("lastRequest".into(), json!(self.last_request));
+        if let Some(action) = &self.last_action {
+            map.insert("lastAction".into(), action.clone());
+        }
+        map.insert("listening".into(), json!(self.listening(now)));
+        Value::Object(map)
+    }
+}
+
+/// The agents that talk to the app, one entry per kind + pid. In memory only.
+#[derive(Default)]
+pub struct AgentRegistry {
+    entries: Mutex<Vec<AgentEntry>>,
+}
+
+impl AgentRegistry {
+    fn update<R>(&self, key: &AgentKey, change: impl FnOnce(&mut AgentEntry) -> R) -> Option<R> {
+        let mut entries = self.entries.lock().ok()?;
+        entries.iter_mut().find(|e| e.client.key() == *key).map(change)
+    }
+
+    /// Notes a request from `client` (creating its entry) and returns its key.
+    pub fn touch(&self, client: &ClientInfo, now: u64) -> AgentKey {
+        let key = client.key();
+        if let Ok(mut entries) = self.entries.lock() {
+            match entries.iter_mut().find(|e| e.client.key() == key) {
+                Some(entry) => {
+                    entry.client = client.clone();
+                    entry.last_request = now;
+                }
+                None => entries.push(AgentEntry { client: client.clone(), first_seen: now, last_request: now, last_action: None, waiting: 0, follow_until: 0 }),
+            }
+        }
+        key
+    }
+
+    /// Sets the agent's last action; returns the agent as it was last described, or `None` if it has no entry.
+    fn record_action(&self, key: &AgentKey, action: &AgentAction, now: u64) -> Option<ClientInfo> {
+        self.update(key, |entry| {
+            entry.last_action = Some(action.last_action(now));
+            entry.client.clone()
+        })
+    }
+
+    /// An `events` call starts: `waits` when it blocks for new events, `follow` when it is a round of `--follow`.
+    fn begin_events(&self, key: &AgentKey, waits: bool, follow: bool, now: u64) {
+        self.update(key, |entry| {
+            entry.waiting += u32::from(waits);
+            if follow {
+                entry.follow_until = now + FOLLOW_GRACE_MS;
+            }
+        });
+    }
+
+    fn end_events(&self, key: &AgentKey, waits: bool, follow: bool, now: u64) {
+        self.update(key, |entry| {
+            entry.waiting = entry.waiting.saturating_sub(u32::from(waits));
+            if follow {
+                entry.follow_until = now + FOLLOW_GRACE_MS;
+            }
+        });
+    }
+
+    /// Drops the entries that expired and returns the rest, newest request first. An entry stays while its process is alive (`alive`) and
+    /// it made a request in the last `AGENT_IDLE_MS`, or while it is listening.
+    pub fn list(&self, now: u64, alive: &dyn Fn(u32) -> bool) -> Vec<Value> {
+        let Ok(mut entries) = self.entries.lock() else { return Vec::new() };
+        entries.retain(|e| e.listening(now) || (now.saturating_sub(e.last_request) < AGENT_IDLE_MS && e.client.pid.map_or(true, alive)));
+        let mut kept: Vec<&AgentEntry> = entries.iter().collect();
+        kept.sort_by(|a, b| b.last_request.cmp(&a.last_request).then(b.first_seen.cmp(&a.first_seen)));
+        kept.into_iter().map(|e| e.to_json(now)).collect()
+    }
+
+    pub fn clear(&self) {
+        if let Ok(mut entries) = self.entries.lock() {
+            entries.clear();
+        }
+    }
+}
+
+/// Whether a process with this id exists (a process of another user counts: only the owner can reach the socket anyway).
+#[cfg(unix)]
+fn pid_alive(pid: u32) -> bool {
+    extern "C" {
+        fn kill(pid: i32, signal: i32) -> i32;
+    }
+    const EPERM: i32 = 1;
+    let Ok(pid) = i32::try_from(pid) else { return false };
+    // SAFETY: signal 0 delivers nothing; it only reports whether the process exists.
+    unsafe { kill(pid, 0) == 0 || std::io::Error::last_os_error().raw_os_error() == Some(EPERM) }
+}
+
+#[cfg(windows)]
+fn pid_alive(pid: u32) -> bool {
+    use std::ffi::c_void;
+    extern "system" {
+        fn OpenProcess(access: u32, inherit: i32, pid: u32) -> *mut c_void;
+        fn GetExitCodeProcess(process: *mut c_void, code: *mut u32) -> i32;
+        fn CloseHandle(handle: *mut c_void) -> i32;
+    }
+    const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+    const STILL_ACTIVE: u32 = 259;
+    const ERROR_ACCESS_DENIED: i32 = 5;
+    // SAFETY: plain Win32 calls; the handle is closed before returning.
+    unsafe {
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if handle.is_null() {
+            return std::io::Error::last_os_error().raw_os_error() == Some(ERROR_ACCESS_DENIED);
+        }
+        let mut code = 0u32;
+        let ok = GetExitCodeProcess(handle, &mut code) != 0;
+        CloseHandle(handle);
+        !ok || code == STILL_ACTIVE
+    }
+}
+
 // ---------------------------------------------------------------- protocol types
 
 #[derive(Debug, Deserialize)]
@@ -187,6 +456,9 @@ pub struct ControlRequest {
     pub method: String,
     #[serde(default)]
     pub params: Value,
+    /// Which agent is asking (`{ kind, name, pid, terminal? }`); absent from old clients.
+    #[serde(default)]
+    pub client: Option<Value>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -491,6 +763,11 @@ pub struct ControlBridge {
     pub briefs: BriefStore,
     pub watcher: Arc<FileWatcher>,
     pub events: EventLog,
+    pub agents: AgentRegistry,
+    /// Sends native events to the reader; set while the server runs.
+    emitter: Mutex<Option<EventSink>>,
+    /// The agent list the reader was last sent.
+    published_agents: Mutex<Option<Vec<Value>>>,
 }
 
 struct ServerHandle {
@@ -617,6 +894,9 @@ impl ControlBridge {
             briefs: BriefStore::default(),
             watcher,
             events: EventLog::default(),
+            agents: AgentRegistry::default(),
+            emitter: Mutex::new(None),
+            published_agents: Mutex::new(None),
         })
     }
 
@@ -695,6 +975,31 @@ impl ControlBridge {
         }
     }
 
+    /// Sends `payload` to the reader as the native event `name`; does nothing while the server is off.
+    fn emit(&self, name: &str, payload: Value) {
+        let emitter = self.emitter.lock().ok().and_then(|e| e.clone());
+        if let Some(emit) = emitter {
+            emit(name, payload);
+        }
+    }
+
+    fn set_emitter(&self, emitter: Option<EventSink>) {
+        if let Ok(mut slot) = self.emitter.lock() {
+            *slot = emitter;
+        }
+    }
+
+    /// Sends the full agent list to the reader (`control-agents`) when it differs from the one it has.
+    fn publish_agents(&self) {
+        let Some(emit) = self.emitter.lock().ok().and_then(|e| e.clone()) else { return };
+        let Ok(mut published) = self.published_agents.lock() else { return };
+        let list = self.agents.list(now(), &pid_alive);
+        if published.as_ref() != Some(&list) {
+            *published = Some(list.clone());
+            emit("control-agents", Value::Array(list));
+        }
+    }
+
     pub fn status(&self, enabled: bool) -> ControlStatus {
         let running = self.server.lock().map(|s| s.is_some()).unwrap_or(false);
         let transport = if cfg!(unix) { "unix" } else { "tcp" }.to_string();
@@ -714,7 +1019,20 @@ impl ControlBridge {
         // The event log starts empty with the process, so area PNGs a previous run left behind belong to no event.
         self.clear_areas();
         let shutdown = Arc::new(AtomicBool::new(false));
-        let handle = self.spawn_listener(app, shutdown)?;
+        let handle = self.spawn_listener(app.clone(), shutdown.clone())?;
+        self.set_emitter(Some(Arc::new(move |event, payload| {
+            let _ = app.emit(event, payload);
+        })));
+        // Entries expire, and `listening` runs out, with no request to notice it.
+        let bridge = self.clone();
+        let _ = thread::Builder::new().name("hmb-control-agents".into()).spawn(move || {
+            while !shutdown.load(Ordering::SeqCst) {
+                thread::sleep(AGENT_SWEEP);
+                if !shutdown.load(Ordering::SeqCst) {
+                    bridge.publish_agents();
+                }
+            }
+        });
         *slot = Some(handle);
         Ok(())
     }
@@ -722,6 +1040,10 @@ impl ControlBridge {
     pub fn stop(&self) {
         let handle = self.server.lock().ok().and_then(|mut slot| slot.take());
         let _ = fs::remove_file(&self.discovery_path);
+        // Nobody is connected to a server that is off: the reader gets an empty list, then no more.
+        self.agents.clear();
+        self.publish_agents();
+        self.set_emitter(None);
         if let Some(mut handle) = handle {
             handle.shutdown.store(true, Ordering::SeqCst);
             // Poke the blocking accept() so the thread exits promptly.
@@ -859,7 +1181,9 @@ impl ControlBridge {
     }
 
     fn dispatch(&self, app: &AppHandle, req: ControlRequest) -> ControlResponse {
-        if let Some(response) = self.dispatch_native(&req) {
+        let key = self.agents.touch(&ClientInfo::from_value(req.client.as_ref()), now());
+        self.publish_agents();
+        if let Some(response) = self.dispatch_native(&req, &key) {
             return response;
         }
         let id = req.id.clone();
@@ -878,24 +1202,55 @@ impl ControlBridge {
             return ControlResponse::err(id, e);
         }
 
-        match self.call_webview(app, method, params) {
-            Ok(result) => ControlResponse::ok(id, result),
+        match self.call_webview(app, method, params.clone()) {
+            Ok(mut result) => {
+                self.applied(&key, method, &params, &mut result);
+                ControlResponse::ok(id, result)
+            }
             Err(error) => ControlResponse::err(id, error),
+        }
+    }
+
+    /// Runs after the reader applied a request: `status` lists the agents, and a request that changed the screen becomes the agent's
+    /// last action and an `agentAction` for the reader.
+    fn applied(&self, key: &AgentKey, method: &str, params: &Value, result: &mut Value) {
+        if method == "status" {
+            if let Value::Object(map) = result {
+                map.insert("agents".into(), Value::Array(self.agents.list(now(), &pid_alive)));
+            }
+            return;
+        }
+        let Some(action) = agent_action(method, params, result) else { return };
+        if let Some(agent) = self.agents.record_action(key, &action, now()) {
+            self.emit("control-agent-action", action.payload(&agent));
+            self.publish_agents();
         }
     }
 
     /// Methods answered without the reader window (and without waiting for it to be ready). `events` may block for its `wait`
     /// on the connection's own thread; the socket timeouts only cover reading the request line, so they never cut that wait short.
-    fn dispatch_native(&self, req: &ControlRequest) -> Option<ControlResponse> {
+    fn dispatch_native(&self, req: &ControlRequest, key: &AgentKey) -> Option<ControlResponse> {
         let id = req.id.clone();
         match req.method.as_str() {
             "ping" => {
                 let ready = self.ready.lock().map(|r| *r).unwrap_or(false);
                 Some(ControlResponse::ok(id, json!({ "version": 1, "pid": std::process::id(), "ready": ready })))
             }
+            "agents" => Some(ControlResponse::ok(id, json!({ "agents": self.agents.list(now(), &pid_alive) }))),
             "events" => {
                 let q = parse_events_params(&req.params);
-                Some(ControlResponse::ok(id, self.events.query(q.since, q.wait, q.types.as_deref(), q.limit)))
+                let waits = !q.wait.is_zero();
+                let follow = req.params.get("follow").and_then(Value::as_bool).unwrap_or(false);
+                if waits || follow {
+                    self.agents.begin_events(key, waits, follow, now());
+                    self.publish_agents();
+                }
+                let reply = self.events.query(q.since, q.wait, q.types.as_deref(), q.limit);
+                if waits || follow {
+                    self.agents.end_events(key, waits, follow, now());
+                    self.publish_agents();
+                }
+                Some(ControlResponse::ok(id, reply))
             }
             _ => None,
         }
@@ -1515,21 +1870,24 @@ mod tests {
     #[test]
     fn a_waiting_events_call_does_not_block_ping_or_status() {
         let bridge = ControlBridge::with_watcher(PathBuf::from("unused-control.json"), PathBuf::from("unused-areas"), FileWatcher::idle());
+        let key = bridge.agents.touch(&ClientInfo::unknown(), now());
         let waiter = bridge.clone();
+        let waiting_key = key.clone();
         let handle = thread::spawn(move || {
             let req = ControlRequest {
                 id: "w".into(),
                 token: None,
                 method: "events".into(),
                 params: json!({ "wait": 10000, "types": ["send"] }),
+                client: None,
             };
-            waiter.dispatch_native(&req).unwrap()
+            waiter.dispatch_native(&req, &waiting_key).unwrap()
         });
         thread::sleep(Duration::from_millis(150));
 
         let started = Instant::now();
-        let ping = ControlRequest { id: "p".into(), token: None, method: "ping".into(), params: Value::Null };
-        let pong = bridge.dispatch_native(&ping).unwrap();
+        let ping = ControlRequest { id: "p".into(), token: None, method: "ping".into(), params: Value::Null, client: None };
+        let pong = bridge.dispatch_native(&ping, &key).unwrap();
         assert!(pong.ok);
         let status = bridge.status(true);
         assert!(!status.running);
@@ -1540,5 +1898,182 @@ mod tests {
         let reply = handle.join().unwrap();
         assert!(reply.ok);
         assert_eq!(reply.result.unwrap()["events"][0]["text"], json!("go"));
+    }
+
+    // ---------------------------------------------------------------- agent registry
+
+    fn agent(kind: &str, pid: u32) -> ClientInfo {
+        ClientInfo { kind: kind.into(), name: kind.into(), pid: Some(pid), terminal: Some("Ghostty".into()) }
+    }
+
+    const ALIVE: &dyn Fn(u32) -> bool = &|_| true;
+
+    fn names(list: &[Value]) -> Vec<String> {
+        list.iter().map(|a| format!("{}:{}", a["kind"].as_str().unwrap(), a["pid"])).collect()
+    }
+
+    #[test]
+    fn a_request_without_client_is_unknown_and_a_malformed_one_is_cleaned() {
+        let unknown = ClientInfo::from_value(None);
+        assert_eq!((unknown.kind.as_str(), unknown.pid), ("unknown", None));
+        let req: ControlRequest = serde_json::from_str(r#"{"id":"1","method":"status"}"#).unwrap();
+        assert_eq!(ClientInfo::from_value(req.client.as_ref()), unknown);
+
+        let client = ClientInfo::from_value(Some(&json!({ "kind": "claude", "name": "Claude Code", "pid": 4242, "terminal": "Ghostty" })));
+        assert_eq!(client, ClientInfo { kind: "claude".into(), name: "Claude Code".into(), pid: Some(4242), terminal: Some("Ghostty".into()) });
+
+        let odd = ClientInfo::from_value(Some(&json!({ "kind": "mystery", "name": "x".repeat(500), "pid": -3, "terminal": 7 })));
+        assert_eq!(odd.kind, "other");
+        assert_eq!(odd.name.chars().count(), CLIENT_TEXT_CHARS);
+        assert_eq!((odd.pid, odd.terminal), (None, None));
+        assert_eq!(ClientInfo::from_value(Some(&json!("claude"))).kind, "unknown");
+    }
+
+    #[test]
+    fn one_entry_per_kind_and_pid_newest_first() {
+        let agents = AgentRegistry::default();
+        agents.touch(&agent("omp", 10), 1_000);
+        agents.touch(&agent("omp", 11), 2_000);
+        agents.touch(&agent("claude", 10), 3_000);
+        agents.touch(&agent("omp", 10), 4_000);
+        let list = agents.list(5_000, ALIVE);
+        assert_eq!(names(&list), ["omp:10", "claude:10", "omp:11"]);
+        assert_eq!((list[0]["firstSeen"].as_u64(), list[0]["lastRequest"].as_u64()), (Some(1_000), Some(4_000)));
+        assert_eq!(list[0]["terminal"], "Ghostty");
+        assert!(list[0].get("lastAction").is_none());
+    }
+
+    #[test]
+    fn entries_expire_after_ten_idle_minutes_or_when_the_process_is_gone() {
+        let agents = AgentRegistry::default();
+        agents.touch(&agent("omp", 10), 0);
+        agents.touch(&agent("claude", 20), 0);
+        agents.touch(&agent("codex", 30), 5 * 60_000);
+        agents.touch(&ClientInfo::unknown(), 0);
+
+        // Still within 10 minutes of the first requests; pid 20 died.
+        let list = agents.list(9 * 60_000 + 59_999, &|pid| pid != 20);
+        assert_eq!(names(&list), ["codex:30", "omp:10", "unknown:null"]);
+
+        // Exactly 10 minutes idle expires; the entry that spoke later stays, and a dead pid does not come back.
+        let list = agents.list(10 * 60_000, ALIVE);
+        assert_eq!(names(&list), ["codex:30"]);
+        assert!(agents.list(15 * 60_000, ALIVE).is_empty());
+    }
+
+    #[test]
+    fn listening_follows_a_waiting_events_call_and_keeps_an_idle_agent_listed() {
+        let agents = AgentRegistry::default();
+        let key = agents.touch(&agent("omp", 10), 0);
+        assert_eq!(agents.list(1, ALIVE)[0]["listening"], false);
+
+        agents.begin_events(&key, true, false, 1_000);
+        // Waiting for longer than the idle window, even with a dead process: still listed, still listening.
+        let list = agents.list(30 * 60_000, &|_| false);
+        assert_eq!(names(&list), ["omp:10"]);
+        assert_eq!(list[0]["listening"], true);
+
+        agents.begin_events(&key, true, false, 2_000);
+        agents.end_events(&key, true, false, 3_000);
+        assert_eq!(agents.list(3_001, ALIVE)[0]["listening"], true, "a second call is still waiting");
+        agents.end_events(&key, true, false, 4_000);
+        assert_eq!(agents.list(4_001, ALIVE)[0]["listening"], false);
+    }
+
+    #[test]
+    fn a_follow_round_keeps_listening_for_five_seconds_around_it() {
+        let agents = AgentRegistry::default();
+        let key = agents.touch(&agent("claude", 10), 0);
+        // A follow round that returned at once (no wait) is listening for 5 s.
+        agents.begin_events(&key, false, true, 10_000);
+        assert_eq!(agents.list(14_999, ALIVE)[0]["listening"], true);
+        assert_eq!(agents.list(15_000, ALIVE)[0]["listening"], false);
+        // A round that waited 30 s starts the next 5 s window when it ends.
+        agents.begin_events(&key, true, true, 20_000);
+        agents.end_events(&key, true, true, 50_000);
+        assert_eq!(agents.list(54_999, ALIVE)[0]["listening"], true);
+        assert_eq!(agents.list(55_000, ALIVE)[0]["listening"], false);
+    }
+
+    #[test]
+    fn a_waiting_events_request_marks_the_agent_listening_and_the_reader_hears_of_it() {
+        let bridge = ControlBridge::with_watcher(PathBuf::from("unused-control.json"), PathBuf::from("unused-areas"), FileWatcher::idle());
+        let sent: Arc<Mutex<Vec<(String, Value)>>> = Arc::default();
+        let sink = sent.clone();
+        bridge.set_emitter(Some(Arc::new(move |name, payload| sink.lock().unwrap().push((name.to_string(), payload)))));
+
+        let client = agent("omp", std::process::id());
+        let key = bridge.agents.touch(&client, now());
+        bridge.publish_agents();
+        let waiter = bridge.clone();
+        let waiting_key = key.clone();
+        let handle = thread::spawn(move || {
+            let req = ControlRequest { id: "w".into(), token: None, method: "events".into(), params: json!({ "wait": 10000 }), client: None };
+            waiter.dispatch_native(&req, &waiting_key).unwrap()
+        });
+        thread::sleep(Duration::from_millis(150));
+        let listening = |agents: &Value| agents[0]["listening"].as_bool();
+        assert_eq!(listening(&bridge.dispatch_native(&ControlRequest { id: "a".into(), token: None, method: "agents".into(), params: Value::Null, client: None }, &key).unwrap().result.unwrap()["agents"]), Some(true));
+
+        bridge.events.push(event("send", "go")).unwrap();
+        handle.join().unwrap();
+        let published: Vec<Option<bool>> = sent.lock().unwrap().iter().filter(|(name, _)| name == "control-agents").map(|(_, list)| listening(list)).collect();
+        assert_eq!(published, [Some(false), Some(true), Some(false)], "each change is published once with the full list");
+    }
+
+    #[test]
+    fn publishing_sends_a_list_only_when_it_changed_and_stop_empties_it() {
+        let bridge = ControlBridge::with_watcher(PathBuf::from("unused-control.json"), PathBuf::from("unused-areas"), FileWatcher::idle());
+        let sent: Arc<Mutex<Vec<Value>>> = Arc::default();
+        let sink = sent.clone();
+        bridge.set_emitter(Some(Arc::new(move |_, payload| sink.lock().unwrap().push(payload))));
+        bridge.agents.touch(&agent("omp", std::process::id()), now());
+        bridge.publish_agents();
+        bridge.publish_agents();
+        assert_eq!(sent.lock().unwrap().len(), 1);
+        bridge.stop();
+        let sent = sent.lock().unwrap();
+        assert_eq!(sent.len(), 2);
+        assert_eq!(sent[1], json!([]));
+    }
+
+    #[test]
+    fn only_requests_that_change_the_screen_are_actions() {
+        let at = |method: &str, params: Value, result: Value| agent_action(method, &params, &result);
+        let shown = at("show", json!({ "path": "/a.pdf", "target": "12" }), json!({ "path": "/a.pdf", "title": "A", "position": "p. 12" })).unwrap();
+        assert_eq!((shown.title.as_deref(), shown.path.as_deref(), shown.target.as_deref()), (Some("A"), Some("/a.pdf"), Some("12")));
+        let payload = shown.payload(&agent("omp", 7));
+        assert_eq!(payload, json!({ "agent": { "kind": "omp", "name": "omp", "pid": 7, "terminal": "Ghostty" }, "method": "show", "path": "/a.pdf", "target": "12" }));
+        assert_eq!(shown.last_action(99), json!({ "method": "show", "title": "A", "path": "/a.pdf", "at": 99 }));
+
+        assert!(at("brief", json!({ "id": "x" }), json!({ "path": "hold-my-brief:brief/x", "title": "X" })).is_some());
+        let went = at("goto", json!({ "heading": "Intro" }), json!({ "position": "p. 2", "path": "/a.pdf" })).unwrap();
+        assert_eq!((went.path.as_deref(), went.target.as_deref()), (Some("/a.pdf"), Some("Intro")));
+        assert!(at("find", json!({ "query": "q", "show": true }), json!({ "total": 1, "shown": "p. 3", "path": "/a.pdf" })).is_some());
+        assert!(at("find", json!({ "query": "q" }), json!({ "total": 1 })).is_none(), "find without show only reads");
+        assert!(at("find", json!({ "query": "q", "show": true }), json!({ "total": 0 })).is_none(), "nothing matched, nothing shown");
+        assert_eq!(at("close", json!({}), json!({ "closed": ["/a.pdf"] })).unwrap().path.as_deref(), Some("/a.pdf"));
+        assert!(at("close", json!({}), json!({ "closed": [] })).is_none());
+        assert_eq!(at("cmd", json!({ "command": "toggle-library" }), json!({})).unwrap().title.as_deref(), Some("toggle-library"));
+        assert!(at("cmd", json!({ "pin": true }), json!({})).is_none(), "window hints without a command are not an action");
+        for method in ["status", "read", "outline", "library", "events", "ping"] {
+            assert!(at(method, json!({}), json!({})).is_none(), "{method}");
+        }
+    }
+
+    #[test]
+    fn an_action_is_kept_on_the_agent_that_made_it() {
+        let agents = AgentRegistry::default();
+        let key = agents.touch(&agent("omp", 10), 0);
+        let other = agents.touch(&agent("claude", 11), 0);
+        let action = agent_action("show", &json!({}), &json!({ "path": "/a.pdf", "title": "A" })).unwrap();
+        let who = agents.record_action(&key, &action, 500).unwrap();
+        assert_eq!(who.kind, "omp");
+        let list = agents.list(1_000, ALIVE);
+        let of = |kind: &str| list.iter().find(|a| a["kind"] == kind).unwrap().clone();
+        assert_eq!(of("omp")["lastAction"], json!({ "method": "show", "title": "A", "path": "/a.pdf", "at": 500 }));
+        assert!(of("claude").get("lastAction").is_none());
+        assert!(agents.record_action(&("codex".into(), Some(1)), &action, 1).is_none());
+        let _ = other;
     }
 }

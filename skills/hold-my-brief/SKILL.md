@@ -91,6 +91,11 @@ For a scanned PDF, an image, a chart or a diagram there is no text to select: te
 an error: say what you are waiting for, or carry on. `"dropped": true` means events were lost; re-read with `hmb status`. `hmb events --follow` streams one JSON line per event for a script;
 over MCP the tool is `hmb_events` (`wait` at most 30 s). Events appear only while Agent control is on, and carry only what the user selected or boxed.
 
+## Who you are to the app
+
+`hmb` tells the app which agent is asking (worked out from its parent processes; `HMB_AGENT=<name>` overrides it), and the app lists the connected agents.
+`hmb agents` shows them, and `agents` in `hmb status --json` / MCP `hmb_status` carries the same list. Set `HMB_AGENT` only when a script runs `hmb` outside your own process tree.
+
 ## Window and appearance
 
 ```sh

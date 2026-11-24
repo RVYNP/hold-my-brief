@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { BRIEF_PREFIX, handleControlRequest, resolveHeadingTarget, type ControlHost, type ControlStatusSnapshot } from '../src/control';
+import { BRIEF_PREFIX, createAgentFeed, handleControlRequest, resolveHeadingTarget, type ControlHost, type ControlStatusSnapshot } from '../src/control';
 
 function makeHost(): { host: ControlHost; calls: string[] } {
   const calls: string[] = [];
@@ -104,5 +104,46 @@ describe('control dispatcher', () => {
     const { host } = makeHost();
     const reply = await handleControlRequest(host, 'cmd', { pin: true, lock: false, preset: 'reading', appearance: { theme: 'graphite' }, command: 'split-down' }) as { done: string[] };
     expect(reply.done).toEqual(['Keep on top on', 'Size unlocked', 'Reading size', 'Graphite (dark)', 'Ran split-down']);
+  });
+});
+
+describe('what a request says about the document it moved in', () => {
+  it('names the pane the goto or the shown match landed in', async () => {
+    const { host } = makeHost();
+    expect(await handleControlRequest(host, 'goto', { target: '5' })).toEqual({ position: 'Target 5', path: '/tmp/spec.pdf', title: 'spec.pdf' });
+    expect(await handleControlRequest(host, 'goto', { target: '5', paneId: 'zz' })).toEqual({ position: 'Target 5' });
+    const found = await handleControlRequest(host, 'find', { query: 'refresh', show: true }) as Record<string, unknown>;
+    expect([found.shown, found.path, found.title]).toEqual(['Page 14 of 40', '/tmp/spec.pdf', 'spec.pdf']);
+    const listed = await handleControlRequest(host, 'find', { query: 'refresh' }) as Record<string, unknown>;
+    expect(listed.shown).toBeUndefined();
+    expect(listed.path).toBeUndefined();
+  });
+});
+
+describe('the agent feed', () => {
+  const omp = { kind: 'omp', name: 'omp', pid: 7, terminal: 'Ghostty', firstSeen: 10, lastRequest: 40, lastAction: { method: 'show', title: 'Plan', path: '/p.md', at: 40 }, listening: true };
+
+  it('keeps the whole list each time and drops entries it cannot read', () => {
+    const feed = createAgentFeed();
+    const seen: number[] = [];
+    feed.subscribeAgents(agents => seen.push(agents.length));
+    feed.setAgents([omp, { kind: 'unknown', name: 'unknown', firstSeen: 1, lastRequest: 2, listening: false }, { name: 'no kind' }, 'junk']);
+    expect(feed.agents()).toEqual([omp, { kind: 'unknown', name: 'unknown', firstSeen: 1, lastRequest: 2, listening: false }]);
+    feed.setAgents([]);
+    feed.setAgents('not a list');
+    expect(feed.agents()).toEqual([]);
+    expect(seen).toEqual([2, 0, 0]);
+  });
+
+  it('hands each agent action to its subscribers once it names an agent and a method', () => {
+    const feed = createAgentFeed();
+    const actions: unknown[] = [];
+    const stop = feed.subscribeActions(action => actions.push(action));
+    feed.agentAction({ agent: { kind: 'claude', name: 'Claude Code', pid: 3 }, method: 'goto', path: '/a.pdf', target: '12' });
+    feed.agentAction({ agent: { kind: 'claude' }, method: 'goto' });
+    feed.agentAction({ agent: { kind: 'claude', name: 'Claude Code' } });
+    stop();
+    feed.agentAction({ agent: { kind: 'omp', name: 'omp' }, method: 'show' });
+    expect(actions).toEqual([{ agent: { kind: 'claude', name: 'Claude Code', pid: 3 }, method: 'goto', path: '/a.pdf', target: '12' }]);
   });
 });
