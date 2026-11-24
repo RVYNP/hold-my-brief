@@ -107,7 +107,8 @@ test('Space on a focused Copy button copies and does not scroll the page', async
   const filler = Array.from({ length: 120 }, (_, i) => `Filler paragraph ${i + 1}.\n`).join('\n');
   await openDoc(page, ['```shell', SHELL, '```', '', filler].join('\n'));
   const host = page.locator('.reader-host:not(.staging)');
-  expect(await host.evaluate(element => element.scrollHeight - element.clientHeight)).toBeGreaterThan(900);
+  // The host is measured once it is shown and laid out; right after the first block paints it can still read 0.
+  await expect.poll(() => host.evaluate(element => element.scrollHeight - element.clientHeight)).toBeGreaterThan(900);
   const copy = page.getByRole('button', { name: 'Copy code, shell' });
   await copy.focus();
   const before = await host.evaluate(element => element.scrollTop);
