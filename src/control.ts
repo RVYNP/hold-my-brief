@@ -95,6 +95,14 @@ export function resolveHeadingTarget(items: readonly OutlineItem[], heading: str
   return items.find(item => item.label.trim().toLocaleLowerCase().includes(needle))?.target;
 }
 
+/** The document a pane (default: the focused one) shows. A request that moves within it names it, so the app can say what an agent did. */
+function shownIn(host: ControlHost, paneId?: string): { path?: string; title?: string } {
+  const panes = host.status().panes;
+  const pane = paneId ? panes.find(p => p.id === paneId) : panes.find(p => p.active);
+  const tab = pane?.tabs.find(t => t.path === pane.shown);
+  return tab ? { path: tab.path, title: tab.title } : {};
+}
+
 async function applyJumpAndFind(
   host: ControlHost,
   params: { target?: string; heading?: string; find?: string; matchIndex?: number },
@@ -239,7 +247,7 @@ export async function handleControlRequest(host: ControlHost, method: string, ra
           where: hit.unitLabel,
           excerpt: hit.excerpt || hit.text,
         })),
-        ...(shown ? { shown } : {}),
+        ...(shown ? { shown, ...shownIn(host, paneId) } : {}),
       };
     }
 
@@ -249,7 +257,7 @@ export async function handleControlRequest(host: ControlHost, method: string, ra
       const target = asStr(params.target) ?? (heading ? resolveHeadingTarget(host.outline(paneId), heading) : undefined);
       if (!target) throw new Error(heading ? `Heading not found: "${heading}".` : 'goto requires a target.');
       const position = await host.goTo(target, paneId);
-      return { position };
+      return { position, ...shownIn(host, paneId) };
     }
 
     case 'outline': {
@@ -316,4 +324,77 @@ export async function handleControlRequest(host: ControlHost, method: string, ra
     default:
       throw new Error(`Unknown control method: ${method}`);
   }
+}
+
+// ---------------------------------------------------------------- agents
+
+/** An agent that talks to the app, as the native registry describes it (`control-agents` carries the whole list, newest request first). */
+export type AgentEntry = {
+  kind: string;
+  name: string;
+  pid?: number;
+  terminal?: string;
+  firstSeen: number;
+  lastRequest: number;
+  lastAction?: { method: string; title?: string; path?: string; at: number };
+  /** An `events` call from it is waiting, or a `--follow` round started within the last 5 s. */
+  listening: boolean;
+};
+
+/** A request from an agent that changed the screen, delivered right after the reader applied it (`control-agent-action`). */
+export type AgentAction = {
+  agent: { kind: string; name: string; pid?: number; terminal?: string };
+  method: string;
+  path?: string;
+  target?: string;
+};
+
+const asNum = (value: unknown): number | undefined => typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+
+function parseAgentRef(value: unknown): AgentAction['agent'] | undefined {
+  const raw = asObj(value);
+  const kind = asStr(raw.kind), name = asStr(raw.name);
+  if (!kind || !name) return undefined;
+  return { kind, name, ...(asNum(raw.pid) === undefined ? {} : { pid: asNum(raw.pid) }), ...(asStr(raw.terminal) ? { terminal: asStr(raw.terminal) } : {}) };
+}
+
+/** Reads the payload of `control-agents`; entries that are malformed are dropped. */
+export function parseAgents(payload: unknown): AgentEntry[] {
+  if (!Array.isArray(payload)) return [];
+  return payload.flatMap((item): AgentEntry[] => {
+    const raw = asObj(item), ref = parseAgentRef(raw), firstSeen = asNum(raw.firstSeen), lastRequest = asNum(raw.lastRequest);
+    if (!ref || firstSeen === undefined || lastRequest === undefined) return [];
+    const action = asObj(raw.lastAction), method = asStr(action.method), at = asNum(action.at);
+    return [{
+      ...ref,
+      firstSeen,
+      lastRequest,
+      ...(method && at !== undefined ? { lastAction: { method, at, ...(asStr(action.title) ? { title: asStr(action.title) } : {}), ...(asStr(action.path) ? { path: asStr(action.path) } : {}) } } : {}),
+      listening: raw.listening === true,
+    }];
+  });
+}
+
+/** Reads the payload of `control-agent-action`, or `undefined` when it names no agent or method. */
+export function parseAgentAction(payload: unknown): AgentAction | undefined {
+  const raw = asObj(payload), agent = parseAgentRef(raw.agent), method = asStr(raw.method);
+  if (!agent || !method) return undefined;
+  return { agent, method, ...(asStr(raw.path) ? { path: asStr(raw.path) } : {}), ...(asStr(raw.target) ? { target: asStr(raw.target) } : {}) };
+}
+
+/** What the reader knows of the agents: the registry as of the last `control-agents`, and a hook for each `control-agent-action`. */
+export function createAgentFeed() {
+  let agents: AgentEntry[] = [];
+  const onAgents = new Set<(agents: readonly AgentEntry[]) => void>();
+  const onAction = new Set<(action: AgentAction) => void>();
+  const subscribe = <T>(set: Set<T>, listener: T) => { set.add(listener); return () => { set.delete(listener); }; };
+  return {
+    agents: (): readonly AgentEntry[] => agents,
+    /** Receives the payload of `control-agents`. */
+    setAgents(payload: unknown) { agents = parseAgents(payload); onAgents.forEach(listener => listener(agents)); },
+    /** Receives the payload of `control-agent-action`. */
+    agentAction(payload: unknown) { const action = parseAgentAction(payload); if (action) onAction.forEach(listener => listener(action)); },
+    subscribeAgents: (listener: (agents: readonly AgentEntry[]) => void) => subscribe(onAgents, listener),
+    subscribeActions: (listener: (action: AgentAction) => void) => subscribe(onAction, listener),
+  };
 }

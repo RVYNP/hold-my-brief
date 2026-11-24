@@ -3,6 +3,9 @@
 //! Speaks newline-delimited JSON-RPC over the local per-user control socket described by
 //! `control.json` (Unix domain socket on macOS/Linux, token-guarded loopback TCP on Windows).
 
+#[path = "hmb/agent.rs"]
+mod agent;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::{
@@ -34,6 +37,8 @@ struct ControlRequest<'a> {
     token: Option<&'a str>,
     method: &'a str,
     params: Value,
+    /// Which agent is asking: `{ kind, name, pid, terminal? }` (see `agent::detect`).
+    client: &'a Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -120,6 +125,7 @@ fn send_once(info: &DiscoveryInfo, method: &str, params: Value) -> Result<Value,
         token: info.token.as_deref(),
         method,
         params,
+        client: agent::client(),
     };
     let mut payload = serde_json::to_vec(&req).map_err(|e| SendError::Failed(e.to_string()))?;
     payload.push(b'\n');
@@ -272,6 +278,7 @@ fn usage() -> &'static str {
 
 USAGE:
   hmb status [--json]
+  hmb agents [--json]               Agents connected to the app (HMB_AGENT=<name> names this one)
   hmb show <file> [--page N | --line N | --heading TEXT | --target T]
                   [--find QUERY] [--beside FILE] [--beside-target T] [--beside-find Q]
                   [--watch] [--ephemeral] [--pin | --unpin] [--compact | --reading] [--focus]
@@ -357,7 +364,7 @@ fn parse_args(args: &[String]) -> Result<ParsedCall, String> {
 
     let mut params = Map::new();
     match cmd {
-        "ping" | "status" | "outline" => {
+        "ping" | "status" | "outline" | "agents" => {
             return Ok(ParsedCall {
                 method: cmd.into(),
                 params: Value::Object(params),
@@ -637,6 +644,9 @@ fn print_human(method: &str, value: &Value) {
         "events" => {
             let _ = write_events_human(&mut io::stdout().lock(), value);
         }
+        "agents" => {
+            let _ = write_agents_human(&mut io::stdout().lock(), value);
+        }
         _ => println!("{}", serde_json::to_string(value).unwrap_or_default()),
     }
 }
@@ -678,6 +688,28 @@ fn write_events_human(out: &mut impl Write, reply: &Value) -> io::Result<()> {
     }
     for event in reply.get("events").and_then(Value::as_array).into_iter().flatten() {
         writeln!(out, "{}", event_line(event))?;
+    }
+    out.flush()
+}
+
+/// `name pid [terminal] listening|idle [last: method title]` — one line per connected agent, newest first.
+fn agent_line(agent: &Value) -> String {
+    let text = |value: &Value, key: &str| value.get(key).and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty()).map(str::to_string);
+    let mut parts = vec![text(agent, "name").unwrap_or_else(|| "?".into())];
+    if let Some(pid) = agent.get("pid").and_then(Value::as_u64) {
+        parts.push(pid.to_string());
+    }
+    parts.extend(text(agent, "terminal"));
+    parts.push(if agent.get("listening").and_then(Value::as_bool) == Some(true) { "listening" } else { "idle" }.into());
+    if let Some(action) = agent.get("lastAction") {
+        parts.push(format!("last: {}", [text(action, "method"), text(action, "title").or_else(|| text(action, "path"))].into_iter().flatten().collect::<Vec<_>>().join(" ")));
+    }
+    parts.join(" ")
+}
+
+fn write_agents_human(out: &mut impl Write, reply: &Value) -> io::Result<()> {
+    for agent in reply.get("agents").and_then(Value::as_array).into_iter().flatten() {
+        writeln!(out, "{}", agent_line(agent))?;
     }
     out.flush()
 }
@@ -910,11 +942,15 @@ fn main() {
         return;
     }
     if parsed.mcp_mode {
+        // The MCP server's parent is the agent; it is worked out once, here.
+        let _ = agent::client();
         std::process::exit(run_mcp(parsed.auto_launch));
     }
     if parsed.follow {
         let auto_launch = parsed.auto_launch;
-        let params = parsed.params.as_object().cloned().unwrap_or_default();
+        let mut params = parsed.params.as_object().cloned().unwrap_or_default();
+        // Marks each round as a `--follow` one, so the app keeps this agent listening between rounds.
+        params.insert("follow".into(), Value::Bool(true));
         let result = follow_events(
             follow_sender(load_discovery, try_launch_app, auto_launch),
             &mut io::stdout().lock(),
@@ -1213,5 +1249,27 @@ mod tests {
         );
         assert_eq!(mcp_events_params(&json!({ "wait": 500 }))["wait"], 30000);
         assert_eq!(mcp_events_params(&json!({})), json!({}));
+    }
+
+    #[test]
+    fn every_request_names_the_agent_that_sends_it() {
+        let client = json!({ "kind": "omp", "name": "omp", "pid": 4242, "terminal": "Ghostty" });
+        let req = ControlRequest { id: "1", token: None, method: "status", params: json!({}), client: &client };
+        let wire: Value = serde_json::from_str(&serde_json::to_string(&req).unwrap()).unwrap();
+        assert_eq!(wire["client"], client);
+        assert!(agent::client()["kind"].is_string() && agent::client()["pid"].is_u64());
+    }
+
+    #[test]
+    fn agents_is_a_plain_request_and_prints_one_line_per_agent() {
+        let parsed = parse_args(&vec_args(&["agents", "--json"])).unwrap();
+        assert_eq!((parsed.method.as_str(), parsed.json_out, parsed.params), ("agents", true, json!({})));
+        let reply = json!({ "agents": [
+            { "kind": "omp", "name": "omp", "pid": 7, "terminal": "Ghostty", "listening": true, "lastAction": { "method": "show", "title": "Plan", "path": "/p.md", "at": 1 } },
+            { "kind": "unknown", "name": "unknown", "listening": false },
+        ] });
+        let mut out = Vec::new();
+        write_agents_human(&mut out, &reply).unwrap();
+        assert_eq!(String::from_utf8(out).unwrap(), "omp 7 Ghostty listening last: show Plan\nunknown idle\n");
     }
 }

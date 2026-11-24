@@ -43,7 +43,7 @@ import { DEFAULT_PERCENT, MIN_SPLIT_WINDOW, PANE_IDS, boxes, evenRatio, fits, fr
 import { createBody, createDivider, createRow, paintDivider, paintFold, paneMap, withoutIds, type SideView } from './split-view';
 import { hostSelectionText } from './pane-selection';
 import { createContextMenu, type MenuEntry } from './context-menu';
-import { BRIEF_PREFIX, briefIdOf, handleControlRequest, isBriefPath, type ControlHost } from './control';
+import { BRIEF_PREFIX, briefIdOf, createAgentFeed, handleControlRequest, isBriefPath, type ControlHost } from './control';
 initAppearance();
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
@@ -131,6 +131,8 @@ const isSplit = () => sides.length > 1;
 /** What the reader tells agents (`hmb events`): while the user has Agent control on, what they select, read and send goes to the local control socket and nowhere else. */
 let agentControl = false;
 const agentEvents = createAgentEvents(event => void native('control_event', { event }).catch(() => undefined), () => desktop && agentControl);
+/** The agents connected to the control socket (`hmb agents`) and what they just did; the app keeps the registry, the reader receives every change. */
+const agentFeed = createAgentFeed();
 function setControlState(status: { enabled: boolean; running: boolean } | null) {
   if (status) settingsSheet.showControl(status);
   agentControl = Boolean(status?.enabled);
@@ -2061,6 +2063,9 @@ async function initialize() {
     await listen('close-tab-request', () => { const tab = closableTab(); if (tab) closeTab(tab.path); else void getCurrentWindow().close(); });
     await listen<string | null>('reader-warning', event => { if (event.payload) notify(event.payload); });
     await listen<string>('file-changed', event => { void reloadOpenFile(event.payload).catch(fail); });
+    // Which agents are connected and what each just did. Nothing draws them yet; `agentFeed` is where the views will subscribe.
+    await listen<unknown>('control-agents', event => agentFeed.setAgents(event.payload));
+    await listen<unknown>('control-agent-action', event => agentFeed.agentAction(event.payload));
     await listen<{ id: string; method: string; params: unknown }>('control-request', event => {
       const { id, method, params } = event.payload;
       void handleControlRequest(controlHost, method, params).then(
