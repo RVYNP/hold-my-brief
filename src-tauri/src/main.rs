@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod agent_icons;
 mod assistant;
 mod control;
 mod state;
@@ -718,6 +719,10 @@ fn main() {
             control::read_brief,
             control::save_brief_as,
             control::unwatch_file,
+            agent_icons::choose_agent_icon,
+            agent_icons::set_agent_icon,
+            agent_icons::reset_agent_icon,
+            agent_icons::agent_icons,
             windows::set_pin,
             windows::set_lock,
             windows::set_preset,

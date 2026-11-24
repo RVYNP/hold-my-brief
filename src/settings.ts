@@ -1,4 +1,5 @@
 import { check, createAppearanceSection, radioGroup, type TextControls } from './appearance';
+import { agentIcon, assignArt, hasAssignedArt, hasBundledArt, kindLabels, knownKinds, toneOf, validateIconFile, type AgentIconElement, type KnownKind } from './agent-appearance';
 
 /** The items of the More section: each runs the command of that name (the palette is the one that is not a command). */
 export type MoreItem = 'palette' | 'assistant' | 'shortcuts' | 'clear-recents' | 'clear-data';
@@ -14,6 +15,13 @@ export type SettingsHost = {
   setControl?: (enabled: boolean) => void;
   /** Runs a More item. The sheet has closed before this is called. */
   more: (item: MoreItem) => void;
+  /** The agent icons (desktop only): the agents connected now, a Lottie file chosen by the user (`null` when the dialog is cancelled; it rejects with the reason a file cannot be read), and keeping or forgetting the file of a kind. */
+  icons?: {
+    agents: () => readonly { kind: string; name: string }[];
+    choose: () => Promise<{ name: string; text: string } | null>;
+    save: (kind: string, text: string) => Promise<void>;
+    reset: (kind: string) => Promise<void>;
+  };
 };
 export type Side = 'left' | 'right';
 
@@ -50,6 +58,11 @@ export function createSettingsSheet(dialog: HTMLDialogElement, text: TextControl
         <div class="settings-heading"><h3 id="settings-control-title">Agent control</h3></div>
         <div class="settings-row"><span class="settings-name">Local CLI &amp; agents</span><kbd>hmb</kbd><button type="button" class="settings-switch" role="switch" aria-checked="true" aria-label="Local CLI and agents" data-control="enabled"><span aria-hidden="true"></span></button></div>
         <p class="settings-note" id="settings-control-note">Allows local tools on this computer to show documents, live briefs and visuals over a private per-user socket.</p>
+        <div class="agent-icons" ${host.icons ? '' : 'hidden'}>
+          <div class="settings-subheading" id="settings-icons-title">Icons</div>
+          <div class="agent-icon-list" id="settings-agent-icons" role="group" aria-labelledby="settings-icons-title"></div>
+          <p class="settings-note">Each agent kind can have its own animated icon: a Lottie JSON file of at most 512 KB, with the four state markers (see docs/agent-icons.md). Without one, the agent shows its initial.</p>
+        </div>
       </section>
       <section class="settings-section" id="settings-appearance" aria-labelledby="appearance-title"></section>
       <section class="settings-section" id="settings-library" aria-labelledby="settings-library-title">
@@ -70,6 +83,74 @@ export function createSettingsSheet(dialog: HTMLDialogElement, text: TextControl
   const controlSwitch = dialog.querySelector<HTMLButtonElement>('[data-control="enabled"]')!;
   const controlNote = dialog.querySelector<HTMLElement>('#settings-control-note')!;
 
+  const iconList = dialog.querySelector<HTMLElement>('#settings-agent-icons')!;
+  const seen = new Map<string, string>(), refusals = new Map<string, string[]>();
+  let previews: AgentIconElement[] = [], listed = '';
+  /** The rows: every known kind, then each other kind an agent has used since the app started (named by the agent). The previews show `listening`. */
+  const renderIcons = () => {
+    for (const agent of host.icons?.agents() ?? []) if (!seen.has(agent.kind) && !knownKinds.includes(agent.kind as KnownKind)) seen.set(agent.kind, agent.name);
+    for (const preview of previews) preview.destroy();
+    const rows: [string, string][] = [...knownKinds.map((kind): [string, string] => [kind, kindLabels[kind]]), ...seen];
+    listed = rows.map(([kind]) => kind).join('\n');
+    previews = [];
+    iconList.replaceChildren(...rows.map(([kind, label]) => {
+      const row = document.createElement('div');
+      row.className = 'agent-icon-row';
+      row.dataset.agent = toneOf(kind);
+      row.setAttribute('role', 'group');
+      row.setAttribute('aria-label', label);
+      const preview = agentIcon({ kind, name: label }, { size: 30, state: 'listening' });
+      previews.push(preview);
+      const source = hasAssignedArt(kind) ? 'Your file' : hasBundledArt(kind) ? 'Built in' : 'Initial';
+      const name = document.createElement('span');
+      name.className = 'settings-name';
+      name.append(label, Object.assign(document.createElement('span'), { className: 'agent-icon-source', textContent: source }));
+      const choose = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Choose file…' });
+      const reset = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Reset', disabled: !hasAssignedArt(kind) });
+      choose.onclick = () => void chooseIcon(kind, choose);
+      reset.onclick = () => void resetIcon(kind);
+      row.append(preview, name, choose, reset);
+      const reasons = refusals.get(kind);
+      if (!reasons) return row;
+      const refusal = document.createElement('ul');
+      refusal.className = 'agent-icon-refusal';
+      refusal.setAttribute('role', 'alert');
+      refusal.append(...reasons.map(reason => Object.assign(document.createElement('li'), { textContent: reason })));
+      const group = document.createElement('div');
+      group.className = 'agent-icon-entry';
+      group.append(row, refusal);
+      return group;
+    }));
+  };
+  const message = (error: unknown) => error instanceof Error ? error.message : String(error);
+  const chooseIcon = async (kind: string, button: HTMLButtonElement) => {
+    button.disabled = true;
+    try {
+      const picked = await host.icons!.choose();
+      if (!picked) return;
+      const result = validateIconFile(picked.text);
+      if (!result.ok) { refusals.set(kind, result.reasons.map(reason => `${picked.name}: ${reason}`)); return; }
+      await host.icons!.save(kind, picked.text);
+      assignArt(kind, picked.text);
+      refusals.delete(kind);
+    } catch (error) {
+      refusals.set(kind, [message(error)]);
+    } finally {
+      renderIcons();
+    }
+  };
+  const resetIcon = async (kind: string) => {
+    try {
+      await host.icons!.reset(kind);
+      assignArt(kind, null);
+      refusals.delete(kind);
+    } catch (error) {
+      refusals.set(kind, [message(error)]);
+    } finally {
+      renderIcons();
+    }
+  };
+
   for (const toggle of switches) toggle.onclick = () => host.toggle(toggle.dataset.window as 'pin' | 'lock');
   controlSwitch.onclick = () => host.setControl?.(controlSwitch.getAttribute('aria-checked') !== 'true');
   for (const button of dialog.querySelectorAll<HTMLButtonElement>('[data-preset]')) button.onclick = () => host.preset(button.dataset.preset as 'compact' | 'reading');
@@ -84,9 +165,15 @@ export function createSettingsSheet(dialog: HTMLDialogElement, text: TextControl
   return {
     /** Opens the sheet. `appearance` and `size` (the palette's "Text size & spacing", when the open document has one) go to the Appearance section; otherwise focus starts at the top. */
     open(focus: 'top' | 'appearance' | 'size' = 'top') {
-      appearance.refresh(); dialog.showModal();
+      appearance.refresh(); if (host.icons) renderIcons(); dialog.showModal();
       const target = focus === 'top' && host.desktop ? switches[0] : appearance.focusTarget(focus === 'size' ? 'size' : 'mode');
       target?.focus();
+    },
+    /** An agent connected: its kind gets a row in Icons if it has none (the rows are rebuilt the next time the sheet opens, or now when the sheet is open). */
+    refreshIcons() {
+      if (!host.icons) return;
+      const kinds = new Set(listed.split('\n'));
+      if (host.icons.agents().some(agent => !kinds.has(agent.kind))) renderIcons();
     },
     /** The window state the switches show. */
     showWindow(state: { pinned: boolean; locked: boolean }) {

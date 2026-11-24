@@ -365,6 +365,8 @@ pub struct SavedState {
     pub path_ids: HashMap<String, String>,
     /// Whether the local per-user agent control socket (`hmb` CLI) is enabled. Defaults to true.
     pub control_enabled: bool,
+    /// The Lottie icon assigned to each agent kind: the name of its file in `agent-icons/` beside the state file (src/agent_icons.rs).
+    pub agent_icons: HashMap<String, String>,
     #[serde(skip_serializing)]
     pub library: Library,
 }
@@ -379,6 +381,7 @@ impl Default for SavedState {
             documents: HashMap::new(),
             path_ids: HashMap::new(),
             control_enabled: true,
+            agent_icons: HashMap::new(),
             library: Library::default(),
         }
     }
@@ -402,6 +405,8 @@ impl<'de> Deserialize<'de> for SavedState {
             path_ids: HashMap<String, String>,
             #[serde(default = "default_true")]
             control_enabled: bool,
+            #[serde(default)]
+            agent_icons: HashMap<String, String>,
             #[serde(default, deserialize_with = "present_library")]
             library: Option<Library>,
         }
@@ -423,6 +428,7 @@ impl<'de> Deserialize<'de> for SavedState {
             documents: input.documents,
             path_ids: input.path_ids,
             control_enabled: input.control_enabled,
+            agent_icons: input.agent_icons,
             library,
         })
     }

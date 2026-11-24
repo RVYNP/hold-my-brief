@@ -1,0 +1,25 @@
+/* The colour of each agent kind (light, dark). `[data-agent]` on any element carries it as --a; docs/agent-icons.md lists them for the people who draw the icons. */
+:root {
+  --agent-omp: light-dark(#17876f, #62d3b6);
+  --agent-claude: light-dark(#4e62cc, #a3b0ff);
+  --agent-codex: light-dark(#b0620f, #f0a458);
+  --agent-cursor: light-dark(#8447b4, #d0a0f0);
+  --agent-other: light-dark(#6a6878, #aeacbb);
+  /* The initial on a squircle: white on the light values, near-black on the dark ones. */
+  --agent-ink: light-dark(#fff, #10121a);
+}
+[data-agent] { --a: var(--agent-other); }
+[data-agent=omp] { --a: var(--agent-omp); }
+[data-agent=claude] { --a: var(--agent-claude); }
+[data-agent=codex] { --a: var(--agent-codex); }
+[data-agent=cursor] { --a: var(--agent-cursor); }
+
+.agent-icon { --size: 24px; display: inline-grid; place-items: center; flex: none; width: var(--size); height: var(--size); line-height: 0; }
+.agent-icon svg { display: block; width: 100%; height: 100%; }
+.agent-icon-shape { fill: var(--a); }
+.agent-icon-initial { fill: var(--agent-ink); font: 600 13px var(--font-ui, sans-serif); }
+/* Lottie layers the author named `.tint…` take the agent's colour and `.fg…` the theme's foreground, wherever the file has a fill or a stroke (none stays none). */
+.agent-icon .tint[fill]:not([fill=none]), .agent-icon .tint [fill]:not([fill=none]) { fill: var(--a); }
+.agent-icon .tint[stroke]:not([stroke=none]), .agent-icon .tint [stroke]:not([stroke=none]) { stroke: var(--a); }
+.agent-icon .fg[fill]:not([fill=none]), .agent-icon .fg [fill]:not([fill=none]) { fill: var(--fg); }
+.agent-icon .fg[stroke]:not([stroke=none]), .agent-icon .fg [stroke]:not([stroke=none]) { stroke: var(--fg); }
