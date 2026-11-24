@@ -43,6 +43,7 @@ import { DEFAULT_PERCENT, MIN_SPLIT_WINDOW, PANE_IDS, boxes, evenRatio, fits, fr
 import { createBody, createDivider, createRow, paintDivider, paintFold, paneMap, withoutIds, type SideView } from './split-view';
 import { hostSelectionText } from './pane-selection';
 import { createContextMenu, type MenuEntry } from './context-menu';
+import { loadAssignedArt } from './agent-appearance';
 import { BRIEF_PREFIX, briefIdOf, createAgentFeed, handleControlRequest, isBriefPath, type ControlHost } from './control';
 initAppearance();
 
@@ -103,6 +104,12 @@ const settingsSheet = createSettingsSheet($<HTMLDialogElement>('settings'), {
       .catch(fail);
   },
   more: item => { if (item === 'palette') openPalette(); else void command(item).catch(fail); },
+  icons: desktop ? {
+    agents: () => agentFeed.agents(),
+    choose: () => native<{ name: string; text: string } | null>('choose_agent_icon'),
+    save: (kind, text) => native('set_agent_icon', { kind, text }),
+    reset: kind => native('reset_agent_icon', { kind }),
+  } : undefined,
 });
 // A modal dialog holds back the reader's shortcuts; the two window ones still work in the sheet, so its switches follow them.
 $('settings').addEventListener('keydown', event => { const shortcut = shortcutFor(event); if (shortcut === 'pin' || shortcut === 'lock') { event.preventDefault(); void command(shortcut).catch(fail); } });
@@ -2075,6 +2082,9 @@ async function initialize() {
     });
     const controlState = await native<{ enabled: boolean; running: boolean } | null>('control_status').catch(() => null);
     setControlState(controlState);
+    // The icons the user assigned to agent kinds (Settings › Agent control › Icons), and a new row for each kind that connects.
+    loadAssignedArt(await native<Record<string, string> | null>('agent_icons').catch(() => null) ?? {});
+    agentFeed.subscribeAgents(() => settingsSheet.refreshIcons());
     const appWindow = getCurrentWindow();
     let closing = false; await appWindow.onCloseRequested(async event => { if (closing) return; event.preventDefault(); await Promise.all(sides.map(side => side.pane.flush())); await flushSession(); closing = true; await appWindow.close(); });
     if (platform === 'windows') {

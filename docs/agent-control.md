@@ -12,6 +12,7 @@ Hold My Brief exposes a fast, local per-user control bridge so coding and resear
 ## Security & privacy
 
 - **Local only:** On macOS/Linux, Hold My Brief listens on an owner-only (`0600`) Unix domain socket in its app data folder. On Windows, it binds a loopback-only (`127.0.0.1`) raw NDJSON listener guarded by a per-session 256-bit random token. Browsers and remote hosts cannot reach it.
+- **Agent icons:** each kind of agent (`omp`, `claude`, `codex`, `cursor`, `other`) has a colour and an icon in the reader: a squircle with its initial, or an animated Lottie icon that is bundled or assigned in **Settings → Agent control → Icons**. The file contract is [agent-icons.md](agent-icons.md).
 - **Controllable in Settings:** Open **Settings → Agent control** (desktop app) to turn local CLI/agent control off or on at any time. Turning it off immediately closes the socket and removes `control.json`.
 - **Safe visuals:** All inline SVGs and `.svg` files pass through a strict allow-list sanitizer (`<script>`, `<foreignObject>`, event handlers, and external URLs are stripped).
 

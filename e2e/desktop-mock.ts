@@ -18,6 +18,9 @@ declare global {
     /** The `paths` of every `prefetch_documents` call the reader made, in order. */
     __mockPrefetch: string[][];
     /** Every `control_area` (the PNG as byte values, and what says where on the page it is) the reader sent, in order. */
+    /** The Lottie files assigned to agent kinds (`agent_icons`, `set_agent_icon`, `reset_agent_icon` keep them here) and the file `choose_agent_icon` hands over next (`null`: the dialog is cancelled; a string: that file's text; `{ error }`: the reason the native side refuses it). */
+    __mockAgentIcons: Record<string, string>;
+    __mockChosenIcon: { name: string; text: string } | { error: string } | null;
     __mockAreas: { png: number[]; meta: { paneId: string; path: string; title: string; page?: number; box: { x: number; y: number; w: number; h: number } } }[];
   }
 }
@@ -44,6 +47,8 @@ export async function mockDesktop(page: Page, { control = null, session = null, 
     const deliver = (event: string, payload: unknown) => { for (const id of listeners.get(event) ?? []) callbacks.get(id)?.({ event, id, payload }); };
     const replies: Window['__mockReplies'] = [], briefs: Window['__mockBriefs'] = {}, sessions: Window['__mockSessions'] = [], events: Window['__mockEvents'] = [], areas: Window['__mockAreas'] = [];
     const library: Window['__mockLibrary'] = {}, prefetched: Window['__mockPrefetch'] = [];
+    const agentIcons: Window['__mockAgentIcons'] = {};
+    Object.assign(window, { __mockAgentIcons: agentIcons, __mockChosenIcon: null });
     Object.assign(window, { isTauri: true, __mockLibrary: library, __mockPrefetch: prefetched, __mockWindow: state, __mockReplies: replies, __mockBriefs: briefs, __mockSessions: sessions, __mockEvents: events, __mockAreas: areas });
     Object.assign(window, {
       __mockEmit: (event: string, payload: unknown) => { if (ready) deliver(event, payload); else held.push([event, payload]); },
@@ -70,6 +75,10 @@ export async function mockDesktop(page: Page, { control = null, session = null, 
           if (command === 'control_area') { areas.push(args as Window['__mockAreas'][number]); return null; }
           if (command === 'control_status') return control && { ...control, transport: 'unix', discoveryPath: '' };
           if (command === 'prefetch_documents') { prefetched.push(args?.paths as string[]); return null; }
+          if (command === 'agent_icons') return { ...agentIcons };
+          if (command === 'choose_agent_icon') { const chosen = window.__mockChosenIcon; window.__mockChosenIcon = null; if (chosen && 'error' in chosen) throw chosen.error; return chosen; }
+          if (command === 'set_agent_icon') { agentIcons[String(args?.kind)] = String(args?.text); return null; }
+          if (command === 'reset_agent_icon') { delete agentIcons[String(args?.kind)]; return null; }
           if (command === 'save_tabs') { sessions.push(args?.session as Window['__mockSessions'][number]); return null; }
           return null;
         },
